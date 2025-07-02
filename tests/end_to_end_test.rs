@@ -13,7 +13,11 @@ use autonomous_platform::integration::{
     data_access::{DataAccessLayer, DataRequest, Timeframe},
     neural_predictions::{NeuralPredictionSystem, DecisionContext, ModelType}
 };
-use autonomous_platform::config::{PlatformConfig, DatabaseConfig, RedisConfig, NeuralConfig, MonitoringConfig, PlatformInfo};
+use autonomous_platform::config::{
+    PlatformConfig, DatabaseConfig, RedisConfig, NeuralConfig, MonitoringConfig, PlatformInfo,
+    ObservabilityConfig, SecurityConfig, PerformanceConfig, LoggingConfig, AlertsConfig,
+    BackupConfig, CircuitBreakerConfig, GracefulShutdownConfig, DevelopmentConfig
+};
 use std::sync::Arc;
 use chrono::{DateTime, Utc, Duration};
 use tokio::sync::mpsc;
@@ -28,26 +32,56 @@ fn create_test_config() -> PlatformConfig {
         platform: PlatformInfo {
             name: "end-to-end-test-platform".to_string(),
             version: "0.1.0".to_string(),
+            environment: "development".to_string(),
+            log_level: "info".to_string(),
         },
         database: DatabaseConfig {
             url: "postgres://test@localhost/end_to_end_test".to_string(),
             max_connections: 20,
             min_connections: 5,
+            connection_timeout: 30,
+            idle_timeout: 600,
+            max_query_time: 30,
         },
         redis: RedisConfig {
             url: "redis://localhost:6379".to_string(),
             max_connections: 10,
             default_ttl_seconds: 300,
+            connection_timeout_ms: 5000,
+            cluster_mode: false,
+            pool_max_idle: 10,
+            pool_timeout_seconds: 30,
         },
         neural: NeuralConfig {
             memory_gb: 8.0,
             models: vec!["NHITS".to_string(), "DeepAR".to_string(), "TCN".to_string()],
             prediction_cache_ttl: 600,
+            model_load_timeout: 300,
+            max_concurrent_predictions: 50,
+            enable_model_monitoring: true,
+            accuracy_threshold: 0.85,
         },
         monitoring: MonitoringConfig {
             metrics_interval_secs: 30,
             quality_threshold: 0.95,
+            prometheus_port: Some(8080),
+            prometheus_path: "/metrics".to_string(),
+            enable_performance_metrics: true,
+            enable_memory_monitoring: true,
+            enable_error_monitoring: true,
+            cpu_usage_threshold: 80.0,
+            memory_usage_threshold: 85.0,
+            error_rate_threshold: 0.05,
         },
+        observability: ObservabilityConfig::default(),
+        security: SecurityConfig::default(),
+        performance: PerformanceConfig::default(),
+        logging: LoggingConfig::default(),
+        alerts: AlertsConfig::default(),
+        backup: BackupConfig::default(),
+        circuit_breaker: CircuitBreakerConfig::default(),
+        graceful_shutdown: GracefulShutdownConfig::default(),
+        development: DevelopmentConfig::default(),
     }
 }
 
