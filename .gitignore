@@ -1,0 +1,7 @@
+/target/
+/Cargo.lock
+/.claude/
+/memory/
+/reports/
+/.roomodes
+/claude-flow
