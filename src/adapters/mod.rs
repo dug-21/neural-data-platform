@@ -105,25 +105,98 @@ pub enum ModelType {
     Custom(String),
 }
 
-/// Model registry for managing available models
+/// Central registry for managing neural network models and their adapters.
+///
+/// The `ModelRegistry` provides a unified interface for registering, managing,
+/// and accessing different types of neural network models. It supports various
+/// model frameworks including PyTorch, TensorFlow, ONNX, and custom Rust implementations.
+///
+/// # Examples
+///
+/// ```rust
+/// use autonomous_platform::adapters::{ModelRegistry, ModelAdapter, MLPModel};
+///
+/// let mut registry = ModelRegistry::new();
+///
+/// // Register a model
+/// let mlp_model = ModelAdapter::MLP(MLPModel);
+/// registry.register("my_mlp".to_string(), mlp_model);
+///
+/// // Retrieve a model
+/// if let Some(model) = registry.get("my_mlp") {
+///     // Use the model for predictions
+/// }
+///
+/// // List all available models
+/// let model_names = registry.list_models();
+/// println!("Available models: {:?}", model_names);
+/// ```
 pub struct ModelRegistry {
     models: HashMap<String, ModelAdapter>,
 }
 
 impl ModelRegistry {
-    /// Create new model registry
+    /// Creates a new empty model registry.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use autonomous_platform::adapters::ModelRegistry;
+    ///
+    /// let registry = ModelRegistry::new();
+    /// assert!(registry.list_models().is_empty());
+    /// ```
     pub fn new() -> Self {
         Self {
             models: HashMap::new(),
         }
     }
     
-    /// Register a model adapter
+    /// Registers a model adapter with the given name.
+    ///
+    /// If a model with the same name already exists, it will be replaced.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Unique identifier for the model
+    /// * `adapter` - The model adapter to register
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use autonomous_platform::adapters::{ModelRegistry, ModelAdapter, MLPModel};
+    ///
+    /// let mut registry = ModelRegistry::new();
+    /// let model = ModelAdapter::MLP(MLPModel);
+    /// registry.register("my_model".to_string(), model);
+    /// ```
     pub fn register(&mut self, name: String, adapter: ModelAdapter) {
         self.models.insert(name, adapter);
     }
     
-    /// Get a model adapter by name
+    /// Retrieves a model adapter by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the model to retrieve
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&ModelAdapter)` if the model exists, `None` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use autonomous_platform::adapters::{ModelRegistry, ModelAdapter, MLPModel};
+    ///
+    /// let mut registry = ModelRegistry::new();
+    /// registry.register("test_model".to_string(), ModelAdapter::MLP(MLPModel));
+    ///
+    /// match registry.get("test_model") {
+    ///     Some(model) => println!("Found model"),
+    ///     None => println!("Model not found"),
+    /// }
+    /// ```
     pub fn get(&self, name: &str) -> Option<&ModelAdapter> {
         self.models.get(name)
     }

@@ -29,7 +29,40 @@ pub struct PredictionData {
 }
 
 impl TimescaleDBStorage {
-    /// Create a new TimescaleDB storage instance
+    /// Creates a new TimescaleDB storage instance with connection pooling.
+    ///
+    /// This function establishes a connection pool to the TimescaleDB database
+    /// and configures it for optimal time series data operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `database_url` - PostgreSQL connection string (e.g., "postgres://user:pass@host:port/db")
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(TimescaleDBStorage)` on successful connection, or an error if
+    /// the database is unreachable or the connection string is invalid.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The database URL is malformed
+    /// - The database server is unreachable
+    /// - Authentication fails
+    /// - The database doesn't exist
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use autonomous_platform::data::TimescaleDBStorage;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let storage = TimescaleDBStorage::new(
+    ///     "postgres://neural_trader:password@localhost/neural_trader_db"
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(10)
@@ -110,7 +143,47 @@ impl TimescaleDBStorage {
         Ok(())
     }
     
-    /// Store a single time series data point
+    /// Stores a single time series data point in the database.
+    ///
+    /// This function inserts a time series data point into the TimescaleDB hypertable,
+    /// using an upsert operation to handle duplicate timestamps gracefully.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The time series data point to store
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on successful storage, or an error if the operation fails.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The database connection is lost
+    /// - The data violates database constraints
+    /// - A database-level error occurs
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use autonomous_platform::data::{TimescaleDBStorage, TimeSeriesData};
+    /// use chrono::Utc;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let storage = TimescaleDBStorage::new("postgres://...").await?;
+    /// 
+    /// let data = TimeSeriesData {
+    ///     timestamp: Utc::now(),
+    ///     source: "market_feed".to_string(),
+    ///     entity: "BTCUSD".to_string(),
+    ///     value: 50000.0,
+    ///     metadata: None,
+    /// };
+    ///
+    /// storage.store_time_series(&data).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn store_time_series(&self, data: &TimeSeriesData) -> Result<()> {
         sqlx::query(r#"
             INSERT INTO time_series_data (timestamp, source, entity, value, metadata)
