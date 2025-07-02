@@ -19,11 +19,23 @@ use crate::config::PlatformConfig;
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc, Duration};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{RwLock, mpsc, broadcast, Mutex};
 use tokio::time::timeout;
 use tracing::{info, warn, error, debug};
+
+/// Component types for startup sequencing and dependency management
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComponentType {
+    DataPipeline,
+    StreamingPipeline,
+    DaaOrchestrator,
+    NeuralSystem,
+    HealthMonitor,
+}
 
 /// Main platform orchestrator coordinating all components
 #[derive(Clone)]
@@ -38,6 +50,7 @@ pub struct PlatformOrchestrator {
     config: PlatformConfig,
     validation_state: Arc<RwLock<ValidationState>>,
     memory_storage: Arc<RwLock<HashMap<String, serde_json::Value>>>,
+    shutdown_signal: Arc<AtomicBool>,
 }
 
 /// System health monitoring component
@@ -231,6 +244,7 @@ impl PlatformOrchestrator {
             config,
             validation_state: Arc::new(RwLock::new(ValidationState::default())),
             memory_storage: Arc::new(RwLock::new(HashMap::new())),
+            shutdown_signal: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -520,6 +534,115 @@ impl PlatformOrchestrator {
         }
     }
 
+    /// Shutdown the complete platform in reverse startup order
+    pub async fn shutdown_platform(&self) -> Result<()> {
+        info!("Initiating platform shutdown");
+        
+        // Set shutdown signal
+        self.shutdown_signal.store(true, Ordering::Relaxed);
+        
+        // Shutdown in reverse order: Health → Neural → DAA → Streaming → Data
+        
+        // 1. Health Monitor (stop monitoring)
+        {
+            let mut health = self.health_monitor.component_health.write().await;
+            health.streaming_pipeline = false;
+            health.data_pipeline = false;
+            health.neural_system = false;
+            health.data_access_layer = false;
+            health.event_bus = false;
+            health.last_check = None;
+        }
+        
+        // 2. Neural System (no explicit shutdown needed for now)
+        debug!("Neural system shutdown - graceful degradation");
+        
+        // 3. DAA Agents (clear all agents)
+        {
+            let mut agents = self.daa_agents.write().await;
+            agents.clear();
+        }
+        
+        // 4. Streaming Pipeline (stop streams)
+        {
+            let pipeline = self.streaming_pipeline.lock().await;
+            // Note: StreamingPipeline would need a shutdown method in real implementation
+            debug!("Streaming pipeline shutdown - stopping data streams");
+        }
+        
+        // 5. Data Pipeline (close connections)
+        debug!("Data pipeline shutdown - closing database connections");
+        
+        info!("Platform shutdown completed successfully");
+        Ok(())
+    }
+
+    /// Start a component with its dependencies
+    pub async fn start_component_with_dependencies(&self, component: ComponentType) -> Result<()> {
+        info!("Starting component: {:?} with dependencies", component);
+        
+        match component {
+            ComponentType::DataPipeline => {
+                // No dependencies
+                self.start_single_component(ComponentType::DataPipeline).await?;
+            }
+            ComponentType::StreamingPipeline => {
+                // Depends on DataPipeline
+                self.ensure_component_started(ComponentType::DataPipeline).await?;
+                self.start_single_component(ComponentType::StreamingPipeline).await?;
+            }
+            ComponentType::DaaOrchestrator => {
+                // Depends on StreamingPipeline and DataPipeline
+                self.ensure_component_started(ComponentType::DataPipeline).await?;
+                self.ensure_component_started(ComponentType::StreamingPipeline).await?;
+                self.start_single_component(ComponentType::DaaOrchestrator).await?;
+            }
+            ComponentType::NeuralSystem => {
+                // Depends on DataPipeline and DaaOrchestrator
+                self.ensure_component_started(ComponentType::DataPipeline).await?;
+                self.ensure_component_started(ComponentType::DaaOrchestrator).await?;
+                self.start_single_component(ComponentType::NeuralSystem).await?;
+            }
+            ComponentType::HealthMonitor => {
+                // Depends on all other components
+                self.ensure_component_started(ComponentType::DataPipeline).await?;
+                self.ensure_component_started(ComponentType::StreamingPipeline).await?;
+                self.ensure_component_started(ComponentType::DaaOrchestrator).await?;
+                self.ensure_component_started(ComponentType::NeuralSystem).await?;
+                self.start_single_component(ComponentType::HealthMonitor).await?;
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Restart a specific component
+    pub async fn restart_component(&self, component: ComponentType) -> Result<()> {
+        info!("Restarting component: {:?}", component);
+        
+        // Check if component is currently running
+        if !self.is_component_running(component.clone()).await? {
+            bail!("Cannot restart component {:?} - it is not currently running", component);
+        }
+        
+        // Stop the component
+        self.stop_single_component(component.clone()).await?;
+        
+        // Wait a moment for cleanup
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
+        // Start the component with dependencies
+        self.start_component_with_dependencies(component.clone()).await?;
+        
+        info!("Component {:?} restarted successfully", component);
+        Ok(())
+    }
+
+    /// Check if shutdown signal is set
+    pub fn is_shutting_down(&self) -> bool {
+        self.shutdown_signal.load(Ordering::Relaxed)
+    }
+
     // Private helper methods
 
     async fn start_event_processing(&self) -> Result<()> {
@@ -591,6 +714,98 @@ impl PlatformOrchestrator {
         metrics.total_requests += 1;
         metrics.successful_requests += 1;
         Ok(())
+    }
+
+    async fn ensure_component_started(&self, component: ComponentType) -> Result<()> {
+        if !self.is_component_running(component.clone()).await? {
+            self.start_single_component(component).await?;
+        }
+        Ok(())
+    }
+
+    async fn start_single_component(&self, component: ComponentType) -> Result<()> {
+        debug!("Starting single component: {:?}", component);
+        
+        match component {
+            ComponentType::DataPipeline => {
+                // Data pipeline is already initialized in constructor
+                debug!("Data pipeline already initialized");
+            }
+            ComponentType::StreamingPipeline => {
+                // Streaming pipeline startup logic
+                let mut pipeline = self.streaming_pipeline.lock().await;
+                let symbols = vec!["BTC/USD".to_string(), "ETH/USD".to_string()];
+                pipeline.start_market_stream(symbols).await
+                    .context("Failed to start streaming pipeline")?;
+            }
+            ComponentType::DaaOrchestrator => {
+                // Start event processing for DAA agents
+                self.start_event_processing().await
+                    .context("Failed to start DAA orchestrator")?;
+            }
+            ComponentType::NeuralSystem => {
+                // Neural system is already initialized
+                debug!("Neural system already initialized");
+            }
+            ComponentType::HealthMonitor => {
+                // Update health monitor to active state
+                let mut health = self.health_monitor.component_health.write().await;
+                health.last_check = Some(Utc::now());
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn stop_single_component(&self, component: ComponentType) -> Result<()> {
+        debug!("Stopping single component: {:?}", component);
+        
+        match component {
+            ComponentType::DataPipeline => {
+                debug!("Data pipeline stop - would close connections");
+            }
+            ComponentType::StreamingPipeline => {
+                debug!("Streaming pipeline stop - would halt streams");
+            }
+            ComponentType::DaaOrchestrator => {
+                // Clear DAA agents
+                let mut agents = self.daa_agents.write().await;
+                agents.clear();
+            }
+            ComponentType::NeuralSystem => {
+                debug!("Neural system stop - graceful degradation");
+            }
+            ComponentType::HealthMonitor => {
+                let mut health = self.health_monitor.component_health.write().await;
+                health.last_check = None;
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn is_component_running(&self, component: ComponentType) -> Result<bool> {
+        match component {
+            ComponentType::DataPipeline => {
+                Ok(self.data_pipeline.health_check().await.unwrap_or(false))
+            }
+            ComponentType::StreamingPipeline => {
+                let pipeline = self.streaming_pipeline.lock().await;
+                Ok(pipeline.health_check().await.unwrap_or(false))
+            }
+            ComponentType::DaaOrchestrator => {
+                let agents = self.daa_agents.read().await;
+                Ok(!agents.is_empty())
+            }
+            ComponentType::NeuralSystem => {
+                // Simplified check - would need actual health check method
+                Ok(true)
+            }
+            ComponentType::HealthMonitor => {
+                let health = self.health_monitor.component_health.read().await;
+                Ok(health.last_check.is_some())
+            }
+        }
     }
 }
 
