@@ -30,10 +30,17 @@ thiserror = "2.0"
 anyhow = "1.0"
 
 # Logging and metrics
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
+prometheus = "0.13"
+
+# Security
+regex = "1.7"
+
+# System monitoring
+sysinfo = "0.30"
 
 # Data processing
 chrono = { version = "0.4", features = ["serde"] }
@@ -49,8 +56,28 @@ mockall = "0.13"
 tempfile = "3.14"
 serial_test = "3.2"
 cargo-tarpaulin = "0.32"
+rand = "0.8"
+tracing-test = "0.2"
+
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "standalone_benchmarks"
+harness = false
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.production]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
