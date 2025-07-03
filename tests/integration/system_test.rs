@@ -7,7 +7,7 @@
 //! - Refinement: Test various market scenarios and failure modes
 //! - Completion: Verify system works as a cohesive unit
 
-use autonomous_platform::{
+use neural_trader::{
     adapters::{DataAdapter, MarketData, redis::RedisAdapter, timescale::TimescaleAdapter},
     config::PlatformConfig,
     integration::{PlatformOrchestrator, streaming::StreamingPipeline},
@@ -49,7 +49,7 @@ mod system_initialization_tests {
         
         // Test initialization order dependencies
         // 1. Database connections should be established first
-        let timescale_config = autonomous_platform::adapters::timescale::TimescaleConfig {
+        let timescale_config = neural_trader::adapters::timescale::TimescaleConfig {
             host: config.database.url.clone(),
             port: 5432,
             database: "test_trading".to_string(),
@@ -63,7 +63,7 @@ mod system_initialization_tests {
         assert!(db_result.is_err(), "Expected DB connection to fail in test env");
 
         // 2. Cache layer should be next
-        let redis_config = autonomous_platform::adapters::redis::RedisConfig {
+        let redis_config = neural_trader::adapters::redis::RedisConfig {
             host: "localhost".to_string(),
             port: 6379,
             password: None,
@@ -76,7 +76,7 @@ mod system_initialization_tests {
         assert!(cache_result.is_err(), "Expected cache connection to fail in test env");
 
         // 3. Strategies can be initialized after data sources
-        let strategy_config = autonomous_platform::strategies::StrategyConfig {
+        let strategy_config = neural_trader::strategies::StrategyConfig {
             name: "momentum".to_string(),
             enabled: true,
             risk_limit: 0.02,
@@ -264,7 +264,7 @@ mod error_handling_tests {
         let config = create_test_config();
         
         // Create adapters with invalid configs
-        let bad_timescale_config = autonomous_platform::adapters::timescale::TimescaleConfig {
+        let bad_timescale_config = neural_trader::adapters::timescale::TimescaleConfig {
             host: "invalid_host".to_string(),
             port: 9999,
             database: "nonexistent".to_string(),
@@ -291,7 +291,7 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_strategy_error_propagation() {
         // GIVEN: A strategy that encounters an error
-        let invalid_config = autonomous_platform::strategies::StrategyConfig {
+        let invalid_config = neural_trader::strategies::StrategyConfig {
             name: "momentum".to_string(),
             enabled: true,
             risk_limit: -0.01, // Invalid negative risk limit
