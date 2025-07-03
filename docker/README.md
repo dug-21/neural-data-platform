@@ -1,31 +1,48 @@
 # Neural Trader Docker Setup
 
-This directory contains the Docker configuration for the Neural Trader autonomous trading platform, including TimescaleDB for time-series data storage and Redis for caching and real-time data management.
+This directory contains all Docker configurations for running the Neural Trader platform.
 
-## Overview
+## Architecture Overview
 
-The Docker setup includes:
-- **TimescaleDB**: PostgreSQL with time-series optimization for market data and predictions
-- **Redis**: High-performance caching and pub/sub for real-time data
+The platform consists of the following services:
+
+- **TimescaleDB**: Time-series database optimized for trading data
+- **Redis**: In-memory data store for real-time market data and caching
+- **Data Ingestion**: Python service for fetching and processing market data
+- **Neural Trader**: Main Rust application for trading logic and neural networks
+- **Prometheus**: Metrics collection and monitoring
+- **Grafana**: Visualization and dashboards
+- **Nginx**: Reverse proxy and load balancer (production only)
 
 ## Quick Start
 
-1. **Start the services**:
+1. **Clone the repository**:
    ```bash
-   cd /Users/dmf/repos/neural-trader/docker
+   git clone https://github.com/your-org/neural-trader.git
+   cd neural-trader
+   ```
+
+2. **Copy environment variables**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Start the platform**:
+   ```bash
+   # Development
    docker-compose up -d
+
+   # Production
+   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
    ```
 
-2. **Verify services are running**:
-   ```bash
-   docker-compose ps
-   ```
-
-3. **Check logs**:
-   ```bash
-   docker-compose logs -f timescaledb
-   docker-compose logs -f redis
-   ```
+4. **Access the services**:
+   - Neural Trader API: http://localhost:3030
+   - Grafana: http://localhost:3000 (admin/neural_trader_admin)
+   - Prometheus: http://localhost:9090
+   - pgAdmin: http://localhost:8082 (development only)
+   - Redis Commander: http://localhost:8081 (development only)
 
 ## Services
 
@@ -247,9 +264,149 @@ For production deployment:
 5. Regular security updates for base images
 6. Enable audit logging
 
+## Development Setup
+
+For development with hot-reloading:
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+This enables:
+- Source code mounting for hot-reloading
+- Debug ports exposed
+- Lower resource limits
+- Development tools (pgAdmin, Redis Commander)
+
+## Production Deployment
+
+For production deployment:
+
+```bash
+# Set production environment variables
+export GRAFANA_ADMIN_PASSWORD=secure_password
+export POSTGRES_PASSWORD=secure_password
+# ... other production configs
+
+# Deploy with production settings
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+Production features:
+- Optimized resource allocation
+- Automated backups
+- SSL/TLS termination with Nginx
+- Log rotation
+- Health checks and auto-restart
+- Multiple replicas for high availability
+
+## Service Configuration
+
+### TimescaleDB
+- Custom PostgreSQL configuration optimized for time-series data
+- Automatic hypertable creation
+- Compression policies for historical data
+- Continuous aggregates for performance
+
+### Redis
+- Persistence enabled (RDB + AOF)
+- Optimized for high-frequency updates
+- Redis Streams for real-time data
+- Memory limits and eviction policies
+
+### Data Ingestion
+- Multi-stage Docker build for efficiency
+- Non-root user for security
+- Health checks
+- Prometheus metrics exposed
+
+### Neural Trader
+- Multi-stage Rust build
+- Optimized release binary
+- Health endpoints
+- Configurable via environment variables
+
+## Monitoring
+
+The platform includes comprehensive monitoring:
+
+1. **Metrics Collection**: Prometheus scrapes metrics from all services
+2. **Visualization**: Grafana dashboards for real-time monitoring
+3. **Alerts**: Configure alerts in Grafana for critical events
+
+### Available Dashboards
+- Neural Trader Overview
+- Market Data Ingestion
+- Trading Performance
+- System Resources
+- Database Performance
+
+## Backup and Recovery
+
+Automated backups run hourly in production:
+
+```bash
+# Manual backup
+docker exec neural_trader_backup /backup.sh
+
+# Restore from backup
+docker exec -it neural_trader_timescaledb \
+  pg_restore -U neural_trader -d neural_trader_db \
+  /backups/postgres/neural_trader_20240101_120000.dump.gz
+```
+
+## Scaling
+
+To scale services horizontally:
+
+```bash
+# Scale data ingestion service to 5 replicas
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d --scale data-ingestion=5
+
+# Scale neural trader to 3 replicas
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d --scale neural-trader=3
+```
+
+## Maintenance
+
+### Update services
+```bash
+# Pull latest images
+docker-compose pull
+
+# Recreate containers
+docker-compose up -d --force-recreate
+```
+
+### Clean up
+```bash
+# Remove stopped containers
+docker-compose rm -f
+
+# Remove unused volumes
+docker volume prune
+
+# Remove unused images
+docker image prune
+```
+
+## Support
+
+For issues or questions:
+1. Check the logs first
+2. Verify environment variables
+3. Ensure sufficient resources
+4. Review health check status
+
 ## Additional Resources
 
 - [TimescaleDB Documentation](https://docs.timescale.com/)
 - [Redis Documentation](https://redis.io/documentation)
 - [Docker Compose Reference](https://docs.docker.com/compose/)
 - [PostgreSQL Connection Strings](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING)
+
+## License
+
+See the main project LICENSE file.

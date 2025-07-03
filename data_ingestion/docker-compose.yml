@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # TimescaleDB for time-series data
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: neural_trader
+      POSTGRES_USER: trader
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-trading123}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trader -d neural_trader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for real-time data and caching
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Data ingestion service
+  data-ingestion:
+    build: .
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: 5432
+      TIMESCALE_DATABASE: neural_trader
+      TIMESCALE_USER: trader
+      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-trading123}
+      
+      # Redis configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis123}
+      
+      # API Keys (set these in .env file)
+      IEX_CLOUD_API_KEY: ${IEX_CLOUD_API_KEY}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
+      POLYGON_API_KEY: ${POLYGON_API_KEY}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+      
+      # Service configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PROMETHEUS_ENABLED: "true"
+      PROMETHEUS_PORT: 9090
+    ports:
+      - "9090:9090"  # Prometheus metrics
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    command: >
+      python -m data_ingestion.main start
+      --providers yahoo_finance finnhub
+      --symbols AAPL GOOGL MSFT AMZN TSLA
+      --realtime
+      --batch
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    depends_on:
+      - data-ingestion
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - prometheus
+      - timescaledb
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "3000:3000"
+
+volumes:
+  timescale_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
