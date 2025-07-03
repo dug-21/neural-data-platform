@@ -9,10 +9,13 @@ path = "src/main.rs"
 
 [dependencies]
 # Autonomous Platform Dependencies
-# Note: Custom ruv-fann and daa integrations have been removed
+# Note: Custom ruv-fann and daa integrations have been restored
 # Use ruv-swarm MCP tools for neural/agent coordination instead
-# ruv-fann = { git = "https://github.com/ruvnet/ruv-fann.git", branch = "ruv-swarm-v1.05-daa", features = ["full", "daa-integration"] }
-# daa = "0.5"
+# ISSUE: ruv-fann has submodule configuration issues - the repository has broken submodule configuration
+# The submodule 'claude-code-flow/claude-code-flow' has no URL configured
+# This needs to be fixed in the upstream repository
+# ruv-fann = { git = "https://github.com/ruvnet/ruv-FANN.git", branch = "ruv-swarm-v1.05-daa", features = ["full", "daa-integration"] }
+daa = "0.5"
 
 # Configuration
 config = "0.14"

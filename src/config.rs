@@ -1100,9 +1100,17 @@ mod tests {
     use super::*;
     use tempfile::NamedTempFile;
     use std::io::Write;
+    use serial_test::serial;
     
     #[test]
+    #[serial]
     fn test_load_valid_config() {
+        // Clear any environment variables that might interfere from other tests
+        std::env::remove_var("DATABASE_MAX_CONNECTIONS");
+        std::env::remove_var("DATABASE_URL");
+        std::env::remove_var("REDIS_URL");
+        std::env::remove_var("REDIS_MAX_CONNECTIONS");
+        
         let config_content = r#"
 [platform]
 name = "test-platform"
@@ -1138,6 +1146,7 @@ quality_threshold = 0.9
     }
     
     #[test]
+    #[serial]
     fn test_env_override() {
         let config_content = r#"
 [platform]
@@ -1178,7 +1187,12 @@ quality_threshold = 0.9
     }
     
     #[test]
+    #[serial]
     fn test_validation_errors() {
+        // Clear any environment variables that might interfere
+        std::env::remove_var("DATABASE_URL");
+        std::env::remove_var("DATABASE_MAX_CONNECTIONS");
+        std::env::remove_var("DATABASE_MIN_CONNECTIONS");
         let invalid_configs = vec![
             // Empty database URL
             r#"
