@@ -5,7 +5,7 @@
 
 use super::{AdapterError, DataAdapter, MarketData, OrderBook};
 use async_trait::async_trait;
-use redis::{aio::MultiplexedConnection, AsyncCommands, Client};
+use redis::{aio::MultiplexedConnection, AsyncCommands, Client, Value, streams::{StreamRangeReply}};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use futures::StreamExt;
@@ -108,6 +108,11 @@ impl RedisAdapter {
 
     /// Cache order book snapshot
     pub async fn cache_order_book(&self, order_book: &OrderBook) -> Result<(), AdapterError> {
+        // Validate order book before caching
+        if order_book.symbol.is_empty() {
+            return Err(AdapterError::Serialization("Order book symbol cannot be empty".to_string()));
+        }
+        
         let conn = self
             .connection
             .as_ref()
@@ -118,7 +123,7 @@ impl RedisAdapter {
             .map_err(|e| AdapterError::Serialization(e.to_string()))?;
 
         let mut conn = conn.write().await;
-        conn.set_ex(&key, json, 60) // Expire after 60 seconds
+        conn.set_ex::<_, _, ()>(&key, json, 60) // Expire after 60 seconds
             .await
             .map_err(|e| AdapterError::Query(e.to_string()))?;
 
@@ -166,7 +171,7 @@ impl RedisAdapter {
         let value = format!("{}:{}", price, timestamp);
 
         let mut conn = conn.write().await;
-        conn.set(&key, value)
+        conn.set::<_, _, ()>(&key, value)
             .await
             .map_err(|e| AdapterError::Query(e.to_string()))?;
 
@@ -208,6 +213,160 @@ impl RedisAdapter {
             }
             None => Ok(None),
         }
+    }
+
+    /// Add market data to Redis stream
+    pub async fn add_to_stream(
+        &self,
+        stream_key: &str,
+        data: &MarketData,
+    ) -> Result<String, AdapterError> {
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
+
+        let mut conn = conn.write().await;
+        
+        // Create stream entry fields with owned strings
+        let timestamp_str = data.timestamp.to_string();
+        let open_str = data.open.to_string();
+        let high_str = data.high.to_string();
+        let low_str = data.low.to_string();
+        let close_str = data.close.to_string();
+        let volume_str = data.volume.to_string();
+        
+        let fields = vec![
+            ("symbol", data.symbol.as_str()),
+            ("timestamp", timestamp_str.as_str()),
+            ("open", open_str.as_str()),
+            ("high", high_str.as_str()),
+            ("low", low_str.as_str()),
+            ("close", close_str.as_str()),
+            ("volume", volume_str.as_str()),
+        ];
+
+        // Add to stream with automatic ID generation
+        let stream_id: String = conn
+            .xadd(stream_key, "*", &fields)
+            .await
+            .map_err(|e| AdapterError::Query(format!("Failed to add to stream: {}", e)))?;
+
+        Ok(stream_id)
+    }
+
+    /// Read from Redis stream
+    pub async fn read_from_stream(
+        &self,
+        stream_key: &str,
+        start_id: &str,
+        count: usize,
+    ) -> Result<Vec<MarketData>, AdapterError> {
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
+
+        let mut conn = conn.write().await;
+        
+        // Read from stream
+        let reply: StreamRangeReply = conn
+            .xrange_count(stream_key, start_id, "+", count)
+            .await
+            .map_err(|e| AdapterError::Query(format!("Failed to read from stream: {}", e)))?;
+
+        let mut market_data_vec = Vec::new();
+
+        for stream_entry in reply.ids {
+            let mut data = MarketData {
+                symbol: String::new(),
+                timestamp: 0,
+                open: 0.0,
+                high: 0.0,
+                low: 0.0,
+                close: 0.0,
+                volume: 0.0,
+            };
+
+            // Parse fields from stream entry
+            for (key, value) in stream_entry.map {
+                match key.as_str() {
+                    "symbol" => {
+                        if let Value::Data(bytes) = value {
+                            data.symbol = String::from_utf8_lossy(&bytes).to_string();
+                        }
+                    }
+                    "timestamp" => {
+                        if let Value::Data(bytes) = value {
+                            data.timestamp = String::from_utf8_lossy(&bytes)
+                                .parse()
+                                .unwrap_or(0);
+                        }
+                    }
+                    "open" => {
+                        if let Value::Data(bytes) = value {
+                            data.open = String::from_utf8_lossy(&bytes)
+                                .parse()
+                                .unwrap_or(0.0);
+                        }
+                    }
+                    "high" => {
+                        if let Value::Data(bytes) = value {
+                            data.high = String::from_utf8_lossy(&bytes)
+                                .parse()
+                                .unwrap_or(0.0);
+                        }
+                    }
+                    "low" => {
+                        if let Value::Data(bytes) = value {
+                            data.low = String::from_utf8_lossy(&bytes)
+                                .parse()
+                                .unwrap_or(0.0);
+                        }
+                    }
+                    "close" => {
+                        if let Value::Data(bytes) = value {
+                            data.close = String::from_utf8_lossy(&bytes)
+                                .parse()
+                                .unwrap_or(0.0);
+                        }
+                    }
+                    "volume" => {
+                        if let Value::Data(bytes) = value {
+                            data.volume = String::from_utf8_lossy(&bytes)
+                                .parse()
+                                .unwrap_or(0.0);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            market_data_vec.push(data);
+        }
+
+        Ok(market_data_vec)
+    }
+
+    /// Create consumer group for stream
+    pub async fn create_consumer_group(
+        &self,
+        stream_key: &str,
+        group_name: &str,
+    ) -> Result<(), AdapterError> {
+        let conn = self
+            .connection
+            .as_ref()
+            .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
+
+        let mut conn = conn.write().await;
+        
+        // Create consumer group starting from beginning of stream
+        let _: Result<(), _> = conn
+            .xgroup_create_mkstream(stream_key, group_name, "$")
+            .await;
+
+        Ok(())
     }
 }
 
