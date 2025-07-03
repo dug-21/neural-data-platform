@@ -21,10 +21,10 @@ if [ -f "package.json" ]; then
     npm install
 fi
 
-if [ -f "requirements.txt" ]; then
-    echo "📦 Installing Python dependencies..."
-    pip install -r requirements.txt
-fi
+# if [ -f "requirements.txt" ]; then
+#    echo "📦 Installing Python dependencies..."
+#    pip install -r requirements.txt
+# fi
 
 if [ -f "pyproject.toml" ]; then
     echo "📦 Installing Python dependencies with Poetry..."

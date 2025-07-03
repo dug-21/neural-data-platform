@@ -63,22 +63,12 @@ npm install -g \
 echo "🐍 Setting up Python environment..."
 pip install --upgrade pip
 pip install \
-    poetry \
     pipenv \
     black \
     flake8 \
     mypy \
-    pytest \
-    jupyter \
-    numpy \
-    pandas \
-    requests \
-    fastapi \
-    uvicorn \
-    pydantic \
-    sqlalchemy \
-    alembic
-
+    pytest 
+    
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
 if ! command -v claude &> /dev/null; then
@@ -114,7 +104,7 @@ cat > ~/.claude/mcp/config.json << 'EOF'
     },
     "filesystem": {
       "command": "npx",
-      "args": ["@modelcontextprotocol/server-filesystem", "/workspaces/test2"],
+      "args": ["@modelcontextprotocol/server-filesystem", "/workspaces/neural-trader"],
       "transport": "stdio"
     }
   }
