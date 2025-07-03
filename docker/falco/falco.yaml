@@ -1,0 +1,151 @@
+# Security Monitoring Configuration for Falco
+# Runtime security monitoring for Neural Trader
+
+# Basic configuration
+json_output: true
+json_include_output_property: true
+json_include_tags_property: true
+
+# Logging
+log_stderr: true
+log_syslog: true
+log_level: info
+
+# Output channels
+stdout_output:
+  enabled: true
+
+file_output:
+  enabled: true
+  keep_alive: false
+  filename: /var/log/falco/events.log
+
+syslog_output:
+  enabled: true
+
+# Network output for centralized logging
+http_output:
+  enabled: false
+  url: "http://falco-collector:8080/events"
+
+grpc_output:
+  enabled: true
+
+# Rules configuration
+rules_file:
+  - /etc/falco/falco_rules.yaml
+  - /etc/falco/falco_rules.local.yaml
+  - /etc/falco/k8s_audit_rules.yaml
+  - /etc/falco/application_rules.yaml
+
+# Metrics
+metrics:
+  enabled: true
+  interval: 30s
+  output_rule: true
+  rules_counters_enabled: true
+  resource_utilization_enabled: true
+  kernel_event_counters_enabled: true
+  libbpf_stats_enabled: true
+
+# Syscall event drops
+syscall_event_drops:
+  threshold: 0.1
+  actions:
+    - log
+    - alert
+
+# Priority configuration
+priority: DEBUG
+
+# Buffered outputs
+buffered_outputs: false
+
+# Time format
+time_format_iso_8601: true
+
+# Application-specific rules for Neural Trader
+application_rules: |
+  # Detect suspicious network connections
+  - rule: Unexpected outbound connection
+    desc: Detect unexpected outbound network connections from neural-trader
+    condition: >
+      outbound and
+      container.name contains "neural_trader" and
+      not fd.sip in (timescaledb, redis, prometheus) and
+      not fd.sport in (5432, 6379, 9090)
+    output: >
+      Unexpected outbound connection from neural-trader
+      (command=%proc.cmdline connection=%fd.name user=%user.name container=%container.name)
+    priority: WARNING
+    tags: [network, neural-trader]
+
+  # Detect file system changes in read-only containers
+  - rule: Write to read-only container
+    desc: Detect writes to containers that should be read-only
+    condition: >
+      open_write and
+      container.name contains "neural_trader" and
+      not fd.name startswith "/tmp" and
+      not fd.name startswith "/app/logs"
+    output: >
+      File write in read-only container
+      (file=%fd.name command=%proc.cmdline container=%container.name)
+    priority: ERROR
+    tags: [filesystem, neural-trader]
+
+  # Detect privilege escalation attempts
+  - rule: Privilege escalation attempt
+    desc: Detect attempts to escalate privileges in neural-trader
+    condition: >
+      spawned_process and
+      container.name contains "neural_trader" and
+      (proc.name in (su, sudo, setuid, setgid) or
+       proc.args contains "chmod +s")
+    output: >
+      Privilege escalation attempt detected
+      (command=%proc.cmdline user=%user.name container=%container.name)
+    priority: CRITICAL
+    tags: [process, privilege-escalation, neural-trader]
+
+  # Detect suspicious process execution
+  - rule: Suspicious process in container
+    desc: Detect suspicious processes in neural-trader containers
+    condition: >
+      spawned_process and
+      container.name contains "neural_trader" and
+      proc.name in (nc, netcat, nmap, telnet, curl, wget, bash, sh) and
+      not proc.pname in (neural-trader, cargo, rustc)
+    output: >
+      Suspicious process executed in container
+      (command=%proc.cmdline container=%container.name parent=%proc.pname)
+    priority: WARNING
+    tags: [process, neural-trader]
+
+  # Detect database connection anomalies
+  - rule: Anomalous database connection
+    desc: Detect unusual database connections from neural-trader
+    condition: >
+      outbound and
+      container.name contains "neural_trader" and
+      fd.sport != 5432 and
+      fd.sip contains "timescale"
+    output: >
+      Anomalous database connection detected
+      (connection=%fd.name container=%container.name)
+    priority: WARNING
+    tags: [database, neural-trader]
+
+  # Detect Redis connection anomalies
+  - rule: Anomalous Redis connection
+    desc: Detect unusual Redis connections from neural-trader
+    condition: >
+      outbound and
+      container.name contains "neural_trader" and
+      fd.sport != 6379 and
+      fd.sip contains "redis"
+    output: >
+      Anomalous Redis connection detected
+      (connection=%fd.name container=%container.name)
+    priority: WARNING
+    tags: [redis, neural-trader]

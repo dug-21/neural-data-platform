@@ -11,11 +11,11 @@ path = "src/main.rs"
 # Autonomous Platform Dependencies
 # Note: Custom ruv-fann and daa integrations have been restored
 # Use ruv-swarm MCP tools for neural/agent coordination instead
-# ISSUE: ruv-fann has submodule configuration issues - the repository has broken submodule configuration
-# The submodule 'claude-code-flow/claude-code-flow' has no URL configured
-# This needs to be fixed in the upstream repository
-# ruv-fann = { git = "https://github.com/ruvnet/ruv-FANN.git", branch = "ruv-swarm-v1.05-daa", features = ["full", "daa-integration"] }
-daa = "0.5"
+# WORKAROUND: The upstream repository has broken submodule configuration
+# Using local path to avoid submodule issues
+# TODO: Re-enable once Rust edition2024 dependencies are resolved
+# ruv-fann = { path = "./vendor/ruv-fann", features = ["default"] }
+# daa = "0.5"
 
 # Configuration
 config = "0.14"
@@ -24,17 +24,18 @@ serde_toml = "0.0.1"
 serde_yaml = "0.9"
 toml = "0.8"
 
-# Database
-sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "macros", "chrono"] }
-redis = { version = "0.25", features = ["tokio-comp"] }
+# Database - temporarily using older versions to avoid edition2024
+# TODO: Upgrade once Rust edition2024 is properly supported
+sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres", "macros", "chrono"] }
+redis = { version = "0.23", features = ["tokio-comp"] }
 
 # Async runtime
-tokio = { version = "1.42", features = ["full"] }
+tokio = { version = "1.35", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
 
 # Error handling
-thiserror = "2.0"
+thiserror = "1.0"
 anyhow = "1.0"
 
 # Logging and metrics
@@ -56,6 +57,8 @@ serde_json = "1.0"
 
 # UUID generation
 uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Temporarily removed patches to get a working build
 
 [dev-dependencies]
 # Testing
