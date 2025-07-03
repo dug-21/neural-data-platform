@@ -25,50 +25,6 @@ sudo apt-get install -y \
     zsh \
     tmux
 
-# Install oh-my-zsh for better shell experience
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-fi
-
-# Set up Rust environment
-echo "🦀 Setting up Rust environment..."
-rustup update
-rustup component add clippy rustfmt rust-src
-cargo install cargo-watch cargo-edit cargo-tree cargo-audit
-
-# Install common Rust tools
-cargo install \
-    tokio-console \
-    cargo-nextest \
-    cargo-deny \
-    cargo-outdated \
-    cargo-udeps \
-    cargo-expand
-
-# Set up Node.js environment
-echo "📦 Setting up Node.js environment..."
-npm install -g \
-    typescript \
-    ts-node \
-    @types/node \
-    eslint \
-    prettier \
-    nodemon \
-    pm2 \
-    create-react-app \
-    @vue/cli \
-    @angular/cli
-
-# Set up Python environment
-echo "🐍 Setting up Python environment..."
-pip install --upgrade pip
-pip install \
-    pipenv \
-    black \
-    flake8 \
-    mypy \
-    pytest 
-    
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
 if ! command -v claude &> /dev/null; then
@@ -195,6 +151,52 @@ alias gp='git push'
 alias gl='git log --oneline'
 alias gd='git diff'
 EOF
+
+
+# Install oh-my-zsh for better shell experience
+# if [ ! -d "$HOME/.oh-my-zsh" ]; then
+#    sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+# fi
+
+# Set up Rust environment
+echo "🦀 Setting up Rust environment..."
+rustup update
+rustup component add clippy rustfmt rust-src
+cargo install cargo-watch cargo-edit cargo-tree cargo-audit
+
+# Install common Rust tools
+cargo install \
+    tokio-console \
+    cargo-nextest \
+    cargo-deny \
+    cargo-outdated \
+    cargo-udeps \
+    cargo-expand
+
+# Set up Node.js environment
+echo "📦 Setting up Node.js environment..."
+npm install -g \
+    typescript \
+    ts-node \
+    @types/node \
+    eslint \
+    prettier \
+    nodemon \
+    pm2 \
+    create-react-app \
+    @vue/cli \
+    @angular/cli
+
+# Set up Python environment
+echo "🐍 Setting up Python environment..."
+pip install --upgrade pip
+pip install \
+    pipenv \
+    black \
+    flake8 \
+    mypy \
+    pytest 
+    
 
 # Source the new aliases
 source ~/.bashrc
