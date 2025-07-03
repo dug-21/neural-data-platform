@@ -197,4 +197,4 @@ secrets/
 
 # Monitoring
 prometheus_data/
-grafana_data/
+grafana_data/*.profraw
