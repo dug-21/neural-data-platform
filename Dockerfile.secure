@@ -1,0 +1,215 @@
+# Security-Hardened Multi-stage Dockerfile for Neural Trader
+# Addresses all identified vulnerabilities and implements security best practices
+
+# Use a minimal, secure base image with fewer vulnerabilities
+FROM rust:1.83-slim AS security-builder
+
+# Set non-interactive mode to prevent hanging during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update package repositories and install security updates
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+        # Only essential build dependencies
+        pkg-config \
+        libssl-dev \
+        libpq-dev \
+        cmake \
+        g++ \
+        ca-certificates \
+        # Security: Add tools for verification
+        gnupg \
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Security: Create build user with minimal privileges
+RUN groupadd -r -g 1000 builduser \
+    && useradd -r -g builduser -u 1000 -d /app -s /bin/bash builduser
+
+# Set working directory
+WORKDIR /app
+
+# Security: Change ownership before copying files
+RUN chown -R builduser:builduser /app
+
+# Switch to non-root user for build
+USER builduser
+
+# Copy dependency files first (better layer caching)
+COPY --chown=builduser:builduser Cargo.toml Cargo.lock ./
+
+# Create a dummy main.rs for dependency caching
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies first (this layer will be cached)
+RUN cargo build --release \
+    && rm -rf src target/release/deps/neural_trader*
+
+# Copy actual source code
+COPY --chown=builduser:builduser src ./src/
+
+# Build the application
+RUN cargo build --release --bin neural-trader
+
+# Security: Verify the binary exists and is executable
+RUN test -f target/release/neural-trader && test -x target/release/neural-trader
+
+# =============================================================================
+# Secure Runtime Stage - Using distroless for minimal attack surface
+# =============================================================================
+
+FROM gcr.io/distroless/cc-debian12:nonroot AS production
+
+# Security: Use distroless base image to minimize attack surface
+# This image contains only the runtime dependencies (glibc, libssl, etc.)
+# and has no shell, package manager, or other tools
+
+# Copy CA certificates for HTTPS connections
+COPY --from=security-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy the binary from builder stage
+COPY --from=security-builder /app/target/release/neural-trader /usr/local/bin/neural-trader
+
+# Security: Create necessary directories with proper permissions
+USER nonroot:nonroot
+WORKDIR /app
+
+# Security: Expose only necessary port
+EXPOSE 3030
+
+# Security: Set minimal environment variables
+ENV RUST_LOG=info \
+    RUST_BACKTRACE=1
+
+# Security: Use exec form to avoid shell interpretation
+ENTRYPOINT ["/usr/local/bin/neural-trader"]
+
+# =============================================================================
+# Alternative Secure Runtime Stage - Using Alpine for smaller footprint
+# =============================================================================
+
+FROM alpine:3.20 AS alpine-production
+
+# Security: Install only runtime dependencies and security updates
+RUN apk add --no-cache \
+        ca-certificates \
+        libgcc \
+        libssl3 \
+        libcrypto3 \
+        libpq \
+        tzdata \
+    && apk upgrade --no-cache \
+    && rm -rf /var/cache/apk/*
+
+# Security: Create non-root user
+RUN addgroup -g 1000 -S neuraltrader \
+    && adduser -u 1000 -S -G neuraltrader -h /app -s /sbin/nologin neuraltrader
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=security-builder --chown=neuraltrader:neuraltrader /app/target/release/neural-trader /usr/local/bin/neural-trader
+
+# Security: Make binary executable and verify
+RUN chmod +x /usr/local/bin/neural-trader \
+    && test -x /usr/local/bin/neural-trader
+
+# Security: Create necessary directories with proper permissions
+RUN mkdir -p /app/logs /app/config \
+    && chown -R neuraltrader:neuraltrader /app
+
+# Switch to non-root user
+USER neuraltrader
+
+# Security: Expose only necessary port
+EXPOSE 3030
+
+# Security: Set environment variables
+ENV RUST_LOG=info \
+    RUST_BACKTRACE=1
+
+# Health check with timeout
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["/usr/local/bin/neural-trader", "--health-check"]
+
+# Security: Use exec form to avoid shell interpretation
+ENTRYPOINT ["/usr/local/bin/neural-trader"]
+
+# =============================================================================
+# Development Stage - Security-focused development environment
+# =============================================================================
+
+FROM security-builder AS development
+
+# Switch back to root for development tool installation
+USER root
+
+# Install development tools with security focus
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        # Development tools
+        gdb \
+        strace \
+        valgrind \
+        # Security tools
+        rkhunter \
+        chkrootkit \
+        # Network tools for debugging
+        netcat-traditional \
+        tcpdump \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Security: Create development user with limited privileges
+RUN groupadd -r -g 1001 devuser \
+    && useradd -r -g devuser -u 1001 -d /app -s /bin/bash devuser \
+    && chown -R devuser:devuser /app
+
+# Switch to development user
+USER devuser
+
+# Set development environment
+ENV RUST_LOG=debug \
+    RUST_BACKTRACE=full
+
+# Expose development port
+EXPOSE 3030
+
+# Development command
+CMD ["cargo", "run", "--bin", "neural-trader"]
+
+# =============================================================================
+# Test Stage - Security-focused testing
+# =============================================================================
+
+FROM security-builder AS test
+
+# Install security testing tools
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        # Security testing tools
+        nmap \
+        openssl \
+        # Code analysis tools
+        cppcheck \
+        clang-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Switch back to build user
+USER builduser
+
+# Copy test files
+COPY --chown=builduser:builduser tests ./tests/
+
+# Run security-focused tests
+RUN cargo test --all \
+    && cargo clippy -- -D warnings \
+    && cargo audit
+
+# Default command for test stage
+CMD ["cargo", "test", "--all"]
