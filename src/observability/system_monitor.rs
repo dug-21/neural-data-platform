@@ -4,11 +4,8 @@
 //! and integrates with the observability metrics system.
 
 use anyhow::Result;
-use std::time::Duration;
 use sysinfo::{System, Networks, Disks};
-use tokio::time::interval;
 
-use super::metrics::SystemMetrics;
 
 /// System monitor that collects real system metrics
 pub struct SystemMonitor {
@@ -51,7 +48,7 @@ impl SystemMonitor {
         }
 
         // Collect network metrics
-        let mut networks = Networks::new_with_refreshed_list();
+        let networks = Networks::new_with_refreshed_list();
         for (_interface_name, network_data) in networks.iter() {
             network_bytes_received += network_data.total_received();
             network_bytes_sent += network_data.total_transmitted();
@@ -106,7 +103,7 @@ impl SystemMonitor {
             available_disk_space += disk.available_space();
         }
 
-        let mut networks = Networks::new_with_refreshed_list();
+        let networks = Networks::new_with_refreshed_list();
         for (_interface_name, network_data) in networks.iter() {
             network_bytes_received += network_data.total_received();
             network_bytes_sent += network_data.total_transmitted();

@@ -3,19 +3,22 @@ name = "autonomous-platform"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "neural-trader"
+path = "src/main.rs"
+
 [dependencies]
 # Autonomous Platform Dependencies
-# Core ruv ecosystem
-ruv-fann = "0.1.3"
-ruv-swarm-core = "0.2.0"
-ruv-swarm-ml = "0.2.0"
-ruv-swarm-mcp = "0.2.0"
-daa-orchestrator = { git = "https://github.com/ruvnet/daa.git", branch = "main" }
+# Note: Custom ruv-fann and daa integrations have been removed
+# Use ruv-swarm MCP tools for neural/agent coordination instead
+# ruv-fann = { git = "https://github.com/ruvnet/ruv-fann.git", branch = "ruv-swarm-v1.05-daa", features = ["full", "daa-integration"] }
+# daa = "0.5"
 
 # Configuration
 config = "0.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_toml = "0.0.1"
+serde_yaml = "0.9"
 toml = "0.8"
 
 # Database
@@ -24,6 +27,8 @@ redis = { version = "0.25", features = ["tokio-comp"] }
 
 # Async runtime
 tokio = { version = "1.42", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
 
 # Error handling
 thiserror = "2.0"
@@ -48,7 +53,6 @@ serde_json = "1.0"
 
 # UUID generation
 uuid = { version = "1.0", features = ["v4", "serde"] }
-futures = "0.3"
 
 [dev-dependencies]
 # Testing

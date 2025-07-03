@@ -6,7 +6,6 @@ use std::collections::HashMap;
 
 pub mod storage;
 pub mod cache;
-pub mod pipeline;
 
 // Re-export main types
 pub use storage::{
@@ -16,7 +15,6 @@ pub use storage::{
     AggregatedStats,
 };
 pub use cache::{RedisCache, PredictionResult};
-pub use pipeline::DataPipeline;
 
 /// Time series data point
 #[derive(Debug, Clone, Serialize, Deserialize)]

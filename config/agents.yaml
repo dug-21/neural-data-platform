@@ -1,0 +1,71 @@
+# Agent Configuration
+# Defines autonomous agents for the trading system
+
+agents:
+  market_analyst:
+    type: researcher
+    capabilities:
+      - market_data_analysis
+      - pattern_recognition
+      - trend_forecasting
+    neural_models:
+      - NHITS      # Long-term trends
+      - TCN        # Short-term patterns
+    data_sources:
+      - timescale  # Historical data
+      - redis      # Real-time streaming
+    analysis_window: 24h
+    update_frequency: 1m
+    
+  risk_manager:
+    type: analyst
+    capabilities:
+      - portfolio_analysis
+      - risk_assessment
+      - position_sizing
+    rules:
+      max_position: 0.1        # 10% of portfolio
+      stop_loss: 0.02          # 2% stop loss
+      max_drawdown: 0.05       # 5% max drawdown
+      correlation_limit: 0.7   # Position correlation limit
+    monitoring:
+      - positions
+      - market_exposure
+      - volatility
+      
+  execution_agent:
+    type: coder
+    capabilities:
+      - order_execution
+      - slippage_minimization
+      - timing_optimization
+    execution_params:
+      order_types: ["market", "limit", "stop"]
+      max_slippage: 0.001      # 0.1%
+      retry_attempts: 3
+      timeout_seconds: 30
+      
+  portfolio_optimizer:
+    type: optimizer
+    capabilities:
+      - allocation_optimization
+      - rebalancing
+      - performance_tracking
+    optimization:
+      method: "sharpe_ratio"
+      rebalance_frequency: "daily"
+      min_position_size: 0.01
+      
+  coordinator:
+    type: coordinator
+    capabilities:
+      - agent_orchestration
+      - conflict_resolution
+      - decision_aggregation
+    coordination:
+      consensus_threshold: 0.7
+      voting_weight:
+        market_analyst: 0.3
+        risk_manager: 0.4
+        execution_agent: 0.2
+        portfolio_optimizer: 0.1

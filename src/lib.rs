@@ -41,7 +41,8 @@
 //! - [`config`] - Configuration management and validation
 //! - [`data`] - Time series data processing, storage, and caching
 //! - [`integration`] - External service integrations (market data, trading platforms)
-//! - [`adapters`] - Neural network model adapters and registry
+//! - [`adapters`] - Data source adapters (TimescaleDB, Redis)
+//! - [`strategies`] - Trading strategies and signal generation
 //!
 //! # Configuration
 //!
@@ -73,6 +74,7 @@ pub mod config;
 pub mod data;
 pub mod integration;
 pub mod adapters;
+pub mod strategies;
 pub mod observability;
 pub mod security;
 pub mod monitoring;

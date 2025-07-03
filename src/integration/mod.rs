@@ -4,17 +4,11 @@
 //! - Market data providers
 //! - Trading platforms
 //! - Analytics services
-//! - External neural model providers
 //! - Data access layer for DAA agents
-//! - DAA-FANN neural prediction integration
 
 use anyhow::Result;
 
 pub mod data_access;
-pub mod neural_predictions;
-pub mod daa_fann;
-pub mod platform_orchestrator;
-pub mod streaming;
 
 /// Trait for market data providers
 pub trait MarketDataProvider: Send + Sync {

@@ -8,7 +8,7 @@
 //! - Security monitoring and alerting
 //! - Vulnerability scanning and prevention
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
