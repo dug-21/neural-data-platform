@@ -1,0 +1,59 @@
+# Trading System Configuration
+# Based on ruv-FANN & DAA Integration
+
+system:
+  mode: production
+  log_level: info
+
+neural:
+  models:
+    - type: NHITS
+      horizon: 24
+      confidence: 0.8
+    - type: DeepAR
+      samples: 100
+      quantiles: [0.1, 0.5, 0.9]
+
+neural_models:
+  primary: NHITS      # Best for trend prediction
+  fallback: DeepAR    # Handles volatility well
+  ensemble:
+    - TCN            # Temporal patterns
+    - MLP            # Non-linear relationships
+
+agents:
+  spawn_strategy: adaptive
+  max_agents: 5
+  coordination: hierarchical
+  topology: hierarchical
+  types:
+    - name: Market Analyst
+      model: NHITS
+      data_window: 1h
+    - name: Risk Manager
+      model: DeepAR
+      thresholds:
+        max_drawdown: 0.05
+        position_size: 0.02
+
+trading:
+  symbols: ["BTC/USD", "ETH/USD"]
+  timeframes: ["1m", "5m", "1h"]
+  max_positions: 3
+  risk_per_trade: 0.01
+
+data:
+  timescale:
+    url: "postgresql://localhost/trading"
+    host: localhost
+    port: 5432
+    database: trading
+    username: postgres
+    password: postgres
+    max_connections: 10
+  redis:
+    url: "redis://localhost:6379"
+    host: localhost
+    port: 6379
+    db: 0
+    pool_size: 10

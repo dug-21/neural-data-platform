@@ -7,7 +7,7 @@
 //! - Custom metrics for specific business logic
 
 use anyhow::Result;
-use metrics::{counter, gauge, histogram, Counter, Gauge, Histogram};
+use metrics::{Counter, Gauge, Histogram};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

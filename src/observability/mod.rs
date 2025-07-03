@@ -12,9 +12,9 @@ use anyhow::{Context, Result};
 use std::sync::atomic::{AtomicU64, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn, Instrument};
+use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
 
 pub mod logger;

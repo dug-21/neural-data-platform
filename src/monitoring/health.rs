@@ -16,7 +16,6 @@ use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::data::{PlatformMetrics, QualityMetrics};
 
 /// Component types in the autonomous platform
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

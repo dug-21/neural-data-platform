@@ -6,10 +6,9 @@
 //! - Performance-optimized async logging
 //! - Context-aware log enrichment
 
-use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{event, Level};
+use tracing::Level;
 
 /// Log levels for the system
 #[derive(Debug, Clone, Copy, PartialEq)]
