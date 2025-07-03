@@ -7,8 +7,8 @@
 //! - Refinement: Cover all edge cases and error scenarios
 //! - Completion: Comprehensive adapter test coverage
 
-use autonomous_platform::adapters::{
-    AdapterError, DataAdapter, MarketData, OrderBook, OrderBookEntry,
+use neural_trader::adapters::{
+    AdapterError, DataAdapter, MarketData, OrderBook,
     redis::{RedisAdapter, RedisConfig},
     timescale::{TimescaleAdapter, TimescaleConfig},
 };
@@ -116,6 +116,229 @@ mod timescale_adapter_tests {
 
         // THEN: Should return connection error
         assert!(matches!(result, Err(AdapterError::Connection(_))));
+    }
+
+    #[test]
+    fn test_timescale_config_default() {
+        let config = TimescaleConfig::default();
+        assert_eq!(config.host, "localhost");
+        assert_eq!(config.port, 5432);
+        assert_eq!(config.database, "trading");
+        assert_eq!(config.username, "postgres");
+        assert_eq!(config.password, "postgres");
+        assert_eq!(config.max_connections, 10);
+    }
+
+    #[tokio::test]
+    async fn test_timescale_validation_empty_symbol() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let mut data = MarketData {
+            symbol: "".to_string(),
+            timestamp: 1640995200,
+            open: 48000.0,
+            high: 49000.0,
+            low: 47500.0,
+            close: 48500.0,
+            volume: 1000.0,
+        };
+        
+        let result = adapter.insert_market_data(&[data]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "Symbol cannot be empty"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_validation_negative_timestamp() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let mut data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: -1,
+            open: 48000.0,
+            high: 49000.0,
+            low: 47500.0,
+            close: 48500.0,
+            volume: 1000.0,
+        };
+        
+        let result = adapter.insert_market_data(&[data]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "Timestamp must be non-negative"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_validation_negative_prices() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: -100.0,
+            high: 49000.0,
+            low: 47500.0,
+            close: 48500.0,
+            volume: 1000.0,
+        };
+        
+        let result = adapter.insert_market_data(&[data]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "Prices must be non-negative"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_validation_high_low_relationship() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: 48000.0,
+            high: 100.0,
+            low: 200.0,
+            close: 48500.0,
+            volume: 1000.0,
+        };
+        
+        let result = adapter.insert_market_data(&[data]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "High price must be >= low price"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_validation_high_not_highest() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: 150.0,
+            high: 100.0,
+            low: 50.0,
+            close: 90.0,
+            volume: 1000.0,
+        };
+        
+        let result = adapter.insert_market_data(&[data]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "High price must be the highest price"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_validation_low_not_lowest() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: 100.0,
+            high: 150.0,
+            low: 110.0,
+            close: 120.0,
+            volume: 1000.0,
+        };
+        
+        let result = adapter.insert_market_data(&[data]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "Low price must be the lowest price"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_validation_negative_volume() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: 48000.0,
+            high: 49000.0,
+            low: 47500.0,
+            close: 48500.0,
+            volume: -100.0,
+        };
+        
+        let result = adapter.insert_market_data(&[data]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "Volume must be non-negative"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_multiple_data_validation() {
+        let config = TimescaleConfig::default();
+        let adapter = TimescaleAdapter::new(config);
+        
+        let data1 = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: 48000.0,
+            high: 49000.0,
+            low: 47500.0,
+            close: 48500.0,
+            volume: 1000.0,
+        };
+        
+        let data2 = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995300,
+            open: 48500.0,
+            high: 49200.0,
+            low: 48000.0,
+            close: 48800.0,
+            volume: -50.0, // Invalid volume
+        };
+        
+        let result = adapter.insert_market_data(&[data1, data2]).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Configuration(msg) => assert_eq!(msg, "Volume must be non-negative"),
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timescale_disconnect_when_not_connected() {
+        let config = TimescaleConfig::default();
+        let mut adapter = TimescaleAdapter::new(config);
+        
+        // Should not error when disconnecting while not connected
+        let result = adapter.disconnect().await;
+        assert!(result.is_ok());
     }
 }
 
@@ -232,6 +455,142 @@ mod redis_adapter_tests {
         // THEN: Both should return connection errors
         assert!(matches!(set_result, Err(AdapterError::Connection(_))));
         assert!(matches!(get_result, Err(AdapterError::Connection(_))));
+    }
+
+    #[test]
+    fn test_redis_config_default() {
+        let config = RedisConfig::default();
+        assert_eq!(config.host, "localhost");
+        assert_eq!(config.port, 6379);
+        assert!(config.password.is_none());
+        assert_eq!(config.db, 0);
+        assert_eq!(config.pool_size, 10);
+    }
+
+    #[test]
+    fn test_redis_config_with_password() {
+        let config = RedisConfig {
+            host: "localhost".to_string(),
+            port: 6379,
+            password: Some("secret".to_string()),
+            db: 2,
+            pool_size: 10,
+        };
+        
+        let adapter = RedisAdapter::new(config);
+        assert!(!adapter.is_connected());
+    }
+
+    #[tokio::test]
+    async fn test_redis_add_to_stream_not_connected() {
+        let config = RedisConfig::default();
+        let adapter = RedisAdapter::new(config);
+        
+        let data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: 48000.0,
+            high: 49000.0,
+            low: 47500.0,
+            close: 48500.0,
+            volume: 1000.0,
+        };
+        
+        let result = adapter.add_to_stream("test_stream", &data).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Connection(msg) => assert_eq!(msg, "Not connected"),
+            _ => panic!("Expected Connection error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_redis_read_from_stream_not_connected() {
+        let config = RedisConfig::default();
+        let adapter = RedisAdapter::new(config);
+        
+        let result = adapter.read_from_stream("test_stream", "0", 10).await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Connection(msg) => assert_eq!(msg, "Not connected"),
+            _ => panic!("Expected Connection error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_redis_create_consumer_group_not_connected() {
+        let config = RedisConfig::default();
+        let adapter = RedisAdapter::new(config);
+        
+        let result = adapter.create_consumer_group("test_stream", "test_group").await;
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            AdapterError::Connection(msg) => assert_eq!(msg, "Not connected"),
+            _ => panic!("Expected Connection error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_redis_disconnect_when_not_connected() {
+        let config = RedisConfig::default();
+        let mut adapter = RedisAdapter::new(config);
+        
+        // Should not error when disconnecting while not connected
+        let result = adapter.disconnect().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_market_data_serialization() {
+        let data = MarketData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            open: 48000.0,
+            high: 49000.0,
+            low: 47500.0,
+            close: 48500.0,
+            volume: 1000.0,
+        };
+        
+        let json = serde_json::to_string(&data).unwrap();
+        let deserialized: MarketData = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(data.symbol, deserialized.symbol);
+        assert_eq!(data.timestamp, deserialized.timestamp);
+        assert_eq!(data.open, deserialized.open);
+        assert_eq!(data.high, deserialized.high);
+        assert_eq!(data.low, deserialized.low);
+        assert_eq!(data.close, deserialized.close);
+        assert_eq!(data.volume, deserialized.volume);
+    }
+
+    #[tokio::test]
+    async fn test_order_book_serialization() {
+        let order_book = OrderBook {
+            symbol: "BTC/USD".to_string(),
+            timestamp: 1640995200,
+            bids: vec![
+                (48000.0, 1.5),
+                (47900.0, 2.0),
+                (47800.0, 1.0),
+            ],
+            asks: vec![
+                (48100.0, 1.2),
+                (48200.0, 2.5),
+                (48300.0, 1.8),
+            ],
+        };
+        
+        let json = serde_json::to_string(&order_book).unwrap();
+        let deserialized: OrderBook = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(order_book.symbol, deserialized.symbol);
+        assert_eq!(order_book.timestamp, deserialized.timestamp);
+        assert_eq!(order_book.bids.len(), deserialized.bids.len());
+        assert_eq!(order_book.asks.len(), deserialized.asks.len());
     }
 }
 

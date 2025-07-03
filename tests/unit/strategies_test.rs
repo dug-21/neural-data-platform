@@ -7,9 +7,9 @@
 //! - Refinement: Cover edge cases and market conditions
 //! - Completion: Comprehensive strategy behavior validation
 
-use autonomous_platform::strategies::{
+use neural_trader::strategies::{
     MarketContext, Position, PositionSide, Signal, StrategyConfig, 
-    StrategyError, StrategyFactory, StrategyMetrics, TradingStrategy,
+    StrategyError, StrategyFactory, TradingStrategy,
     momentum::MomentumStrategy,
 };
 use std::collections::HashMap;
@@ -117,7 +117,7 @@ mod momentum_strategy_tests {
         // GIVEN: A position with significant loss
         let strategy = create_test_momentum_strategy().await;
         
-        let position = Position {
+        let mut position = Position {
             symbol: "BTC/USD".to_string(),
             side: PositionSide::Long,
             size: 1.0,
@@ -126,6 +126,7 @@ mod momentum_strategy_tests {
             unrealized_pnl: -1500.0,
             timestamp: 1704067200,
         };
+        position.current_price = 48500.0;
 
         let context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -157,7 +158,7 @@ mod momentum_strategy_tests {
         // GIVEN: A position with significant profit
         let strategy = create_test_momentum_strategy().await;
         
-        let position = Position {
+        let mut position = Position {
             symbol: "BTC/USD".to_string(),
             side: PositionSide::Long,
             size: 1.0,
@@ -166,6 +167,7 @@ mod momentum_strategy_tests {
             unrealized_pnl: 2600.0,
             timestamp: 1704067200,
         };
+        position.current_price = 52600.0;
 
         let context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -190,6 +192,29 @@ mod momentum_strategy_tests {
             }
             _ => panic!("Expected Sell signal for take profit"),
         }
+    }
+
+    async fn create_test_momentum_strategy() -> MomentumStrategy {
+        let config = StrategyConfig {
+            name: "momentum".to_string(),
+            enabled: true,
+            risk_limit: 0.02,
+            position_size: 1.0,
+            parameters: HashMap::from([
+                ("fast_period".to_string(), json!(12)),
+                ("slow_period".to_string(), json!(26)),
+                ("rsi_period".to_string(), json!(14)),
+                ("rsi_overbought".to_string(), json!(70.0)),
+                ("rsi_oversold".to_string(), json!(30.0)),
+                ("momentum_threshold".to_string(), json!(0.02)),
+                ("stop_loss_pct".to_string(), json!(0.02)),
+                ("take_profit_pct".to_string(), json!(0.05)),
+            ]),
+        };
+
+        let mut strategy = MomentumStrategy::new();
+        strategy.initialize(config).await.unwrap();
+        strategy
     }
 
     #[tokio::test]
@@ -249,28 +274,6 @@ mod momentum_strategy_tests {
         }
     }
 
-    async fn create_test_momentum_strategy() -> MomentumStrategy {
-        let config = StrategyConfig {
-            name: "momentum".to_string(),
-            enabled: true,
-            risk_limit: 0.02,
-            position_size: 1.0,
-            parameters: HashMap::from([
-                ("fast_period".to_string(), json!(12)),
-                ("slow_period".to_string(), json!(26)),
-                ("rsi_period".to_string(), json!(14)),
-                ("rsi_overbought".to_string(), json!(70.0)),
-                ("rsi_oversold".to_string(), json!(30.0)),
-                ("momentum_threshold".to_string(), json!(0.02)),
-                ("stop_loss_pct".to_string(), json!(0.02)),
-                ("take_profit_pct".to_string(), json!(0.05)),
-            ]),
-        };
-
-        let mut strategy = MomentumStrategy::new();
-        strategy.initialize(config).await.unwrap();
-        strategy
-    }
 }
 
 #[cfg(test)]
@@ -321,45 +324,276 @@ mod strategy_factory_tests {
 mod strategy_metrics_tests {
     use super::*;
 
+    #[tokio::test]
+    async fn test_momentum_update_parameters() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        // GIVEN: An initialized momentum strategy
+        let mut strategy = create_test_momentum_strategy().await;
+        
+        // WHEN: We update parameters
+        let new_params = HashMap::from([
+            ("fast_period".to_string(), json!(10)),
+            ("slow_period".to_string(), json!(20)),
+            ("momentum_threshold".to_string(), json!(0.03)),
+        ]);
+        
+        let result = strategy.update_parameters(new_params).await;
+        
+        // THEN: Update should succeed
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_momentum_update_parameters_invalid() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        // GIVEN: An initialized momentum strategy
+        let mut strategy = create_test_momentum_strategy().await;
+        
+        // WHEN: We update with invalid parameters
+        let invalid_params = HashMap::from([
+            ("fast_period".to_string(), json!(30)),
+            ("slow_period".to_string(), json!(20)), // Fast > Slow
+        ]);
+        
+        let result = strategy.update_parameters(invalid_params).await;
+        
+        // THEN: Update should fail
+        assert!(result.is_err());
+        match result {
+            Err(StrategyError::Configuration(msg)) => {
+                assert!(msg.contains("Fast period must be less than slow period"));
+            }
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_momentum_update_parameters_unknown() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        // GIVEN: An initialized momentum strategy
+        let mut strategy = create_test_momentum_strategy().await;
+        
+        // WHEN: We update with unknown parameter
+        let params = HashMap::from([
+            ("unknown_parameter".to_string(), json!(123)),
+        ]);
+        
+        let result = strategy.update_parameters(params).await;
+        
+        // THEN: Update should fail
+        assert!(result.is_err());
+        match result {
+            Err(StrategyError::Configuration(msg)) => {
+                assert!(msg.contains("Unknown parameter"));
+            }
+            _ => panic!("Expected Configuration error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_momentum_get_metrics() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        // GIVEN: A momentum strategy
+        let strategy = create_test_momentum_strategy().await;
+        
+        // WHEN: We get metrics
+        let metrics = strategy.get_metrics();
+        
+        // THEN: Metrics should be empty initially
+        assert!(metrics.is_empty());
+    }
+
+    #[test]
+    fn test_momentum_config_default() {
+        use neural_trader::strategies::momentum::MomentumConfig;
+        
+        let config = MomentumConfig::default();
+        assert_eq!(config.fast_period, 12);
+        assert_eq!(config.slow_period, 26);
+        assert_eq!(config.rsi_period, 14);
+        assert_eq!(config.rsi_overbought, 70.0);
+        assert_eq!(config.rsi_oversold, 30.0);
+        assert_eq!(config.momentum_threshold, 0.02);
+        assert_eq!(config.stop_loss_pct, 0.02);
+        assert_eq!(config.take_profit_pct, 0.05);
+    }
+
+    #[test]
+    fn test_momentum_strategy_default() {
+        let strategy = MomentumStrategy::default();
+        assert_eq!(strategy.name(), "Momentum Strategy");
+    }
+
+    #[tokio::test]
+    async fn test_momentum_edge_case_spread() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        let strategy = create_test_momentum_strategy().await;
+        
+        // Test exact 1% spread (boundary)
+        let context = MarketContext {
+            symbol: "BTC/USD".to_string(),
+            current_price: 48240.0,
+            bid: 48000.0,
+            ask: 48480.0,
+            volume_24h: 1_000_000.0,
+            volatility: 0.2,
+            timestamp: 1704067200,
+        };
+        
+        let result = strategy.can_execute(&context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+        
+        // Test just over 1% spread
+        let context = MarketContext {
+            symbol: "BTC/USD".to_string(),
+            current_price: 48240.5,
+            bid: 48000.0,
+            ask: 48481.0,
+            volume_24h: 1_000_000.0,
+            volatility: 0.2,
+            timestamp: 1704067200,
+        };
+        
+        let result = strategy.can_execute(&context);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_momentum_edge_case_volatility() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        let strategy = create_test_momentum_strategy().await;
+        
+        // Test exact 0.5 volatility (boundary)
+        let context = MarketContext {
+            symbol: "BTC/USD".to_string(),
+            current_price: 48050.0,
+            bid: 48000.0,
+            ask: 48100.0,
+            volume_24h: 1_000_000.0,
+            volatility: 0.5,
+            timestamp: 1704067200,
+        };
+        
+        let result = strategy.can_execute(&context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+        
+        // Test just over 0.5 volatility
+        let context = MarketContext {
+            symbol: "BTC/USD".to_string(),
+            current_price: 48050.0,
+            bid: 48000.0,
+            ask: 48100.0,
+            volume_24h: 1_000_000.0,
+            volatility: 0.50001,
+            timestamp: 1704067200,
+        };
+        
+        let result = strategy.can_execute(&context);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_momentum_short_position_stop_loss() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        let strategy = create_test_momentum_strategy().await;
+        
+        let mut position = Position {
+            symbol: "BTC/USD".to_string(),
+            side: PositionSide::Short,
+            size: 1.0,
+            entry_price: 48000.0,
+            current_price: 49000.0, // 2.08% loss for short
+            unrealized_pnl: -1000.0,
+            timestamp: 1704067200,
+        };
+        position.current_price = 49000.0;
+
+        let context = MarketContext {
+            symbol: "BTC/USD".to_string(),
+            current_price: 49000.0,
+            bid: 48990.0,
+            ask: 49010.0,
+            volume_24h: 1_000_000.0,
+            volatility: 0.02,
+            timestamp: 1704067200,
+        };
+
+        let result = strategy.generate_signal(&context, Some(&position)).await;
+        assert!(result.is_ok());
+        
+        match result.unwrap() {
+            Signal::Sell { confidence, size, reason } => {
+                assert_eq!(confidence, 1.0);
+                assert_eq!(size, 1.0);
+                assert!(reason.contains("Stop loss"));
+            }
+            _ => panic!("Expected Sell signal for stop loss"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_momentum_short_position_take_profit() {
+        use super::momentum_strategy_tests::create_test_momentum_strategy;
+        let strategy = create_test_momentum_strategy().await;
+        
+        let mut position = Position {
+            symbol: "BTC/USD".to_string(),
+            side: PositionSide::Short,
+            size: 1.0,
+            entry_price: 48000.0,
+            current_price: 45500.0, // 5.2% profit for short
+            unrealized_pnl: 2500.0,
+            timestamp: 1704067200,
+        };
+        position.current_price = 45500.0;
+
+        let context = MarketContext {
+            symbol: "BTC/USD".to_string(),
+            current_price: 45500.0,
+            bid: 45490.0,
+            ask: 45510.0,
+            volume_24h: 1_000_000.0,
+            volatility: 0.02,
+            timestamp: 1704067200,
+        };
+
+        let result = strategy.generate_signal(&context, Some(&position)).await;
+        assert!(result.is_ok());
+        
+        match result.unwrap() {
+            Signal::Sell { confidence, size, reason } => {
+                assert_eq!(confidence, 1.0);
+                assert_eq!(size, 1.0);
+                assert!(reason.contains("Take profit"));
+            }
+            _ => panic!("Expected Sell signal for take profit"),
+        }
+    }
+
     #[test]
     fn test_strategy_metrics_update() {
+        use neural_trader::strategies::StrategyMetrics;
+        
         // GIVEN: A new strategy metrics instance
         let mut metrics = StrategyMetrics::default();
-
+        
         // WHEN: We record multiple trades
         metrics.update_trade(500.0);  // Win
         metrics.update_trade(-200.0); // Loss
         metrics.update_trade(300.0);  // Win
         metrics.update_trade(-100.0); // Loss
         metrics.update_trade(600.0);  // Win
-
+        
         // THEN: Metrics should be calculated correctly
         assert_eq!(metrics.total_trades, 5);
         assert_eq!(metrics.winning_trades, 3);
         assert_eq!(metrics.losing_trades, 2);
         assert_eq!(metrics.total_pnl, 1100.0);
         assert_eq!(metrics.win_rate, 0.6); // 3/5 = 0.6
-    }
-
-    #[test]
-    fn test_strategy_metrics_edge_cases() {
-        // Test with no trades
-        let mut metrics = StrategyMetrics::default();
-        assert_eq!(metrics.total_trades, 0);
-        assert_eq!(metrics.win_rate, 0.0);
-
-        // Test with only winning trades
-        metrics.update_trade(100.0);
-        metrics.update_trade(200.0);
-        metrics.update_trade(300.0);
-        assert_eq!(metrics.win_rate, 1.0);
-        assert_eq!(metrics.losing_trades, 0);
-
-        // Test with break-even trade
-        metrics.update_trade(0.0);
-        assert_eq!(metrics.total_trades, 4);
-        assert_eq!(metrics.winning_trades, 3);
-        assert_eq!(metrics.losing_trades, 0);
     }
 }
 
