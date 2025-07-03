@@ -1,29 +1,14 @@
 {
-  "name": "Multi-Language Development Environment",
-  "image": "mcr.microsoft.com/devcontainers/universal:2-focal",
+  "name": "Neural Trader Development",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bullseye",
   
   "features": {
-    "ghcr.io/devcontainers/features/rust:1": {
-      "version": "latest",
-      "profile": "default"
-    },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "20",
-      "nodeGypDependencies": true
-    },
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.11",
-      "installTools": true
+      "version": "3.11"
     },
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "version": "latest",
-      "enableNonRootDocker": true
-    },
-    "ghcr.io/devcontainers/features/github-cli:1": {
-      "version": "latest"
-    },
-    "ghcr.io/devcontainers/features/git:1": {
-      "version": "latest"
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": true,
+      "dockerDashComposeVersion": "v2"
     }
   },
 
@@ -32,83 +17,21 @@
       "extensions": [
         "rust-lang.rust-analyzer",
         "ms-python.python",
-        "ms-python.pylint",
-        "ms-vscode.vscode-typescript-next",
-        "bradlc.vscode-tailwindcss",
-        "ms-vscode.vscode-json",
-        "redhat.vscode-yaml",
-        "ms-vscode-remote.remote-containers",
-        "GitHub.copilot",
-        "GitHub.copilot-chat",
-        "ms-vscode.remote-explorer"
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker"
       ],
       "settings": {
         "rust-analyzer.cargo.buildScripts.enable": true,
         "rust-analyzer.checkOnSave.command": "clippy",
         "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.linting.enabled": true,
-        "python.linting.pylintEnabled": true,
-        "typescript.preferences.importModuleSpecifier": "relative",
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-          "source.fixAll": true
-        }
+        "editor.formatOnSave": true
       }
     }
   },
 
-  "forwardPorts": [3000, 8000, 8080, 5000, 9000],
-  "portsAttributes": {
-    "3000": {
-      "label": "Frontend Dev Server",
-      "onAutoForward": "notify"
-    },
-    "8000": {
-      "label": "API Server",
-      "onAutoForward": "notify"
-    },
-    "8080": {
-      "label": "Web Server",
-      "onAutoForward": "notify"
-    },
-    "5000": {
-      "label": "Python Server",
-      "onAutoForward": "notify"
-    },
-    "9000": {
-      "label": "Rust Server",
-      "onAutoForward": "notify"
-    }
-  },
-
-  "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/post-start.sh",
+  "forwardPorts": [3030, 5432, 6379, 8081, 9090],
   
-  "remoteUser": "codespace",
-  "workspaceFolder": "/workspaces/test2",
+  "postCreateCommand": "rustc --version && cargo --version && python --version && pip install -r data_ingestion/requirements.txt",
   
-  "mounts": [
-    "source=cargo-cache,target=/usr/local/cargo/registry,type=volume",
-    "source=node-modules,target=/workspaces/test2/node_modules,type=volume",
-    "source=python-cache,target=/root/.cache/pip,type=volume"
-  ],
-
-  "containerEnv": {
-    "RUST_LOG": "debug",
-    "CARGO_HOME": "/usr/local/cargo",
-    "RUSTUP_HOME": "/usr/local/rustup",
-    "NODE_ENV": "development",
-    "PYTHONPATH": "/workspaces/test2/src",
-    "CLAUDE_CODE_WORKSPACE": "/workspaces/test2"
-  },
-
-  "initializeCommand": "echo 'Initializing development environment...'",
-  "onCreateCommand": "echo 'Container created successfully'",
-  "updateContentCommand": "echo 'Updating development environment...'",
-  
-  "hostRequirements": {
-    "cpus": 4,
-    "memory": "8gb",
-    "storage": "32gb"
-  }
+  "remoteUser": "vscode"
 }
