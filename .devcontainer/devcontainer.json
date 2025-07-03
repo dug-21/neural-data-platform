@@ -6,10 +6,7 @@
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.11"
     },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "moby": true,
-      "dockerDashComposeVersion": "v2"
-    }
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
 
   "customizations": {
@@ -17,21 +14,18 @@
       "extensions": [
         "rust-lang.rust-analyzer",
         "ms-python.python",
-        "ms-python.vscode-pylance",
         "ms-azuretools.vscode-docker"
       ],
       "settings": {
         "rust-analyzer.cargo.buildScripts.enable": true,
-        "rust-analyzer.checkOnSave.command": "clippy",
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "editor.formatOnSave": true
+        "rust-analyzer.checkOnSave.command": "clippy"
       }
     }
   },
 
-  "forwardPorts": [3030, 5432, 6379, 8081, 9090],
+  "forwardPorts": [3030, 5432, 6379],
   
-  "postCreateCommand": "rustc --version && cargo --version && python --version && pip install -r data_ingestion/requirements.txt",
+  "postCreateCommand": "echo 'Welcome to Neural Trader! Run: cargo build' && rustc --version",
   
   "remoteUser": "vscode"
 }
