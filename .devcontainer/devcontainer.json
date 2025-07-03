@@ -15,10 +15,6 @@
       "version": "3.11",
       "installTools": true
     },
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "version": "latest",
-      "enableNonRootDocker": true
-    },
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
     },
@@ -57,29 +53,6 @@
     }
   },
 
-  "forwardPorts": [3000, 8000, 8080, 5000, 9000],
-  "portsAttributes": {
-    "3000": {
-      "label": "Frontend Dev Server",
-      "onAutoForward": "notify"
-    },
-    "8000": {
-      "label": "API Server",
-      "onAutoForward": "notify"
-    },
-    "8080": {
-      "label": "Web Server",
-      "onAutoForward": "notify"
-    },
-    "5000": {
-      "label": "Python Server",
-      "onAutoForward": "notify"
-    },
-    "9000": {
-      "label": "Rust Server",
-      "onAutoForward": "notify"
-    }
-  },
 
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "bash .devcontainer/post-start.sh",
@@ -92,16 +65,7 @@
     "source=node-modules,target=/workspaces/test2/node_modules,type=volume",
     "source=python-cache,target=/root/.cache/pip,type=volume"
   ],
-
-  "containerEnv": {
-    "RUST_LOG": "debug",
-    "CARGO_HOME": "/usr/local/cargo",
-    "RUSTUP_HOME": "/usr/local/rustup",
-    "NODE_ENV": "development",
-    "PYTHONPATH": "/workspaces/test2/src",
-    "CLAUDE_CODE_WORKSPACE": "/workspaces/test2"
-  },
-
+  
   "initializeCommand": "echo 'Initializing development environment...'",
   "onCreateCommand": "echo 'Container created successfully'",
   "updateContentCommand": "echo 'Updating development environment...'",
