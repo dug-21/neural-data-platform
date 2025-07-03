@@ -1,6 +1,6 @@
 {
   "name": "Multi-Language Development Environment",
-  "image": "mcr.microsoft.com/devcontainers/universal:2-focal",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
   
   "features": {
     "ghcr.io/devcontainers/features/rust:1": {
