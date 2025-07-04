@@ -198,3 +198,8 @@ secrets/
 # Monitoring
 prometheus_data/
 grafana_data/*.profraw
+
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
