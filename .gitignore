@@ -165,7 +165,7 @@ site/
 /reports/
 /.roomodes
 /claude-flow
-/vendor/ruv-fann/
+# /vendor/ruv-fann/
 *.profraw
 test_results.log
 python_test_results.log
