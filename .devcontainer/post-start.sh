@@ -6,6 +6,7 @@ echo "🔄 Running post-start configuration..."
 # Ensure proper permissions
 chmod +x .devcontainer/setup.sh
 chmod +x .devcontainer/post-start.sh
+chmod +x .devcontainer/mcp_setup.sh
 
 # Update Rust toolchain
 rustup update
@@ -37,9 +38,18 @@ if [ ! -d ".ruv-swarm" ]; then
     ruv-swarm init --auto
 fi
 
-# Verify MCP connections
-echo "🔌 Verifying MCP connections..."
-claude mcp list || echo "⚠️  Claude Code MCP setup needed"
+# Verify and configure MCP connections
+if [ -f ".devcontainer/mcp_setup.sh" ]; then
+    chmod +x .devcontainer/mcp_setup.sh
+    .devcontainer/mcp_setup.sh
+else
+    echo "⚠️  MCP setup script not found. Checking existing configuration..."
+    if command -v claude &> /dev/null; then
+        claude mcp list
+    else
+        echo "❌ Claude CLI not found. Please run setup script first."
+    fi
+fi
 
 # Start background services if needed
 echo "🚀 Starting development services..."

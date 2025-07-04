@@ -37,68 +37,29 @@ if ! command -v ruv-swarm &> /dev/null; then
     npm install -g ruv-swarm
 fi
 
-# Set up MCP configuration directory
+# Wait for Claude to be fully installed
+echo "⏳ Waiting for Claude CLI to be available..."
+max_wait=30
+waited=0
+while ! command -v claude &> /dev/null; do
+    if [ $waited -ge $max_wait ]; then
+        echo "❌ Claude CLI installation timeout"
+        break
+    fi
+    sleep 2
+    waited=$((waited + 2))
+done
+
+# Create project-level Claude directory for other settings
 mkdir -p /workspaces/$RepositoryName/.claude
-mkdir -p /workspaces/$RepositoryName/.claude/mcp
 
-# Create Claude Code MCP configuration
-cat > /workspaces/$RepositoryName/.claude/mcp/config.json << 'EOF'
-{
-  "mcpServers": {
-    "ruv-swarm": {
-      "command": "npx",
-      "args": ["ruv-swarm", "mcp", "start"],
-      "transport": "stdio"
-    },
-    "github": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-github"],
-      "transport": "stdio",
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${AGENT_TOKEN}"
-      }
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-filesystem", "/workspaces/neural-trader"],
-      "transport": "stdio"
-    }
-  }
-}
-EOF
-
-# Create workspace-specific Claude configuration
-cat > /workspaces/$RepositoryName/.claude/settings.json << 'EOF'
-{
-  "workspaceSettings": {
-    "defaultModel": "claude-3-5-sonnet-20241022",
-    "temperature": 0.1,
-    "maxTokens": 4096
-  },
-  "mcpServers": {
-    "ruv-swarm": {
-      "command": "npx",
-      "args": ["ruv-swarm", "mcp", "start"],
-      "transport": "stdio"
-    },
-    "github": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-github"],
-      "transport": "stdio"
-    }
-  },
-  "hooks": {
-    "pre-edit": "npx ruv-swarm hook pre-edit --file ${file}",
-    "post-edit": "npx ruv-swarm hook post-edit --file ${file}",
-    "pre-task": "npx ruv-swarm hook pre-task --description '${description}'",
-    "post-task": "npx ruv-swarm hook post-task --task-id '${taskId}'"
-  },
-  "tools": {
-    "enabled": ["all"],
-    "disabled": []
-  }
-}
-EOF
+# Run MCP setup script
+if [ -f ".devcontainer/mcp_setup.sh" ]; then
+    chmod +x .devcontainer/mcp_setup.sh
+    .devcontainer/mcp_setup.sh
+else
+    echo "⚠️  MCP setup script not found at .devcontainer/mcp_setup.sh"
+fi
 
 # Set up git configuration for Codespaces
 git config --global init.defaultBranch main
@@ -210,7 +171,7 @@ echo "  - Claude Code: $(claude --version 2>/dev/null || echo 'Installing...')"
 echo "  - ruv-swarm: $(ruv-swarm --version 2>/dev/null || echo 'Installing...')"
 echo ""
 echo "🔧 Next steps:"
-echo "  1. Set GITHUB_TOKEN environment variable"
+echo "  1. Set AGENT_TOKEN environment variable for GitHub MCP access"
 echo "  2. Run 'claude mcp list' to verify MCP connections"
 echo "  3. Run 'ruv-swarm swarm init' to initialize swarm"
 echo "  4. Start coding! 🎉"
