@@ -55,7 +55,7 @@ cat > /workspaces/$RepositoryName/.claude/mcp/config.json << 'EOF'
       "args": ["@modelcontextprotocol/server-github"],
       "transport": "stdio",
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${AGENT_TOKEN}"
       }
     },
     "filesystem": {
