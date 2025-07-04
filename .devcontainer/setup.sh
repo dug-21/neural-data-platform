@@ -25,10 +25,99 @@ sudo apt-get install -y \
     zsh \
     tmux
 
-# Install oh-my-zsh for better shell experience
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+# Install Claude Code CLI
+echo "🤖 Installing Claude Code CLI..."
+if ! command -v claude &> /dev/null; then
+    npm install -g @anthropic-ai/claude-code | sh
 fi
+
+# Install ruv-swarm
+echo "🐝 Installing ruv-swarm..."
+if ! command -v ruv-swarm &> /dev/null; then
+    npm install -g ruv-swarm
+fi
+
+# Wait for Claude to be fully installed
+echo "⏳ Waiting for Claude CLI to be available..."
+max_wait=30
+waited=0
+while ! command -v claude &> /dev/null; do
+    if [ $waited -ge $max_wait ]; then
+        echo "❌ Claude CLI installation timeout"
+        break
+    fi
+    sleep 2
+    waited=$((waited + 2))
+done
+
+# Create project-level Claude directory for other settings
+mkdir -p /workspaces/$RepositoryName/.claude
+
+# Run MCP setup script
+if [ -f ".devcontainer/mcp_setup.sh" ]; then
+    chmod +x .devcontainer/mcp_setup.sh
+    .devcontainer/mcp_setup.sh
+else
+    echo "⚠️  MCP setup script not found at .devcontainer/mcp_setup.sh"
+fi
+
+# Set up git configuration for Codespaces
+git config --global init.defaultBranch main
+git config --global pull.rebase false
+git config --global user.name "Codespace User"
+git config --global user.email "codespace@example.com"
+
+# Create useful aliases
+cat >> ~/.bashrc << 'EOF'
+
+# Development aliases
+alias ll='exa -la'
+alias la='exa -la'
+alias tree='exa --tree'
+alias cat='bat'
+alias find='fd'
+alias grep='rg'
+
+# Rust aliases
+alias cb='cargo build'
+alias ct='cargo test'
+alias cr='cargo run'
+alias cw='cargo watch'
+alias cc='cargo clippy'
+alias cf='cargo fmt'
+
+# Node aliases
+alias ni='npm install'
+alias nr='npm run'
+alias ns='npm start'
+alias nt='npm test'
+alias nb='npm run build'
+
+# Python aliases
+alias py='python3'
+alias pip='pip3'
+alias venv='python3 -m venv'
+
+# Claude and ruv-swarm aliases
+alias claude='claude'
+alias swarm='ruv-swarm'
+alias swarm-init='ruv-swarm swarm init'
+alias swarm-status='ruv-swarm swarm status'
+
+# Git aliases
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline'
+alias gd='git diff'
+EOF
+
+
+# Install oh-my-zsh for better shell experience
+# if [ ! -d "$HOME/.oh-my-zsh" ]; then
+#    sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+# fi
 
 # Set up Rust environment
 echo "🦀 Setting up Rust environment..."
@@ -69,132 +158,6 @@ pip install \
     mypy \
     pytest 
     
-# Install Claude Code CLI
-echo "🤖 Installing Claude Code CLI..."
-if ! command -v claude &> /dev/null; then
-    curl -fsSL https://claude.ai/install.sh | sh
-fi
-
-# Install ruv-swarm
-echo "🐝 Installing ruv-swarm..."
-if ! command -v ruv-swarm &> /dev/null; then
-    npm install -g ruv-swarm
-fi
-
-# Set up MCP configuration directory
-mkdir -p ~/.claude
-mkdir -p ~/.claude/mcp
-
-# Create Claude Code MCP configuration
-cat > ~/.claude/mcp/config.json << 'EOF'
-{
-  "mcpServers": {
-    "ruv-swarm": {
-      "command": "npx",
-      "args": ["ruv-swarm", "mcp", "start"],
-      "transport": "stdio"
-    },
-    "github": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-github"],
-      "transport": "stdio",
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-      }
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-filesystem", "/workspaces/neural-trader"],
-      "transport": "stdio"
-    }
-  }
-}
-EOF
-
-# Create workspace-specific Claude configuration
-cat > .claude/settings.json << 'EOF'
-{
-  "workspaceSettings": {
-    "defaultModel": "claude-3-5-sonnet-20241022",
-    "temperature": 0.1,
-    "maxTokens": 4096
-  },
-  "mcpServers": {
-    "ruv-swarm": {
-      "command": "npx",
-      "args": ["ruv-swarm", "mcp", "start"],
-      "transport": "stdio"
-    },
-    "github": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-github"],
-      "transport": "stdio"
-    }
-  },
-  "hooks": {
-    "pre-edit": "npx ruv-swarm hook pre-edit --file ${file}",
-    "post-edit": "npx ruv-swarm hook post-edit --file ${file}",
-    "pre-task": "npx ruv-swarm hook pre-task --description '${description}'",
-    "post-task": "npx ruv-swarm hook post-task --task-id '${taskId}'"
-  },
-  "tools": {
-    "enabled": ["all"],
-    "disabled": []
-  }
-}
-EOF
-
-# Set up git configuration for Codespaces
-git config --global init.defaultBranch main
-git config --global pull.rebase false
-git config --global user.name "Codespace User"
-git config --global user.email "codespace@example.com"
-
-# Create useful aliases
-cat >> ~/.bashrc << 'EOF'
-
-# Development aliases
-alias ll='exa -la'
-alias la='exa -la'
-alias tree='exa --tree'
-alias cat='bat'
-alias find='fd'
-alias grep='rg'
-
-# Rust aliases
-alias cb='cargo build'
-alias ct='cargo test'
-alias cr='cargo run'
-alias cw='cargo watch'
-alias cc='cargo clippy'
-alias cf='cargo fmt'
-
-# Node aliases
-alias ni='npm install'
-alias nr='npm run'
-alias ns='npm start'
-alias nt='npm test'
-alias nb='npm run build'
-
-# Python aliases
-alias py='python3'
-alias pip='pip3'
-alias venv='python3 -m venv'
-
-# Claude and ruv-swarm aliases
-alias claude='claude --mcp'
-alias swarm='ruv-swarm'
-alias swarm-init='ruv-swarm swarm init'
-alias swarm-status='ruv-swarm swarm status'
-
-# Git aliases
-alias gs='git status'
-alias ga='git add'
-alias gc='git commit'
-alias gp='git push'
-alias gl='git log --oneline'
-alias gd='git diff'
-EOF
 
 # Source the new aliases
 source ~/.bashrc
@@ -208,7 +171,7 @@ echo "  - Claude Code: $(claude --version 2>/dev/null || echo 'Installing...')"
 echo "  - ruv-swarm: $(ruv-swarm --version 2>/dev/null || echo 'Installing...')"
 echo ""
 echo "🔧 Next steps:"
-echo "  1. Set GITHUB_TOKEN environment variable"
+echo "  1. Set AGENT_TOKEN environment variable for GitHub MCP access"
 echo "  2. Run 'claude mcp list' to verify MCP connections"
 echo "  3. Run 'ruv-swarm swarm init' to initialize swarm"
 echo "  4. Start coding! 🎉"
