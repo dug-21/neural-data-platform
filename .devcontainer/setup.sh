@@ -28,7 +28,7 @@ sudo apt-get install -y \
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
 if ! command -v claude &> /dev/null; then
-    curl -fsSL https://claude.ai/install.sh | sh
+    npm install -g @anthropic-ai/claude-code | sh
 fi
 
 # Install ruv-swarm
@@ -38,11 +38,11 @@ if ! command -v ruv-swarm &> /dev/null; then
 fi
 
 # Set up MCP configuration directory
-mkdir -p ~/.claude
-mkdir -p ~/.claude/mcp
+mkdir -p /workspaces/$RepositoryName/.claude
+mkdir -p /workspaces/$RepositoryName/.claude/mcp
 
 # Create Claude Code MCP configuration
-cat > ~/.claude/mcp/config.json << 'EOF'
+cat > /workspaces/$RepositoryName/.claude/mcp/config.json << 'EOF'
 {
   "mcpServers": {
     "ruv-swarm": {
@@ -68,7 +68,7 @@ cat > ~/.claude/mcp/config.json << 'EOF'
 EOF
 
 # Create workspace-specific Claude configuration
-cat > .claude/settings.json << 'EOF'
+cat > /workspaces/$RepositoryName/.claude/settings.json << 'EOF'
 {
   "workspaceSettings": {
     "defaultModel": "claude-3-5-sonnet-20241022",
@@ -138,7 +138,7 @@ alias pip='pip3'
 alias venv='python3 -m venv'
 
 # Claude and ruv-swarm aliases
-alias claude='claude --mcp'
+alias claude='claude'
 alias swarm='ruv-swarm'
 alias swarm-init='ruv-swarm swarm init'
 alias swarm-status='ruv-swarm swarm status'
