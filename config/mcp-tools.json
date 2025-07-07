@@ -1,0 +1,171 @@
+{
+  "tools": [
+    {
+      "name": "query_market_data",
+      "description": "Query historical market data from TimescaleDB",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Trading pair symbol (e.g., BTC/USD)"
+          },
+          "interval": {
+            "type": "string",
+            "description": "Time interval (1m, 5m, 15m, 1h, etc.)",
+            "default": "1m"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of data points to return",
+            "default": 100
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Start time in ISO 8601 format"
+          },
+          "end_time": {
+            "type": "string",
+            "description": "End time in ISO 8601 format"
+          },
+          "aggregation": {
+            "type": "string",
+            "description": "Aggregation type (ohlc)",
+            "enum": ["ohlc", "none"]
+          }
+        },
+        "required": ["symbol"]
+      }
+    },
+    {
+      "name": "get_cache_data",
+      "description": "Retrieve data from Redis cache",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Redis key to retrieve"
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Pattern to match multiple keys (e.g., market:*)"
+          }
+        }
+      }
+    },
+    {
+      "name": "request_prediction",
+      "description": "Get neural network predictions for a symbol",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Trading pair symbol"
+          },
+          "horizon": {
+            "type": "integer",
+            "description": "Prediction horizon in time steps",
+            "default": 5
+          },
+          "confidence_threshold": {
+            "type": "number",
+            "description": "Minimum confidence threshold",
+            "default": 0.0
+          },
+          "ensemble": {
+            "type": "boolean",
+            "description": "Use ensemble of models",
+            "default": false
+          },
+          "models": {
+            "type": "array",
+            "description": "Specific models to use for ensemble",
+            "items": {
+              "type": "string"
+            }
+          },
+          "features": {
+            "type": "object",
+            "description": "Additional features for prediction"
+          }
+        },
+        "required": ["symbol"]
+      }
+    },
+    {
+      "name": "agent_decision",
+      "description": "Get trading decision from autonomous agent",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Trading pair symbol"
+          },
+          "position_size": {
+            "type": "number",
+            "description": "Desired position size"
+          },
+          "current_position": {
+            "type": "number",
+            "description": "Current position size",
+            "default": 0.0
+          },
+          "entry_price": {
+            "type": "number",
+            "description": "Entry price for existing position"
+          },
+          "current_price": {
+            "type": "number",
+            "description": "Current market price"
+          },
+          "portfolio_value": {
+            "type": "number",
+            "description": "Total portfolio value"
+          },
+          "strategy_weights": {
+            "type": "object",
+            "description": "Weights for multi-strategy decisions"
+          }
+        },
+        "required": ["symbol"]
+      }
+    },
+    {
+      "name": "system_status",
+      "description": "Get comprehensive system health and status",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "detailed": {
+            "type": "boolean",
+            "description": "Include detailed metrics",
+            "default": false
+          },
+          "include_alerts": {
+            "type": "boolean",
+            "description": "Include active alerts",
+            "default": false
+          },
+          "include_resources": {
+            "type": "boolean",
+            "description": "Include resource usage",
+            "default": false
+          },
+          "include_trading_stats": {
+            "type": "boolean",
+            "description": "Include trading statistics",
+            "default": false
+          },
+          "metrics_window": {
+            "type": "string",
+            "description": "Time window for metrics (1m, 5m, 1h)",
+            "default": "5m"
+          }
+        }
+      }
+    }
+  ]
+}
