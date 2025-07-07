@@ -1,0 +1,154 @@
+# Database Pod Configuration
+# This pod contains TimescaleDB and pgAdmin services
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: neural-trader-db
+  labels:
+    app: neural-trader
+    tier: database
+spec:
+  # Pod-level settings
+  hostname: db-pod
+  restartPolicy: OnFailure
+  
+  # Shared volumes for the pod
+  volumes:
+    - name: timescale-data
+      persistentVolumeClaim:
+        claimName: timescale-data-pvc
+    - name: timescale-logs
+      persistentVolumeClaim:
+        claimName: timescale-logs-pvc
+    - name: timescale-init
+      hostPath:
+        path: /workspaces/neural-trader/docker/timescaledb/init-scripts
+        type: Directory
+    - name: pgadmin-data
+      persistentVolumeClaim:
+        claimName: pgadmin-data-pvc
+
+  # Security context for rootless operation
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+    # TimescaleDB Container
+    - name: timescaledb
+      image: localhost/neural-trader-timescaledb:latest
+      imagePullPolicy: IfNotPresent
+      
+      env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: neural-trader-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neural-trader-secrets
+              key: postgres-password
+        - name: POSTGRES_DB
+          value: neural_trader_db
+        - name: POSTGRES_SHARED_BUFFERS
+          value: "2GB"
+        - name: POSTGRES_EFFECTIVE_CACHE_SIZE
+          value: "6GB"
+        - name: POSTGRES_MAINTENANCE_WORK_MEM
+          value: "512MB"
+        - name: POSTGRES_WORK_MEM
+          value: "128MB"
+        - name: POSTGRES_MAX_CONNECTIONS
+          value: "200"
+        - name: POSTGRES_MAX_PARALLEL_WORKERS
+          value: "8"
+        - name: POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER
+          value: "4"
+      
+      ports:
+        - containerPort: 5432
+          hostPort: 5432
+          protocol: TCP
+      
+      volumeMounts:
+        - name: timescale-data
+          mountPath: /var/lib/postgresql/data
+          subPath: postgres
+        - name: timescale-logs
+          mountPath: /var/log/postgresql
+        - name: timescale-init
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+      
+      resources:
+        limits:
+          cpu: "4"
+          memory: 8Gi
+        requests:
+          cpu: "2"
+          memory: 4Gi
+      
+      livenessProbe:
+        exec:
+          command:
+            - pg_isready
+            - -U
+            - neural_trader
+            - -d
+            - neural_trader_db
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 5
+      
+      readinessProbe:
+        exec:
+          command:
+            - pg_isready
+            - -U
+            - neural_trader
+            - -d
+            - neural_trader_db
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        timeoutSeconds: 3
+        failureThreshold: 3
+
+    # pgAdmin Container (Development Profile)
+    - name: pgadmin
+      image: docker.io/dpage/pgadmin4:latest
+      imagePullPolicy: IfNotPresent
+      
+      env:
+        - name: PGADMIN_DEFAULT_EMAIL
+          value: admin@neuraltrader.local
+        - name: PGADMIN_DEFAULT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neural-trader-secrets
+              key: pgadmin-password
+        - name: PGADMIN_CONFIG_SERVER_MODE
+          value: "False"
+        - name: PGADMIN_LISTEN_PORT
+          value: "8082"
+      
+      ports:
+        - containerPort: 8082
+          hostPort: 8082
+          protocol: TCP
+      
+      volumeMounts:
+        - name: pgadmin-data
+          mountPath: /var/lib/pgadmin
+      
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: 512Mi
+        requests:
+          cpu: "0.25"
+          memory: 256Mi
