@@ -42,6 +42,9 @@ fi
 # Configure filesystem MCP server
 add_mcp_if_not_exists "filesystem" npx @modelcontextprotocol/server-filesystem /workspaces/neural-trader
 
+# Add Neural Trader MCP server
+add_mcp_if_not_exists "neural-trader" /workspaces/neural-trader/target/release/mcp_server_simple
+
 # Add any additional MCP servers here in the future
 # Example:
 # add_mcp_if_not_exists "my-new-server" npx @my-org/my-server --some-args
