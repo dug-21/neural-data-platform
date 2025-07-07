@@ -8,7 +8,8 @@
     },
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
       "moby": true,
-      "dockerDashComposeVersion": "v2"
+      "dockerDashComposeVersion": "v2",
+      "enableNonRootDocker": "true"
     },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
@@ -34,19 +35,35 @@
     }
   },
 
-  "forwardPorts": [3030, 5432, 6379, 3000, 8000, 5000, 9000],
+  "forwardPorts": [
+    3030,  // Neural Trader API
+    5432,  // PostgreSQL/TimescaleDB
+    6379,  // Redis
+    3000,  // Grafana Dashboard
+    8001,  // Data Ingestion Metrics
+    9090,  // Prometheus
+    8081,  // Redis Commander
+    8082   // pgAdmin
+  ],
+  
+  "portsAttributes": {
+    "3030": { "label": "Neural Trader API", "onAutoForward": "notify" },
+    "5432": { "label": "PostgreSQL/TimescaleDB", "onAutoForward": "silent" },
+    "6379": { "label": "Redis", "onAutoForward": "silent" },
+    "3000": { "label": "Grafana Dashboard", "onAutoForward": "openBrowser" },
+    "8001": { "label": "Data Ingestion Metrics", "onAutoForward": "notify" },
+    "9090": { "label": "Prometheus Metrics", "onAutoForward": "notify" },
+    "8081": { "label": "Redis Commander", "onAutoForward": "notify" },
+    "8082": { "label": "pgAdmin", "onAutoForward": "notify" }
+  },
   
   "postCreateCommand": "chmod +x .devcontainer/setup.sh && .devcontainer/setup.sh",
   "postStartCommand": "chmod +x .devcontainer/post-start.sh && .devcontainer/post-start.sh",
   
   "remoteUser": "vscode",
   
-  "mounts": [
-    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
-  ],
-  
   "runArgs": [
-    "--network=host"
+    "--privileged"
   ],
   
   "containerEnv": {
