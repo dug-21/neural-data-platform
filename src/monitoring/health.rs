@@ -34,8 +34,8 @@ pub enum ComponentType {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum HealthStatus {
     Healthy,
-    Degraded,
-    Unhealthy,
+    Degraded(String),
+    Unhealthy(String),
     Unknown,
 }
 
@@ -153,7 +153,6 @@ pub struct HealthMonitor {
     component_health: Arc<RwLock<HashMap<ComponentType, ComponentHealth>>>,
     metrics_collector: MetricsCollector,
     alert_manager: AlertManager,
-    health_endpoints: HealthEndpoints,
     start_time: Instant,
     monitoring_interval: Duration,
     is_monitoring: Arc<RwLock<bool>>,
@@ -188,7 +187,7 @@ impl ComponentHealth {
 
     /// Set error message and mark as unhealthy
     pub fn set_error(&mut self, error: String) {
-        self.status = HealthStatus::Unhealthy;
+        self.status = HealthStatus::Unhealthy("Health check failed".to_string());
         self.error_message = Some(error);
         self.last_check = Utc::now();
     }
@@ -205,12 +204,12 @@ impl ComponentHealth {
 
     /// Check if component is degraded
     pub fn is_degraded(&self) -> bool {
-        matches!(self.status, HealthStatus::Degraded)
+        matches!(self.status, HealthStatus::Degraded(_))
     }
 
     /// Check if component is unhealthy
     pub fn is_unhealthy(&self) -> bool {
-        matches!(self.status, HealthStatus::Unhealthy)
+        matches!(self.status, HealthStatus::Unhealthy(_))
     }
 }
 
@@ -224,9 +223,9 @@ impl SystemHealth {
 
         // Determine overall status
         let overall_status = if unhealthy_components > 0 {
-            HealthStatus::Unhealthy
+            HealthStatus::Unhealthy(format!("{} unhealthy components", unhealthy_components))
         } else if degraded_components > 0 {
-            HealthStatus::Degraded
+            HealthStatus::Degraded(format!("{} degraded components", degraded_components))
         } else if healthy_components == total_components {
             HealthStatus::Healthy
         } else {
@@ -597,8 +596,8 @@ impl HealthEndpoints {
         for (component, health) in &health.components {
             let value = match health.status {
                 HealthStatus::Healthy => 1.0,
-                HealthStatus::Degraded => 0.5,
-                HealthStatus::Unhealthy => 0.0,
+                HealthStatus::Degraded(_) => 0.5,
+                HealthStatus::Unhealthy(_) => 0.0,
                 HealthStatus::Unknown => -1.0,
             };
             output.push_str(&format!("component_health{{component=\"{:?}\"}} {}\n", component, value));
@@ -659,16 +658,16 @@ impl HealthMonitor {
         let metrics_collector = MetricsCollector::new();
         let alert_manager = AlertManager::new();
         
+        let component_health = Arc::new(RwLock::new(HashMap::new()));
+        let is_monitoring = Arc::new(RwLock::new(false));
+        
         let monitor = Self {
-            component_health: Arc::new(RwLock::new(HashMap::new())),
+            component_health: component_health.clone(),
             metrics_collector,
             alert_manager,
-            health_endpoints: HealthEndpoints {
-                monitor: Arc::new(unsafe { std::mem::zeroed() }) // Temporary placeholder
-            },
             start_time: Instant::now(),
             monitoring_interval: Duration::from_secs(30),
-            is_monitoring: Arc::new(RwLock::new(false)),
+            is_monitoring,
         };
         
         Ok(monitor)
@@ -956,18 +955,14 @@ impl HealthMonitor {
 // Clone implementation for HealthMonitor
 impl Clone for HealthMonitor {
     fn clone(&self) -> Self {
-        // Create the clone first without endpoints
-        let monitor = Self {
+        Self {
             component_health: self.component_health.clone(),
             metrics_collector: self.metrics_collector.clone(),
             alert_manager: AlertManager::new(), // Create new alert manager for clone
-            health_endpoints: HealthEndpoints { monitor: Arc::new(unsafe { std::mem::zeroed() }) }, // Temporary placeholder
             start_time: self.start_time,
             monitoring_interval: self.monitoring_interval,
             is_monitoring: self.is_monitoring.clone(),
-        };
-        
-        monitor
+        }
     }
 }
 
@@ -989,8 +984,8 @@ impl std::fmt::Display for HealthStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HealthStatus::Healthy => write!(f, "Healthy"),
-            HealthStatus::Degraded => write!(f, "Degraded"),
-            HealthStatus::Unhealthy => write!(f, "Unhealthy"),
+            HealthStatus::Degraded(msg) => write!(f, "Degraded: {}", msg),
+            HealthStatus::Unhealthy(msg) => write!(f, "Unhealthy: {}", msg),
             HealthStatus::Unknown => write!(f, "Unknown"),
         }
     }

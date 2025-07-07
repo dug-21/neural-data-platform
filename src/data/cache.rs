@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Redis cache implementation for neural-trader
 #[derive(Debug, Clone)]
 pub struct RedisCache {
-    conn: MultiplexedConnection,
+    pub conn: MultiplexedConnection,
 }
 
 /// Result of a prediction that can be cached

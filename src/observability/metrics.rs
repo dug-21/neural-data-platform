@@ -294,15 +294,15 @@ pub enum CustomMetric {
 }
 
 impl CustomMetric {
-    pub fn counter(name: &str, description: &str) -> Self {
+    pub fn counter(_name: &str, _description: &str) -> Self {
         Self::Counter(Counter::noop())
     }
     
-    pub fn gauge(name: &str, description: &str) -> Self {
+    pub fn gauge(_name: &str, _description: &str) -> Self {
         Self::Gauge(Gauge::noop())
     }
     
-    pub fn histogram(name: &str, description: &str) -> Self {
+    pub fn histogram(_name: &str, _description: &str) -> Self {
         Self::Histogram(Histogram::noop())
     }
 }

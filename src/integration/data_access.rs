@@ -205,7 +205,7 @@ impl DataAccessLayer {
         for data_point in raw_data {
             if let Some(metadata) = &data_point.metadata {
                 time_series_data.push(TimeSeriesData {
-                    symbol: data_point.entity,
+                    symbol: data_point.entity.clone(),
                     timestamp: data_point.timestamp,
                     open: metadata.get("open").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
                     high: metadata.get("high").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
@@ -220,6 +220,10 @@ impl DataAccessLayer {
                                 .collect()
                         })
                         .unwrap_or_default(),
+                    source: Some(data_point.source.clone()),
+                    entity: Some(data_point.entity.clone()),
+                    value: Some(data_point.value),
+                    metadata: data_point.metadata.clone(),
                 });
             }
         }
@@ -397,7 +401,7 @@ impl DataAccessLayer {
         let mut data = Vec::new();
         for (symbol, price_info) in price_map {
             data.push(TimeSeriesData {
-                symbol,
+                symbol: symbol.clone(),
                 timestamp: price_info.timestamp,
                 open: price_info.price,
                 high: price_info.price,
@@ -405,6 +409,10 @@ impl DataAccessLayer {
                 close: price_info.price,
                 volume: price_info.volume,
                 indicators: HashMap::new(),
+                source: Some("price_feed".to_string()),
+                entity: Some(symbol.clone()),
+                value: Some(price_info.price),
+                metadata: None,
             });
         }
 
@@ -447,7 +455,7 @@ impl DataAccessLayer {
             indicators.insert("volume".to_string(), 1000.0); // Default volume
 
             data.push(TimeSeriesData {
-                symbol: stat.entity,
+                symbol: stat.entity.clone(),
                 timestamp: stat.bucket,
                 open: stat.avg_value.unwrap_or(0.0),
                 high: stat.max_value.unwrap_or(0.0),
@@ -455,6 +463,10 @@ impl DataAccessLayer {
                 close: stat.avg_value.unwrap_or(0.0),
                 volume: 1000.0, // Default volume for aggregated data
                 indicators,
+                source: Some("aggregated_stats".to_string()),
+                entity: Some(stat.entity.clone()),
+                value: Some(stat.avg_value.unwrap_or(0.0)),
+                metadata: None,
             });
         }
 

@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]
 pub struct TimescaleDBStorage {
-    pool: PgPool,
+    pub pool: PgPool,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]

@@ -79,6 +79,9 @@ pub mod observability;
 pub mod security;
 pub mod monitoring;
 pub mod streaming;
+pub mod mcp;
+pub mod neural;
+pub mod agents;
 
 // Re-export commonly used types
 pub use anyhow::Result;

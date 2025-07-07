@@ -192,7 +192,7 @@ impl TradingStrategy for MomentumStrategy {
 
     async fn generate_signal(
         &self,
-        context: &MarketContext,
+        _context: &MarketContext,
         position: Option<&Position>,
     ) -> Result<Signal, StrategyError> {
         // Check if we have an open position
@@ -326,21 +326,14 @@ impl TradingStrategy for MomentumStrategy {
         self.metrics.clone()
     }
 
-    fn can_execute(&self, context: &MarketContext) -> Result<bool, StrategyError> {
+    fn can_execute(&self, _context: &MarketContext) -> Result<bool, StrategyError> {
         // Check if market conditions allow trading
-        if context.volume_24h == 0.0 {
-            return Ok(false);
-        }
-
-        // Check if spread is reasonable
-        let spread = (context.ask - context.bid) / context.bid;
-        if spread > 0.01 {
-            // More than 1% spread
+        if _context.volume_24h == 0.0 {
             return Ok(false);
         }
 
         // Check volatility
-        if context.volatility > 0.5 {
+        if _context.volatility > 0.5 {
             // Too volatile
             return Ok(false);
         }

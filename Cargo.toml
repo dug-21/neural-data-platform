@@ -14,7 +14,7 @@ path = "src/main.rs"
 # WORKAROUND: The upstream repository has broken submodule configuration
 # Using local path to avoid submodule issues
 # TODO: Re-enable once Rust edition2024 dependencies are resolved
-# ruv-fann = { path = "./vendor/ruv-fann", features = ["default"] }
+ruv-fann = { path = "./vendor/ruv-fann", features = ["default"] }
 # daa = "0.5"
 
 # Configuration
@@ -75,6 +75,14 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "standalone_benchmarks"
 harness = false
+
+[[bin]]
+name = "mcp_server"
+path = "src/bin/mcp_server.rs"
+
+[[bin]]
+name = "mcp_server_simple"
+path = "src/bin/mcp_server_simple.rs"
 
 [profile.release]
 opt-level = 3

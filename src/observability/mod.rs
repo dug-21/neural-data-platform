@@ -7,7 +7,7 @@
 //! - Performance monitoring
 //! - Error tracking and alerting
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 // Simplified metrics for compilation
 use std::sync::atomic::{AtomicU64, AtomicI64, Ordering};
 use std::sync::Arc;
@@ -429,7 +429,7 @@ pub struct LoggingConfig {
 }
 
 impl LoggingConfig {
-    fn from_platform_config(config: &PlatformConfig) -> Self {
+    fn from_platform_config(_config: &PlatformConfig) -> Self {
         Self {
             level: "info".to_string(), // Default from config
             format: "json".to_string(),

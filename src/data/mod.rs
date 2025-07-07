@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 pub mod storage;
 pub mod cache;
+pub mod market_context;
 
 // Re-export main types
 pub use storage::{
@@ -15,6 +16,7 @@ pub use storage::{
     AggregatedStats,
 };
 pub use cache::{RedisCache, PredictionResult};
+pub use market_context::MarketContext;
 
 /// Time series data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +29,11 @@ pub struct TimeSeriesData {
     pub close: f64,
     pub volume: f64,
     pub indicators: HashMap<String, f64>,
+    // Storage compatibility fields
+    pub source: Option<String>,
+    pub entity: Option<String>,
+    pub value: Option<f64>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Quality metrics for data monitoring
@@ -70,6 +77,50 @@ impl TimeSeriesData {
         }
         
         Ok(())
+    }
+    
+    /// Convert to storage format
+    pub fn to_storage_format(&self) -> storage::TimeSeriesData {
+        storage::TimeSeriesData {
+            timestamp: self.timestamp,
+            source: self.source.clone().unwrap_or_else(|| "neural-trader".to_string()),
+            entity: self.entity.clone().unwrap_or_else(|| self.symbol.clone()),
+            value: self.value.unwrap_or(self.close),
+            metadata: self.metadata.clone().or_else(|| {
+                Some(serde_json::json!({
+                    "symbol": self.symbol,
+                    "open": self.open,
+                    "high": self.high,
+                    "low": self.low,
+                    "close": self.close,
+                    "volume": self.volume,
+                    "indicators": self.indicators
+                }))
+            }),
+        }
+    }
+    
+    /// Create from storage format
+    pub fn from_storage_format(data: &storage::TimeSeriesData) -> Self {
+        let metadata = data.metadata.as_ref().and_then(|m| m.as_object());
+        
+        Self {
+            symbol: metadata.and_then(|m| m.get("symbol").and_then(|v| v.as_str().map(|s| s.to_string())))
+                .unwrap_or_else(|| data.entity.clone()),
+            timestamp: data.timestamp,
+            open: metadata.and_then(|m| m.get("open").and_then(|v| v.as_f64())).unwrap_or(data.value),
+            high: metadata.and_then(|m| m.get("high").and_then(|v| v.as_f64())).unwrap_or(data.value),
+            low: metadata.and_then(|m| m.get("low").and_then(|v| v.as_f64())).unwrap_or(data.value),
+            close: metadata.and_then(|m| m.get("close").and_then(|v| v.as_f64())).unwrap_or(data.value),
+            volume: metadata.and_then(|m| m.get("volume").and_then(|v| v.as_f64())).unwrap_or(0.0),
+            indicators: metadata.and_then(|m| m.get("indicators").and_then(|v| {
+                serde_json::from_value(v.clone()).ok()
+            })).unwrap_or_default(),
+            source: Some(data.source.clone()),
+            entity: Some(data.entity.clone()),
+            value: Some(data.value),
+            metadata: data.metadata.clone(),
+        }
     }
 }
 
