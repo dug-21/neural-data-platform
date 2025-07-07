@@ -155,7 +155,7 @@ class BaseProvider(ABC):
                     self._last_request_time = asyncio.get_event_loop().time()
             
             self._request_count += 1
-            metrics.api_requests.labels(provider=self.name).inc()
+            # Rate limiting doesn't need to track metrics - actual API calls will be tracked
     
     def _validate_symbols(self, symbols: List[str]) -> List[str]:
         """Validate and normalize symbols."""

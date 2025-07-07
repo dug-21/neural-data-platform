@@ -2,7 +2,7 @@
 import sys
 import structlog
 from pythonjsonlogger import jsonlogger
-from config import get_settings
+from ..config import get_settings
 
 
 def configure_logging():

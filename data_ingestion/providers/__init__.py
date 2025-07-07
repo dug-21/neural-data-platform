@@ -5,6 +5,10 @@ from .alpha_vantage import AlphaVantageProvider
 from .polygon import PolygonProvider
 from .yahoo_finance import YahooFinanceProvider
 from .finnhub import FinnhubProvider
+from .fred import FREDProvider
+from .reddit import RedditProvider
+from .nasdaq import NASDAQProvider
+from .newsapi import NewsAPIProvider, NewsArticle
 
 # Provider registry
 PROVIDERS = {
@@ -12,7 +16,11 @@ PROVIDERS = {
     "alpha_vantage": AlphaVantageProvider,
     "polygon": PolygonProvider,
     "yahoo_finance": YahooFinanceProvider,
-    "finnhub": FinnhubProvider
+    "finnhub": FinnhubProvider,
+    "fred": FREDProvider,
+    "reddit": RedditProvider,
+    "nasdaq": NASDAQProvider,
+    "newsapi": NewsAPIProvider
 }
 
 __all__ = [
@@ -26,5 +34,10 @@ __all__ = [
     "PolygonProvider",
     "YahooFinanceProvider",
     "FinnhubProvider",
+    "FREDProvider",
+    "RedditProvider",
+    "NASDAQProvider",
+    "NewsAPIProvider",
+    "NewsArticle",
     "PROVIDERS"
 ]

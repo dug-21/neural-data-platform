@@ -5,9 +5,9 @@ services:
   timescaledb:
     image: timescale/timescaledb:latest-pg16
     environment:
-      POSTGRES_DB: neural_trader
-      POSTGRES_USER: trader
-      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-trading123}
+      POSTGRES_DB: ${POSTGRES_DB:-neural_trader}
+      POSTGRES_USER: ${POSTGRES_USER:-trader}
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD}
     volumes:
       - timescale_data:/var/lib/postgresql/data
     ports:
@@ -21,7 +21,7 @@ services:
   # Redis for real-time data and caching
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     ports:
@@ -44,20 +44,31 @@ services:
       # Database configuration
       TIMESCALE_HOST: timescaledb
       TIMESCALE_PORT: 5432
-      TIMESCALE_DATABASE: neural_trader
-      TIMESCALE_USER: trader
-      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD:-trading123}
+      TIMESCALE_DATABASE: ${POSTGRES_DB:-neural_trader}
+      TIMESCALE_USER: ${POSTGRES_USER:-trader}
+      TIMESCALE_PASSWORD: ${TIMESCALE_PASSWORD}
       
       # Redis configuration
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis123}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       
-      # API Keys (set these in .env file)
+      # API Keys (must be set as environment variables)
       IEX_CLOUD_API_KEY: ${IEX_CLOUD_API_KEY}
       ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
       POLYGON_API_KEY: ${POLYGON_API_KEY}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+      FRED_API_KEY: ${FRED_API_KEY}
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET}
+      QUANDL_API_KEY: ${QUANDL_API_KEY}
+      NEWSAPI_KEY: ${NEWSAPI_KEY}
+      YAHOO_API_KEY: ${YAHOO_API_KEY}
+      NASDAQ_API_KEY: ${NASDAQ_API_KEY}
+      
+      # Rate limit overrides (optional)
+      RATE_LIMIT_ALPHA_VANTAGE_CALLS_PER_MINUTE: ${RATE_LIMIT_ALPHA_VANTAGE_CALLS_PER_MINUTE}
+      RATE_LIMIT_ALPHA_VANTAGE_CALLS_PER_DAY: ${RATE_LIMIT_ALPHA_VANTAGE_CALLS_PER_DAY}
       
       # Service configuration
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -96,7 +107,8 @@ services:
       - prometheus
       - timescaledb
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
