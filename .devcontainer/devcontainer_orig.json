@@ -6,7 +6,11 @@
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.11"
     },
-  "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": true,
+      "dockerDashComposeVersion": "v2",
+      "enableNonRootDocker": "true"
+    },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
     },

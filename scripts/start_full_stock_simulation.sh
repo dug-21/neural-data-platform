@@ -50,7 +50,7 @@ docker-compose down 2>/dev/null || true
 
 # Build images if needed
 echo "🔨 Building Docker images..."
-docker-compose build
+docker-compose -f docker-compose.dev.yml build
 
 # Start the full stack
 echo "🚀 Starting full trading stack..."
