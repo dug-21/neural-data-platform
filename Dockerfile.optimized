@@ -1,0 +1,125 @@
+# Optimized Multi-stage build for Neural Trader
+# Uses BuildKit features for efficient caching and smaller images
+
+# syntax=docker/dockerfile:1.4
+
+# Base builder stage with build mount caches
+FROM rustlang/rust:nightly AS base
+
+# Install build dependencies with cache mount
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libpq-dev \
+    cmake \
+    g++
+
+# Create app directory
+WORKDIR /app
+
+# Cache Cargo dependencies
+# Copy only dependency files first
+COPY Cargo.toml Cargo.lock ./
+# Create dummy main.rs to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+# Build dependencies with cache mount
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release && \
+    rm -rf src
+
+# Now copy actual source code
+COPY . .
+
+# Touch main.rs to ensure it's newer than the dummy
+RUN touch src/main.rs
+
+# Build the application with cache
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --bin neural-trader && \
+    # Copy the binary out of the cache mount
+    cp target/release/neural-trader /tmp/neural-trader
+
+# Development stage - smaller and optimized
+FROM rustlang/rust:nightly-slim AS development
+
+# Install only runtime dependencies
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y \
+    libssl3 \
+    libpq5 \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r neuraltrader && useradd -r -g neuraltrader neuraltrader
+
+WORKDIR /app
+
+# Copy source code
+COPY --chown=neuraltrader:neuraltrader . .
+
+# Create necessary directories
+RUN mkdir -p /home/neuraltrader/.cargo && \
+    chown -R neuraltrader:neuraltrader /home/neuraltrader/.cargo
+
+USER neuraltrader
+
+# Use cargo-watch for hot reload in development
+RUN --mount=type=cache,target=/home/neuraltrader/.cargo/registry,uid=1000,gid=1000 \
+    cargo install cargo-watch
+
+EXPOSE 3030
+
+ENV RUST_LOG=debug \
+    RUST_BACKTRACE=full
+
+# Development command with hot reload
+CMD ["cargo", "watch", "-x", "run --bin neural-trader"]
+
+# Production stage - minimal size
+FROM debian:bookworm-slim AS production
+
+# Install only runtime dependencies
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r neuraltrader && useradd -r -g neuraltrader neuraltrader
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=base /tmp/neural-trader /app/neural-trader
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/config && \
+    chown -R neuraltrader:neuraltrader /app
+
+# Copy configuration files
+COPY --chown=neuraltrader:neuraltrader config/*.toml config/*.yaml /app/config/
+
+USER neuraltrader
+
+EXPOSE 3030
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3030/health || exit 1
+
+ENV RUST_LOG=info \
+    RUST_BACKTRACE=1
+
+CMD ["/app/neural-trader"]

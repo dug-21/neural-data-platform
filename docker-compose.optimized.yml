@@ -1,0 +1,206 @@
+version: '3.8'
+
+# Optimized Docker Compose for Codespaces
+# Uses BuildKit features and efficient caching strategies
+
+services:
+  neural-trader:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+      target: development
+      cache_from:
+        - type=registry,ref=ghcr.io/neural-trader/cache
+      args:
+        DOCKER_BUILDKIT: 1
+    image: neural-trader:dev
+    environment:
+      - DATABASE_URL=postgresql://postgres:dev_password@timescaledb:5432/neural_trader
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=debug
+      - RUST_LOG=debug
+    ports:
+      - "3030:3030"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Use delegated mounts for better performance
+      - ./src:/app/src:ro,delegated
+      - ./target:/app/target:delegated
+      # Use tmpfs for build artifacts
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 1G
+    networks:
+      - neural_trader_dev
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password}
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=neural_trader
+      - TIMESCALEDB_TELEMETRY=off
+      # Optimize PostgreSQL for container environment
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --data-checksums
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    ports:
+      - "5432:5432"
+    volumes:
+      # Use named volume for better performance
+      - timescaledb_dev_data:/var/lib/postgresql/data
+      - ./docker/timescaledb/init-scripts/01-init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql:ro
+    networks:
+      - neural_trader_dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    # Optimize PostgreSQL configuration
+    command: 
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_connections=100
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - default_statistics_target=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      # Use tmpfs for Redis data in dev
+      - type: tmpfs
+        target: /data
+        tmpfs:
+          size: 512M
+    networks:
+      - neural_trader_dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    # Optimize Redis for development
+    command: redis-server --maxmemory 400mb --maxmemory-policy allkeys-lru
+
+  data-ingestion:
+    build:
+      context: ./data_ingestion
+      dockerfile: Dockerfile.optimized
+      cache_from:
+        - type=registry,ref=ghcr.io/neural-trader/cache
+      args:
+        DOCKER_BUILDKIT: 1
+    image: neural-trader-data-ingestion:dev
+    command: ["python", "main.py"]
+    environment:
+      - DATABASE_URL=postgresql://postgres:dev_password@timescaledb:5432/neural_trader
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=debug
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - IEX_CLOUD_API_KEY=${IEX_CLOUD_API_KEY}
+      - FRED_API_KEY=${FRED_API_KEY}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data_ingestion:/app:ro,cached
+    networks:
+      - neural_trader_dev
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Optional development tools (can be disabled to save resources)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    profiles: ["tools"]
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - neural_trader_dev
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    profiles: ["tools"]
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@neural-trader.local
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=False
+    ports:
+      - "8082:80"
+    depends_on:
+      - timescaledb
+    networks:
+      - neural_trader_dev
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  timescaledb_dev_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /tmp/neural-trader-timescale
+
+networks:
+  neural_trader_dev:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: neural_trader_br
