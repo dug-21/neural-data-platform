@@ -1,9 +1,21 @@
-//! Autonomous Trading Agents Module
+//! Autonomous Trading Agents Module with DAA Integration
+//!
+//! This module provides autonomous trading agents powered by the ruv-swarm DAA framework.
+//! The DAA service provides advanced capabilities including:
+//! - Autonomous decision-making with < 1ms latency
+//! - Self-monitoring and adaptation
+//! - Multi-agent coordination
+//! - Persistent memory and learning
+//! - Cognitive pattern recognition
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
+
+// Re-export DAA bridge for direct DAA service integration
+mod daa_bridge;
+pub use daa_bridge::DAAAgent;
 
 use crate::data::MarketContext;
 
@@ -18,9 +30,10 @@ pub struct AgentConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TradingStrategy {
-    Momentum,
-    MeanReversion,
-    Arbitrage,
+    Momentum,      // Fast decision-making for price momentum
+    MeanReversion, // Analytical approach for mean reversion
+    Arbitrage,     // Critical thinking for arbitrage opportunities
+    Adaptive,      // NEW: Adaptive strategy that learns and evolves (recommended for DAA)
     Hybrid(Vec<TradingStrategy>),
 }
 
@@ -45,17 +58,31 @@ pub struct RiskAssessment {
     pub warnings: Vec<String>,
 }
 
+/// AutonomousAgent - Now powered by DAA service
+/// This implementation delegates all autonomous capabilities to the DAA framework
 pub struct AutonomousAgent {
     config: AgentConfig,
     market_context: Option<MarketContext>,
+    daa_agent: Option<DAAAgent>,
 }
 
 impl AutonomousAgent {
     pub fn new(config: AgentConfig) -> Result<Self> {
+        // For synchronous new(), we'll initialize DAA lazily
         Ok(Self {
             config,
             market_context: None,
+            daa_agent: None,
         })
+    }
+    
+    /// Initialize the DAA agent asynchronously
+    async fn ensure_daa_initialized(&mut self) -> Result<()> {
+        if self.daa_agent.is_none() {
+            let daa = DAAAgent::new(self.config.clone()).await?;
+            self.daa_agent = Some(daa);
+        }
+        Ok(())
     }
     
     pub async fn update_market_context(&self, context: MarketContext) -> Result<()> {
@@ -64,96 +91,56 @@ impl AutonomousAgent {
     }
     
     pub async fn make_decision(
-        &self,
+        &mut self,
         symbol: &str,
-        _market_data: &crate::mcp::trading_tools::MarketData,
+        market_data: &crate::mcp::trading_tools::MarketData,
         current_position: f64,
-        _position_size: f64,
+        position_size: f64,
     ) -> Result<TradingDecision> {
-        // Simplified decision logic based on strategy
-        let (action, confidence) = match &self.config.strategy {
-            TradingStrategy::Momentum => {
-                if _market_data.close > _market_data.open {
-                    ("buy", 0.75)
-                } else {
-                    ("hold", 0.6)
-                }
-            },
-            TradingStrategy::MeanReversion => {
-                let avg = (_market_data.high + _market_data.low) / 2.0;
-                if _market_data.close < avg * 0.98 {
-                    ("buy", 0.8)
-                } else if _market_data.close > avg * 1.02 {
-                    ("sell", 0.8)
-                } else {
-                    ("hold", 0.5)
-                }
-            },
-            TradingStrategy::Arbitrage => ("hold", 0.9),
-            TradingStrategy::Hybrid(_) => ("hold", 0.7),
-        };
+        // Ensure DAA is initialized
+        self.ensure_daa_initialized().await?;
         
-        Ok(TradingDecision {
-            action: action.to_string(),
-            confidence,
-            reasoning: format!("{:?} strategy suggests {}", self.config.strategy, action),
-            position_action: if current_position > 0.0 { "adjust" } else { "open" }.to_string(),
-            stop_loss: _market_data.close * 0.98,
-            take_profit: _market_data.close * 1.02,
-            combined_signal: None,
-            breakdown: None,
-        })
+        // Delegate to DAA agent for autonomous decision-making
+        self.daa_agent
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("DAA agent not initialized"))?
+            .make_decision(symbol, market_data, current_position, position_size)
+            .await
     }
     
     pub async fn get_strategy_signal(
-        &self,
-        _strategy: &str,
+        &mut self,
+        strategy: &str,
         symbol: &str,
-        _market_data: &crate::mcp::trading_tools::MarketData,
+        market_data: &crate::mcp::trading_tools::MarketData,
     ) -> Result<serde_json::Value> {
-        Ok(serde_json::json!({
-            "signal": "neutral",
-            "strength": 0.5,
-            "indicators": {}
-        }))
+        // Ensure DAA is initialized
+        self.ensure_daa_initialized().await?;
+        
+        // Use DAA's pattern recognition for strategy signals
+        self.daa_agent
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("DAA agent not initialized"))?
+            .get_strategy_signal(strategy, symbol, market_data)
+            .await
     }
     
     pub async fn assess_risk(
-        &self,
+        &mut self,
         symbol: &str,
-        _position_size: f64,
-        _market_data: &crate::mcp::trading_tools::MarketData,
+        position_size: f64,
+        market_data: &crate::mcp::trading_tools::MarketData,
         portfolio_value: Option<f64>,
     ) -> Result<RiskAssessment> {
-        let mut factors = HashMap::new();
-        let mut warnings = Vec::new();
+        // Ensure DAA is initialized
+        self.ensure_daa_initialized().await?;
         
-        // Calculate risk factors
-        let volatility = (_market_data.high - _market_data.low) / _market_data.close;
-        factors.insert("volatility".to_string(), volatility);
-        
-        if let Some(portfolio) = portfolio_value {
-            let position_ratio = _position_size / portfolio;
-            factors.insert("position_ratio".to_string(), position_ratio);
-            
-            if position_ratio > 0.2 {
-                warnings.push("Position size exceeds 20% of portfolio".to_string());
-            }
-        }
-        
-        let risk_score = volatility * 5.0; // Simplified risk calculation
-        
-        if risk_score > 0.7 {
-            warnings.push("High market volatility detected".to_string());
-        }
-        
-        Ok(RiskAssessment {
-            risk_score: risk_score.min(1.0),
-            factors,
-            max_drawdown: _position_size * 0.1,
-            value_at_risk: _position_size * 0.05,
-            warnings,
-        })
+        // Use DAA's self-monitoring for comprehensive risk assessment
+        self.daa_agent
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("DAA agent not initialized"))?
+            .assess_risk(symbol, position_size, market_data, portfolio_value)
+            .await
     }
 }
 
@@ -162,11 +149,33 @@ impl Default for AutonomousAgent {
     fn default() -> Self {
         let config = AgentConfig {
             id: "default-agent".to_string(),
-            strategy: TradingStrategy::Momentum,
+            strategy: TradingStrategy::Adaptive, // Changed to Adaptive for DAA
             risk_tolerance: 0.5,
             max_position_size: 10000.0,
             decision_threshold: 0.7,
         };
         Self::new(config).unwrap()
     }
+}
+
+/// Create a DAA-powered autonomous agent
+/// This is the recommended way to create agents with full DAA capabilities
+pub async fn create_daa_agent(config: AgentConfig) -> Result<DAAAgent> {
+    DAAAgent::new(config).await
+}
+
+/// Helper to create a DAA agent with common trading configurations
+pub async fn create_trading_agent(
+    id: &str,
+    strategy: TradingStrategy,
+    risk_tolerance: f64,
+) -> Result<DAAAgent> {
+    let config = AgentConfig {
+        id: id.to_string(),
+        strategy,
+        risk_tolerance,
+        max_position_size: 10000.0,
+        decision_threshold: 0.7,
+    };
+    create_daa_agent(config).await
 }
