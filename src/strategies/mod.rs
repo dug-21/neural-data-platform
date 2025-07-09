@@ -4,10 +4,12 @@
 //! configured and executed by the autonomous trading agents.
 
 pub mod momentum;
+pub mod neural_enhanced;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -30,12 +32,12 @@ pub enum StrategyError {
 pub enum Signal {
     Buy {
         confidence: f64,
-        size: f64,
+        size: Option<f64>,
         reason: String,
     },
     Sell {
         confidence: f64,
-        size: f64,
+        size: Option<f64>,
         reason: String,
     },
     Hold {
@@ -117,10 +119,21 @@ pub struct StrategyFactory;
 
 impl StrategyFactory {
     /// Create a strategy instance from configuration
-    pub fn create_strategy(config: &StrategyConfig) -> Result<Box<dyn TradingStrategy>, StrategyError> {
+    pub fn create_strategy(
+        config: &StrategyConfig,
+        neural_predictor: Option<Arc<crate::neural::NeuralPredictor>>,
+    ) -> Result<Box<dyn TradingStrategy>, StrategyError> {
         match config.name.as_str() {
             "momentum" => Ok(Box::new(momentum::MomentumStrategy::new())),
-            // Add more strategies here
+            "neural_enhanced" => {
+                if let Some(predictor) = neural_predictor {
+                    Ok(Box::new(neural_enhanced::NeuralEnhancedStrategy::new(predictor)))
+                } else {
+                    Err(StrategyError::Configuration(
+                        "Neural predictor required for neural_enhanced strategy".to_string(),
+                    ))
+                }
+            }
             _ => Err(StrategyError::Configuration(format!(
                 "Unknown strategy: {}",
                 config.name

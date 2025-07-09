@@ -201,7 +201,7 @@ impl TradingStrategy for MomentumStrategy {
             if self.check_stop_loss(pos) {
                 return Ok(Signal::Sell {
                     confidence: 1.0,
-                    size: pos.size,
+                    size: Some(pos.size),
                     reason: "Stop loss triggered".to_string(),
                 });
             }
@@ -210,7 +210,7 @@ impl TradingStrategy for MomentumStrategy {
             if self.check_take_profit(pos) {
                 return Ok(Signal::Sell {
                     confidence: 1.0,
-                    size: pos.size,
+                    size: Some(pos.size),
                     reason: "Take profit reached".to_string(),
                 });
             }
@@ -242,7 +242,7 @@ impl TradingStrategy for MomentumStrategy {
         {
             return Ok(Signal::Buy {
                 confidence: (momentum / self.config.momentum_threshold).min(1.0),
-                size: 1.0,
+                size: Some(1.0),
                 reason: format!(
                     "Bullish momentum: SMA crossover, RSI={:.2}, Momentum={:.2}%",
                     rsi,
@@ -258,7 +258,7 @@ impl TradingStrategy for MomentumStrategy {
         {
             return Ok(Signal::Sell {
                 confidence: (-momentum / self.config.momentum_threshold).min(1.0),
-                size: position.unwrap().size,
+                size: Some(position.unwrap().size),
                 reason: format!(
                     "Bearish momentum: SMA crossunder, RSI={:.2}, Momentum={:.2}%",
                     rsi,

@@ -4,7 +4,7 @@
 
 system:
   mode: production
-  environment: day_trading
+  environment: stock_day_trading
   log_level: info
   performance_tracking: true
 
@@ -80,8 +80,9 @@ trading:
   
   # Asset Configuration
   symbols: 
-    primary: ["BTC/USD", "ETH/USD"]     # Main focus
-    secondary: ["SOL/USD", "MATIC/USD"] # When opportunities arise
+    primary: ["AAPL", "MSFT", "GOOG", "NVDA"]     # Main focus
+    secondary: ["SPY", "QQQ", "TSLA", "NVDA"] # When opportunities arise
+    watchlist: ["META", "NFLX", "AMD", "CRM"]
     max_correlation: 0.6                  # Avoid correlated trades
   
   # Timeframe Configuration for Day Trading
@@ -107,8 +108,15 @@ trading:
     trading_hours:
       start: "09:35"       # Start 5 min after market open
       end: "15:30"         # End 30 min before close
-      avoid_lunch: false   # Trade through lunch
+      avoid_lunch: true   # Trade through lunch
       
+    # Stock-specific filters
+    price_filters:
+      min_price: 10.0            # Avoid penny stocks
+      max_price: 1000.0          # Avoid extremely high-priced stocks
+      min_volume: 1000000        # Min 1M daily volume
+      min_avg_volume: 500000     # Min 500K average volume
+
     # Volatility adjustments
     volatility_filters:
       min_atr: 0.002       # Minimum 0.2% ATR
@@ -136,12 +144,12 @@ trading:
 data:
   # TimescaleDB for historical data
   timescale:
-    url: "postgresql://localhost/trading"
+    url: "postgresql://postgres:${POSTGRES_PASSWORD:-dev_password}@localhost:5432/neural_trader
     host: localhost
     port: 5432
-    database: trading
+    database: neural_trader
     username: postgres
-    password: postgres
+    password: ${POSTGRES_PASSWORD:-dev_password}
     max_connections: 20        # More connections for day trading
     connection_timeout: 5s     # Fast timeout
     
@@ -203,6 +211,22 @@ session:
       - "calculate_metrics"
       - "update_models"
       - "generate_report"
+
+# Paper Trading Settings
+paper_trading:
+  initial_capital: 10000.00
+  commission_per_share: 0.005   # $0.005 per share
+  min_commission: 1.00           # $1 minimum
+  
+  # Realistic stock market simulation
+  market_impact:
+    enabled: true
+    impact_factor: 0.0001        # 0.01% per $1000 traded
+    
+  spread_simulation:
+    enabled: true
+    min_spread: 0.01             # $0.01 minimum spread
+    spread_factor: 0.0002        # 0.02% of price
       
 # Backtesting Configuration
 backtest:
