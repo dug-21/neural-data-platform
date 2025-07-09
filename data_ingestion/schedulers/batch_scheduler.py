@@ -5,12 +5,12 @@ from datetime import datetime, timedelta
 import aiocron
 from croniter import croniter
 
-from ..providers import PROVIDERS, BaseProvider
-from ..processors import DataValidator, DataCleaner, DataTransformer, DataAggregator
-from ..storage import TimescaleDB, RedisStore
-from ..config import get_settings
-from ..utils.logging import get_logger
-from ..utils.metrics import metrics
+from providers import PROVIDERS, BaseProvider
+from processors import DataValidator, DataCleaner, DataTransformer, DataAggregator
+from storage import TimescaleDB, RedisStore
+from config import get_settings
+from utils.logging import get_logger
+from utils.metrics import metrics
 
 
 logger = get_logger(__name__)

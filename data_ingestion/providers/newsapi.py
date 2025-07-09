@@ -8,7 +8,7 @@ import re
 from urllib.parse import quote
 
 from .base import BaseProvider, DataType
-from ..utils.retry import with_retry
+from utils.retry import with_retry
 
 
 @dataclass

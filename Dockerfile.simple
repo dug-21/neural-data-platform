@@ -1,0 +1,47 @@
+# Simple Dockerfile for Neural Trader
+FROM rustlang/rust:nightly AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libpq-dev \
+    cmake \
+    g++ \
+    clang \
+    libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy everything
+COPY . .
+
+# Build the application
+RUN cargo build --release --bin neural-trader
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libpq5 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the binary
+COPY --from=builder /app/target/release/neural-trader /app/neural-trader
+
+# Copy config
+COPY --from=builder /app/config /app/config
+
+# Create non-root user
+RUN useradd -m -u 1000 trader && chown -R trader:trader /app
+USER trader
+
+EXPOSE 3030
+
+ENTRYPOINT ["/app/neural-trader"]

@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import logging
 
 from .base import BaseProvider
-from ..config import get_settings
-from ..utils.retry import with_retry
+from config import get_settings
+from utils.retry import with_retry
 
 
 @dataclass

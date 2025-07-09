@@ -4,12 +4,12 @@ from typing import List, Dict, Any, Set, Optional, Callable
 from datetime import datetime
 import json
 
-from ..providers import PROVIDERS, BaseProvider
-from ..processors import DataValidator, DataCleaner, DataTransformer
-from ..storage import TimescaleDB, RedisStore
-from ..config import get_settings
-from ..utils.logging import get_logger
-from ..utils.metrics import metrics
+from providers import PROVIDERS, BaseProvider
+from processors import DataValidator, DataCleaner, DataTransformer
+from storage import TimescaleDB, RedisStore
+from config import get_settings
+from utils.logging import get_logger
+from utils.metrics import metrics
 
 
 logger = get_logger(__name__)
@@ -225,8 +225,11 @@ class RealtimeCoordinator:
                     self.logger.error(f"Callback error: {e}")
                     
         except Exception as e:
+            import traceback
             self.logger.error(f"Failed to process market data: {e}")
-            metrics.processing_errors.labels(stage='realtime').inc()
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            self.logger.error(f"Data dict: {data_dict}")
+            metrics.processing_errors.labels(provider=provider_name, error_type='processing').inc()
     
     async def _monitor_streams(self):
         """Monitor stream health and restart if needed."""

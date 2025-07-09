@@ -5,8 +5,8 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 import ta  # Technical Analysis library
 
-from ..utils.logging import get_logger
-from ..utils.metrics import metrics
+from utils.logging import get_logger
+from utils.metrics import metrics
 
 
 logger = get_logger(__name__)

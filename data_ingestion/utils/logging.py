@@ -2,7 +2,7 @@
 import sys
 import structlog
 from pythonjsonlogger import jsonlogger
-from ..config import get_settings
+from config import get_settings
 
 
 def configure_logging():
@@ -41,7 +41,11 @@ def configure_logging():
     )
 
 
+def setup_logging():
+    """Setup logging configuration (alias for configure_logging)."""
+    configure_logging()
+
+
 def get_logger(name: str):
     """Get a configured logger instance."""
-    configure_logging()
     return structlog.get_logger(name)

@@ -7,7 +7,7 @@ import pandas as pd
 from decimal import Decimal
 
 from .base import BaseProvider, MarketData, TickData, OrderBookData, DataType
-from ..utils.retry import with_retry
+from utils.retry import with_retry
 
 
 class PolygonProvider(BaseProvider):

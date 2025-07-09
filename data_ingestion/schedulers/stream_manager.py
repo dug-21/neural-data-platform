@@ -5,10 +5,10 @@ from datetime import datetime
 import json
 from collections import defaultdict
 
-from ..providers import BaseProvider
-from ..config import get_settings
-from ..utils.logging import get_logger
-from ..utils.metrics import metrics
+from providers import BaseProvider
+from config import get_settings
+from utils.logging import get_logger
+from utils.metrics import metrics
 
 
 logger = get_logger(__name__)

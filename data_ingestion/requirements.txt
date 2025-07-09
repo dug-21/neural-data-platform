@@ -7,6 +7,9 @@ aiocron>=1.8
 yfinance>=0.2.33
 websockets>=12.0
 requests>=2.31.0
+asyncpraw>=7.7.0  # Reddit API
+finnhub-python>=2.4.0  # Finnhub API
+newsapi-python>=0.2.0  # News API
 
 # Database connectors
 asyncpg>=0.29.0

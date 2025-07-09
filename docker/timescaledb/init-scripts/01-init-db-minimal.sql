@@ -14,8 +14,8 @@ SET search_path TO neural_trader, public;
 -- Create optimized time_series_data table
 CREATE TABLE IF NOT EXISTS time_series_data (
     time TIMESTAMPTZ NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
-    exchange VARCHAR(50) NOT NULL,
+    symbol TEXT NOT NULL,
+    exchange TEXT NOT NULL,
     open NUMERIC(20, 8) NOT NULL,
     high NUMERIC(20, 8) NOT NULL,
     low NUMERIC(20, 8) NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS time_series_data (
     spread NUMERIC(20, 8) GENERATED ALWAYS AS (ask - bid) STORED,
     spread_pct NUMERIC(8, 6) GENERATED ALWAYS AS ((ask - bid) / NULLIF(bid, 0) * 100) STORED,
     PRIMARY KEY (time, symbol, exchange)
-) PARTITION BY RANGE (time);
+);
 
 -- Create hypertable with optimized settings
 SELECT create_hypertable(
@@ -51,18 +51,18 @@ SELECT create_hypertable(
 -- Create optimized indexes
 CREATE INDEX idx_time_series_symbol_time ON time_series_data (symbol, time DESC) WITH (timescaledb.transaction_per_chunk);
 CREATE INDEX idx_time_series_exchange_time ON time_series_data (exchange, time DESC) WITH (timescaledb.transaction_per_chunk);
-CREATE INDEX idx_time_series_volume ON time_series_data (volume) WHERE volume > 0 WITH (timescaledb.transaction_per_chunk);
+CREATE INDEX idx_time_series_volume ON time_series_data (volume) WITH (timescaledb.transaction_per_chunk) WHERE volume > 0;
 
 -- Create predictions table with partitioning
 CREATE TABLE IF NOT EXISTS predictions (
     prediction_id UUID DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    symbol VARCHAR(20) NOT NULL,
-    exchange VARCHAR(50) NOT NULL,
-    model_name VARCHAR(100) NOT NULL,
-    model_version VARCHAR(50) NOT NULL,
+    symbol TEXT NOT NULL,
+    exchange TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    model_version TEXT NOT NULL,
     prediction_time TIMESTAMPTZ NOT NULL,
-    prediction_type VARCHAR(50) NOT NULL,
+    prediction_type TEXT NOT NULL,
     prediction_horizon INTEGER NOT NULL,
     predicted_value JSONB NOT NULL,
     confidence NUMERIC(5, 4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS predictions (
     actual_value JSONB,
     error_metrics JSONB,
     PRIMARY KEY (prediction_id, created_at)
-) PARTITION BY RANGE (created_at);
+);
 
 -- Create hypertable for predictions
 SELECT create_hypertable(
@@ -85,16 +85,16 @@ SELECT create_hypertable(
 -- Optimized indexes for predictions
 CREATE INDEX idx_predictions_symbol_created ON predictions (symbol, created_at DESC) WITH (timescaledb.transaction_per_chunk);
 CREATE INDEX idx_predictions_model_created ON predictions (model_name, created_at DESC) WITH (timescaledb.transaction_per_chunk);
-CREATE INDEX idx_predictions_confidence ON predictions (confidence DESC) WHERE confidence > 0.8 WITH (timescaledb.transaction_per_chunk);
+CREATE INDEX idx_predictions_confidence ON predictions (confidence DESC) WITH (timescaledb.transaction_per_chunk) WHERE confidence > 0.8;
 
 -- Create trades table with better partitioning
 CREATE TABLE IF NOT EXISTS trades (
     trade_id UUID DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     executed_at TIMESTAMPTZ NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
-    exchange VARCHAR(50) NOT NULL,
-    side VARCHAR(10) NOT NULL CHECK (side IN ('buy', 'sell')),
+    symbol TEXT NOT NULL,
+    exchange TEXT NOT NULL,
+    side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
     quantity NUMERIC(20, 8) NOT NULL,
     price NUMERIC(20, 8) NOT NULL,
     total_value NUMERIC(30, 8) NOT NULL,
@@ -105,15 +105,15 @@ CREATE TABLE IF NOT EXISTS trades (
             ELSE total_value - fees
         END
     ) STORED,
-    strategy_name VARCHAR(100) NOT NULL,
-    strategy_version VARCHAR(50) NOT NULL,
+    strategy_name TEXT NOT NULL,
+    strategy_version TEXT NOT NULL,
     prediction_id UUID,
-    order_type VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL,
+    order_type TEXT NOT NULL,
+    status TEXT NOT NULL,
     slippage NUMERIC(20, 8),
     metadata JSONB,
     PRIMARY KEY (trade_id, executed_at)
-) PARTITION BY RANGE (executed_at);
+);
 
 -- Create hypertable for trades
 SELECT create_hypertable(
@@ -127,7 +127,7 @@ SELECT create_hypertable(
 -- Optimized indexes for trades
 CREATE INDEX idx_trades_symbol_executed ON trades (symbol, executed_at DESC) WITH (timescaledb.transaction_per_chunk);
 CREATE INDEX idx_trades_strategy_executed ON trades (strategy_name, executed_at DESC) WITH (timescaledb.transaction_per_chunk);
-CREATE INDEX idx_trades_status ON trades (status) WHERE status != 'filled' WITH (timescaledb.transaction_per_chunk);
+CREATE INDEX idx_trades_status ON trades (status) WITH (timescaledb.transaction_per_chunk) WHERE status != 'filled';
 
 -- Create performance metrics table
 CREATE TABLE IF NOT EXISTS performance_metrics (
@@ -135,9 +135,9 @@ CREATE TABLE IF NOT EXISTS performance_metrics (
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     period_start TIMESTAMPTZ NOT NULL,
     period_end TIMESTAMPTZ NOT NULL,
-    strategy_name VARCHAR(100) NOT NULL,
-    strategy_version VARCHAR(50) NOT NULL,
-    symbol VARCHAR(20),
+    strategy_name TEXT NOT NULL,
+    strategy_version TEXT NOT NULL,
+    symbol TEXT,
     total_trades INTEGER NOT NULL,
     winning_trades INTEGER NOT NULL,
     losing_trades INTEGER NOT NULL,
@@ -158,8 +158,8 @@ CREATE TABLE IF NOT EXISTS performance_metrics (
 -- Create neural model performance tracking
 CREATE TABLE IF NOT EXISTS neural_model_metrics (
     model_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    model_name VARCHAR(100) NOT NULL,
-    model_type VARCHAR(50) NOT NULL,
+    model_name TEXT NOT NULL,
+    model_type TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     training_started_at TIMESTAMPTZ,
     training_completed_at TIMESTAMPTZ,
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS neural_model_metrics (
     feature_importance JSONB,
     model_size_bytes BIGINT,
     inference_time_ms NUMERIC(10, 3),
-    status VARCHAR(50) NOT NULL DEFAULT 'created'
+    status TEXT NOT NULL DEFAULT 'created'
 );
 
 -- Create materialized views for common aggregations
@@ -273,7 +273,15 @@ SELECT add_retention_policy('trades', INTERVAL '365 days', if_not_exists => TRUE
 
 -- Skip pg_cron jobs since extension not available
 
--- Grant permissions
+-- Create role if not exists and grant permissions
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'neural_trader') THEN
+        CREATE ROLE neural_trader WITH LOGIN PASSWORD 'neural_trader_password';
+    END IF;
+END
+$$;
+
 GRANT ALL PRIVILEGES ON SCHEMA neural_trader TO neural_trader;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA neural_trader TO neural_trader;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA neural_trader TO neural_trader;

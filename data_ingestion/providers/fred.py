@@ -6,8 +6,8 @@ from typing import List, Dict, Any, AsyncIterator, Optional
 import logging
 
 from .base import BaseProvider, MarketData, DataType
-from ..config import get_settings
-from ..utils.retry import with_retry
+from config import get_settings
+from utils.retry import with_retry
 
 
 class FREDProvider(BaseProvider):

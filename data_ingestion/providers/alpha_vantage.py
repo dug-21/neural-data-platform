@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 
 from .base import BaseProvider, MarketData, DataType
-from ..utils.retry import with_retry
+from utils.retry import with_retry
 
 
 class AlphaVantageProvider(BaseProvider):

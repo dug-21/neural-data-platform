@@ -1,0 +1,9 @@
+[submodule "claude-code-flow/claude-code-flow"]
+	path = claude-code-flow/claude-code-flow
+	url = https://github.com/ruvnet/claude-code-flow.git
+[submodule "daa-repository"]
+	path = daa-repository
+	url = https://github.com/ruvnet/daa-repository.git
+[submodule "polyglot-benchmark"]
+	path = polyglot-benchmark
+	url = https://github.com/ruvnet/polyglot-benchmark.git

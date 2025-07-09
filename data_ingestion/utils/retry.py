@@ -11,7 +11,7 @@ from tenacity import (
     before_log,
     after_log
 )
-from ..utils.logging import get_logger
+from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,8 +39,8 @@ def with_retry(
             stop=stop_after_attempt(max_attempts),
             wait=wait_exponential(multiplier=1, max=max_delay),
             retry=retry_if_exception_type(exceptions),
-            before=before_log(logger, "DEBUG"),
-            after=after_log(logger, "DEBUG"),
+            before=before_log(logger, 10),  # DEBUG level
+            after=after_log(logger, 10),    # DEBUG level
             reraise=True
         )
         async def wrapper(*args, **kwargs) -> T:

@@ -67,7 +67,7 @@ services:
       - DATABASE_URL=postgresql://postgres:dev_password@timescaledb:5432/neural_trader
       - REDIS_URL=redis://redis:6379
       - LOG_LEVEL=debug
-      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - ALPHA_ADVANTAGE_API_KEY=${ALPHA_ADVANTAGE_API_KEY}
       - POLYGON_API_KEY=${POLYGON_API_KEY}
       - FINNHUB_API_KEY=${FINNHUB_API_KEY}
       - IEX_CLOUD_API_KEY=${IEX_CLOUD_API_KEY}

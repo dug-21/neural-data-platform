@@ -2,13 +2,13 @@
 import asyncio
 import aiohttp
 from typing import List, AsyncIterator, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 import yfinance as yf
 from concurrent.futures import ThreadPoolExecutor
 
 from .base import BaseProvider, MarketData, DataType
-from ..utils.retry import with_retry
+from utils.retry import with_retry
 
 
 class YahooFinanceProvider(BaseProvider):
@@ -65,12 +65,12 @@ class YahooFinanceProvider(BaseProvider):
             # For intraday data, Yahoo Finance only provides last 60 days
             if interval in ["1m", "2m", "5m", "15m", "30m", "60m"]:
                 max_days = 60
-                if (datetime.now() - start).days > max_days:
+                if (datetime.now(timezone.utc) - start).days > max_days:
                     self.logger.warning(
                         f"Yahoo Finance only provides {max_days} days of intraday data. "
                         f"Adjusting start date for {symbol}"
                     )
-                    start = datetime.now() - timedelta(days=max_days)
+                    start = datetime.now(timezone.utc) - timedelta(days=max_days)
             
             # Download data
             df = ticker.history(
@@ -118,14 +118,35 @@ class YahooFinanceProvider(BaseProvider):
                 
                 # Convert DataFrame to MarketData objects
                 for timestamp, row in df.iterrows():
+                    # Helper function to safely convert to float
+                    def safe_float(value, default=0.0):
+                        try:
+                            if pd.isna(value) or value is None:
+                                return default
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    # Helper function to safely convert to int
+                    def safe_int(value, default=0):
+                        try:
+                            if pd.isna(value) or value is None:
+                                return default
+                            # Handle string volumes with commas
+                            if isinstance(value, str):
+                                value = value.replace(',', '')
+                            return int(float(value))
+                        except (ValueError, TypeError):
+                            return default
+                    
                     yield MarketData(
                         time=timestamp,
                         symbol=symbol,
-                        open=float(row.get("Open", 0)),
-                        high=float(row.get("High", 0)),
-                        low=float(row.get("Low", 0)),
-                        close=float(row.get("Close", 0)),
-                        volume=int(row.get("Volume", 0)),
+                        open=safe_float(row.get("Open", 0)),
+                        high=safe_float(row.get("High", 0)),
+                        low=safe_float(row.get("Low", 0)),
+                        close=safe_float(row.get("Close", 0)),
+                        volume=safe_int(row.get("Volume", 0)),
                         provider=self.name,
                         metadata={
                             "dividends": row.get("Dividends"),
@@ -165,7 +186,7 @@ class YahooFinanceProvider(BaseProvider):
                         lambda: ticker.info
                     )
                     
-                    if info:
+                    if info and isinstance(info, dict) and len(info) > 0:
                         yield self._parse_quote_data(info, symbol)
                         
                 except Exception as e:
@@ -177,14 +198,35 @@ class YahooFinanceProvider(BaseProvider):
     
     def _parse_quote_data(self, info: Dict[str, Any], symbol: str) -> MarketData:
         """Parse Yahoo Finance quote data."""
+        # Helper function to safely convert to float
+        def safe_float(value, default=0.0):
+            try:
+                if value is None:
+                    return default
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+        
+        # Helper function to safely convert to int
+        def safe_int(value, default=0):
+            try:
+                if value is None:
+                    return default
+                # Handle string volumes with commas
+                if isinstance(value, str):
+                    value = value.replace(',', '')
+                return int(float(value))
+            except (ValueError, TypeError):
+                return default
+        
         return MarketData(
-            time=datetime.now(),
+            time=datetime.now(timezone.utc),
             symbol=symbol,
-            open=float(info.get("regularMarketOpen", info.get("open", 0))),
-            high=float(info.get("regularMarketDayHigh", info.get("dayHigh", 0))),
-            low=float(info.get("regularMarketDayLow", info.get("dayLow", 0))),
-            close=float(info.get("regularMarketPrice", info.get("currentPrice", 0))),
-            volume=int(info.get("regularMarketVolume", info.get("volume", 0))),
+            open=safe_float(info.get("regularMarketOpen", info.get("open", 0))),
+            high=safe_float(info.get("regularMarketDayHigh", info.get("dayHigh", 0))),
+            low=safe_float(info.get("regularMarketDayLow", info.get("dayLow", 0))),
+            close=safe_float(info.get("regularMarketPrice", info.get("currentPrice", 0))),
+            volume=safe_int(info.get("regularMarketVolume", info.get("volume", 0))),
             provider=self.name,
             metadata={
                 "market_cap": info.get("marketCap"),

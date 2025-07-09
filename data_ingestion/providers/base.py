@@ -6,10 +6,10 @@ import asyncio
 from dataclasses import dataclass
 from enum import Enum
 
-from ..config import get_settings
-from ..utils.logging import get_logger
-from ..utils.metrics import metrics
-from ..utils.retry import with_retry
+from config import get_settings
+from utils.logging import get_logger
+from utils.metrics import metrics
+from utils.retry import with_retry
 
 
 class DataType(Enum):

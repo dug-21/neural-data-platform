@@ -1,0 +1,108 @@
+[package]
+name = "autonomous-platform"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Core dependencies
+tokio = { version = "1.38", features = ["full", "tracing"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+axum = { version = "0.7", features = ["http2", "ws", "json", "macros"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate", "macros"] }
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "json"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.8", features = ["v4", "serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+config = "0.14"
+prometheus = { version = "0.13", features = ["process"] }
+once_cell = "1.19"
+deadpool-redis = "0.15"
+sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+rust_decimal = { version = "1.35", features = ["serde-float"] }
+rust_decimal_macros = "1.34"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+url = "2.5"
+dotenv = "0.15"
+parking_lot = "0.12"
+async-trait = "0.1"
+pin-project = "1.1"
+bytes = "1.6"
+http = "1.1"
+futures = "0.3"
+futures-util = "0.3"
+regex = "1.10"
+lazy_static = "1.4"
+clap = { version = "4.5", features = ["derive", "env"] }
+num_cpus = "1.16"
+crossbeam = "0.8"
+rayon = "1.10"
+dashmap = "5.5"
+flume = { version = "0.11", features = ["async"] }
+arrow = { version = "51.0", features = ["json", "csv", "prettyprint", "chrono-tz"] }
+parquet = { version = "51.0", features = ["arrow", "async"] }
+ahash = "0.8"
+indexmap = { version = "2.2", features = ["serde"] }
+smallvec = { version = "1.13", features = ["serde", "union", "const_generics"] }
+mimalloc = { version = "0.1", optional = true }
+moka = { version = "0.12", features = ["future"] }
+metrics = "0.22"
+metrics-exporter-prometheus = "0.14"
+tantivy = "0.21"
+blake3 = "1.5"
+zstd = "0.13"
+lz4 = "1.24"
+bincode = "1.3"
+rmp-serde = "1.1"
+flatbuffers = "23.5"
+capnp = "0.19"
+prost = "0.12"
+rdkafka = { version = "0.36", features = ["cmake-build", "ssl-vendored", "tokio"] }
+lapin = "2.3"
+nats = "0.25"
+bb8 = "0.8"
+bb8-redis = "0.15"
+rocksdb = { version = "0.22", default-features = false, features = ["lz4", "zstd"] }
+rusoto_core = { version = "0.48", default-features = false, features = ["rustls"] }
+rusoto_s3 = { version = "0.48", default-features = false, features = ["rustls"] }
+object_store = { version = "0.9", features = ["aws", "azure", "gcp"] }
+aws-config = "1.1"
+aws-sdk-s3 = "1.15"
+tonic = { version = "0.11", features = ["tls", "gzip"] }
+tonic-health = "0.11"
+opentelemetry = { version = "0.22", features = ["trace"] }
+opentelemetry-otlp = { version = "0.15", features = ["tonic", "metrics", "logs"] }
+opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
+actix-web = { version = "4.4", optional = true }
+
+# Local dependencies
+ruv-fann = { path = "vendor/ruv-fann" }
+
+# Machine Learning & Analysis
+candle-core = { version = "0.4", optional = true }
+candle-nn = { version = "0.4", optional = true }
+candle-transformers = { version = "0.4", optional = true }
+polars = { version = "0.38", features = ["lazy", "temporal", "performant", "parquet", "json"], optional = true }
+ndarray = { version = "0.15", features = ["serde"], optional = true }
+linfa = { version = "0.7", optional = true }
+smartcore = { version = "0.3", optional = true }
+
+[features]
+default = ["ml-basic"]
+mimalloc = ["dep:mimalloc"]
+ml-basic = ["dep:ndarray", "dep:linfa", "dep:smartcore"]
+ml-advanced = ["ml-basic", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:polars"]
+full = ["ml-advanced", "actix-web"]
+
+[[bin]]
+name = "neural-trader"
+path = "src/main.rs"
+
+[[bin]]
+name = "mcp_server"
+path = "src/bin/mcp_server.rs"

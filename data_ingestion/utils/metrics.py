@@ -66,6 +66,58 @@ class Metrics:
             'Number of rate limit hits',
             ['provider']
         )
+        
+        # Streaming metrics
+        self.streaming_errors = Counter(
+            'data_ingestion_streaming_errors_total',
+            'Number of streaming errors',
+            ['provider']
+        )
+        
+        self.active_streams = Gauge(
+            'data_ingestion_active_streams',
+            'Number of active data streams'
+        )
+        
+        # Validation metrics
+        self.validation_failures = Counter(
+            'data_ingestion_validation_failures_total',
+            'Number of validation failures',
+            ['provider']
+        )
+        
+        # Additional processing metrics by stage
+        self.processing_errors_by_stage = Counter(
+            'data_ingestion_processing_errors_by_stage_total',
+            'Total number of processing errors by stage',
+            ['stage']
+        )
+        
+        # Data quality metrics
+        self.data_quality_issues = Counter(
+            'data_ingestion_data_quality_issues_total',
+            'Number of data quality issues',
+            ['issue_type']
+        )
+        
+        # Batch job metrics
+        self.batch_job_duration = Histogram(
+            'data_ingestion_batch_job_duration_seconds',
+            'Duration of batch jobs',
+            ['job_id']
+        )
+        
+        self.batch_job_errors = Counter(
+            'data_ingestion_batch_job_errors_total',
+            'Number of batch job errors',
+            ['job_id', 'provider']
+        )
+        
+        self.batch_job_success = Counter(
+            'data_ingestion_batch_job_success_total',
+            'Number of successful batch jobs',
+            ['job_id']
+        )
     
     def track_api_request(self, provider: str, endpoint: str):
         """Decorator to track API request metrics."""
@@ -128,3 +180,10 @@ class Metrics:
 
 # Global metrics instance
 metrics = Metrics()
+
+
+def start_metrics_server(port: int = 9090):
+    """Start Prometheus metrics server."""
+    from prometheus_client import start_http_server
+    start_http_server(port)
+    return port

@@ -20,7 +20,7 @@ if [ ! -f .env.stock-simulation ]; then
 fi
 
 # Check for at least one API key in environment
-if [ -z "$FINNHUB_API_KEY" ] && [ -z "$ALPHA_VANTAGE_API_KEY" ] && [ -z "$IEX_CLOUD_API_KEY" ] && [ -z "$POLYGON_API_KEY" ]; then
+if [ -z "$FINNHUB_API_KEY" ] && [ -z "$ALPHA_ADVANTAGE_API_KEY" ] && [ -z "$IEX_CLOUD_API_KEY" ] && [ -z "$POLYGON_API_KEY" ]; then
     echo ""
     echo "⚠️  WARNING: No API key found in environment variables!"
     echo ""
@@ -28,7 +28,7 @@ if [ -z "$FINNHUB_API_KEY" ] && [ -z "$ALPHA_VANTAGE_API_KEY" ] && [ -z "$IEX_CL
     echo ""
     echo "  export FINNHUB_API_KEY='your_actual_key'"
     echo "  or"
-    echo "  export ALPHA_VANTAGE_API_KEY='your_actual_key'"
+    echo "  export ALPHA_ADVANTAGE_API_KEY='your_actual_key'"
     echo "  or"
     echo "  export IEX_CLOUD_API_KEY='your_actual_key'"
     echo ""

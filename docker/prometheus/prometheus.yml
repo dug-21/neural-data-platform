@@ -32,7 +32,7 @@ scrape_configs:
   # Data Ingestion Python service
   - job_name: 'data-ingestion'
     static_configs:
-      - targets: ['data-ingestion:8000']
+      - targets: ['data-ingestion:9090']
     metrics_path: '/metrics'
     scrape_interval: 10s
 

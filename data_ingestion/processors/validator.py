@@ -4,8 +4,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, time
 import pytz
 
-from ..utils.logging import get_logger
-from ..utils.metrics import metrics
+from utils.logging import get_logger
+from utils.metrics import metrics
 
 
 logger = get_logger(__name__)
@@ -173,7 +173,9 @@ class DataValidator:
         for field in price_fields:
             if field in record and record[field] is not None:
                 try:
-                    price = float(record[field])
+                    # Handle string prices with commas
+                    price_str = str(record[field]).replace(',', '')
+                    price = float(price_str)
                     prices[field] = price
                     
                     if price <= 0:
@@ -211,7 +213,9 @@ class DataValidator:
         errors = []
         
         try:
-            vol = int(volume)
+            # Handle string volumes with commas
+            volume_str = str(volume).replace(',', '')
+            vol = int(float(volume_str))
             if vol < 0:
                 errors.append("Volume cannot be negative")
             elif vol > 1e12:  # 1 trillion

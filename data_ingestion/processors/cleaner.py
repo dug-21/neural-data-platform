@@ -2,10 +2,10 @@
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional, Union
-from datetime import datetime
+from datetime import datetime, timezone
 
-from ..utils.logging import get_logger
-from ..utils.metrics import metrics
+from utils.logging import get_logger
+from utils.metrics import metrics
 
 
 logger = get_logger(__name__)
@@ -94,7 +94,7 @@ class DataCleaner:
         # Validate time
         if not isinstance(record['time'], (datetime, pd.Timestamp)):
             try:
-                record['time'] = pd.to_datetime(record['time'])
+                record['time'] = pd.to_datetime(record['time'], utc=True)
             except:
                 logger.debug(f"Invalid time format: {record.get('time')}")
                 return False
@@ -120,7 +120,9 @@ class DataCleaner:
         # Validate volume
         if 'volume' in record and record['volume'] is not None:
             try:
-                volume = int(record['volume'])
+                # Handle string volumes with commas or decimals
+                volume_str = str(record['volume']).replace(',', '')
+                volume = int(float(volume_str))
                 if volume < self.min_volume:
                     logger.debug(f"Invalid volume: {volume}")
                     return False
@@ -136,21 +138,35 @@ class DataCleaner:
         
         try:
             # Ensure proper types
-            cleaned['time'] = pd.to_datetime(cleaned['time'])
+            cleaned['time'] = pd.to_datetime(cleaned['time'], utc=True)
             cleaned['symbol'] = str(cleaned['symbol']).upper().strip()
             
             # Clean price fields
             for field in ['open', 'high', 'low', 'close']:
                 if field in cleaned and cleaned[field] is not None:
-                    cleaned[field] = float(cleaned[field])
+                    try:
+                        # Handle string prices with commas
+                        price_str = str(cleaned[field]).replace(',', '')
+                        cleaned[field] = float(price_str)
+                    except (ValueError, TypeError):
+                        logger.debug(f"Could not convert {field} to float: {cleaned.get(field)}")
+                        # Use close price as fallback
+                        if field != 'close' and 'close' in cleaned:
+                            cleaned[field] = cleaned.get('close', 0.0)
+                        else:
+                            cleaned[field] = 0.0
                 else:
                     # Use close price as fallback
                     if field != 'close' and 'close' in cleaned:
-                        cleaned[field] = cleaned['close']
+                        cleaned[field] = cleaned.get('close', 0.0)
             
             # Clean volume
             if 'volume' in cleaned and cleaned['volume'] is not None:
-                cleaned['volume'] = int(cleaned['volume'])
+                try:
+                    cleaned['volume'] = int(float(str(cleaned['volume']).replace(',', '')))
+                except (ValueError, TypeError):
+                    logger.debug(f"Could not convert volume to int: {cleaned.get('volume')}")
+                    cleaned['volume'] = 0
             else:
                 cleaned['volume'] = 0
             

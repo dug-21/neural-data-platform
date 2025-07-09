@@ -1,0 +1,81 @@
+version: '3.8'
+
+# Podman-compatible compose file for Neural Trader development
+# Usage: podman-compose -f .devcontainer_podman/podman-compose.yml up -d
+
+services:
+  timescaledb:
+    image: docker.io/timescale/timescaledb:latest-pg16
+    container_name: neural_trader_timescaledb
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=neural_trader
+      - TIMESCALEDB_TELEMETRY=off
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data:Z
+      - ./docker/timescaledb/init-scripts:/docker-entrypoint-initdb.d:ro,Z
+    ports:
+      - "5432:5432"
+    networks:
+      - neural_trader_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/redis:7-alpine
+    container_name: neural_trader_redis
+    volumes:
+      - redis_data:/data:Z
+    ports:
+      - "6379:6379"
+    networks:
+      - neural_trader_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  pgadmin:
+    image: docker.io/dpage/pgadmin4:latest
+    container_name: neural_trader_pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@neural-trader.local
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "8082:80"
+    networks:
+      - neural_trader_net
+    depends_on:
+      - timescaledb
+    restart: unless-stopped
+
+  redis-commander:
+    image: docker.io/rediscommander/redis-commander:latest
+    container_name: neural_trader_redis_commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    networks:
+      - neural_trader_net
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  timescaledb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  neural_trader_net:
+    driver: bridge

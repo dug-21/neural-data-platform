@@ -1,0 +1,168 @@
+version: '3.8'
+
+# This is a Podman-compatible version that uses secrets instead of environment variables
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    container_name: neural_trader_timescaledb
+    environment:
+      POSTGRES_DB: neural_trader
+      POSTGRES_USER: neural_trader
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-development_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./docker_config/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neural_trader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: neural_trader_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  data_ingestion:
+    build:
+      context: ./data_ingestion
+      dockerfile: Dockerfile
+    container_name: neural_trader_data_ingestion
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      DB_NAME: neural_trader
+      DB_USER: neural_trader
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-development_password}
+      
+      # Redis configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # Trading configuration from .env.stock-simulation
+      PRIMARY_PROVIDER: ${PRIMARY_PROVIDER:-finnhub}
+      TRADING_MODE: ${TRADING_MODE:-paper}
+      TRADING_SYMBOLS_PRIMARY: ${TRADING_SYMBOLS_PRIMARY}
+      COLLECTION_INTERVAL_SECONDS: ${COLLECTION_INTERVAL_SECONDS:-60}
+      
+      # API keys will be injected from secrets
+      FINNHUB_API_KEY_FILE: /run/secrets/finnhub_api_key
+      ALPHA_VANTAGE_API_KEY_FILE: /run/secrets/alpha_vantage_api_key
+      IEX_CLOUD_API_KEY_FILE: /run/secrets/iex_cloud_api_key
+      POLYGON_API_KEY_FILE: /run/secrets/polygon_api_key
+    secrets:
+      - finnhub_api_key
+      - alpha_vantage_api_key
+      - iex_cloud_api_key
+      - polygon_api_key
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  neural_trader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: neural_trader_app
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      data_ingestion:
+        condition: service_started
+    environment:
+      # Database configuration
+      DATABASE_URL: postgresql://neural_trader:${POSTGRES_PASSWORD:-development_password}@timescaledb:5432/neural_trader
+      
+      # Redis configuration
+      REDIS_URL: redis://redis:6379
+      
+      # Trading configuration
+      TRADING_MODE: ${TRADING_MODE:-paper}
+      INITIAL_CAPITAL: ${INITIAL_CAPITAL:-10000}
+      RISK_PER_TRADE: ${RISK_PER_TRADE:-0.02}
+      MAX_POSITIONS: ${MAX_POSITIONS:-5}
+      
+      # Application settings
+      RUST_LOG: ${RUST_LOG:-info}
+      RUST_BACKTRACE: 1
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./logs:/app/logs
+      - ./models:/app/models
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: neural_trader_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker_config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: neural_trader_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_admin_password
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    secrets:
+      - grafana_admin_password
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker_config/grafana/provisioning:/etc/grafana/provisioning
+      - ./docker_config/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  timescaledb_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+# External secrets managed by Podman
+secrets:
+  finnhub_api_key:
+    external: true
+  alpha_vantage_api_key:
+    external: true
+  iex_cloud_api_key:
+    external: true
+  polygon_api_key:
+    external: true
+  grafana_admin_password:
+    external: true

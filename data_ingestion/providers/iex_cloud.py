@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from .base import BaseProvider, MarketData, TickData, DataType
-from ..utils.retry import with_retry
+from utils.retry import with_retry
 
 
 class IEXCloudProvider(BaseProvider):

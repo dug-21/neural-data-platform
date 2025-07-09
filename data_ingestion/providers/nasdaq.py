@@ -7,7 +7,7 @@ import pandas as pd
 from urllib.parse import urlencode
 
 from .base import BaseProvider, MarketData, DataType
-from ..utils.retry import with_retry
+from utils.retry import with_retry
 
 
 class NASDAQProvider(BaseProvider):
