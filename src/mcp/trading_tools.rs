@@ -21,7 +21,7 @@ pub struct TradingMcpTools {
     storage: Arc<TimescaleDBStorage>,
     cache: Arc<RwLock<RedisCache>>,
     predictor: Arc<NeuralPredictor>,
-    agent: Arc<AutonomousAgent>,
+    agent: Arc<RwLock<AutonomousAgent>>,
     monitor: Option<Arc<HealthMonitor>>,
 }
 
@@ -30,7 +30,7 @@ impl TradingMcpTools {
         storage: Arc<TimescaleDBStorage>,
         cache: Arc<RwLock<RedisCache>>,
         predictor: Arc<NeuralPredictor>,
-        agent: Arc<AutonomousAgent>,
+        agent: Arc<RwLock<AutonomousAgent>>,
     ) -> Self {
         Self {
             storage,
@@ -70,7 +70,7 @@ impl TradingMcpTools {
             storage,
             cache,
             predictor: Arc::new(NeuralPredictor::default()),
-            agent: Arc::new(AutonomousAgent::default()),
+            agent: Arc::new(RwLock::new(AutonomousAgent::default())),
             monitor: Some(monitor),
         })
     }
@@ -344,7 +344,7 @@ impl TradingMcpTools {
         };
         
         // Get agent decision
-        let decision = self.agent.make_decision(
+        let decision = self.agent.write().await.make_decision(
             symbol,
             &market_data,
             current_position,
@@ -355,7 +355,7 @@ impl TradingMcpTools {
         let strategy_signals = if let Some(weights) = params["strategy_weights"].as_object() {
             let mut signals = json!({});
             for (strategy, _weight) in weights {
-                signals[strategy] = self.agent.get_strategy_signal(
+                signals[strategy] = self.agent.write().await.get_strategy_signal(
                     strategy,
                     symbol,
                     &market_data
@@ -367,7 +367,7 @@ impl TradingMcpTools {
         };
         
         // Risk assessment
-        let risk_assessment = self.agent.assess_risk(
+        let risk_assessment = self.agent.write().await.assess_risk(
             symbol,
             position_size,
             &market_data,
