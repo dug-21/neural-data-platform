@@ -10,8 +10,8 @@ keywords = ["neural-network", "time-series", "forecasting", "lstm", "rnn"]
 categories = ["science", "algorithms", "mathematics"]
 
 [dependencies]
-# Core ruv-FANN dependency
-ruv-fann = "0.1"
+# Core ruv-FANN dependency - use vendored version
+ruv-fann = { path = "../.." }
 
 # Essential dependencies
 num-traits = "0.2"

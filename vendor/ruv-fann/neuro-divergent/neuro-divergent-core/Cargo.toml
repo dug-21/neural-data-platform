@@ -41,8 +41,8 @@ rand_distr = "0.4"
 # Mathematical operations
 nalgebra = "0.32"
 
-# ruv-FANN integration
-ruv-fann = "0.1"
+# ruv-FANN integration - use vendored version
+ruv-fann = { path = "../.." }
 
 # Optional GPU acceleration
 candle-core = { version = "0.3", optional = true }
