@@ -75,6 +75,20 @@ pub struct MarketContext {
     pub timestamp: i64,
 }
 
+impl Default for MarketContext {
+    fn default() -> Self {
+        Self {
+            symbol: String::new(),
+            current_price: 0.0,
+            bid: 0.0,
+            ask: 0.0,
+            volume_24h: 0.0,
+            volatility: 0.0,
+            timestamp: 0,
+        }
+    }
+}
+
 /// Strategy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyConfig {
