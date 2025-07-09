@@ -12,15 +12,7 @@ keywords = ["neural-network", "forecasting", "time-series", "machine-learning", 
 categories = ["science", "algorithms", "mathematics"]
 readme = "README.md"
 
-[workspace]
-members = [
-    ".",
-    "neuro-divergent-core",
-    "neuro-divergent-data",
-    "neuro-divergent-models",
-    "neuro-divergent-registry", 
-    "neuro-divergent-training"
-]
+# Workspace definition moved to root Cargo.toml to avoid conflicts
 
 [lib]
 name = "neuro_divergent"
@@ -62,13 +54,13 @@ candle-nn = { version = "0.3", optional = true }
 log = "0.4"
 tracing = { version = "0.1", optional = true }
 
-# Internal neuro-divergent crates (using published versions)
-neuro-divergent-core = "0.1.0"
-neuro-divergent-models = { version = "0.1.0", optional = true }
-neuro-divergent-registry = { version = "0.1.0", optional = true }
+# Internal neuro-divergent crates (using local versions)
+neuro-divergent-core = { path = "./neuro-divergent-core" }
+neuro-divergent-models = { path = "./neuro-divergent-models", optional = true }
+neuro-divergent-registry = { path = "./neuro-divergent-registry", optional = true }
 
-# ruv-FANN dependency
-ruv-fann = "0.1"
+# ruv-FANN dependency - use vendored version
+ruv-fann = { path = ".." }
 
 [dev-dependencies]
 approx = "0.5"
@@ -108,7 +100,7 @@ python-compat = []  # Enable Python-specific compatibility features
 # plotting = ["plotly"]  # Enable plotting support for examples (dev-dependency only)
 
 # WASM support
-wasm = ["dep:ruv-fann/wasm"]
+wasm = ["ruv-fann/wasm"]
 no_std = []
 
 
