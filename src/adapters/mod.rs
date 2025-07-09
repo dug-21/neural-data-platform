@@ -5,6 +5,10 @@
 
 pub mod redis;
 pub mod timescale;
+pub mod neuro_divergent;
+pub mod daa_service;
+pub mod integration_bridge;
+pub mod ffi_wrapper;
 
 use async_trait::async_trait;
 use thiserror::Error;

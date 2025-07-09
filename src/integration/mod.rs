@@ -9,6 +9,12 @@
 use anyhow::Result;
 
 pub mod data_access;
+pub mod daa_coordinator;
+pub mod autonomous_decisions;
+
+// Re-export commonly used types
+pub use daa_coordinator::{DaaCoordinator, DaaConfig, AutonomousDecision, TradingAction};
+pub use autonomous_decisions::{DaaDecisionMaker, MarketTrend};
 
 /// Trait for market data providers
 pub trait MarketDataProvider: Send + Sync {
