@@ -85,7 +85,7 @@ async fn main() -> Result<()> {
         max_position_size: 10000.0,
         decision_threshold: 0.7,
     };
-    let agent = Arc::new(AutonomousAgent::new(agent_config)?);
+    let agent = Arc::new(RwLock::new(AutonomousAgent::new(agent_config)?));
     println!("✅ Trading agent ready");
     
     // Create MCP tools
