@@ -215,7 +215,7 @@ mod health_monitor_tests {
         
         assert!(health.is_ok());
         let health = health.unwrap();
-        assert_eq!(health.status, HealthStatus::Unhealthy);
+        assert!(matches!(health.status, HealthStatus::Unhealthy(_)));
         assert!(health.error_message.is_some());
     }
 
@@ -242,7 +242,7 @@ mod health_monitor_tests {
         
         assert!(health.is_ok());
         let health = health.unwrap();
-        assert_eq!(health.status, HealthStatus::Degraded);
+        assert!(matches!(health.status, HealthStatus::Degraded(_)));
     }
 
     #[tokio::test]
@@ -264,7 +264,7 @@ mod health_monitor_tests {
         
         // Overall status should be determined by component statuses
         match system_health.overall_status {
-            HealthStatus::Healthy | HealthStatus::Degraded | HealthStatus::Unhealthy => {},
+            HealthStatus::Healthy | HealthStatus::Degraded(_) | HealthStatus::Unhealthy(_) => {},
             _ => panic!("Invalid overall status"),
         }
     }
@@ -295,16 +295,19 @@ mod health_monitor_tests {
         
         // Create alert config
         let alert_config = AlertConfig {
+            id: "test_alert_1".to_string(),
             component: ComponentType::Database,
             metric_name: "response_time_ms".to_string(),
             threshold: 1000.0,
             alert_type: AlertType::Threshold,
+            enabled: true,
+            cooldown_minutes: 5,
         };
         
         health_monitor.add_alert_config(alert_config).await.unwrap();
         
         // Should trigger alert when threshold is exceeded
-        let alerts = health_monitor.check_alerts().await.unwrap();
+        let _alerts = health_monitor.check_alerts().await.unwrap();
         // Alert behavior depends on current system state
     }
 
@@ -422,6 +425,8 @@ impl TestHealthMonitor {
             ComponentType::DAAOrchestrator => HealthStatus::Healthy,
             ComponentType::NeuralSystem => HealthStatus::Healthy,
             ComponentType::EventBus => HealthStatus::Healthy,
+            ComponentType::DataPipeline => HealthStatus::Healthy,
+            ComponentType::Cache => HealthStatus::Healthy,
         };
 
         let health = ComponentHealth {
@@ -431,6 +436,8 @@ impl TestHealthMonitor {
             response_time_ms: Some(50),
             error_message: None,
             metadata: HashMap::new(),
+            uptime: Duration::from_secs(0),
+            last_restart: None,
         };
 
         // Store in component_health map
@@ -455,19 +462,28 @@ impl TestHealthMonitor {
         }
 
         // Determine overall status
-        let overall_status = if components.values().any(|h| matches!(h.status, HealthStatus::Unhealthy)) {
-            HealthStatus::Unhealthy
-        } else if components.values().any(|h| matches!(h.status, HealthStatus::Degraded)) {
-            HealthStatus::Degraded
+        let overall_status = if components.values().any(|h| matches!(h.status, HealthStatus::Unhealthy(_))) {
+            HealthStatus::Unhealthy("Some components are unhealthy".to_string())
+        } else if components.values().any(|h| matches!(h.status, HealthStatus::Degraded(_))) {
+            HealthStatus::Degraded("Some components are degraded".to_string())
         } else {
             HealthStatus::Healthy
         };
 
+        let total_components = components.len();
+        let healthy_components = components.values().filter(|c| matches!(c.status, HealthStatus::Healthy)).count();
+        let degraded_components = components.values().filter(|c| matches!(c.status, HealthStatus::Degraded(_))).count();
+        let unhealthy_components = components.values().filter(|c| matches!(c.status, HealthStatus::Unhealthy(_))).count();
+        
         Ok(SystemHealth {
             overall_status,
             components,
             timestamp: Utc::now(),
             system_uptime: self.start_time.elapsed(),
+            total_components,
+            healthy_components,
+            degraded_components,
+            unhealthy_components,
         })
     }
 
@@ -481,6 +497,8 @@ impl TestHealthMonitor {
             cpu_usage_percent: 45.0,
             memory_usage_mb: 512,
             disk_usage_percent: 25.0,
+            network_bytes_in: 0,
+            network_bytes_out: 0,
             timestamp: Utc::now(),
         })
     }

@@ -783,6 +783,20 @@ impl HealthMonitor {
         self.alert_manager.check_alerts(&metrics, &health).await
     }
 
+    /// Register a component for monitoring
+    pub async fn register_component(&mut self, component: ComponentType) -> Result<()> {
+        let health = ComponentHealth::new(component.clone());
+        self.component_health.write().await.insert(component.clone(), health);
+        info!("Registered component for monitoring: {:?}", component);
+        Ok(())
+    }
+
+    /// Update component health directly
+    pub async fn update_component_health(&mut self, component: ComponentType, health: ComponentHealth) -> Result<()> {
+        self.component_health.write().await.insert(component, health);
+        Ok(())
+    }
+
     /// Main monitoring loop
     async fn monitoring_loop(&self) {
         let mut interval = interval(self.monitoring_interval);

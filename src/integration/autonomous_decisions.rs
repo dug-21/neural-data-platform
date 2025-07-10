@@ -329,7 +329,15 @@ mod tests {
     
     #[tokio::test]
     async fn test_daa_decision_maker_creation() {
-        let neural_config = NeuralConfig::default();
+        let neural_config = NeuralConfig {
+            memory_gb: 1.0,
+            models: vec!["MLP".to_string()],
+            prediction_cache_ttl: 300,
+            model_load_timeout: 60,
+            max_concurrent_predictions: 10,
+            enable_model_monitoring: true,
+            accuracy_threshold: 0.8,
+        };
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
         
         let decision_maker = DaaDecisionMaker::new(neural_predictor);

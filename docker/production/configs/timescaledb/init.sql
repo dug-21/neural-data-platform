@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 DO $$ 
 BEGIN
     -- Grant database permissions
-    EXECUTE format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', current_database(), current_user());
+    EXECUTE format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', current_database(), current_user);
     
     -- Grant schema permissions
     GRANT ALL PRIVILEGES ON SCHEMA public TO neural_trader;

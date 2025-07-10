@@ -1,0 +1,60 @@
+# Provider Configuration
+# Define primary and backup data sources with priorities
+
+market_data_providers:
+  primary:
+    # WebSocket providers for real-time data
+    polygon:
+      priority: 1
+      enabled: true
+      features: ["realtime", "historical", "orderbook"]
+      
+  backup_tier_1:
+    # First fallback - good real-time coverage
+    finnhub:
+      priority: 2
+      enabled: true
+      features: ["realtime", "historical", "news"]
+      
+    iex_cloud:
+      priority: 3
+      enabled: true
+      features: ["realtime", "historical", "fundamentals"]
+      
+  backup_tier_2:
+    # Second fallback - reliable but slower
+    alpha_vantage:
+      priority: 4
+      enabled: true
+      features: ["historical", "technical_indicators"]
+      rate_limit_override: 5  # Calls per minute
+      
+  backup_tier_3:
+    # Last resort - no API key needed
+    yahoo_finance:
+      priority: 5
+      enabled: true
+      features: ["historical", "options"]
+
+# Alternative data providers (not fallback)
+alternative_data:
+  economic:
+    fred:
+      enabled: true
+      update_frequency: "daily"
+      
+  sentiment:
+    reddit:
+      enabled: false  # Set to true to activate
+      update_frequency: "15min"
+      subreddits: ["wallstreetbets", "stocks", "investing", "options"]
+      
+    newsapi:
+      enabled: true
+      update_frequency: "30min"
+
+# Provider health monitoring
+health_check:
+  interval_seconds: 60
+  failure_threshold: 3  # Failures before switching
+  recovery_threshold: 2  # Successes before re-enabling

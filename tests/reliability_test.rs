@@ -5,8 +5,8 @@
 //! and component restart procedures.
 
 use anyhow::{Result, Context};
-use autonomous_platform::data::{TimescaleDBStorage, RedisCache, DataPipeline, TimeSeriesData, PredictionResult};
-use autonomous_platform::integration::platform_orchestrator::PlatformOrchestrator;
+use autonomous_platform::data::{TimescaleDBStorage, RedisCache, StorageTimeSeriesData as TimeSeriesData, PredictionResult};
+// use autonomous_platform::integration::platform_orchestrator::PlatformOrchestrator;
 use autonomous_platform::monitoring::HealthMonitor;
 use autonomous_platform::config::PlatformConfig;
 use chrono::{Utc, Duration};
@@ -413,7 +413,7 @@ impl ReliabilityTestSuite {
         self.restart_simulator.register_component("daa_orchestrator".to_string()).await;
 
         // Run individual test scenarios
-        let results = tokio::try_join!(
+        let _results = tokio::try_join!(
             self.test_database_failure_recovery(),
             self.test_redis_failure_recovery(),
             self.test_network_partition_recovery(),
@@ -601,7 +601,7 @@ impl ReliabilityTestSuite {
         let recovery_start = Instant::now();
         
         // Simulate operations during partition
-        for i in 0..10 {
+        for _i in 0..10 {
             if self.network_simulator.is_partitioned() {
                 self.metrics.record_operation(false).await;
                 self.metrics.record_failure_type("network_partition").await;
@@ -629,7 +629,7 @@ impl ReliabilityTestSuite {
         
         // Test memory pressure
         self.resource_simulator.simulate_memory_pressure();
-        for i in 0..5 {
+        for _i in 0..5 {
             if self.resource_simulator.has_memory_pressure() {
                 self.metrics.record_operation(false).await;
                 self.metrics.record_failure_type("memory_pressure").await;
@@ -639,7 +639,7 @@ impl ReliabilityTestSuite {
         
         // Test CPU saturation
         self.resource_simulator.simulate_cpu_saturation();
-        for i in 0..5 {
+        for _i in 0..5 {
             if self.resource_simulator.has_cpu_pressure() {
                 self.metrics.record_operation(false).await;
                 self.metrics.record_failure_type("cpu_saturation").await;
@@ -649,7 +649,7 @@ impl ReliabilityTestSuite {
         
         // Test disk exhaustion
         self.resource_simulator.simulate_disk_exhaustion();
-        for i in 0..5 {
+        for _i in 0..5 {
             if self.resource_simulator.has_disk_pressure() {
                 self.metrics.record_operation(false).await;
                 self.metrics.record_failure_type("disk_exhaustion").await;
@@ -659,7 +659,7 @@ impl ReliabilityTestSuite {
         
         // Test connection pool exhaustion
         self.resource_simulator.simulate_connection_pool_exhaustion();
-        for i in 0..5 {
+        for _i in 0..5 {
             if self.resource_simulator.has_connection_pool_exhaustion() {
                 self.metrics.record_operation(false).await;
                 self.metrics.record_failure_type("connection_pool_exhaustion").await;
@@ -672,7 +672,7 @@ impl ReliabilityTestSuite {
         self.resource_simulator.clear_all_pressures();
         
         // Verify recovery
-        for i in 0..5 {
+        for _i in 0..5 {
             if !self.resource_simulator.has_memory_pressure() &&
                !self.resource_simulator.has_cpu_pressure() &&
                !self.resource_simulator.has_disk_pressure() &&
@@ -803,8 +803,9 @@ impl ReliabilityTestSuite {
         
         // Random database failures
         let db_simulator = self.db_simulator.clone();
+        let chaos_start_db = chaos_start.clone();
         chaos_tasks.push(tokio::spawn(async move {
-            while chaos_start.elapsed() < chaos_duration {
+            while chaos_start_db.elapsed() < chaos_duration {
                 if rand::random::<f64>() < 0.3 {
                     db_simulator.start_failure();
                     sleep(StdDuration::from_millis(100 + (rand::random::<u64>() % 900))).await;
@@ -816,8 +817,9 @@ impl ReliabilityTestSuite {
         
         // Random Redis failures
         let redis_simulator = self.redis_simulator.clone();
+        let chaos_start_redis = chaos_start.clone();
         chaos_tasks.push(tokio::spawn(async move {
-            while chaos_start.elapsed() < chaos_duration {
+            while chaos_start_redis.elapsed() < chaos_duration {
                 if rand::random::<f64>() < 0.2 {
                     redis_simulator.start_failure();
                     sleep(StdDuration::from_millis(200 + (rand::random::<u64>() % 800))).await;
@@ -829,8 +831,9 @@ impl ReliabilityTestSuite {
         
         // Random network partitions
         let network_simulator = self.network_simulator.clone();
+        let chaos_start_network = chaos_start.clone();
         chaos_tasks.push(tokio::spawn(async move {
-            while chaos_start.elapsed() < chaos_duration {
+            while chaos_start_network.elapsed() < chaos_duration {
                 if rand::random::<f64>() < 0.1 {
                     network_simulator.create_partition(vec!["localhost".to_string()]).await;
                     sleep(StdDuration::from_millis(300 + (rand::random::<u64>() % 700))).await;
@@ -842,8 +845,9 @@ impl ReliabilityTestSuite {
         
         // Random resource exhaustion
         let resource_simulator = self.resource_simulator.clone();
+        let chaos_start_resource = chaos_start.clone();
         chaos_tasks.push(tokio::spawn(async move {
-            while chaos_start.elapsed() < chaos_duration {
+            while chaos_start_resource.elapsed() < chaos_duration {
                 if rand::random::<f64>() < 0.15 {
                     match rand::random::<u8>() % 4 {
                         0 => resource_simulator.simulate_memory_pressure(),
@@ -860,9 +864,10 @@ impl ReliabilityTestSuite {
         }));
         
         // Monitor system behavior during chaos
-        let metrics = &self.metrics;
+        let metrics = self.metrics.clone();
+        let chaos_start_monitor = chaos_start.clone();
         let monitor_task = tokio::spawn(async move {
-            while chaos_start.elapsed() < chaos_duration {
+            while chaos_start_monitor.elapsed() < chaos_duration {
                 // Simulate system operations
                 if rand::random::<f64>() < 0.8 {
                     metrics.record_operation(true).await;

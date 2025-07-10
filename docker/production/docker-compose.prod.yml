@@ -167,6 +167,7 @@ services:
       - "127.0.0.1:3000:3000"  # Grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-changeme}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     deploy:
       resources:
         limits:

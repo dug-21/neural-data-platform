@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use autonomous_platform::load_default_config;
+use autonomous_platform::{load_default_config, PlatformOrchestrator};
+use autonomous_platform::orchestration::platform_orchestrator::OrchestrationConfig;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::signal;
@@ -29,9 +30,16 @@ async fn main() -> Result<()> {
     info!("   Neural Memory: {}GB", config.neural.memory_gb);
     info!("   Models: {:?}", config.neural.models);
 
+    // Initialize the platform orchestrator
+    let orchestrator_config = OrchestrationConfig::default();
+    let orchestrator = Arc::new(
+        PlatformOrchestrator::new(orchestrator_config)
+    );
+
     // Setup graceful shutdown handler
     let shutdown_signal = Arc::new(AtomicBool::new(false));
     let shutdown_clone = Arc::clone(&shutdown_signal);
+    let orchestrator_clone = orchestrator.clone();
 
     // Spawn shutdown signal handler
     tokio::spawn(async move {
@@ -39,6 +47,11 @@ async fn main() -> Result<()> {
             Ok(()) => {
                 info!("🛑 Received shutdown signal (Ctrl+C)");
                 shutdown_clone.store(true, Ordering::Relaxed);
+                
+                // Initiate orchestrator shutdown
+                if let Err(e) = orchestrator_clone.shutdown().await {
+                    error!("Error during orchestrator shutdown: {}", e);
+                }
             }
             Err(err) => {
                 error!("Failed to install CTRL+C signal handler: {}", err);
@@ -53,7 +66,7 @@ async fn main() -> Result<()> {
     loop {
         // Check for shutdown signal
         if shutdown_signal.load(Ordering::Relaxed) {
-            info!("🛑 Shutdown signal detected, initiating graceful shutdown...");
+            info!("🛑 Shutdown signal detected, waiting for graceful shutdown...");
             break;
         }
 

@@ -43,6 +43,7 @@
 //! - [`integration`] - External service integrations (market data, trading platforms)
 //! - [`adapters`] - Data source adapters (TimescaleDB, Redis)
 //! - [`strategies`] - Trading strategies and signal generation
+//! - [`orchestration`] - Platform-wide coordination and lifecycle management
 //!
 //! # Configuration
 //!
@@ -82,6 +83,7 @@ pub mod streaming;
 pub mod mcp;
 pub mod neural;
 pub mod agents;
+pub mod orchestration;
 
 // Re-export commonly used types
 pub use anyhow::Result;
@@ -90,3 +92,4 @@ pub use monitoring::{
     HealthMonitor, ComponentType, ComponentHealth, SystemHealth, HealthStatus,
     PerformanceMetrics, AlertConfig, Alert, AlertSeverity
 };
+pub use orchestration::PlatformOrchestrator;

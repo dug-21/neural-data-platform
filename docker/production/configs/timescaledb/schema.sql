@@ -1,13 +1,13 @@
 -- Market data table
 CREATE TABLE IF NOT EXISTS market_data (
     time TIMESTAMPTZ NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
+    symbol TEXT NOT NULL,
     open DOUBLE PRECISION,
     high DOUBLE PRECISION,
     low DOUBLE PRECISION,
     close DOUBLE PRECISION NOT NULL,
     volume BIGINT,
-    provider VARCHAR(50),
+    provider TEXT,
     metadata JSONB,
     CONSTRAINT market_data_time_symbol_provider_key UNIQUE (time, symbol, provider)
 );
@@ -22,8 +22,8 @@ CREATE INDEX IF NOT EXISTS idx_market_data_metadata ON market_data USING GIN (me
 -- Predictions table
 CREATE TABLE IF NOT EXISTS predictions (
     time TIMESTAMPTZ NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
-    model_name VARCHAR(50) NOT NULL,
+    symbol TEXT NOT NULL,
+    model_name TEXT NOT NULL,
     horizon INTEGER NOT NULL,
     predicted_value DOUBLE PRECISION NOT NULL,
     confidence DOUBLE PRECISION,
@@ -42,12 +42,12 @@ CREATE INDEX IF NOT EXISTS idx_predictions_symbol_model ON predictions (symbol, 
 CREATE TABLE IF NOT EXISTS trading_decisions (
     time TIMESTAMPTZ NOT NULL,
     decision_id UUID NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
-    action VARCHAR(10) NOT NULL,
+    symbol TEXT NOT NULL,
+    action TEXT NOT NULL,
     confidence DOUBLE PRECISION NOT NULL,
     position_size DOUBLE PRECISION,
     reasoning TEXT,
-    agent_id VARCHAR(50),
+    agent_id TEXT,
     metadata JSONB
 );
 
@@ -61,7 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_trading_decisions_agent ON trading_decisions (age
 -- Performance metrics table
 CREATE TABLE IF NOT EXISTS performance_metrics (
     time TIMESTAMPTZ NOT NULL,
-    metric_name VARCHAR(100) NOT NULL,
+    metric_name TEXT NOT NULL,
     value DOUBLE PRECISION NOT NULL,
     labels JSONB
 );
@@ -96,9 +96,9 @@ SELECT add_retention_policy('market_data', INTERVAL '1 year', if_not_exists => T
 SELECT add_retention_policy('predictions', INTERVAL '3 months', if_not_exists => TRUE);
 SELECT add_retention_policy('trading_decisions', INTERVAL '1 year', if_not_exists => TRUE);
 
--- Grant permissions to app user
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO neural_trader_app;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO neural_trader_app;
+-- Grant permissions to main user
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO neural_trader;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO neural_trader;
 
 -- Grant read permissions to readonly user
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO neural_trader_readonly;
