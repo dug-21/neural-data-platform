@@ -36,6 +36,14 @@ async fn main() -> Result<()> {
         PlatformOrchestrator::new(orchestrator_config)
     );
 
+    // Initialize the orchestrator
+    if let Err(e) = orchestrator.initialize().await {
+        error!("Failed to initialize orchestrator: {}", e);
+        return Err(e.into());
+    }
+
+    info!("🎯 Platform orchestrator initialized successfully");
+
     // Setup graceful shutdown handler
     let shutdown_signal = Arc::new(AtomicBool::new(false));
     let shutdown_clone = Arc::clone(&shutdown_signal);
@@ -59,8 +67,18 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Start the orchestration loop
+    let orchestrator_loop = orchestrator.clone();
+    let loop_signal = shutdown_signal.clone();
+    tokio::spawn(async move {
+        info!("🔄 Starting orchestration event loop...");
+        if let Err(e) = orchestrator_loop.run_orchestration_loop().await {
+            error!("Orchestration loop error: {}", e);
+        }
+    });
+
     info!("✅ Neural Trading Platform started successfully");
-    info!("🔄 Platform is running. Press Ctrl+C to shut down.");
+    info!("🔄 Platform is running with active orchestration. Press Ctrl+C to shut down.");
     
     // Main application loop - wait for shutdown signal
     loop {
