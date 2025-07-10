@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     // Initialize the orchestrator
     if let Err(e) = orchestrator.initialize().await {
         error!("Failed to initialize orchestrator: {}", e);
-        return Err(e.into());
+        return Err(anyhow::anyhow!("Failed to initialize orchestrator: {}", e));
     }
 
     info!("🎯 Platform orchestrator initialized successfully");
