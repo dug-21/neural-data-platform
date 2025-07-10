@@ -1,0 +1,43 @@
+# Neural Trader Configuration
+# This file is baked into the Docker image
+
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+
+[database]
+# URL is provided via environment variable DATABASE_URL
+max_connections = 20
+min_connections = 5
+connect_timeout = 30
+idle_timeout = 600
+
+[redis]
+# URL is provided via environment variable REDIS_URL
+pool_size = 10
+ttl_seconds = 3600
+
+[neural]
+models = ["NHITS", "TCN", "DeepAR", "MLP"]
+horizon = 10
+update_frequency = 300
+confidence_threshold = 0.7
+ensemble_method = "weighted_average"
+
+[agent]
+decision_threshold = 0.7
+risk_tolerance = 0.02
+max_position_size = 10000.0
+
+[monitoring]
+metrics_enabled = true
+metrics_path = "/metrics"
+health_check_path = "/health"
+log_level = "info"
+
+[trading]
+# Mode is provided via environment variable TRADING_MODE
+symbols = ["BTC/USD", "ETH/USD", "SOL/USD"]
+update_interval = 60
+max_concurrent_orders = 5
