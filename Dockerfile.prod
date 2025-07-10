@@ -1,0 +1,8 @@
+# Production Dockerfile for Neural Trader
+# This is a convenience wrapper for the production build
+
+# Use the production Dockerfile
+FROM neural-trader:prod
+
+# The production image is built from docker/production/images/neural-trader.dockerfile
+# To build: cd docker/production && ./build.sh
