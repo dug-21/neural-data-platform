@@ -14,7 +14,7 @@ use autonomous_platform::neural::NeuralPredictor;
 use autonomous_platform::streaming::event_bus::{EventBusIntegration, MarketEvent};
 use autonomous_platform::integration::data_access::DataAccessLayer;
 use autonomous_platform::data::{TimescaleDBStorage, RedisCache, TimeSeriesData};
-use autonomous_platform::strategies::{Position, PositionSide};
+use autonomous_platform::strategies::{Position, PositionSide, StrategyFactory, StrategyConfig};
 
 // Import Redis adapter
 use autonomous_platform::adapters::redis::{RedisAdapter, RedisConfig};
@@ -56,6 +56,44 @@ async fn main() -> Result<()> {
     let daa_coordinator = Arc::new(
         DaaCoordinator::new(daa_config, neural_predictor.clone(), decision_sender)
     );
+
+    info!("📈 Registering trading strategies...");
+    
+    // Register momentum strategy
+    let momentum_config = StrategyConfig {
+        name: "momentum".to_string(),
+        enabled: true,
+        risk_limit: 0.02,
+        position_size: 0.1,
+        parameters: HashMap::new(),
+    };
+    match StrategyFactory::create_strategy(&momentum_config, None) {
+        Ok(momentum_strategy) => {
+            daa_coordinator.register_strategy("momentum".to_string(), momentum_strategy).await;
+            info!("✅ Momentum strategy registered");
+        }
+        Err(e) => {
+            error!("Failed to create momentum strategy: {}", e);
+        }
+    }
+    
+    // Register neural-enhanced strategy
+    let neural_config = StrategyConfig {
+        name: "neural_enhanced".to_string(),
+        enabled: true,
+        risk_limit: 0.02,
+        position_size: 0.1,
+        parameters: HashMap::new(),
+    };
+    match StrategyFactory::create_strategy(&neural_config, Some(neural_predictor.clone())) {
+        Ok(neural_strategy) => {
+            daa_coordinator.register_strategy("neural_enhanced".to_string(), neural_strategy).await;
+            info!("✅ Neural-enhanced strategy registered");
+        }
+        Err(e) => {
+            error!("Failed to create neural-enhanced strategy: {}", e);
+        }
+    }
 
     info!("🔌 Initializing Redis adapter...");
     // Parse Redis URL to extract host, port, and password
