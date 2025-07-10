@@ -207,9 +207,27 @@ class RealtimeCoordinator:
                 ttl=300  # 5 minutes
             )
             
-            # Publish to Redis channel
+            # Convert time to timestamp for neural-trader compatibility
+            market_data = cleaned.copy()
+            if 'time' in market_data:
+                # Check if time is already a datetime object
+                if hasattr(market_data['time'], 'timestamp'):
+                    # It's already a datetime object
+                    market_data['timestamp'] = int(market_data['time'].timestamp())
+                else:
+                    # It's a string, parse it
+                    from dateutil import parser
+                    dt = parser.parse(market_data['time'])
+                    market_data['timestamp'] = int(dt.timestamp())
+                # Keep time field for backward compatibility
+            
+            # Publish to Redis channels
+            # Symbol-specific channel
             channel = f"market_data:{cleaned['symbol']}"
             await self.redis.publish(channel, json.dumps(cleaned, default=str))
+            
+            # Unified market updates channel - use market_data with timestamp
+            await self.redis.publish("market:updates", json.dumps(market_data, default=str))
             
             # Update metrics
             metrics.data_points_processed.labels(

@@ -494,6 +494,19 @@ impl EventBusIntegration {
         
         if let Some(metadata) = &event.metadata {
             payload.insert("metadata".to_string(), metadata.clone());
+            // Also extract OHLC data from metadata if available
+            if let Some(open) = metadata.get("open") {
+                payload.insert("open".to_string(), open.clone());
+            }
+            if let Some(high) = metadata.get("high") {
+                payload.insert("high".to_string(), high.clone());
+            }
+            if let Some(low) = metadata.get("low") {
+                payload.insert("low".to_string(), low.clone());
+            }
+            if let Some(close) = metadata.get("close") {
+                payload.insert("close".to_string(), close.clone());
+            }
         }
         
         let mut metadata = HashMap::new();
