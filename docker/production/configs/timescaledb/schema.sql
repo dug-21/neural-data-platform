@@ -96,9 +96,26 @@ SELECT add_retention_policy('market_data', INTERVAL '1 year', if_not_exists => T
 SELECT add_retention_policy('predictions', INTERVAL '3 months', if_not_exists => TRUE);
 SELECT add_retention_policy('trading_decisions', INTERVAL '1 year', if_not_exists => TRUE);
 
--- Grant permissions to main user
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO neural_trader;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO neural_trader;
-
--- Grant read permissions to readonly user
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO neural_trader_readonly;
+-- Grant permissions dynamically
+DO $$
+DECLARE
+    db_owner text;
+    readonly_user text;
+BEGIN
+    -- Get the database owner
+    SELECT pg_database.datdba::regrole::text INTO db_owner 
+    FROM pg_database 
+    WHERE datname = current_database();
+    
+    -- Create readonly username based on the database owner
+    readonly_user := db_owner || '_readonly';
+    
+    -- Grant permissions to main user
+    EXECUTE format('GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %I', db_owner);
+    EXECUTE format('GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %I', db_owner);
+    
+    -- Grant read permissions to readonly user (if exists)
+    IF EXISTS (SELECT FROM pg_user WHERE usename = readonly_user) THEN
+        EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA public TO %I', readonly_user);
+    END IF;
+END $$;

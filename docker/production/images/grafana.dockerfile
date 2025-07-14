@@ -12,7 +12,7 @@ COPY --chown=472:472 configs/grafana/dashboards/*.json /tmp/dashboards/
 COPY --chmod=755 scripts/grafana-entrypoint.sh /usr/local/bin/grafana-entrypoint.sh
 
 # Environment variables for configuration
-ENV GF_SECURITY_ADMIN_PASSWORD=changeme
+ENV GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
 ENV GF_USERS_ALLOW_SIGN_UP=false
 ENV GF_ANALYTICS_REPORTING_ENABLED=false
 ENV GF_ANALYTICS_CHECK_FOR_UPDATES=false

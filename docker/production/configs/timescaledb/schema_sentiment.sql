@@ -40,6 +40,25 @@ SELECT add_continuous_aggregate_policy('reddit_sentiment_1h',
     schedule_interval => INTERVAL '30 minutes',
     if_not_exists => TRUE);
 
--- Grant permissions
-GRANT ALL PRIVILEGES ON reddit_sentiment TO neural_trader;
-GRANT SELECT ON reddit_sentiment_1h TO neural_trader_readonly;
+-- Grant permissions dynamically
+DO $$
+DECLARE
+    db_owner text;
+    readonly_user text;
+BEGIN
+    -- Get the database owner
+    SELECT pg_database.datdba::regrole::text INTO db_owner 
+    FROM pg_database 
+    WHERE datname = current_database();
+    
+    -- Create readonly username based on the database owner
+    readonly_user := db_owner || '_readonly';
+    
+    -- Grant permissions
+    EXECUTE format('GRANT ALL PRIVILEGES ON reddit_sentiment TO %I', db_owner);
+    
+    -- Grant read permissions to readonly user (if exists)
+    IF EXISTS (SELECT FROM pg_user WHERE usename = readonly_user) THEN
+        EXECUTE format('GRANT SELECT ON reddit_sentiment_1h TO %I', readonly_user);
+    END IF;
+END $$;

@@ -6,9 +6,9 @@ COPY configs/timescaledb/init.sql /docker-entrypoint-initdb.d/01-init.sql
 COPY configs/timescaledb/schema.sql /docker-entrypoint-initdb.d/02-schema.sql
 
 # Default configuration (overridden by docker-compose)
-ENV POSTGRES_DB=neural_trader
-ENV POSTGRES_USER=neural_trader
-ENV POSTGRES_PASSWORD=changeme
+ENV POSTGRES_DB=${POSTGRES_DB}
+ENV POSTGRES_USER=${POSTGRES_USER}
+ENV POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
 # TimescaleDB tuning for time-series data
 RUN echo "shared_preload_libraries = 'timescaledb'" >> /usr/share/postgresql/postgresql.conf.sample && \

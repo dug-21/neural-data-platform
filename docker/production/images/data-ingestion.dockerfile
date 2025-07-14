@@ -21,6 +21,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY data_ingestion/ ./
 
+# Application is now self-contained with clean metrics integration
+# No need for workaround scripts
+
 # Copy startup script
 COPY docker/production/scripts/start-data-ingestion.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start-data-ingestion.sh

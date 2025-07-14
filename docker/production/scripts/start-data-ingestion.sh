@@ -11,8 +11,9 @@ if [ -n "$SYMBOLS" ]; then
     done
     
     echo "Starting data ingestion with symbols: $SYMBOLS"
-    exec python main.py start $SYMBOL_ARGS "$@"
+    # Use python -m to avoid __main__ execution issues
+    exec python -m main start $SYMBOL_ARGS "$@"
 else
     echo "No symbols specified, using defaults"
-    exec python main.py start "$@"
+    exec python -m main start "$@"
 fi

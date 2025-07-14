@@ -34,10 +34,10 @@ echo -e "${YELLOW}Building prometheus image...${NC}"
 docker build -f images/prometheus.dockerfile -t neural-trader/prometheus:prod .
 
 echo -e "${YELLOW}Building grafana image...${NC}"
-docker build -f images/grafana.dockerfile -t neural-trader/grafana:prod .
+docker build -f images/grafana.dockerfile  -t neural-trader/grafana:prod .
 
 echo -e "${YELLOW}Building data-ingestion image...${NC}"
-docker build -f images/data-ingestion.dockerfile -t neural-trader/data-ingestion:prod "$PROJECT_ROOT"
+docker build --no-cache -f images/data-ingestion.dockerfile --no-cache -t neural-trader/data-ingestion:prod "$PROJECT_ROOT"
 
 echo -e "${GREEN}All images built successfully!${NC}"
 

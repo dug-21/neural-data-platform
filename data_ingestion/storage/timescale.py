@@ -21,18 +21,30 @@ class TimescaleDB:
         self.settings = get_settings()
         self.pool: Optional[asyncpg.Pool] = None
     
+    @with_retry(max_attempts=10, exceptions=(asyncpg.PostgresError, ConnectionRefusedError, OSError))
     async def connect(self):
-        """Create connection pool to TimescaleDB."""
+        """Create connection pool to TimescaleDB with retry logic."""
         try:
+            logger.info("Attempting to connect to TimescaleDB...")
             self.pool = await asyncpg.create_pool(
                 self.settings.timescale_url,
-                min_size=5,
-                max_size=20,
-                command_timeout=60
+                min_size=1,
+                max_size=10,
+                command_timeout=60,
+                ssl=False  # Disable SSL for internal Docker network
             )
             await self._initialize_schema()
-            logger.info("Connected to TimescaleDB")
+            logger.info("Connected to TimescaleDB successfully")
             metrics.active_connections.labels(connection_type="timescale").inc()
+            
+            # Update connection pool metrics
+            pool_stats = self.pool.get_size()
+            metrics.update_db_connection_pool(
+                "timescale",
+                active=pool_stats - self.pool.get_idle_size(),
+                idle=self.pool.get_idle_size(),
+                total=pool_stats
+            )
         except Exception as e:
             logger.error("Failed to connect to TimescaleDB", error=str(e))
             raise
@@ -53,18 +65,26 @@ class TimescaleDB:
     async def _initialize_schema(self):
         """Initialize database schema and hypertables."""
         async with self.acquire() as conn:
-            # Create main tables
+            # Create main tables with light constraints
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS market_data (
                     time TIMESTAMPTZ NOT NULL,
                     symbol VARCHAR(10) NOT NULL,
-                    open DECIMAL(10, 4),
-                    high DECIMAL(10, 4),
-                    low DECIMAL(10, 4),
-                    close DECIMAL(10, 4),
-                    volume BIGINT,
-                    provider VARCHAR(50),
-                    UNIQUE(time, symbol, provider)
+                    open DECIMAL(10, 4) NOT NULL CHECK (open > 0),
+                    high DECIMAL(10, 4) NOT NULL CHECK (high > 0),
+                    low DECIMAL(10, 4) NOT NULL CHECK (low > 0),
+                    close DECIMAL(10, 4) NOT NULL CHECK (close > 0),
+                    volume BIGINT NOT NULL CHECK (volume >= 0),
+                    provider VARCHAR(50) NOT NULL,
+                    metadata JSONB,
+                    -- Ensure OHLC consistency
+                    CONSTRAINT check_high_low CHECK (high >= low),
+                    CONSTRAINT check_ohlc_range CHECK (
+                        high >= open AND high >= close AND
+                        low <= open AND low <= close
+                    ),
+                    -- Composite primary key to prevent duplicates
+                    PRIMARY KEY (time, symbol, provider)
                 );
                 
                 -- Convert to hypertable if not already
@@ -73,17 +93,22 @@ class TimescaleDB:
                 -- Create index for symbol queries
                 CREATE INDEX IF NOT EXISTS idx_market_data_symbol_time 
                 ON market_data (symbol, time DESC);
+                
+                -- Create index for provider queries
+                CREATE INDEX IF NOT EXISTS idx_market_data_provider 
+                ON market_data (provider, time DESC);
             """)
             
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS tick_data (
                     time TIMESTAMPTZ NOT NULL,
                     symbol VARCHAR(10) NOT NULL,
-                    price DECIMAL(10, 4) NOT NULL,
-                    size BIGINT,
+                    price DECIMAL(10, 4) NOT NULL CHECK (price > 0),
+                    size BIGINT NOT NULL CHECK (size > 0),
                     exchange VARCHAR(10),
-                    conditions VARCHAR(50),
-                    provider VARCHAR(50)
+                    conditions TEXT,
+                    provider VARCHAR(50) NOT NULL,
+                    PRIMARY KEY (time, symbol, provider)
                 );
                 
                 SELECT create_hypertable('tick_data', 'time', if_not_exists => TRUE);
@@ -96,13 +121,16 @@ class TimescaleDB:
                 CREATE TABLE IF NOT EXISTS order_book (
                     time TIMESTAMPTZ NOT NULL,
                     symbol VARCHAR(10) NOT NULL,
-                    bid_price DECIMAL(10, 4),
-                    bid_size BIGINT,
-                    ask_price DECIMAL(10, 4),
-                    ask_size BIGINT,
-                    mid_price DECIMAL(10, 4),
-                    spread DECIMAL(10, 4),
-                    provider VARCHAR(50)
+                    bid_price DECIMAL(10, 4) NOT NULL CHECK (bid_price > 0),
+                    bid_size BIGINT NOT NULL CHECK (bid_size >= 0),
+                    ask_price DECIMAL(10, 4) NOT NULL CHECK (ask_price > 0),
+                    ask_size BIGINT NOT NULL CHECK (ask_size >= 0),
+                    mid_price DECIMAL(10, 4) NOT NULL CHECK (mid_price > 0),
+                    spread DECIMAL(10, 4) NOT NULL CHECK (spread >= 0),
+                    provider VARCHAR(50) NOT NULL,
+                    -- Ensure bid < ask
+                    CONSTRAINT check_bid_ask CHECK (bid_price < ask_price),
+                    PRIMARY KEY (time, symbol, provider)
                 );
                 
                 SELECT create_hypertable('order_book', 'time', if_not_exists => TRUE);
@@ -129,6 +157,7 @@ class TimescaleDB:
             
             logger.info("Database schema initialized")
     
+    @metrics.track_db_write("market_data", "insert")
     @metrics.track_storage_operation("timescale", "insert_market_data")
     @with_retry(max_attempts=3, exceptions=(asyncpg.PostgresError,))
     async def insert_market_data(self, data: List[Dict[str, Any]]):
@@ -171,6 +200,7 @@ class TimescaleDB:
             
             logger.info(f"Inserted {len(records)} market data records")
     
+    @metrics.track_db_write("tick_data", "insert")
     @metrics.track_storage_operation("timescale", "insert_tick_data")
     @with_retry(max_attempts=3, exceptions=(asyncpg.PostgresError,))
     async def insert_tick_data(self, data: List[Dict[str, Any]]):
