@@ -8,6 +8,26 @@ chmod +x .devcontainer/setup.sh
 chmod +x .devcontainer/post-start.sh
 chmod +x .devcontainer/mcp_setup.sh
 
+# Configure SSH keys if they exist
+if [ -d "/home/vscode/.ssh" ]; then
+    echo "🔑 Setting up SSH keys..."
+    chmod 700 /home/vscode/.ssh
+    if [ -f "/home/vscode/.ssh/id_rsa" ]; then
+        chmod 600 /home/vscode/.ssh/id_rsa
+    fi
+    if [ -f "/home/vscode/.ssh/id_ed25519" ]; then
+        chmod 600 /home/vscode/.ssh/id_ed25519
+    fi
+    if [ -f "/home/vscode/.ssh/config" ]; then
+        chmod 600 /home/vscode/.ssh/config
+    fi
+    if [ -f "/home/vscode/.ssh/known_hosts" ]; then
+        chmod 644 /home/vscode/.ssh/known_hosts
+    fi
+    chown -R vscode:vscode /home/vscode/.ssh
+    echo "✅ SSH keys configured successfully"
+fi
+
 # Update Rust toolchain
 rustup update
 

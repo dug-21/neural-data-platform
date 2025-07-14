@@ -62,9 +62,14 @@
   "runArgs": [
     "--privileged"
   ],
+
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+  ],
   
   "containerEnv": {
     "DOCKER_BUILDKIT": "1",
-    "COMPOSE_DOCKER_CLI_BUILD": "1"
+    "COMPOSE_DOCKER_CLI_BUILD": "1",
+    "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}"
   }
 }
