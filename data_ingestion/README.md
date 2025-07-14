@@ -5,11 +5,15 @@ A production-ready, scalable Python data ingestion service for financial market 
 ## Features
 
 - **Multiple Data Providers**:
+  - Alpaca Markets (free/premium) - Real-time stocks & crypto
   - IEX Cloud (premium)
   - Polygon.io (premium)
   - Alpha Vantage (free tier)
   - Yahoo Finance (free)
   - Finnhub (free tier)
+  - FRED (free) - Economic data
+  - Reddit (free) - Social sentiment
+  - NewsAPI (free tier) - News sentiment
 
 - **Data Types**:
   - Real-time market data streaming
@@ -51,10 +55,17 @@ cd neural-trader/data_ingestion
 2. Create a `.env` file with your API keys:
 ```bash
 # API Keys (optional - will use free providers if not set)
+ALPACA_API_KEY=your_key_here
+ALPACA_API_SECRET=your_secret_here
+ALPACA_SUBSCRIPTION_LEVEL=basic  # or unlimited
 IEX_CLOUD_API_KEY=your_key_here
 ALPHA_VANTAGE_API_KEY=your_key_here
 POLYGON_API_KEY=your_key_here
 FINNHUB_API_KEY=your_key_here
+FRED_API_KEY=your_key_here
+REDDIT_CLIENT_ID=your_id_here
+REDDIT_CLIENT_SECRET=your_secret_here
+NEWSAPI_KEY=your_key_here
 
 # Database passwords
 TIMESCALE_PASSWORD=secure_password

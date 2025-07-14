@@ -1,0 +1,235 @@
+# System Log Analysis Platform Configuration Example
+
+platform:
+  name: "Enterprise Log Intelligence Platform"
+  version: "1.0.0"
+  deployment: "hybrid-cloud"
+
+ingestion:
+  sources:
+    - name: "application-logs"
+      type: "kafka"
+      config:
+        brokers: ["kafka1:9092", "kafka2:9092"]
+        topics: ["app-logs-*"]
+        consumer_group: "log-analysis-platform"
+        
+    - name: "system-logs"
+      type: "syslog"
+      config:
+        port: 514
+        protocol: "tcp"
+        parsers: ["rfc3164", "rfc5424"]
+        
+    - name: "cloud-logs"
+      type: "aws-cloudwatch"
+      config:
+        regions: ["us-east-1", "eu-west-1"]
+        log_groups: ["/aws/lambda/*", "/ecs/*"]
+        
+  pipeline:
+    buffer_size: 10000
+    batch_timeout: "100ms"
+    compression: "lz4"
+    
+  enrichment:
+    - type: "geoip"
+      fields: ["client_ip", "source_ip"]
+    - type: "user_lookup"
+      source: "ldap"
+    - type: "asset_inventory"
+      source: "cmdb"
+
+neural_models:
+  anomaly_detection:
+    type: "autoencoder_lstm"
+    config:
+      encoding_dim: 128
+      lstm_units: [256, 128]
+      sequence_length: 100
+      reconstruction_threshold: 0.85
+      training:
+        epochs: 50
+        batch_size: 256
+        learning_rate: 0.001
+        
+  pattern_classifier:
+    type: "cnn_classifier"
+    config:
+      embedding_dim: 200
+      conv_layers:
+        - filters: 128
+          kernel_size: 3
+        - filters: 256
+          kernel_size: 5
+      classes: ["error", "warning", "security", "performance", "normal"]
+      confidence_threshold: 0.8
+      
+  failure_predictor:
+    type: "gru_timeseries"
+    config:
+      input_features: 50
+      gru_units: [128, 64]
+      prediction_horizon: 30  # minutes
+      update_frequency: "5m"
+
+daa_swarm:
+  topology: "hierarchical"
+  coordinator:
+    type: "log_coordinator"
+    config:
+      dispatch_strategy: "priority_based"
+      load_balancing: true
+      health_check_interval: "30s"
+      
+  agents:
+    - type: "security_analyst"
+      count: 3
+      config:
+        threat_feeds:
+          - "mitre_attack"
+          - "custom_ioc"
+        alert_threshold: "high"
+        investigation_depth: 5
+        
+    - type: "performance_analyst"
+      count: 2
+      config:
+        metrics:
+          - "response_time"
+          - "error_rate"
+          - "throughput"
+        baseline_window: "7d"
+        anomaly_sensitivity: 0.95
+        
+    - type: "error_analyst"
+      count: 2
+      config:
+        correlation_window: "5m"
+        stack_trace_analysis: true
+        root_cause_depth: 3
+        
+    - type: "compliance_analyst"
+      count: 1
+      config:
+        regulations: ["pci", "hipaa", "gdpr"]
+        audit_retention: "7y"
+        report_schedule: "daily"
+        
+    - type: "remediation_agent"
+      count: 2
+      config:
+        auto_remediate: true
+        approval_required: ["production", "critical"]
+        rollback_enabled: true
+
+workflows:
+  security_incident:
+    trigger: 
+      - "anomaly_score > 0.9"
+      - "pattern_type == 'security'"
+    steps:
+      - action: "isolate_source"
+        timeout: "30s"
+      - action: "collect_forensics"
+        timeout: "5m"
+      - action: "notify_soc"
+        channels: ["pagerduty", "slack"]
+      - action: "create_incident"
+        system: "jira"
+        
+  performance_degradation:
+    trigger:
+      - "error_rate > baseline * 2"
+      - "response_time > sla_threshold"
+    steps:
+      - action: "analyze_bottleneck"
+      - action: "scale_resources"
+        conditions:
+          cpu_usage: "> 80%"
+          memory_usage: "> 85%"
+      - action: "optimize_queries"
+        if: "database_related"
+        
+  predictive_maintenance:
+    trigger:
+      - "failure_probability > 0.7"
+    steps:
+      - action: "schedule_maintenance"
+        lead_time: "2h"
+      - action: "prepare_replacement"
+      - action: "notify_ops"
+        priority: "high"
+
+storage:
+  hot_tier:
+    type: "elasticsearch"
+    retention: "30d"
+    shards: 10
+    replicas: 2
+    
+  warm_tier:
+    type: "s3"
+    retention: "90d"
+    compression: "zstd"
+    
+  cold_tier:
+    type: "glacier"
+    retention: "7y"
+    
+alerting:
+  channels:
+    - type: "webhook"
+      url: "https://alerts.company.com/webhook"
+      
+    - type: "email"
+      smtp: "smtp.company.com"
+      recipients: ["ops@company.com"]
+      
+    - type: "slack"
+      webhook: "${SLACK_WEBHOOK}"
+      channels: ["#alerts", "#security"]
+      
+  rules:
+    - name: "critical_security"
+      condition: "severity == 'critical' && category == 'security'"
+      channels: ["webhook", "email", "slack"]
+      throttle: "1m"
+      
+    - name: "performance_sla"
+      condition: "sla_breach == true"
+      channels: ["email", "slack"]
+      throttle: "5m"
+
+monitoring:
+  metrics:
+    - "logs_processed_per_second"
+    - "neural_model_inference_time"
+    - "agent_task_completion_rate"
+    - "remediation_success_rate"
+    
+  dashboards:
+    - name: "executive_overview"
+      refresh: "1m"
+      widgets: ["log_volume", "threat_summary", "system_health"]
+      
+    - name: "security_operations"
+      refresh: "30s"
+      widgets: ["threat_map", "ioc_matches", "incident_timeline"]
+      
+    - name: "system_performance"
+      refresh: "10s"
+      widgets: ["error_rates", "response_times", "resource_usage"]
+
+scaling:
+  auto_scaling:
+    enabled: true
+    min_nodes: 3
+    max_nodes: 20
+    metrics:
+      - type: "cpu"
+        threshold: 70
+      - type: "queue_depth"
+        threshold: 1000
+      - type: "inference_latency"
+        threshold: "200ms"

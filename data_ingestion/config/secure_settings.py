@@ -42,6 +42,9 @@ class SecureSettings(BaseSettings):
     quandl_api_key: Optional[str] = Field(None, alias="QUANDL_API_KEY")
     newsapi_key: Optional[str] = Field(None, alias="NEWSAPI_KEY")
     yahoo_api_key: Optional[str] = Field(None, alias="YAHOO_API_KEY")
+    alpaca_api_key: Optional[str] = Field(None, alias="ALPACA_API_KEY")
+    alpaca_api_secret: Optional[str] = Field(None, alias="ALPACA_API_SECRET")
+    alpaca_subscription_level: Optional[str] = Field("basic", alias="ALPACA_SUBSCRIPTION_LEVEL")
     
     # Database Configuration
     timescale_host: str = Field("localhost", alias="TIMESCALE_HOST")
@@ -71,6 +74,7 @@ class SecureSettings(BaseSettings):
             "reddit": RateLimitConfig(calls_per_minute=60),
             "nasdaq": RateLimitConfig(calls_per_minute=None, calls_per_day=50000),
             "yahoo_finance": RateLimitConfig(calls_per_minute=None, calls_per_day=200),
+            "alpaca": RateLimitConfig(calls_per_minute=200),  # Basic plan default
         }
     )
     
@@ -91,7 +95,8 @@ class SecureSettings(BaseSettings):
         'iex_cloud_api_key', 'alpha_vantage_api_key', 'polygon_api_key',
         'finnhub_api_key', 'fred_api_key', 'reddit_client_id',
         'reddit_client_secret', 'quandl_api_key', 'newsapi_key',
-        'yahoo_api_key', 'timescale_password', 'redis_password'
+        'yahoo_api_key', 'alpaca_api_key', 'alpaca_api_secret',
+        'timescale_password', 'redis_password'
     }
     
     @classmethod
@@ -188,7 +193,8 @@ class SecureSettings(BaseSettings):
                         'IEX_CLOUD_API_KEY', 'ALPHA_VANTAGE_API_KEY', 'POLYGON_API_KEY',
                         'FINNHUB_API_KEY', 'FRED_API_KEY', 'REDDIT_CLIENT_ID',
                         'REDDIT_CLIENT_SECRET', 'QUANDL_API_KEY', 'NEWSAPI_KEY',
-                        'YAHOO_API_KEY', 'TIMESCALE_PASSWORD', 'REDIS_PASSWORD'
+                        'YAHOO_API_KEY', 'ALPACA_API_KEY', 'ALPACA_API_SECRET',
+                        'TIMESCALE_PASSWORD', 'REDIS_PASSWORD'
                     ]:
                         print(f"WARNING: Secret '{key}' found in .env file - ignoring for security")
                     else:

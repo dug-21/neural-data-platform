@@ -219,6 +219,7 @@ class YahooFinanceProvider(BaseProvider):
             except (ValueError, TypeError):
                 return default
         
+        # Let MarketData handle normalization via __post_init__
         return MarketData(
             time=datetime.now(timezone.utc),
             symbol=symbol,

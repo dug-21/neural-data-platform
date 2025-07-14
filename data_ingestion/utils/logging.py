@@ -1,5 +1,6 @@
 """Structured logging configuration."""
 import sys
+import logging
 import structlog
 from pythonjsonlogger import jsonlogger
 from config import get_settings
@@ -10,9 +11,17 @@ def configure_logging():
     settings = get_settings()
     
     # Configure JSON formatter
-    logHandler = structlog.stdlib.logging.StreamHandler(sys.stdout)
+    logHandler = logging.StreamHandler(sys.stdout)
     formatter = jsonlogger.JsonFormatter()
     logHandler.setFormatter(formatter)
+    
+    # Configure root logger level - CRITICAL FIX
+    # This ensures INFO level messages are visible
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        handlers=[logHandler],
+        force=True  # Override any existing configuration
+    )
     
     # Configure structlog
     structlog.configure(

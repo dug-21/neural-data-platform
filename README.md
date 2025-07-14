@@ -1,261 +1,277 @@
-# Neural Trader 🧠💹
+# Neural Trading Platform
 
-An autonomous trading platform powered by neural networks and advanced decision-making algorithms. This system combines real-time market data analysis with neural prediction models and distributed decision agents to execute intelligent trading strategies.
+An autonomous trading platform that leverages advanced neural networks (ruv_fann) and Decentralized Autonomous Agents (DAA) to make intelligent trading decisions. Built with Rust for high-performance core components and Python for flexible data ingestion.
 
-## 🚀 Quick Start
+## 🚀 Key Features
+
+- **Neural Network Ensemble**: Multiple FANN-based models (NHITS, TCN, DeepAR, Transformer, MLP) with weighted consensus predictions
+- **Autonomous Trading**: DAA coordination system for multi-agent decision making with risk management
+- **Real-time Data**: Multi-provider data ingestion supporting 9+ market data sources
+- **Time-Series Optimized**: TimescaleDB for historical data with compression and continuous aggregates
+- **Event-Driven Architecture**: Redis pub/sub and streams for real-time market data flow
+- **Production Ready**: Docker deployment with monitoring stack (Prometheus + Grafana)
+
+## 📋 Architecture Overview
+
+```
+┌─────────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
+│   Data Ingestion    │      │   Neural Trader     │      │   Data Platform     │
+│     (Python)        │ ──▶  │      (Rust)         │ ◀──▶ │                     │
+│                     │      │                     │      │ • TimescaleDB       │
+│ • Market Providers  │      │ • DAA Coordinator   │      │ • Redis             │
+│ • Rate Limiting     │      │ • Neural Predictor  │      └─────────────────────┘
+│ • Data Processing   │      │ • Trading Engine    │
+└─────────────────────┘      └─────────────────────┘
+```
+
+For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## 🛠️ Technology Stack
+
+- **Core Engine**: Rust with Tokio async runtime
+- **Neural Networks**: ruv_fann (Fast Artificial Neural Network Library)
+- **Data Ingestion**: Python 3.11+ with asyncio
+- **Time-Series DB**: TimescaleDB (PostgreSQL extension)
+- **Caching/Streaming**: Redis 7+
+- **Monitoring**: Prometheus + Grafana
+- **Deployment**: Docker Compose
+
+## 📦 Quick Start
 
 ### Prerequisites
-- Rust 1.70+ with cargo
-- Docker & Docker Compose
-- Redis 7.0+
-- TimescaleDB/PostgreSQL 15+
-- Python 3.10+ (for data ingestion)
 
-### Installation
+- Docker and Docker Compose
+- API keys for data providers (see [Configuration](#configuration))
+- At least 8GB RAM and 4 CPU cores
 
-1. **Clone the repository:**
+### 1. Clone the Repository
+
 ```bash
-git clone https://github.com/your-org/neural-trader.git
+git clone https://github.com/yourusername/neural-trader.git
 cd neural-trader
 ```
 
-2. **Set up environment variables:**
+### 2. Configure Environment
+
+Create a `.env` file with your API keys and passwords:
+
 ```bash
-cp .env.example .env
-# Edit .env with your API keys and configuration
+# Database
+POSTGRES_USER=neural_trader
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=neural_trader_db
+
+# Redis
+REDIS_PASSWORD=your_redis_password
+
+# API Keys (at least one required)
+YAHOO_API_KEY=your_yahoo_key
+FINNHUB_API_KEY=your_finnhub_key
+POLYGON_API_KEY=your_polygon_key
+# ... see docker-compose.yml for all supported providers
 ```
 
-3. **Start all services:**
-```bash
-./scripts/start_full_stock_simulation.sh
-```
+### 3. Start the Platform
 
-4. **Or use Docker Compose:**
 ```bash
+# Start all services
 docker-compose up -d
+
+# View logs
+docker-compose logs -f neural-trader
+
+# Check service health
+docker-compose ps
 ```
 
-## 🏗️ Architecture
+### 4. Access Monitoring
 
-Neural Trader uses a modular architecture with the following components:
+- Grafana Dashboard: http://localhost:3000 (admin/admin)
+- Prometheus Metrics: http://localhost:9090
 
-### Core Components
+## 📊 Supported Data Providers
 
-1. **Neural Prediction Engine** (`src/neural/`)
-   - FANN-based neural networks for price prediction
-   - Real-time model training and adaptation
-   - Multiple prediction horizons (1min, 5min, 15min, 1h)
+| Provider | Type | Priority | Features |
+|----------|------|----------|----------|
+| Polygon | Market Data | 1 | Professional real-time data |
+| IEX Cloud | Market Data | 2 | Institutional-grade |
+| Finnhub | Market Data | 3 | Comprehensive coverage |
+| Alpha Vantage | Market Data | 4 | Technical indicators |
+| Yahoo Finance | Market Data | 5 | Free tier fallback |
+| NASDAQ Data | Market Data | - | Official exchange data |
+| NewsAPI | Alternative | - | News sentiment |
+| Reddit | Alternative | - | Social sentiment |
+| FRED | Economic | - | Federal Reserve data |
 
-2. **Decision-Making Agents (DAA)** (`src/agents/`)
-   - Distributed autonomous agents
-   - Consensus-based decision making
-   - Risk assessment and portfolio optimization
+## 🧠 Neural Network Models
 
-3. **Data Ingestion Pipeline** (`data_ingestion/`)
-   - Real-time market data from multiple sources
-   - Yahoo Finance, Alpha Vantage, Finnhub integration
-   - Rate limiting and caching
+The platform uses an ensemble of neural network models:
 
-4. **Trading Strategies** (`src/strategies/`)
-   - Neural-enhanced momentum trading
-   - Mean reversion strategies
-   - Custom strategy framework
+- **NHITS**: Neural Hierarchical Interpolation for Time Series (128→64→32→16 neurons)
+- **TCN**: Temporal Convolutional Networks (96→48→24 neurons)
+- **DeepAR**: Probabilistic forecasting with uncertainty (100→50→25 neurons)
+- **Transformer**: Attention-based architecture (256→128→64→32 neurons)
+- **MLP**: Multi-Layer Perceptron baseline (64→32→16 neurons)
 
-5. **MCP Trading Server** (`mcp-trading-server/`)
-   - Model Context Protocol integration
-   - Real-time monitoring and control
-   - RESTful API for external integrations
+Models are trained continuously with online learning and weighted based on performance.
 
-### Vendored Libraries
+## 🤖 Autonomous Trading System
 
-The project includes vendored Rust implementations of key libraries:
+The DAA (Decentralized Autonomous Agents) system coordinates trading decisions:
 
-- **ruv-fann**: Neural network library (FANN implementation)
-- **neuro-divergent**: Advanced neural architectures
-- **DAA (Distributed Autonomous Agents)**: Decision-making framework
+1. **Neural Consensus**: Aggregates predictions from multiple models
+2. **Strategy Signals**: Collects votes from trading strategies (momentum, neural-enhanced)
+3. **Risk Assessment**: Evaluates market, position, and portfolio risk
+4. **Decision Synthesis**: Combines inputs with confidence weighting
+5. **Parameter Adaptation**: Updates based on performance feedback
 
 ## 🔧 Configuration
 
-### Trading Configuration (`config/trading.yaml`)
-```yaml
-trading:
-  symbols:
-    - AAPL
-    - GOOGL
-    - MSFT
-  strategies:
-    - neural_enhanced
-    - momentum
-  risk_limits:
-    max_position_size: 10000
-    max_daily_loss: 5000
-```
+### Platform Configuration
 
-### Neural Network Configuration
+Configuration files are located in the `config/` directory:
+
+- `platform.toml`: Base configuration
+- `development.toml`: Development settings
+- `production.toml`: Production settings
+
+Example configuration:
+
 ```toml
 [neural]
-layers = [20, 40, 20, 1]
-learning_rate = 0.001
-training_epochs = 1000
-prediction_horizon = "5min"
+memory_gb = 1.0
+models = ["NHITS", "DeepAR", "TCN", "MLP"]
+prediction_cache_ttl = 300
+
+[database]
+url = "postgres://neural_trader:password@localhost/neural_trader_db"
+max_connections = 20
+
+[redis]
+url = "redis://localhost:6379"
+default_ttl_seconds = 3600
 ```
 
-### Data Sources Configuration
+### Trading Strategies
+
+Configure trading strategies in `config/trading.yaml`:
+
 ```yaml
-data_sources:
-  yahoo_finance:
+strategies:
+  - name: momentum
     enabled: true
-    interval: "1m"
-  alpha_vantage:
-    api_key: "${ALPHA_VANTAGE_API_KEY}"
+    risk_limit: 0.02
+    position_size: 0.1
+    
+  - name: neural_enhanced
     enabled: true
+    risk_limit: 0.02
+    position_size: 0.1
 ```
 
-## 📊 Usage Examples
+## 📈 Development
 
-### Basic Trading Example
-```rust
-use neural_trader::{TradingSystem, Config};
+### Project Structure
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load configuration
-    let config = Config::from_file("config/trading.yaml")?;
-    
-    // Initialize trading system
-    let mut system = TradingSystem::new(config).await?;
-    
-    // Start autonomous trading
-    system.start_autonomous_trading().await?;
-    
-    Ok(())
-}
 ```
-
-### Neural Prediction Example
-```rust
-use neural_trader::neural::FANNPredictor;
-
-// Create predictor
-let predictor = FANNPredictor::new(config)?;
-
-// Get prediction for AAPL
-let prediction = predictor.predict("AAPL", &market_data)?;
-println!("Predicted price in 5 min: ${:.2}", prediction.price);
-println!("Confidence: {:.2}%", prediction.confidence * 100.0);
+neural-trader/
+├── src/                    # Rust source code
+│   ├── main.rs            # Main application entry
+│   ├── neural/            # Neural network integration
+│   ├── integration/       # DAA coordination
+│   ├── strategies/        # Trading strategies
+│   └── adapters/          # Data source adapters
+├── data_ingestion/        # Python data ingestion service
+│   ├── providers/         # Market data providers
+│   ├── processors/        # Data processing pipeline
+│   └── schedulers/        # Data collection scheduling
+├── config/                # Configuration files
+├── docker/                # Docker-related files
+└── docker-compose.yml     # Service orchestration
 ```
-
-### DAA Integration Example
-```rust
-use neural_trader::agents::DAABridge;
-
-// Initialize DAA bridge
-let daa = DAABridge::new(config)?;
-
-// Get trading decision
-let decision = daa.get_consensus_decision("AAPL", &market_context)?;
-match decision.action {
-    Action::Buy => println!("Buy {} shares", decision.quantity),
-    Action::Sell => println!("Sell {} shares", decision.quantity),
-    Action::Hold => println!("Hold position"),
-}
-```
-
-## 🛠️ Development
 
 ### Building from Source
+
+#### Rust Application
+
 ```bash
-# Build all components
+# Build release version
 cargo build --release
 
 # Run tests
 cargo test
 
-# Run with logging
-RUST_LOG=debug cargo run
+# Run with custom config
+cargo run -- --config config/development.toml
 ```
 
-### Running Individual Components
+#### Python Service
+
 ```bash
-# Start data ingestion only
-cd data_ingestion && python main.py
+cd data_ingestion
 
-# Start MCP server only
-cargo run --bin mcp-trading-server
+# Install dependencies
+pip install -r requirements.txt
 
-# Run neural training
-cargo run --bin neural-trainer
+# Run service
+python main.py start --providers yahoo_finance finnhub --symbols AAPL MSFT
 ```
 
-## 📈 Monitoring
+### Running Tests
 
-Access the monitoring dashboard at `http://localhost:3000` (Grafana)
+```bash
+# Rust tests
+cargo test
 
-Key metrics:
-- Trading performance (P&L, win rate)
-- Neural network accuracy
-- System health (CPU, memory, latency)
-- Market data feed status
+# Python tests
+cd data_ingestion && pytest
+
+# Integration tests
+docker-compose -f docker-compose.test.yml up --abort-on-container-exit
+```
+
+## 📊 Monitoring & Performance
+
+### Key Metrics
+
+- **Trading Performance**: P&L, win rate, Sharpe ratio
+- **Neural Accuracy**: Model prediction accuracy by horizon
+- **System Health**: CPU, memory, latency metrics
+- **Data Quality**: Provider uptime, data completeness
+
+### Performance Characteristics
+
+- Market data ingestion: < 100ms latency
+- Neural predictions: < 500ms for ensemble
+- Trading decisions: < 1s end-to-end
+- Throughput: 10,000+ market updates/second
 
 ## 🔒 Security
 
-- All API keys stored in environment variables
-- TLS encryption for external connections
-- Rate limiting on all API endpoints
-- Secure Redis configuration with AUTH
-- Database encryption at rest
-
-## 📚 Documentation
-
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [DAA Integration Guide](docs/DAA_INTEGRATION.md)
-- [Neural Migration Plan](docs/NEURAL_MIGRATION_PLAN.md)
-- [API Documentation](docs/API_DOCUMENTATION.md)
-- [Configuration Guide](docs/CONFIGURATION.md)
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-cargo test
-
-# Run integration tests
-cargo test --test integration_test
-
-# Run specific test
-cargo test test_neural_prediction
-```
-
-## 🚀 Deployment
-
-See [Deployment Guide](docs/DEPLOYMENT.md) for production deployment instructions.
-
-Quick deployment with Docker:
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-## 📊 Performance
-
-- Processes 1000+ trades/second
-- Sub-millisecond decision latency
-- 85%+ prediction accuracy on 5-minute horizons
-- Supports 50+ simultaneous trading pairs
+- **API Keys**: Environment variable based, never in code
+- **Network**: Isolated Docker network with limited exposure
+- **Authentication**: Password-protected Redis and PostgreSQL
+- **Validation**: Input validation on all data adapters
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit changes (`git commit -m 'Add amazing feature'`)
 4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+5. Open a Pull Request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- FANN library contributors
-- Rust async ecosystem
-- Financial data providers
+- [ruv_fann](https://github.com/ruv-fann/ruv-fann) - Neural network framework
+- [DAA](https://github.com/daa/daa) - Autonomous agent coordination
+- [TimescaleDB](https://www.timescale.com/) - Time-series database
+- All the data provider APIs that make this possible
+
+## ⚠️ Disclaimer
+
+This software is for educational and research purposes only. Trading financial instruments carries risk. Always do your own research and never trade with money you cannot afford to lose.

@@ -10,6 +10,7 @@ requests>=2.31.0
 asyncpraw>=7.7.0  # Reddit API
 finnhub-python>=2.4.0  # Finnhub API
 newsapi-python>=0.2.0  # News API
+alpaca-py>=0.13.0  # Alpaca Markets SDK
 
 # Database connectors
 asyncpg>=0.29.0

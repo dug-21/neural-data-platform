@@ -1,0 +1,486 @@
+# Domain Configuration Template
+# This is the master template for creating new domain configurations
+# Copy this file and customize for your specific domain
+
+# Domain Metadata
+domain:
+  name: "example-domain"
+  version: "1.0.0"
+  description: "Brief description of what this domain does"
+  author: "Your Name"
+  license: "MIT"
+  
+  # Optional: Extend from base configuration
+  extends: "platform.defaults"
+  
+  # Tags for discovery and categorization
+  tags:
+    - "example"
+    - "template"
+
+# Variables Section - Define reusable values
+variables:
+  # Model parameters
+  model_complexity: "medium"  # small, medium, large
+  base_learning_rate: 0.001
+  
+  # Resource limits
+  default_cpu: "1"
+  default_memory: "2Gi"
+  
+  # Domain-specific variables
+  custom_var: "value"
+
+# Neural Models Configuration
+neural:
+  # Global neural settings
+  defaults:
+    optimizer: "adam"
+    activation: "relu"
+    dropout: 0.2
+  
+  # Define multiple models for different tasks
+  models:
+    - name: "primary_model"
+      type: "feedforward"  # feedforward, lstm, gru, transformer
+      
+      # Model architecture
+      architecture:
+        input_size: 10
+        hidden_layers: [64, 32, 16]
+        output_size: 1
+        activation: "${neural.defaults.activation}"
+        dropout: "${neural.defaults.dropout}"
+      
+      # Training configuration
+      training:
+        epochs: 100
+        batch_size: 32
+        learning_rate: "${variables.base_learning_rate}"
+        optimizer: "${neural.defaults.optimizer}"
+        early_stopping:
+          patience: 10
+          monitor: "val_loss"
+          mode: "min"
+      
+      # Model persistence
+      persistence:
+        save_path: "/models/${domain.name}/${neural.models[0].name}"
+        checkpoint_frequency: 10
+        keep_best_only: true
+    
+    - name: "secondary_model"
+      type: "lstm"
+      architecture:
+        input_size: 20
+        hidden_size: 128
+        num_layers: 2
+        bidirectional: true
+        output_size: 5
+
+# DAA Agent Configuration
+agents:
+  # Agent coordinator settings
+  coordinator:
+    topology: "hierarchical"  # mesh, ring, star, hierarchical
+    max_agents: 10
+    coordination_interval: "5s"
+  
+  # Define agent types and their behaviors
+  types:
+    - type: "analyzer"
+      count: 2
+      capabilities:
+        - "data_analysis"
+        - "pattern_recognition"
+        - "anomaly_detection"
+      
+      # Resource allocation
+      resources:
+        cpu_limit: "${variables.default_cpu}"
+        memory_limit: "${variables.default_memory}"
+        gpu: false
+      
+      # Agent behavior configuration
+      behavior:
+        strategy: "balanced"  # aggressive, conservative, balanced
+        decision_threshold: 0.7
+        coordination_mode: "collaborative"
+        
+      # Task preferences
+      tasks:
+        preferred:
+          - "analyze_patterns"
+          - "detect_anomalies"
+        excluded:
+          - "execute_trades"
+    
+    - type: "executor"
+      count: 1
+      capabilities:
+        - "action_execution"
+        - "state_management"
+      
+      behavior:
+        strategy: "conservative"
+        decision_threshold: 0.9
+        coordination_mode: "supervised"
+
+# Data Pipeline Configuration
+pipeline:
+  # Data sources
+  sources:
+    - name: "primary_source"
+      type: "websocket"  # websocket, http, file, database, kafka
+      config:
+        url: "${PRIMARY_DATA_URL}"
+        format: "json"
+        reconnect: true
+        buffer_size: 1000
+      
+      # Schema validation
+      schema:
+        type: "object"
+        properties:
+          timestamp: { type: "string", format: "date-time" }
+          value: { type: "number" }
+          metadata: { type: "object" }
+        required: ["timestamp", "value"]
+    
+    - name: "secondary_source"
+      type: "database"
+      config:
+        connection_string: "${DB_CONNECTION_STRING}"
+        query: "SELECT * FROM data WHERE timestamp > ?"
+        poll_interval: "1m"
+  
+  # Data transformations
+  transformations:
+    - name: "normalize"
+      type: "normalization"
+      config:
+        method: "min_max"  # min_max, z_score, decimal_scaling
+        fields: ["value"]
+        
+    - name: "aggregate"
+      type: "windowing"
+      config:
+        window_size: "5m"
+        aggregations:
+          - field: "value"
+            functions: ["mean", "std", "min", "max"]
+    
+    - name: "feature_engineering"
+      type: "custom"
+      config:
+        script: |
+          # Python code for custom transformation
+          def transform(data):
+              data['moving_avg'] = data['value'].rolling(window=10).mean()
+              return data
+  
+  # Data sinks
+  sinks:
+    - name: "primary_storage"
+      type: "timeseries"  # timeseries, document, relational, file
+      config:
+        database: "influxdb"
+        measurement: "${domain.name}_data"
+        retention_policy: "30d"
+        
+    - name: "cache"
+      type: "redis"
+      config:
+        key_prefix: "${domain.name}:"
+        ttl: "1h"
+    
+    - name: "archive"
+      type: "s3"
+      config:
+        bucket: "${S3_BUCKET}"
+        prefix: "${domain.name}/"
+        format: "parquet"
+
+# API Configuration
+api:
+  # API Gateway settings
+  gateway:
+    base_path: "/api/v1/${domain.name}"
+    rate_limit: "100/minute"
+    cors:
+      enabled: true
+      origins: ["*"]
+    authentication:
+      type: "jwt"  # jwt, api_key, oauth2
+      required: true
+  
+  # REST endpoints
+  rest:
+    - path: "/status"
+      method: "GET"
+      description: "Get domain status"
+      public: true
+      handler:
+        type: "builtin"
+        function: "get_domain_status"
+    
+    - path: "/data"
+      method: "POST"
+      description: "Submit data for processing"
+      schema:
+        $ref: "#/pipeline/sources/0/schema"
+      handler:
+        type: "pipeline"
+        target: "primary_source"
+    
+    - path: "/predict"
+      method: "POST"
+      description: "Get prediction from neural model"
+      handler:
+        type: "neural"
+        model: "primary_model"
+        preprocessing: "normalize"
+  
+  # GraphQL schema
+  graphql:
+    enabled: true
+    schema: |
+      type Query {
+        domainStatus: DomainStatus!
+        predictions(input: PredictionInput!): [Prediction!]!
+      }
+      
+      type Mutation {
+        submitData(data: DataInput!): DataResult!
+      }
+      
+      type Subscription {
+        dataStream: DataPoint!
+      }
+  
+  # WebSocket endpoints
+  websocket:
+    - path: "/stream"
+      description: "Real-time data stream"
+      handlers:
+        connect: "on_client_connect"
+        message: "on_client_message"
+        disconnect: "on_client_disconnect"
+
+# Monitoring Configuration
+monitoring:
+  # Metrics collection
+  metrics:
+    enabled: true
+    interval: "10s"
+    exporters:
+      - type: "prometheus"
+        port: 9090
+        path: "/metrics"
+    
+    # Custom metrics
+    custom:
+      - name: "predictions_total"
+        type: "counter"
+        description: "Total number of predictions made"
+        
+      - name: "processing_latency"
+        type: "histogram"
+        description: "Data processing latency"
+        buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 5.0]
+  
+  # Alerting rules
+  alerts:
+    - name: "high_error_rate"
+      condition: "error_rate > 0.05"
+      duration: "5m"
+      severity: "warning"
+      notification:
+        channels: ["slack", "email"]
+        
+    - name: "model_degradation"
+      condition: "model_accuracy < 0.8"
+      duration: "10m"
+      severity: "critical"
+      notification:
+        channels: ["pagerduty"]
+  
+  # Dashboards
+  dashboards:
+    - name: "domain_overview"
+      type: "grafana"
+      config:
+        refresh: "30s"
+        panels:
+          - title: "Request Rate"
+            type: "graph"
+            query: "rate(requests_total[5m])"
+            
+          - title: "Model Performance"
+            type: "gauge"
+            query: "model_accuracy"
+
+# Security Configuration
+security:
+  # Authentication
+  authentication:
+    providers:
+      - type: "jwt"
+        config:
+          issuer: "${JWT_ISSUER}"
+          audience: "${domain.name}"
+          secret: "${JWT_SECRET}"
+      
+      - type: "api_key"
+        config:
+          header_name: "X-API-Key"
+          storage: "redis"
+  
+  # Authorization
+  authorization:
+    type: "rbac"  # rbac, abac
+    roles:
+      - name: "admin"
+        permissions: ["*"]
+        
+      - name: "user"
+        permissions:
+          - "read:data"
+          - "write:data"
+          - "execute:predict"
+      
+      - name: "viewer"
+        permissions:
+          - "read:data"
+          - "read:status"
+  
+  # Encryption
+  encryption:
+    data_at_rest:
+      enabled: true
+      algorithm: "AES-256-GCM"
+      key_rotation: "30d"
+    
+    data_in_transit:
+      tls:
+        enabled: true
+        min_version: "1.2"
+        cert_path: "/certs/${domain.name}.crt"
+        key_path: "/certs/${domain.name}.key"
+
+# Plugin Configuration
+plugins:
+  # Enable plugin system
+  enabled: true
+  
+  # Plugin sources
+  sources:
+    - type: "local"
+      path: "/plugins/${domain.name}"
+    
+    - type: "registry"
+      url: "https://plugins.example.com"
+  
+  # Active plugins
+  active:
+    - name: "custom_indicators"
+      version: "1.0.0"
+      config:
+        indicators:
+          - "RSI"
+          - "MACD"
+          - "Bollinger Bands"
+    
+    - name: "data_validator"
+      version: "2.1.0"
+      config:
+        strict_mode: true
+        custom_rules: |
+          def validate(data):
+              return data['value'] > 0
+
+# Lifecycle Hooks
+lifecycle:
+  # Initialization hooks
+  on_init:
+    - type: "script"
+      script: |
+        echo "Initializing ${domain.name} domain"
+        # Custom initialization logic
+    
+    - type: "http"
+      url: "${WEBHOOK_URL}/domain/init"
+      method: "POST"
+      body:
+        domain: "${domain.name}"
+        timestamp: "${NOW}"
+  
+  # Shutdown hooks
+  on_shutdown:
+    - type: "script"
+      script: |
+        echo "Shutting down ${domain.name} domain"
+        # Cleanup logic
+  
+  # Error hooks
+  on_error:
+    - type: "notification"
+      channels: ["slack"]
+      message: "Error in ${domain.name}: ${ERROR_MESSAGE}"
+
+# Testing Configuration
+testing:
+  # Test data generation
+  data_generation:
+    enabled: true
+    generator:
+      type: "synthetic"
+      config:
+        samples: 1000
+        distribution: "normal"
+        parameters:
+          mean: 100
+          std: 10
+  
+  # Test scenarios
+  scenarios:
+    - name: "load_test"
+      type: "performance"
+      config:
+        duration: "5m"
+        users: 100
+        ramp_up: "30s"
+        
+    - name: "accuracy_test"
+      type: "model"
+      config:
+        test_split: 0.2
+        metrics: ["mse", "mae", "r2"]
+        threshold:
+          mse: 0.1
+          mae: 0.05
+          r2: 0.9
+
+# Environment-specific overrides
+environments:
+  development:
+    neural:
+      models:
+        - name: "primary_model"
+          training:
+            epochs: 10  # Faster training in dev
+    
+    monitoring:
+      metrics:
+        interval: "30s"  # Less frequent in dev
+  
+  production:
+    pipeline:
+      sources:
+        - name: "primary_source"
+          config:
+            buffer_size: 10000  # Larger buffer in prod
+    
+    security:
+      authentication:
+        required: true  # Always require auth in prod

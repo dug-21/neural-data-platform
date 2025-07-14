@@ -8,24 +8,70 @@ import click
 from config import get_settings
 from utils.logging import get_logger, setup_logging
 from utils.metrics import start_metrics_server
-from schedulers import RealtimeCoordinator, BatchScheduler, StreamManager
-from providers import PROVIDERS
+from utils.metrics_integration import metrics_collector
+
+# Lazy imports to avoid import deadlock
+# These modules will be imported only when needed
+RealtimeCoordinator = None
+BatchScheduler = None
+StreamManager = None
+PROVIDERS = None
 
 
-# Setup logging
-setup_logging()
-logger = get_logger(__name__)
+# Defer logging setup to avoid blocking CLI output
+# setup_logging() will be called when needed
+logger = None
 
 
 class DataIngestionService:
     """Main data ingestion service orchestrator."""
     
     def __init__(self):
+        # Initialize logging if not already done
+        global logger
+        if logger is None:
+            setup_logging()
+            logger = get_logger(__name__)
+        
         self.settings = get_settings()
+        # Lazy initialization - these will be created when needed
+        self.realtime_coordinator = None
+        self.batch_scheduler = None
+        self.stream_manager = None
+        self._shutdown_event = asyncio.Event()
+        self._initialized = False
+    
+    async def _lazy_initialize(self):
+        """Lazy initialization of components to avoid import deadlock."""
+        if self._initialized:
+            return
+        
+        # Import modules only when needed
+        global RealtimeCoordinator, BatchScheduler, StreamManager, PROVIDERS
+        
+        if RealtimeCoordinator is None:
+            from schedulers import RealtimeCoordinator as RC
+            RealtimeCoordinator = RC
+        
+        if BatchScheduler is None:
+            from schedulers import BatchScheduler as BS
+            BatchScheduler = BS
+        
+        if StreamManager is None:
+            from schedulers import StreamManager as SM
+            StreamManager = SM
+        
+        if PROVIDERS is None:
+            from providers import PROVIDERS as P
+            PROVIDERS = P
+        
+        # Initialize components
         self.realtime_coordinator = RealtimeCoordinator()
         self.batch_scheduler = BatchScheduler()
         self.stream_manager = StreamManager()
-        self._shutdown_event = asyncio.Event()
+        
+        self._initialized = True
+        logger.info("Lazy initialization of components completed")
     
     async def start(
         self,
@@ -40,14 +86,32 @@ class DataIngestionService:
             f"symbols: {symbols}"
         )
         
-        # Start metrics server
+        # Start metrics server and collection
         if self.settings.prometheus_enabled:
             start_metrics_server(self.settings.prometheus_port)
+            metrics_collector.start_collection()
+            logger.info("Started clean metrics collection")
         
-        # Initialize components
-        await self.realtime_coordinator.initialize(providers)
-        await self.batch_scheduler.initialize(providers)
-        await self.stream_manager.start()
+        # Initialize components with lazy loading
+        await self._lazy_initialize()
+        
+        # Initialize coordinators with retry logic
+        max_init_retries = 5
+        for attempt in range(max_init_retries):
+            try:
+                await self.realtime_coordinator.initialize(providers)
+                await self.batch_scheduler.initialize(providers)
+                await self.stream_manager.start()
+                logger.info("All components initialized successfully")
+                break
+            except Exception as e:
+                logger.error(f"Initialization attempt {attempt + 1}/{max_init_retries} failed: {e}")
+                if attempt == max_init_retries - 1:
+                    logger.error("Max initialization attempts reached, service will exit")
+                    raise
+                else:
+                    logger.info(f"Retrying initialization in 10 seconds...")
+                    await asyncio.sleep(10)
         
         # Setup signal handlers
         def signal_handler(sig, frame):
@@ -86,10 +150,10 @@ class DataIngestionService:
                 # Determine priority based on provider
                 priority_map = {
                     'polygon': 1,
-                    'iex_cloud': 2,
-                    'finnhub': 3,
-                    'alpha_vantage': 4,
-                    'yahoo_finance': 5
+                    'alpaca': 2,
+                    'iex_cloud': 3,
+                    'finnhub': 4,
+                    'alpha_vantage': 5,
                 }
                 priority = priority_map.get(provider_name, 10)
                 
@@ -146,10 +210,13 @@ class DataIngestionService:
         """Gracefully shutdown the service."""
         logger.info("Shutting down data ingestion service")
         
-        # Stop components
-        await self.realtime_coordinator.stop()
-        await self.batch_scheduler.cleanup()
-        await self.stream_manager.stop()
+        # Stop components if they were initialized
+        if self.realtime_coordinator:
+            await self.realtime_coordinator.stop()
+        if self.batch_scheduler:
+            await self.batch_scheduler.cleanup()
+        if self.stream_manager:
+            await self.stream_manager.stop()
         
         # Signal shutdown complete
         self._shutdown_event.set()
@@ -172,6 +239,7 @@ class DataIngestionService:
             f"from {start_date} to {end_date}"
         )
         
+        await self._lazy_initialize()
         await self.batch_scheduler.initialize(providers)
         await self.batch_scheduler.backfill_data(
             symbols, start, end, providers
@@ -190,7 +258,7 @@ def cli():
     '--providers',
     '-p',
     multiple=True,
-    default=['yahoo_finance', 'finnhub'],
+    default=['alpaca'],
     help='Data providers to use'
 )
 @click.option(
@@ -265,9 +333,14 @@ def backfill(symbols, start_date, end_date, providers):
 @cli.command()
 def list_providers():
     """List available data providers."""
+    # Don't setup logging for simple list command
+    # Import providers only when needed
+    from providers import PROVIDERS as P
+    
     click.echo("Available data providers:")
-    for name, provider_class in PROVIDERS.items():
-        click.echo(f"  - {name}: {provider_class.__doc__.strip()}")
+    for name, provider_class in P.items():
+        doc = provider_class.__doc__ or "No description available"
+        click.echo(f"  - {name}: {doc.strip()}")
 
 
 if __name__ == "__main__":

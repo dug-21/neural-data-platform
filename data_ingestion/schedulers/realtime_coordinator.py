@@ -1,7 +1,6 @@
 """Real-time data streaming coordinator."""
 import asyncio
 from typing import List, Dict, Any, Set, Optional, Callable
-from datetime import datetime
 import json
 
 from providers import PROVIDERS, BaseProvider
@@ -44,9 +43,18 @@ class RealtimeCoordinator:
     
     async def initialize(self, provider_names: List[str]):
         """Initialize specified providers."""
-        # Connect to storage
-        await self.timescale.connect()
-        await self.redis.connect()
+        # Connect to storage with error handling
+        try:
+            await self.timescale.connect()
+        except Exception as e:
+            self.logger.error(f"Failed to connect to TimescaleDB after retries: {e}")
+            raise
+        
+        try:
+            await self.redis.connect()
+        except Exception as e:
+            self.logger.error(f"Failed to connect to Redis: {e}")
+            raise
         
         # Initialize providers
         for name in provider_names:
@@ -79,13 +87,8 @@ class RealtimeCoordinator:
         
         self.logger.info(f"Subscribing to {len(valid_symbols)} symbols: {valid_symbols}")
         
-        # Start streaming for each provider
-        for provider_name, provider in self.providers.items():
-            if provider_name not in self.active_streams:
-                task = asyncio.create_task(
-                    self._stream_provider(provider_name, provider, list(self.subscribed_symbols))
-                )
-                self.active_streams[provider_name] = task
+        # Don't create streaming tasks here - wait for start() to be called
+        # The tasks will be created when _running is True
     
     async def unsubscribe(self, symbols: List[str]):
         """Unsubscribe from symbols."""
@@ -102,11 +105,21 @@ class RealtimeCoordinator:
         self._running = True
         self.logger.info("Real-time coordinator started")
         
+        # Now create streaming tasks for each provider with subscribed symbols
+        if self.subscribed_symbols:
+            self.logger.info(f"Starting streams for {len(self.subscribed_symbols)} symbols")
+            for provider_name, provider in self.providers.items():
+                if provider_name not in self.active_streams:
+                    task = asyncio.create_task(
+                        self._stream_provider(provider_name, provider, list(self.subscribed_symbols))
+                    )
+                    self.active_streams[provider_name] = task
+                    self.logger.info(f"Started stream for provider: {provider_name}")
+        
         # Start monitoring task
         asyncio.create_task(self._monitor_streams())
         
-        # Wait for shutdown
-        await self._shutdown_event.wait()
+        # Don't wait here - let the main service handle shutdown
     
     async def stop(self):
         """Stop the coordinator."""
@@ -135,6 +148,7 @@ class RealtimeCoordinator:
         await asyncio.gather(*self.active_streams.values(), return_exceptions=True)
         self.active_streams.clear()
     
+    @metrics.track_pipeline_stage("realtime", "stream_provider")
     async def _stream_provider(self, provider_name: str, provider: BaseProvider, symbols: List[str]):
         """Stream data from a single provider."""
         self.logger.info(f"Starting stream for {provider_name} with symbols: {symbols}")
@@ -170,6 +184,7 @@ class RealtimeCoordinator:
                         self._stream_provider(provider_name, provider, symbols)
                     )
     
+    @metrics.track_pipeline_stage("realtime", "process_data")
     async def _process_market_data(self, data: Any, provider_name: str):
         """Process incoming market data."""
         try:

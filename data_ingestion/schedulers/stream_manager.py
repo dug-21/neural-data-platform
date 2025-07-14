@@ -54,6 +54,7 @@ class StreamManager:
         
         self.logger.info("Stream manager stopped")
     
+    @metrics.track_pipeline_stage("stream_manager", "register_stream")
     async def register_stream(
         self,
         stream_id: str,
@@ -80,11 +81,15 @@ class StreamManager:
         for symbol in symbols:
             self.symbol_assignments[symbol].add(stream_id)
         
+        # Update active streams metric
+        metrics.active_streams.inc()
+        
         self.logger.info(
             f"Registered stream {stream_id} for {len(symbols)} symbols "
             f"with priority {priority}"
         )
     
+    @metrics.track_async_task("stream_start")
     async def start_stream(self, stream_id: str, data_handler: Callable):
         """Start a registered stream."""
         if stream_id not in self.active_streams:
@@ -119,6 +124,11 @@ class StreamManager:
                 pass
         
         stream_info['status'] = 'stopped'
+        
+        # Update active streams metric
+        if stream_id in self.active_streams:
+            metrics.active_streams.dec()
+        
         self.logger.info(f"Stopped stream {stream_id}")
     
     async def _run_stream(self, stream_id: str, data_handler: Callable):
@@ -147,6 +157,12 @@ class StreamManager:
                 async for data in stream_method(symbols):
                     if not self._running:
                         break
+                    
+                    # Update metrics
+                    metrics.data_points_processed.labels(
+                        provider=provider.name,
+                        data_type=stream_type
+                    ).inc()
                     
                     # Update statistics
                     stream_info['last_data'] = datetime.now()

@@ -23,7 +23,43 @@ This guide walks you through obtaining API keys for each data provider used by t
 - Professional quality data
 - Free forever
 
-## 2. NASDAQ Data Link (formerly Quandl) - RECOMMENDED SECOND
+## 2. Alpaca Markets - RECOMMENDED SECOND
+
+**Why Second?** Real-time market data, WebSocket streaming, professional-grade API
+
+1. Visit: https://alpaca.markets/
+2. Click "Sign Up" (top right)
+3. Complete registration (choose "Individual" account)
+4. After email verification, log in to dashboard
+5. Go to "Your API Keys" section
+6. Generate new API key pair (Paper Trading first recommended)
+7. Add to your `.env` file:
+   ```
+   ALPACA_API_KEY=your_api_key_here
+   ALPACA_API_SECRET=your_api_secret_here
+   ALPACA_SUBSCRIPTION_LEVEL=basic  # or unlimited
+   ```
+
+**Free Tier (Basic):**
+- 30 WebSocket symbol subscriptions
+- 200 historical API calls/minute
+- Data limited to last 15 minutes
+- IEX data feed only
+
+**Paid Tier (Algo Trader Plus - $99/month):**
+- Unlimited WebSocket subscriptions
+- 10,000 historical API calls/minute
+- Full historical data access
+- SIP data feed (consolidated from all exchanges)
+
+**Key Features:**
+- Real-time stock and crypto data
+- WebSocket streaming
+- Historical bars and trades
+- Order book snapshots
+- Both REST and WebSocket APIs
+
+## 3. NASDAQ Data Link (formerly Quandl) - RECOMMENDED THIRD
 
 **Why Second?** Professional data quality, extensive historical data, generous free tier
 
@@ -53,7 +89,7 @@ This guide walks you through obtaining API keys for each data provider used by t
 - Foreign exchange rates
 - Easy-to-use API with multiple data formats
 
-## 3. Reddit API - RECOMMENDED THIRD
+## 4. Reddit API - RECOMMENDED FOURTH
 
 **Why Third?** Good for sentiment analysis, reasonable rate limits
 
@@ -80,7 +116,7 @@ This guide walks you through obtaining API keys for each data provider used by t
 - 60 requests per minute (authenticated)
 - Must include User-Agent header
 
-## 4. Yahoo Finance - USE WITH CAUTION
+## 5. Yahoo Finance - USE WITH CAUTION
 
 **Note:** Yahoo Finance doesn't provide official API keys. The yfinance library uses web scraping.
 
@@ -96,7 +132,7 @@ YAHOO_MAX_REQUESTS_PER_DAY=200
 YAHOO_REQUEST_DELAY_SECONDS=5
 ```
 
-## 5. NewsAPI - VERY LIMITED FREE TIER
+## 6. NewsAPI - VERY LIMITED FREE TIER
 
 **Why Last?** Only 100 requests/day on free tier
 
@@ -128,6 +164,9 @@ Create or update your `.env` file with all API keys:
 FRED_API_KEY=your_fred_api_key_here
 
 # Market Data
+ALPACA_API_KEY=your_alpaca_api_key_here
+ALPACA_API_SECRET=your_alpaca_api_secret_here
+ALPACA_SUBSCRIPTION_LEVEL=basic  # basic or unlimited
 QUANDL_API_KEY=your_quandl_api_key_here
 
 # Social Sentiment

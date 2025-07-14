@@ -68,9 +68,14 @@ async fn main() -> Result<()> {
         parameters: HashMap::new(),
     };
     match StrategyFactory::create_strategy(&momentum_config, None) {
-        Ok(momentum_strategy) => {
-            daa_coordinator.register_strategy("momentum".to_string(), momentum_strategy).await;
-            info!("✅ Momentum strategy registered");
+        Ok(mut momentum_strategy) => {
+            // Initialize the strategy before registering
+            if let Err(e) = momentum_strategy.initialize(momentum_config.clone()).await {
+                error!("Failed to initialize momentum strategy: {}", e);
+            } else {
+                daa_coordinator.register_strategy("momentum".to_string(), momentum_strategy).await;
+                info!("✅ Momentum strategy registered and initialized");
+            }
         }
         Err(e) => {
             error!("Failed to create momentum strategy: {}", e);
@@ -86,9 +91,14 @@ async fn main() -> Result<()> {
         parameters: HashMap::new(),
     };
     match StrategyFactory::create_strategy(&neural_config, Some(neural_predictor.clone())) {
-        Ok(neural_strategy) => {
-            daa_coordinator.register_strategy("neural_enhanced".to_string(), neural_strategy).await;
-            info!("✅ Neural-enhanced strategy registered");
+        Ok(mut neural_strategy) => {
+            // Initialize the strategy before registering
+            if let Err(e) = neural_strategy.initialize(neural_config.clone()).await {
+                error!("Failed to initialize neural-enhanced strategy: {}", e);
+            } else {
+                daa_coordinator.register_strategy("neural_enhanced".to_string(), neural_strategy).await;
+                info!("✅ Neural-enhanced strategy registered and initialized");
+            }
         }
         Err(e) => {
             error!("Failed to create neural-enhanced strategy: {}", e);

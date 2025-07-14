@@ -1,0 +1,688 @@
+# Log Analysis Domain Configuration
+# Intelligent log processing, anomaly detection, and root cause analysis
+
+domain:
+  name: "logs"
+  version: "1.5.0"
+  description: "Advanced log analysis system with ML-powered anomaly detection and automated remediation"
+  author: "DevOps Team"
+  license: "MIT"
+  extends: "platform.defaults"
+  tags:
+    - "observability"
+    - "monitoring"
+    - "anomaly-detection"
+    - "automation"
+
+# Log analysis variables
+variables:
+  # Log processing
+  log_retention_days: 30
+  max_log_size_mb: 100
+  batch_size: 1000
+  
+  # Anomaly detection
+  anomaly_threshold: 0.95
+  baseline_window: "7d"
+  
+  # Pattern matching
+  pattern_cache_size: 10000
+  regex_timeout_ms: 100
+  
+  # Alert settings
+  alert_cooldown_minutes: 15
+  max_alerts_per_hour: 50
+
+# Neural Models for Log Analysis
+neural:
+  models:
+    # Anomaly detection model
+    - name: "anomaly_detector"
+      type: "autoencoder"
+      architecture:
+        encoder_layers: [512, 256, 128, 64]
+        latent_dim: 32
+        decoder_layers: [64, 128, 256, 512]
+        activation: "relu"
+        dropout: 0.2
+        
+      training:
+        epochs: 100
+        batch_size: 256
+        learning_rate: 0.001
+        loss_function: "mse"
+        anomaly_threshold: "${variables.anomaly_threshold}"
+        
+        # Unsupervised learning
+        contamination: 0.01  # Expected anomaly rate
+        
+      # Feature extraction
+      features:
+        log_features:
+          - "log_length"
+          - "word_count"
+          - "numeric_count"
+          - "special_char_count"
+          - "timestamp_hour"
+          - "timestamp_day_of_week"
+        
+        statistical_features:
+          - "entropy"
+          - "compression_ratio"
+          - "char_frequency_distribution"
+        
+        contextual_features:
+          - "service_name"
+          - "log_level"
+          - "source_ip"
+          - "user_agent"
+    
+    # Log classification model
+    - name: "log_classifier"
+      type: "transformer"
+      architecture:
+        vocab_size: 50000
+        d_model: 256
+        n_heads: 8
+        n_layers: 6
+        max_seq_length: 512
+        num_classes: 20  # Log categories
+        
+      training:
+        epochs: 50
+        batch_size: 64
+        learning_rate: 0.0001
+        warmup_steps: 4000
+        
+        # Multi-label classification
+        loss_function: "binary_crossentropy"
+        threshold: 0.5
+        
+      # Categories
+      categories:
+        - "error"
+        - "warning"
+        - "security"
+        - "performance"
+        - "authentication"
+        - "database"
+        - "network"
+        - "application"
+        - "system"
+        - "deployment"
+    
+    # Root cause analysis model
+    - name: "root_cause_analyzer"
+      type: "graph_neural_network"
+      architecture:
+        node_features: 128
+        edge_features: 64
+        hidden_layers: [256, 128, 64]
+        num_classes: 50  # Root cause types
+        
+      training:
+        epochs: 150
+        batch_size: 32
+        learning_rate: 0.0005
+        
+        # Graph construction
+        graph_config:
+          time_window: "5m"
+          correlation_threshold: 0.7
+          max_edges_per_node: 10
+
+# Log Analysis DAA Agents
+agents:
+  coordinator:
+    topology: "mesh"
+    max_agents: 15
+    coordination_interval: "5s"
+  
+  types:
+    # Log parser agent
+    - type: "log_parser"
+      count: 4
+      capabilities:
+        - "pattern_extraction"
+        - "format_detection"
+        - "field_extraction"
+        - "timestamp_parsing"
+      
+      resources:
+        cpu_limit: "2"
+        memory_limit: "4Gi"
+      
+      behavior:
+        strategy: "aggressive"
+        
+        # Parsing configuration
+        parsing:
+          formats:
+            - "json"
+            - "syslog"
+            - "apache_common"
+            - "apache_combined"
+            - "nginx"
+            - "elasticsearch"
+            - "custom_regex"
+          
+          # Custom patterns
+          grok_patterns:
+            - name: "CUSTOM_ERROR"
+              pattern: "ERROR \\[%{TIMESTAMP_ISO8601:timestamp}\\] %{GREEDYDATA:message}"
+            
+            - name: "API_REQUEST"
+              pattern: "%{IP:client_ip} - - \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{URIPATH:path} HTTP/%{NUMBER:http_version}\" %{NUMBER:status_code} %{NUMBER:response_size}"
+    
+    # Anomaly hunter agent
+    - type: "anomaly_hunter"
+      count: 3
+      capabilities:
+        - "statistical_analysis"
+        - "ml_detection"
+        - "pattern_deviation"
+        - "behavioral_analysis"
+      
+      resources:
+        cpu_limit: "4"
+        memory_limit: "8Gi"
+        gpu: true
+      
+      behavior:
+        strategy: "balanced"
+        
+        detection_methods:
+          - name: "statistical"
+            algorithms:
+              - "isolation_forest"
+              - "local_outlier_factor"
+              - "one_class_svm"
+          
+          - name: "ml_based"
+            models:
+              - "anomaly_detector"
+              - "variational_autoencoder"
+          
+          - name: "rule_based"
+            rules:
+              - "sudden_spike"
+              - "unusual_pattern"
+              - "rare_combination"
+    
+    # Pattern analyzer agent
+    - type: "pattern_analyzer"
+      count: 2
+      capabilities:
+        - "sequence_mining"
+        - "correlation_analysis"
+        - "trend_detection"
+        - "periodicity_detection"
+      
+      behavior:
+        analysis_config:
+          sequence_mining:
+            algorithm: "prefixspan"
+            min_support: 0.01
+            max_pattern_length: 10
+          
+          correlation:
+            methods:
+              - "pearson"
+              - "spearman"
+              - "mutual_information"
+            
+            time_windows: ["1m", "5m", "1h", "1d"]
+    
+    # Alert manager agent
+    - type: "alert_manager"
+      count: 1
+      capabilities:
+        - "alert_correlation"
+        - "deduplication"
+        - "prioritization"
+        - "routing"
+      
+      behavior:
+        alert_rules:
+          correlation_window: "5m"
+          deduplication_fields:
+            - "message_pattern"
+            - "service"
+            - "host"
+          
+          priority_factors:
+            - name: "service_criticality"
+              weight: 0.4
+            - name: "error_frequency"
+              weight: 0.3
+            - name: "blast_radius"
+              weight: 0.3
+    
+    # Remediation agent
+    - type: "remediation_executor"
+      count: 2
+      capabilities:
+        - "automated_fixes"
+        - "playbook_execution"
+        - "rollback_management"
+        - "validation"
+      
+      behavior:
+        strategy: "conservative"
+        
+        remediation_actions:
+          - trigger: "disk_full"
+            actions:
+              - "clean_temp_files"
+              - "rotate_logs"
+              - "alert_if_critical"
+          
+          - trigger: "service_down"
+            actions:
+              - "restart_service"
+              - "check_dependencies"
+              - "failover_if_needed"
+          
+          - trigger: "memory_leak"
+            actions:
+              - "restart_application"
+              - "increase_memory_limit"
+              - "enable_profiling"
+
+# Log Processing Pipeline
+pipeline:
+  sources:
+    # Real-time log streaming
+    - name: "log_stream"
+      type: "kafka"
+      config:
+        brokers: ["${KAFKA_BROKER_1}", "${KAFKA_BROKER_2}", "${KAFKA_BROKER_3}"]
+        topics:
+          - "application-logs"
+          - "system-logs"
+          - "security-logs"
+          - "audit-logs"
+        
+        consumer_group: "log-analyzer"
+        
+        # Kafka settings
+        auto_offset_reset: "latest"
+        enable_auto_commit: false
+        max_poll_records: "${variables.batch_size}"
+        
+        # Performance tuning
+        fetch_min_bytes: 1024
+        fetch_max_wait_ms: 500
+    
+    # File-based logs
+    - name: "file_logs"
+      type: "file"
+      config:
+        paths:
+          - "/var/log/application/*.log"
+          - "/var/log/nginx/*.log"
+          - "/var/log/system/*.log"
+        
+        # File watching
+        watch: true
+        tail: true
+        
+        # Multiline handling
+        multiline:
+          pattern: "^\\d{4}-\\d{2}-\\d{2}"
+          negate: true
+          match: "after"
+          max_lines: 500
+    
+    # Cloud logs
+    - name: "cloud_logs"
+      type: "http"
+      config:
+        providers:
+          - name: "aws_cloudwatch"
+            url: "${AWS_LOGS_URL}"
+            auth: "aws_signature_v4"
+            
+          - name: "gcp_stackdriver"
+            url: "${GCP_LOGS_URL}"
+            auth: "oauth2"
+            
+          - name: "azure_monitor"
+            url: "${AZURE_LOGS_URL}"
+            auth: "shared_key"
+  
+  transformations:
+    # Log parsing
+    - name: "parse_logs"
+      type: "parsing"
+      config:
+        parser: "auto_detect"  # Automatically detect log format
+        
+        # Enrichment
+        enrich:
+          - type: "geoip"
+            source_field: "client_ip"
+            target_field: "geo"
+            
+          - type: "user_agent"
+            source_field: "user_agent"
+            target_field: "device"
+          
+          - type: "dns"
+            source_field: "hostname"
+            target_field: "fqdn"
+    
+    # Anonymization
+    - name: "anonymize_pii"
+      type: "anonymization"
+      config:
+        rules:
+          - field: "email"
+            method: "hash"
+            
+          - field: "credit_card"
+            method: "mask"
+            mask_char: "X"
+            visible_chars: 4
+            
+          - field: "ssn"
+            method: "remove"
+          
+          - field: "ip_address"
+            method: "partial_mask"
+            mask_octets: 2
+    
+    # Feature extraction
+    - name: "extract_features"
+      type: "feature_engineering"
+      config:
+        extractors:
+          - type: "regex"
+            patterns:
+              error_codes: "ERROR\\[(\\w+)\\]"
+              response_times: "took (\\d+)ms"
+              status_codes: "HTTP/\\d\\.\\d\" (\\d{3})"
+          
+          - type: "statistical"
+            features:
+              - "log_length"
+              - "word_count"
+              - "numeric_ratio"
+              - "entropy"
+          
+          - type: "temporal"
+            features:
+              - "hour_of_day"
+              - "day_of_week"
+              - "is_business_hours"
+    
+    # Anomaly scoring
+    - name: "score_anomalies"
+      type: "ml_inference"
+      config:
+        model: "anomaly_detector"
+        
+        # Post-processing
+        post_process:
+          - type: "smoothing"
+            window: 5
+            
+          - type: "threshold"
+            value: "${variables.anomaly_threshold}"
+  
+  sinks:
+    # Indexed storage for search
+    - name: "elasticsearch"
+      type: "elasticsearch"
+      config:
+        nodes: ["${ES_NODE_1}", "${ES_NODE_2}", "${ES_NODE_3}"]
+        index_pattern: "logs-%{+YYYY.MM.dd}"
+        
+        # Index settings
+        settings:
+          number_of_shards: 5
+          number_of_replicas: 1
+          refresh_interval: "1s"
+        
+        # Mapping
+        mappings:
+          dynamic_templates:
+            - strings_as_keywords:
+                match_mapping_type: "string"
+                mapping:
+                  type: "keyword"
+                  ignore_above: 256
+        
+        # ILM policy
+        lifecycle:
+          hot_phase: "7d"
+          warm_phase: "30d"
+          cold_phase: "90d"
+          delete_phase: "365d"
+    
+    # Time-series metrics
+    - name: "metrics_store"
+      type: "prometheus"
+      config:
+        pushgateway_url: "${PROMETHEUS_PUSHGATEWAY}"
+        
+        # Metrics extraction
+        metrics:
+          - name: "log_count"
+            type: "counter"
+            labels: ["service", "level", "host"]
+            
+          - name: "error_rate"
+            type: "gauge"
+            labels: ["service", "error_type"]
+            
+          - name: "response_time"
+            type: "histogram"
+            labels: ["endpoint", "method"]
+            buckets: [0.01, 0.05, 0.1, 0.5, 1, 5, 10]
+    
+    # Alert sink
+    - name: "alert_system"
+      type: "webhook"
+      config:
+        endpoints:
+          - url: "${PAGERDUTY_WEBHOOK}"
+            severity: ["critical", "high"]
+            
+          - url: "${SLACK_WEBHOOK}"
+            severity: ["medium", "low"]
+            
+          - url: "${EMAIL_WEBHOOK}"
+            severity: ["info"]
+        
+        # Rate limiting
+        rate_limit:
+          max_alerts_per_hour: "${variables.max_alerts_per_hour}"
+          cooldown_minutes: "${variables.alert_cooldown_minutes}"
+
+# Log Analysis API
+api:
+  gateway:
+    base_path: "/api/v1/logs"
+    rate_limit: "100/minute"
+  
+  rest:
+    # Search endpoints
+    - path: "/search"
+      method: "POST"
+      description: "Search logs with query DSL"
+      schema:
+        type: "object"
+        properties:
+          query: { type: "string" }
+          filters: { type: "object" }
+          time_range: { type: "object" }
+          size: { type: "integer", default: 100 }
+      
+      # Search optimization
+      middleware:
+        - type: "query_optimizer"
+        - type: "cache"
+          ttl: "5m"
+    
+    # Analytics endpoints
+    - path: "/analytics/anomalies"
+      method: "GET"
+      description: "Get detected anomalies"
+      parameters:
+        time_range: { type: "string", required: true }
+        service: { type: "string" }
+        min_score: { type: "number", default: 0.8 }
+    
+    - path: "/analytics/patterns"
+      method: "GET"
+      description: "Get log patterns"
+      
+    - path: "/analytics/trends"
+      method: "GET"
+      description: "Get trending errors and issues"
+    
+    # Alert management
+    - path: "/alerts"
+      method: "GET"
+      description: "Get active alerts"
+      
+    - path: "/alerts/{alert_id}/acknowledge"
+      method: "POST"
+      description: "Acknowledge alert"
+      
+    - path: "/alerts/{alert_id}/resolve"
+      method: "POST"
+      description: "Resolve alert"
+    
+    # Remediation endpoints
+    - path: "/remediate"
+      method: "POST"
+      description: "Trigger automated remediation"
+      schema:
+        type: "object"
+        properties:
+          issue_type: { type: "string" }
+          target: { type: "string" }
+          dry_run: { type: "boolean", default: true }
+  
+  websocket:
+    # Real-time log tail
+    - path: "/tail"
+      description: "Real-time log streaming"
+      parameters:
+        filters: { type: "object" }
+        
+    # Alert stream
+    - path: "/alerts/stream"
+      description: "Real-time alert notifications"
+
+# Log Analysis Monitoring
+monitoring:
+  metrics:
+    custom:
+      - name: "logs_processed_total"
+        type: "counter"
+        labels: ["source", "level"]
+        
+      - name: "parse_errors_total"
+        type: "counter"
+        labels: ["parser", "format"]
+        
+      - name: "anomalies_detected_total"
+        type: "counter"
+        labels: ["service", "anomaly_type"]
+        
+      - name: "alert_response_time"
+        type: "histogram"
+        description: "Time to acknowledge alerts"
+        
+      - name: "log_lag_seconds"
+        type: "gauge"
+        description: "Log processing lag"
+  
+  alerts:
+    - name: "high_error_rate"
+      condition: "rate(error_logs[5m]) > 100"
+      severity: "warning"
+      
+    - name: "log_parsing_failures"
+      condition: "rate(parse_errors_total[5m]) > 10"
+      severity: "critical"
+      
+    - name: "anomaly_spike"
+      condition: "rate(anomalies_detected_total[5m]) > 50"
+      severity: "warning"
+      
+    - name: "log_ingestion_lag"
+      condition: "log_lag_seconds > 60"
+      severity: "critical"
+
+# Log Security
+security:
+  # Data protection
+  encryption:
+    data_at_rest:
+      enabled: true
+      algorithm: "AES-256-GCM"
+      
+    data_in_transit:
+      tls:
+        enabled: true
+        min_version: "1.3"
+  
+  # Access control
+  authorization:
+    roles:
+      - name: "log_viewer"
+        permissions:
+          - "logs:search"
+          - "logs:view"
+          - "analytics:view"
+      
+      - name: "log_analyst"
+        permissions:
+          - "logs:*"
+          - "analytics:*"
+          - "alerts:view"
+          - "alerts:acknowledge"
+      
+      - name: "log_admin"
+        permissions:
+          - "*"
+  
+  # Compliance
+  compliance:
+    standards:
+      - "SOC2"
+      - "HIPAA"
+      - "GDPR"
+    
+    # Audit requirements
+    audit:
+      log_access: true
+      query_history: true
+      retention: "7y"
+
+# Environment-specific settings
+environments:
+  production:
+    # Higher performance
+    pipeline:
+      sources:
+        - name: "log_stream"
+          config:
+            max_poll_records: 10000
+    
+    # More agents
+    agents:
+      types:
+        - type: "log_parser"
+          count: 8
+          
+        - type: "anomaly_hunter"
+          count: 5
+    
+    # Stricter retention
+    variables:
+      log_retention_days: 90

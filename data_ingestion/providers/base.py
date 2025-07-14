@@ -10,6 +10,7 @@ from config import get_settings
 from utils.logging import get_logger
 from utils.metrics import metrics
 from utils.retry import with_retry
+from utils.normalization import DataNormalizer
 
 
 class DataType(Enum):
@@ -34,6 +35,30 @@ class MarketData:
     volume: int
     provider: str
     metadata: Optional[Dict[str, Any]] = None
+    
+    def __post_init__(self):
+        """Normalize data on creation."""
+        # Normalize timestamp to UTC with proper rounding
+        self.time = DataNormalizer.normalize_timestamp(self.time)
+        
+        # Normalize symbol to uppercase
+        self.symbol = DataNormalizer.normalize_symbol(self.symbol)
+        
+        # Normalize prices to 2 decimal places
+        self.open = DataNormalizer.normalize_price(self.open)
+        self.high = DataNormalizer.normalize_price(self.high)
+        self.low = DataNormalizer.normalize_price(self.low)
+        self.close = DataNormalizer.normalize_price(self.close)
+        
+        # Ensure volume is integer
+        self.volume = DataNormalizer.normalize_volume(self.volume)
+        
+        # Normalize provider name
+        self.provider = DataNormalizer.normalize_provider_name(self.provider)
+        
+        # Validate OHLC consistency
+        if not DataNormalizer.validate_ohlc_consistency(self.open, self.high, self.low, self.close):
+            raise ValueError(f"Invalid OHLC data for {self.symbol}: O={self.open}, H={self.high}, L={self.low}, C={self.close}")
 
 
 @dataclass
@@ -46,6 +71,15 @@ class TickData:
     exchange: Optional[str] = None
     conditions: Optional[str] = None
     provider: Optional[str] = None
+    
+    def __post_init__(self):
+        """Normalize tick data on creation."""
+        self.time = DataNormalizer.normalize_timestamp(self.time)
+        self.symbol = DataNormalizer.normalize_symbol(self.symbol)
+        self.price = DataNormalizer.normalize_price(self.price)
+        self.size = DataNormalizer.normalize_volume(self.size)
+        if self.provider:
+            self.provider = DataNormalizer.normalize_provider_name(self.provider)
 
 
 @dataclass
@@ -60,6 +94,18 @@ class OrderBookData:
     mid_price: float
     spread: float
     provider: str
+    
+    def __post_init__(self):
+        """Normalize order book data on creation."""
+        self.time = DataNormalizer.normalize_timestamp(self.time)
+        self.symbol = DataNormalizer.normalize_symbol(self.symbol)
+        self.bid_price = DataNormalizer.normalize_price(self.bid_price)
+        self.ask_price = DataNormalizer.normalize_price(self.ask_price)
+        self.bid_size = DataNormalizer.normalize_volume(self.bid_size)
+        self.ask_size = DataNormalizer.normalize_volume(self.ask_size)
+        self.mid_price = DataNormalizer.normalize_price(self.mid_price)
+        self.spread = DataNormalizer.normalize_price(self.spread)
+        self.provider = DataNormalizer.normalize_provider_name(self.provider)
 
 
 class BaseProvider(ABC):
@@ -86,12 +132,15 @@ class BaseProvider(ABC):
     @abstractmethod
     async def connect(self):
         """Initialize provider connection."""
-        pass
+        metrics.active_connections.labels(connection_type=f"provider_{self.name}").inc()
+        self._connected = True
     
     @abstractmethod
     async def disconnect(self):
         """Clean up provider connection."""
-        pass
+        if self._connected:
+            metrics.active_connections.labels(connection_type=f"provider_{self.name}").dec()
+            self._connected = False
     
     @abstractmethod
     async def get_market_data(
@@ -150,23 +199,23 @@ class BaseProvider(ABC):
                 sleep_time = 60 - (current_time - self._last_request_time)
                 if sleep_time > 0:
                     self.logger.warning(f"Rate limit reached, sleeping for {sleep_time:.2f}s")
+                    metrics.rate_limit_hits.labels(provider=self.name).inc()
                     await asyncio.sleep(sleep_time)
                     self._request_count = 0
                     self._last_request_time = asyncio.get_event_loop().time()
             
             self._request_count += 1
-            # Rate limiting doesn't need to track metrics - actual API calls will be tracked
     
     def _validate_symbols(self, symbols: List[str]) -> List[str]:
         """Validate and normalize symbols."""
         validated = []
         for symbol in symbols:
-            # Basic validation - uppercase and alphanumeric
-            clean_symbol = symbol.upper().strip()
-            if clean_symbol and clean_symbol.replace("-", "").replace(".", "").isalnum():
+            try:
+                # Use centralized normalization
+                clean_symbol = DataNormalizer.normalize_symbol(symbol)
                 validated.append(clean_symbol)
-            else:
-                self.logger.warning(f"Invalid symbol: {symbol}")
+            except ValueError as e:
+                self.logger.warning(f"Invalid symbol {symbol}: {e}")
         return validated
     
     def _parse_interval(self, interval: str) -> Dict[str, Any]:
@@ -182,3 +231,15 @@ class BaseProvider(ABC):
         }
         
         return interval_map.get(interval, interval_map["1min"])
+    
+    def _normalize_timestamp(self, ts, interval: str = "1min") -> datetime:
+        """Helper method for timestamp normalization."""
+        return DataNormalizer.normalize_timestamp(ts, interval)
+    
+    def _normalize_price(self, price) -> float:
+        """Helper method for price normalization."""
+        return DataNormalizer.normalize_price(price)
+    
+    def _normalize_volume(self, volume) -> int:
+        """Helper method for volume normalization."""
+        return DataNormalizer.normalize_volume(volume)

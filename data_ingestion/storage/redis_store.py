@@ -156,6 +156,7 @@ class RedisStore:
         return None
     
     # Pub/Sub methods
+    @metrics.track_redis_publish("generic")
     async def publish(self, channel: str, message: str):
         """Publish message to a channel."""
         await self.redis.publish(channel, message)
@@ -171,6 +172,7 @@ class RedisStore:
         """Get value by key."""
         return await self.redis.get(key)
     
+    @metrics.track_redis_publish("price_update")
     async def publish_price_update(self, symbol: str, price_data: Dict[str, Any]):
         """Publish price update to subscribers."""
         channel = f"price_updates:{symbol}"
@@ -183,6 +185,7 @@ class RedisStore:
         
         await self.redis.publish(channel, message)
     
+    @metrics.track_redis_publish("tick_update")
     async def publish_tick_update(self, symbol: str, tick: Dict[str, Any]):
         """Publish tick update to subscribers."""
         channel = f"tick_updates:{symbol}"
@@ -195,6 +198,7 @@ class RedisStore:
         
         await self.redis.publish(channel, message)
     
+    @metrics.track_redis_publish("orderbook_update")
     async def publish_orderbook_update(self, symbol: str, orderbook: Dict[str, Any]):
         """Publish order book update to subscribers."""
         channel = f"orderbook_updates:{symbol}"

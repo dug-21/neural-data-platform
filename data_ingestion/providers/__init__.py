@@ -9,6 +9,7 @@ from .fred import FREDProvider
 from .reddit import RedditProvider
 from .nasdaq import NASDAQProvider
 from .newsapi import NewsAPIProvider, NewsArticle
+from .alpaca import AlpacaProvider
 
 # Provider registry
 PROVIDERS = {
@@ -20,7 +21,8 @@ PROVIDERS = {
     "fred": FREDProvider,
     "reddit": RedditProvider,
     "nasdaq": NASDAQProvider,
-    "newsapi": NewsAPIProvider
+    "newsapi": NewsAPIProvider,
+    "alpaca": AlpacaProvider
 }
 
 __all__ = [
@@ -39,5 +41,6 @@ __all__ = [
     "NASDAQProvider",
     "NewsAPIProvider",
     "NewsArticle",
+    "AlpacaProvider",
     "PROVIDERS"
 ]

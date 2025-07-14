@@ -1,0 +1,1155 @@
+openapi: 3.0.3
+info:
+  title: Domain Registry API
+  description: API for managing domain configurations, lifecycle, and dependencies
+  version: 1.0.0
+  contact:
+    name: Platform Team
+    email: platform@company.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://registry.platform.internal
+    description: Production registry
+  - url: https://registry-staging.platform.internal
+    description: Staging registry
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: domains
+    description: Domain management operations
+  - name: lifecycle
+    description: Domain lifecycle operations
+  - name: versions
+    description: Domain version management
+  - name: dependencies
+    description: Domain dependency management
+  - name: health
+    description: Health and monitoring endpoints
+  - name: discovery
+    description: Domain discovery configuration
+
+paths:
+  /domains:
+    get:
+      tags: [domains]
+      summary: List all domains
+      description: Retrieve a list of all registered domains with optional filtering
+      operationId: listDomains
+      parameters:
+        - name: status
+          in: query
+          description: Filter by domain status
+          schema:
+            type: string
+            enum: [discovered, validating, validated, failed, initializing, active, deactivating, deactivated]
+        - name: team
+          in: query
+          description: Filter by team ownership
+          schema:
+            type: string
+        - name: tag
+          in: query
+          description: Filter by tags
+          schema:
+            type: array
+            items:
+              type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domains:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DomainSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags: [domains]
+      summary: Register a new domain
+      description: Register a new domain configuration
+      operationId: createDomain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainConfig'
+      responses:
+        '201':
+          description: Domain created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+        '400':
+          description: Invalid domain configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Domain already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /domains/{domainId}:
+    parameters:
+      - $ref: '#/components/parameters/domainId'
+    
+    get:
+      tags: [domains]
+      summary: Get domain details
+      description: Retrieve detailed information about a specific domain
+      operationId: getDomain
+      responses:
+        '200':
+          description: Domain details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: [domains]
+      summary: Update domain configuration
+      description: Update an existing domain configuration
+      operationId: updateDomain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainConfig'
+      responses:
+        '200':
+          description: Domain updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+        '400':
+          description: Invalid configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [domains]
+      summary: Remove domain
+      description: Remove a domain from the registry
+      operationId: deleteDomain
+      parameters:
+        - name: force
+          in: query
+          description: Force deletion even if domain is active
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '204':
+          description: Domain deleted
+        '400':
+          description: Cannot delete active domain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /domains/{domainId}/activate:
+    post:
+      tags: [lifecycle]
+      summary: Activate domain
+      description: Activate a validated domain
+      operationId: activateDomain
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                strategy:
+                  type: string
+                  enum: [immediate, rolling, canary]
+                  default: immediate
+                canaryPercentage:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 10
+      responses:
+        '202':
+          description: Activation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationStatus'
+        '400':
+          description: Invalid state for activation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /domains/{domainId}/deactivate:
+    post:
+      tags: [lifecycle]
+      summary: Deactivate domain
+      description: Deactivate an active domain
+      operationId: deactivateDomain
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gracePeriod:
+                  type: string
+                  format: duration
+                  default: PT5M
+                drainConnections:
+                  type: boolean
+                  default: true
+      responses:
+        '202':
+          description: Deactivation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeactivationStatus'
+        '400':
+          description: Invalid state for deactivation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /domains/{domainId}/validate:
+    post:
+      tags: [lifecycle]
+      summary: Validate domain configuration
+      description: Trigger validation of domain configuration
+      operationId: validateDomain
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+
+  /domains/{domainId}/versions:
+    get:
+      tags: [versions]
+      summary: List domain versions
+      description: Get all versions of a domain
+      operationId: listDomainVersions
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+        - name: includeDeprecated
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List of versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DomainVersion'
+
+    post:
+      tags: [versions]
+      summary: Create new version
+      description: Create a new version of the domain
+      operationId: createDomainVersion
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionRequest'
+      responses:
+        '201':
+          description: Version created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainVersion'
+
+  /domains/{domainId}/rollback:
+    post:
+      tags: [versions]
+      summary: Rollback domain version
+      description: Rollback to a previous version
+      operationId: rollbackDomain
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetVersion]
+              properties:
+                targetVersion:
+                  type: string
+                  pattern: '^v\d+\.\d+\.\d+$'
+                reason:
+                  type: string
+      responses:
+        '202':
+          description: Rollback initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RollbackStatus'
+
+  /domains/{domainId}/dependencies:
+    get:
+      tags: [dependencies]
+      summary: Get domain dependencies
+      description: List all dependencies of a domain
+      operationId: getDomainDependencies
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+        - name: resolved
+          in: query
+          description: Include resolved dependency versions
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Domain dependencies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DependencyGraph'
+
+  /domains/{domainId}/dependents:
+    get:
+      tags: [dependencies]
+      summary: Get domain dependents
+      description: List all domains that depend on this domain
+      operationId: getDomainDependents
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+      responses:
+        '200':
+          description: Domain dependents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dependents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DependentInfo'
+
+  /domains/{domainId}/health:
+    get:
+      tags: [health]
+      summary: Get domain health
+      description: Get health status of a specific domain
+      operationId: getDomainHealth
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+      responses:
+        '200':
+          description: Domain health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainHealth'
+
+  /domains/{domainId}/metrics:
+    get:
+      tags: [health]
+      summary: Get domain metrics
+      description: Get metrics for a specific domain
+      operationId: getDomainMetrics
+      parameters:
+        - $ref: '#/components/parameters/domainId'
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [1h, 6h, 24h, 7d, 30d]
+            default: 24h
+      responses:
+        '200':
+          description: Domain metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainMetrics'
+
+  /health:
+    get:
+      tags: [health]
+      summary: Registry health check
+      description: Get health status of the registry
+      operationId: getHealth
+      responses:
+        '200':
+          description: Registry is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Registry is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      tags: [health]
+      summary: Registry metrics
+      description: Get metrics for the registry
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Registry metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP domain_count Total number of domains
+                  # TYPE domain_count gauge
+                  domain_count{status="active"} 42
+
+  /discovery/providers:
+    get:
+      tags: [discovery]
+      summary: List discovery providers
+      description: Get configured discovery providers
+      operationId: listDiscoveryProviders
+      responses:
+        '200':
+          description: List of providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DiscoveryProvider'
+
+    post:
+      tags: [discovery]
+      summary: Add discovery provider
+      description: Configure a new discovery provider
+      operationId: addDiscoveryProvider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoveryProviderConfig'
+      responses:
+        '201':
+          description: Provider added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryProvider'
+
+  /discovery/scan:
+    post:
+      tags: [discovery]
+      summary: Trigger discovery scan
+      description: Manually trigger a discovery scan
+      operationId: triggerDiscoveryScan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                providers:
+                  type: array
+                  items:
+                    type: string
+                  description: Specific providers to scan (empty for all)
+      responses:
+        '202':
+          description: Scan initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanStatus'
+
+components:
+  parameters:
+    domainId:
+      name: domainId
+      in: path
+      required: true
+      description: Domain identifier
+      schema:
+        type: string
+        pattern: '^[a-z0-9-]+$'
+
+  schemas:
+    DomainConfig:
+      type: object
+      required: [id, name, version]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        name:
+          type: string
+        version:
+          type: string
+          pattern: '^v\d+\.\d+\.\d+$'
+        description:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        lifecycle:
+          $ref: '#/components/schemas/LifecycleConfig'
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dependency'
+        resources:
+          $ref: '#/components/schemas/ResourceRequirements'
+        network:
+          $ref: '#/components/schemas/NetworkConfig'
+        scaling:
+          $ref: '#/components/schemas/ScalingConfig'
+
+    Domain:
+      allOf:
+        - $ref: '#/components/schemas/DomainConfig'
+        - type: object
+          properties:
+            status:
+              $ref: '#/components/schemas/DomainStatus'
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            activatedAt:
+              type: string
+              format: date-time
+
+    DomainSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        status:
+          $ref: '#/components/schemas/DomainStatus'
+        team:
+          type: string
+        activatedAt:
+          type: string
+          format: date-time
+
+    DomainStatus:
+      type: string
+      enum: [discovered, validating, validated, failed, initializing, active, deactivating, deactivated]
+
+    Metadata:
+      type: object
+      properties:
+        team:
+          type: string
+        owner:
+          type: string
+          format: email
+        tags:
+          type: array
+          items:
+            type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+
+    LifecycleConfig:
+      type: object
+      properties:
+        initialization:
+          type: object
+          properties:
+            timeout:
+              type: string
+              format: duration
+            healthCheckPath:
+              type: string
+            retries:
+              type: integer
+        shutdown:
+          type: object
+          properties:
+            gracePeriod:
+              type: string
+              format: duration
+            drainTimeout:
+              type: string
+              format: duration
+        hooks:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/Hook'
+
+    Hook:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        timeout:
+          type: string
+          format: duration
+        retries:
+          type: integer
+        continueOnError:
+          type: boolean
+
+    Dependency:
+      type: object
+      required: [domain]
+      properties:
+        domain:
+          type: string
+        version:
+          type: string
+        required:
+          type: boolean
+          default: true
+        features:
+          type: array
+          items:
+            type: string
+        fallback:
+          type: string
+
+    ResourceRequirements:
+      type: object
+      properties:
+        limits:
+          $ref: '#/components/schemas/Resources'
+        requests:
+          $ref: '#/components/schemas/Resources'
+
+    Resources:
+      type: object
+      properties:
+        cpu:
+          type: string
+          pattern: '^[0-9]+m?$'
+        memory:
+          type: string
+          pattern: '^[0-9]+(Ki|Mi|Gi)?$'
+        storage:
+          type: string
+          pattern: '^[0-9]+(Ki|Mi|Gi)?$'
+        connections:
+          type: integer
+
+    NetworkConfig:
+      type: object
+      properties:
+        expose:
+          type: array
+          items:
+            type: object
+            properties:
+              port:
+                type: integer
+              protocol:
+                type: string
+                enum: [http, https, tcp, udp]
+              name:
+                type: string
+        ingress:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkPolicy'
+        egress:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkPolicy'
+
+    NetworkPolicy:
+      type: object
+      properties:
+        from:
+          type: array
+          items:
+            type: string
+        to:
+          type: array
+          items:
+            type: string
+        ports:
+          type: array
+          items:
+            type: integer
+
+    ScalingConfig:
+      type: object
+      properties:
+        minReplicas:
+          type: integer
+          minimum: 0
+        maxReplicas:
+          type: integer
+          minimum: 1
+        targetCPU:
+          type: integer
+          minimum: 1
+          maximum: 100
+        targetMemory:
+          type: integer
+          minimum: 1
+          maximum: 100
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScalingMetric'
+
+    ScalingMetric:
+      type: object
+      required: [type, target]
+      properties:
+        type:
+          type: string
+          enum: [cpu, memory, custom]
+        name:
+          type: string
+        target:
+          type: number
+
+    DomainVersion:
+      type: object
+      properties:
+        version:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        status:
+          type: string
+          enum: [active, deprecated, unsupported]
+        deprecatedAt:
+          type: string
+          format: date-time
+        sunsetAt:
+          type: string
+          format: date-time
+        changelog:
+          type: string
+
+    VersionRequest:
+      type: object
+      required: [version, changelog]
+      properties:
+        version:
+          type: string
+          pattern: '^v\d+\.\d+\.\d+$'
+        changelog:
+          type: string
+        compatible:
+          type: boolean
+          default: true
+
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationWarning'
+
+    ValidationError:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+    ValidationWarning:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high]
+
+    ActivationStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        message:
+          type: string
+
+    DeactivationStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, draining, deactivating, completed, failed]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        connectionsRemaining:
+          type: integer
+        message:
+          type: string
+
+    RollbackStatus:
+      type: object
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+
+    DependencyGraph:
+      type: object
+      properties:
+        domain:
+          type: string
+        version:
+          type: string
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedDependency'
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DependencyConflict'
+
+    ResolvedDependency:
+      type: object
+      properties:
+        domain:
+          type: string
+        requestedVersion:
+          type: string
+        resolvedVersion:
+          type: string
+        required:
+          type: boolean
+        features:
+          type: array
+          items:
+            type: string
+
+    DependencyConflict:
+      type: object
+      properties:
+        domain:
+          type: string
+        requestedBy:
+          type: array
+          items:
+            type: object
+            properties:
+              domain:
+                type: string
+              version:
+                type: string
+
+    DependentInfo:
+      type: object
+      properties:
+        domain:
+          type: string
+        version:
+          type: string
+        required:
+          type: boolean
+
+    DomainHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+        lastChecked:
+          type: string
+          format: date-time
+
+    HealthCheck:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [passing, warning, critical]
+        message:
+          type: string
+        duration:
+          type: string
+          format: duration
+
+    DomainMetrics:
+      type: object
+      properties:
+        period:
+          type: string
+        metrics:
+          type: object
+          properties:
+            requests:
+              $ref: '#/components/schemas/MetricSeries'
+            errors:
+              $ref: '#/components/schemas/MetricSeries'
+            latency:
+              $ref: '#/components/schemas/MetricSeries'
+            cpu:
+              $ref: '#/components/schemas/MetricSeries'
+            memory:
+              $ref: '#/components/schemas/MetricSeries'
+
+    MetricSeries:
+      type: object
+      properties:
+        timestamps:
+          type: array
+          items:
+            type: string
+            format: date-time
+        values:
+          type: array
+          items:
+            type: number
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: string
+          format: duration
+        components:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ComponentHealth'
+
+    ComponentHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        message:
+          type: string
+
+    DiscoveryProvider:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [filesystem, git, s3, kubernetes, consul, etcd]
+        enabled:
+          type: boolean
+        config:
+          type: object
+        lastScan:
+          type: string
+          format: date-time
+        discoveredDomains:
+          type: integer
+
+    DiscoveryProviderConfig:
+      type: object
+      required: [type, config]
+      properties:
+        type:
+          type: string
+          enum: [filesystem, git, s3, kubernetes, consul, etcd]
+        enabled:
+          type: boolean
+          default: true
+        config:
+          type: object
+          additionalProperties: true
+
+    ScanStatus:
+      type: object
+      properties:
+        scanId:
+          type: string
+        status:
+          type: string
+          enum: [pending, scanning, completed, failed]
+        providers:
+          type: array
+          items:
+            type: string
+        discovered:
+          type: integer
+        updated:
+          type: integer
+        failed:
+          type: integer
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        pages:
+          type: integer
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - bearerAuth: []
+  - apiKey: []

@@ -1,0 +1,742 @@
+# Trading Domain Configuration
+# Complete configuration for algorithmic trading domain
+
+domain:
+  name: "trading"
+  version: "2.0.0"
+  description: "Algorithmic trading system with neural prediction and automated execution"
+  author: "Trading Team"
+  license: "Proprietary"
+  extends: "platform.defaults"
+  tags:
+    - "finance"
+    - "trading"
+    - "real-time"
+    - "high-frequency"
+
+# Trading-specific variables
+variables:
+  # Market configuration
+  market_type: "crypto"  # crypto, forex, stocks, futures
+  base_currency: "USD"
+  
+  # Risk management
+  max_position_size: 10000
+  stop_loss_percentage: 0.02
+  take_profit_percentage: 0.05
+  
+  # Model parameters
+  prediction_horizon: 5  # minutes
+  confidence_threshold: 0.85
+  
+  # Infrastructure
+  tick_buffer_size: 100000
+  order_queue_size: 1000
+
+# Neural Models for Trading
+neural:
+  defaults:
+    optimizer: "adam"
+    learning_rate_scheduler:
+      type: "exponential_decay"
+      decay_rate: 0.95
+      decay_steps: 1000
+  
+  models:
+    # Price prediction model
+    - name: "price_predictor"
+      type: "lstm"
+      architecture:
+        input_size: 50  # OHLCV + 45 technical indicators
+        hidden_size: 256
+        num_layers: 3
+        dropout: 0.3
+        bidirectional: true
+        attention: true
+        output_size: 1  # Next price
+      
+      training:
+        epochs: 200
+        batch_size: 64
+        sequence_length: 100
+        learning_rate: 0.001
+        optimizer: "adamw"
+        loss_function: "huber"
+        validation_split: 0.2
+        
+        # Advanced training features
+        gradient_clipping: 1.0
+        mixed_precision: true
+        distributed: true
+        
+        # Callbacks
+        callbacks:
+          - type: "early_stopping"
+            patience: 20
+            restore_best_weights: true
+          
+          - type: "reduce_lr_on_plateau"
+            factor: 0.5
+            patience: 10
+            min_lr: 0.00001
+      
+      # Feature engineering
+      features:
+        price_features:
+          - "open"
+          - "high"
+          - "low"
+          - "close"
+          - "volume"
+        
+        technical_indicators:
+          - name: "SMA"
+            periods: [5, 10, 20, 50, 200]
+          - name: "EMA"
+            periods: [12, 26]
+          - name: "RSI"
+            period: 14
+          - name: "MACD"
+            fast: 12
+            slow: 26
+            signal: 9
+          - name: "Bollinger_Bands"
+            period: 20
+            std_dev: 2
+          - name: "ATR"
+            period: 14
+          - name: "OBV"
+          - name: "Stochastic"
+            k_period: 14
+            d_period: 3
+        
+        market_features:
+          - "bid_ask_spread"
+          - "order_book_imbalance"
+          - "trade_volume_ratio"
+          - "volatility_30m"
+    
+    # Risk assessment model
+    - name: "risk_evaluator"
+      type: "feedforward"
+      architecture:
+        input_size: 30
+        hidden_layers: [128, 64, 32]
+        activation: "tanh"
+        output_size: 3  # [risk_score, stop_loss, take_profit]
+      
+      training:
+        epochs: 150
+        batch_size: 128
+        learning_rate: 0.0005
+        loss_weights: [0.5, 0.25, 0.25]
+    
+    # Market regime classifier
+    - name: "regime_classifier"
+      type: "transformer"
+      architecture:
+        input_size: 100
+        d_model: 256
+        n_heads: 8
+        n_layers: 4
+        output_size: 5  # trending_up, trending_down, ranging, volatile, calm
+
+# Trading-specific DAA Agents
+agents:
+  coordinator:
+    topology: "hierarchical"
+    max_agents: 12
+    coordination_interval: "1s"
+    consensus_mechanism: "weighted_voting"
+  
+  types:
+    # Market data analyst
+    - type: "market_analyst"
+      count: 3
+      capabilities:
+        - "technical_analysis"
+        - "pattern_recognition"
+        - "market_microstructure"
+        - "sentiment_analysis"
+      
+      resources:
+        cpu_limit: "4"
+        memory_limit: "8Gi"
+        network_priority: "high"
+      
+      behavior:
+        strategy: "aggressive"
+        analysis_frequency: "100ms"
+        confidence_threshold: 0.8
+        
+        # Technical analysis configuration
+        technical_analysis:
+          timeframes: ["1m", "5m", "15m", "1h", "4h"]
+          pattern_types:
+            - "head_and_shoulders"
+            - "double_top_bottom"
+            - "triangles"
+            - "flags_pennants"
+            - "support_resistance"
+    
+    # Trading strategy executor
+    - type: "strategy_executor"
+      count: 2
+      capabilities:
+        - "order_execution"
+        - "position_management"
+        - "risk_management"
+        - "portfolio_optimization"
+      
+      resources:
+        cpu_limit: "2"
+        memory_limit: "4Gi"
+        network_priority: "critical"
+        low_latency: true
+      
+      behavior:
+        strategy: "conservative"
+        execution_style: "passive"  # passive, aggressive, adaptive
+        
+        # Order execution rules
+        order_rules:
+          max_order_size: "${variables.max_position_size}"
+          order_types: ["limit", "market", "stop", "stop_limit"]
+          time_in_force: ["GTC", "IOC", "FOK"]
+          
+          # Smart order routing
+          routing:
+            enabled: true
+            venues: ["primary", "secondary", "dark_pool"]
+            algorithm: "best_execution"
+        
+        # Position management
+        position_management:
+          max_positions: 10
+          position_sizing: "kelly_criterion"
+          rebalance_frequency: "1h"
+    
+    # Risk manager
+    - type: "risk_manager"
+      count: 1
+      capabilities:
+        - "risk_assessment"
+        - "exposure_monitoring"
+        - "drawdown_control"
+        - "compliance_checking"
+      
+      behavior:
+        strategy: "conservative"
+        
+        risk_limits:
+          max_daily_loss: 0.02  # 2% of capital
+          max_position_exposure: 0.1  # 10% per position
+          max_leverage: 3
+          max_correlation: 0.7
+          
+        monitoring:
+          var_calculation: "historical"  # historical, parametric, monte_carlo
+          stress_testing: true
+          real_time_pnl: true
+
+# Trading Data Pipeline
+pipeline:
+  sources:
+    # Real-time market data
+    - name: "market_data_feed"
+      type: "websocket"
+      config:
+        url: "${MARKET_DATA_WS_URL}"
+        channels:
+          - "trades"
+          - "orderbook"
+          - "ticker"
+        
+        # Subscription configuration
+        symbols: ["BTC/USD", "ETH/USD", "SPY", "QQQ"]
+        
+        # Connection management
+        heartbeat_interval: "30s"
+        reconnect_delay: "1s"
+        max_reconnect_attempts: -1  # Infinite
+        
+        # Data handling
+        buffer_size: "${variables.tick_buffer_size}"
+        compression: true
+        
+      # Market data schema
+      schema:
+        $ref: "schemas/trading/market_tick.json"
+    
+    # Historical data for backtesting
+    - name: "historical_data"
+      type: "database"
+      config:
+        connection_string: "${TIMESCALE_DB_URL}"
+        query: |
+          SELECT time, symbol, open, high, low, close, volume
+          FROM ohlcv
+          WHERE time >= $1 AND time <= $2 AND symbol = ANY($3)
+          ORDER BY time
+        
+        # Caching for performance
+        cache:
+          enabled: true
+          ttl: "24h"
+          size: "10GB"
+    
+    # Alternative data sources
+    - name: "news_sentiment"
+      type: "http"
+      config:
+        url: "${NEWS_API_URL}"
+        poll_interval: "1m"
+        headers:
+          Authorization: "Bearer ${NEWS_API_KEY}"
+  
+  transformations:
+    # Price normalization
+    - name: "normalize_prices"
+      type: "normalization"
+      config:
+        method: "log_returns"
+        window: 20
+        
+    # Technical indicator calculation
+    - name: "calculate_indicators"
+      type: "technical_analysis"
+      config:
+        indicators: "${neural.models[0].features.technical_indicators}"
+        parallel: true
+        
+    # Feature engineering
+    - name: "engineer_features"
+      type: "custom"
+      config:
+        script: |
+          import pandas as pd
+          import numpy as np
+          from ta import add_all_ta_features
+          
+          def transform(df):
+              # Add all technical indicators
+              df = add_all_ta_features(df, open="open", high="high", 
+                                       low="low", close="close", volume="volume")
+              
+              # Add custom features
+              df['price_momentum'] = df['close'].pct_change(periods=5)
+              df['volume_ratio'] = df['volume'] / df['volume'].rolling(20).mean()
+              df['volatility'] = df['close'].pct_change().rolling(20).std()
+              
+              # Market microstructure
+              df['bid_ask_spread'] = (df['ask'] - df['bid']) / df['mid']
+              df['order_imbalance'] = (df['bid_volume'] - df['ask_volume']) / \
+                                      (df['bid_volume'] + df['ask_volume'])
+              
+              return df
+    
+    # Risk metrics calculation
+    - name: "calculate_risk_metrics"
+      type: "risk_analysis"
+      config:
+        metrics:
+          - "value_at_risk"
+          - "conditional_value_at_risk"
+          - "sharpe_ratio"
+          - "sortino_ratio"
+          - "max_drawdown"
+          - "beta"
+  
+  sinks:
+    # Real-time tick storage
+    - name: "tick_storage"
+      type: "timeseries"
+      config:
+        database: "influxdb"
+        measurement: "market_ticks"
+        tags: ["symbol", "exchange"]
+        retention_policy: "7d"
+        shard_duration: "1h"
+        
+        # High-performance settings
+        batch_size: 10000
+        flush_interval: "100ms"
+        
+    # Aggregated data storage
+    - name: "ohlcv_storage"
+      type: "timeseries"
+      config:
+        database: "timescaledb"
+        table: "ohlcv_1m"
+        
+        # Continuous aggregation
+        aggregations:
+          - interval: "5m"
+            table: "ohlcv_5m"
+          - interval: "1h"
+            table: "ohlcv_1h"
+          - interval: "1d"
+            table: "ohlcv_1d"
+    
+    # Order and trade storage
+    - name: "trade_storage"
+      type: "document"
+      config:
+        database: "mongodb"
+        collection: "trades"
+        indexes:
+          - keys: ["timestamp", "symbol"]
+          - keys: ["order_id"]
+          - keys: ["strategy_id", "timestamp"]
+    
+    # Real-time cache
+    - name: "market_cache"
+      type: "redis"
+      config:
+        key_patterns:
+          orderbook: "orderbook:{symbol}"
+          ticker: "ticker:{symbol}"
+          positions: "positions:{account_id}"
+        
+        ttl:
+          orderbook: "1s"
+          ticker: "5s"
+          positions: "1m"
+
+# Trading API
+api:
+  gateway:
+    base_path: "/api/v1/trading"
+    rate_limit: "1000/second"  # High-frequency trading
+    
+    # WebSocket upgrade for streaming
+    websocket_upgrade: true
+    
+    # Low latency settings
+    tcp_nodelay: true
+    tcp_quickack: true
+  
+  rest:
+    # Market data endpoints
+    - path: "/market/ticker/{symbol}"
+      method: "GET"
+      description: "Get current ticker data"
+      cache: "1s"
+      
+    - path: "/market/orderbook/{symbol}"
+      method: "GET"
+      description: "Get order book snapshot"
+      cache: "100ms"
+      
+    - path: "/market/trades/{symbol}"
+      method: "GET"
+      description: "Get recent trades"
+      parameters:
+        limit: { type: "integer", default: 100, max: 1000 }
+    
+    # Trading endpoints
+    - path: "/orders"
+      method: "POST"
+      description: "Place new order"
+      authentication: true
+      schema:
+        $ref: "schemas/trading/order_request.json"
+      
+      # Pre-trade risk checks
+      middleware:
+        - type: "risk_check"
+          config:
+            checks:
+              - "position_limits"
+              - "buying_power"
+              - "regulatory_compliance"
+    
+    - path: "/orders/{order_id}"
+      method: "DELETE"
+      description: "Cancel order"
+      authentication: true
+      
+    - path: "/positions"
+      method: "GET"
+      description: "Get current positions"
+      authentication: true
+      
+    # Strategy endpoints
+    - path: "/strategies"
+      method: "GET"
+      description: "List available strategies"
+      
+    - path: "/strategies/{strategy_id}/activate"
+      method: "POST"
+      description: "Activate trading strategy"
+      authentication: true
+      authorization: ["admin", "trader"]
+      
+    # Analytics endpoints
+    - path: "/analytics/performance"
+      method: "GET"
+      description: "Get performance metrics"
+      parameters:
+        period: { type: "string", enum: ["1d", "1w", "1m", "3m", "1y"] }
+        
+    - path: "/analytics/risk"
+      method: "GET"
+      description: "Get risk metrics"
+  
+  websocket:
+    # Real-time market data stream
+    - path: "/stream/market"
+      description: "Market data stream"
+      channels:
+        - name: "trades"
+          subscribe: "trades:{symbol}"
+          
+        - name: "orderbook"
+          subscribe: "orderbook:{symbol}:{depth}"
+          
+        - name: "ticker"
+          subscribe: "ticker:{symbol}"
+    
+    # Private data streams
+    - path: "/stream/private"
+      description: "Private account data"
+      authentication: true
+      channels:
+        - name: "orders"
+          subscribe: "orders:{account_id}"
+          
+        - name: "fills"
+          subscribe: "fills:{account_id}"
+          
+        - name: "positions"
+          subscribe: "positions:{account_id}"
+
+# Trading-specific Monitoring
+monitoring:
+  metrics:
+    custom:
+      # Trading metrics
+      - name: "orders_placed_total"
+        type: "counter"
+        labels: ["symbol", "order_type", "side"]
+        
+      - name: "order_latency"
+        type: "histogram"
+        description: "Order placement latency"
+        buckets: [0.001, 0.005, 0.01, 0.05, 0.1]
+        
+      - name: "position_pnl"
+        type: "gauge"
+        labels: ["symbol", "strategy"]
+        
+      - name: "strategy_sharpe_ratio"
+        type: "gauge"
+        labels: ["strategy"]
+        
+      - name: "market_data_lag"
+        type: "histogram"
+        description: "Market data feed latency"
+  
+  alerts:
+    # Trading alerts
+    - name: "excessive_drawdown"
+      condition: "max_drawdown > 0.1"
+      duration: "1m"
+      severity: "critical"
+      actions:
+        - "pause_trading"
+        - "notify_risk_team"
+    
+    - name: "order_rejection_rate"
+      condition: "rate(orders_rejected[5m]) / rate(orders_total[5m]) > 0.05"
+      severity: "warning"
+      
+    - name: "market_data_stale"
+      condition: "time() - last_tick_timestamp > 10"
+      severity: "critical"
+      actions:
+        - "switch_to_backup_feed"
+        - "pause_trading"
+    
+    - name: "position_limit_breach"
+      condition: "position_size > max_position_size"
+      severity: "critical"
+      actions:
+        - "force_reduce_position"
+        - "notify_compliance"
+
+# Trading Security
+security:
+  # API key management for trading
+  authentication:
+    providers:
+      - type: "api_key"
+        config:
+          key_rotation: "7d"
+          ip_whitelist: true
+          
+      - type: "jwt"
+        config:
+          requires_2fa: true
+          session_timeout: "1h"
+  
+  # Trading-specific permissions
+  authorization:
+    roles:
+      - name: "trader"
+        permissions:
+          - "trade:place_order"
+          - "trade:cancel_order"
+          - "trade:view_positions"
+          - "data:view_market"
+          - "analytics:view_performance"
+        
+        # Trading limits per role
+        limits:
+          max_order_size: 10000
+          max_daily_volume: 1000000
+          allowed_symbols: ["BTC/USD", "ETH/USD"]
+          allowed_order_types: ["limit", "market"]
+      
+      - name: "risk_manager"
+        permissions:
+          - "trade:view_all_positions"
+          - "trade:force_close_position"
+          - "risk:modify_limits"
+          - "risk:pause_trading"
+      
+      - name: "quant"
+        permissions:
+          - "strategy:create"
+          - "strategy:backtest"
+          - "strategy:deploy"
+          - "model:train"
+          - "data:historical_access"
+  
+  # Audit trail for compliance
+  audit:
+    enabled: true
+    events:
+      - "order_placed"
+      - "order_cancelled"
+      - "order_filled"
+      - "position_opened"
+      - "position_closed"
+      - "risk_limit_modified"
+      - "strategy_activated"
+    
+    storage:
+      type: "immutable"
+      retention: "7y"  # Regulatory requirement
+
+# Trading-specific Plugins
+plugins:
+  active:
+    # Technical analysis library
+    - name: "ta_lib_extended"
+      version: "3.0.0"
+      config:
+        indicators:
+          custom:
+            - name: "ML_Signal"
+              model: "price_predictor"
+              
+    # Execution algorithms
+    - name: "execution_algos"
+      version: "2.5.0"
+      config:
+        algorithms:
+          - name: "TWAP"
+            slice_interval: "30s"
+            
+          - name: "VWAP"
+            participation_rate: 0.1
+            
+          - name: "Iceberg"
+            visible_percentage: 0.2
+    
+    # Risk management
+    - name: "risk_framework"
+      version: "4.1.0"
+      config:
+        pre_trade_checks: true
+        post_trade_analysis: true
+        real_time_var: true
+
+# Trading Lifecycle
+lifecycle:
+  # Market open preparation
+  on_market_open:
+    - type: "script"
+      script: |
+        # Load models
+        platform load-models trading
+        
+        # Warm up connections
+        platform warm-up-connections
+        
+        # Load positions
+        platform sync-positions
+        
+        # Run pre-market checks
+        platform run-diagnostics trading
+  
+  # Market close procedures
+  on_market_close:
+    - type: "script"
+      script: |
+        # Close all positions if configured
+        if [ "$CLOSE_ON_MARKET_CLOSE" = "true" ]; then
+          platform close-all-positions
+        fi
+        
+        # Generate daily report
+        platform generate-report daily
+        
+        # Backup trade data
+        platform backup-trades
+  
+  # Emergency procedures
+  on_emergency:
+    - type: "script"
+      script: |
+        # Immediate actions
+        platform pause-trading
+        platform cancel-all-orders
+        
+        # Notify
+        platform send-emergency-alert
+        
+        # Log state
+        platform dump-state emergency
+
+# Production Environment Overrides
+environments:
+  production:
+    # Higher performance settings
+    neural:
+      models:
+        - name: "price_predictor"
+          training:
+            distributed: true
+            num_gpus: 4
+    
+    # More resources
+    agents:
+      types:
+        - type: "market_analyst"
+          count: 5  # More analysts in production
+          resources:
+            cpu_limit: "8"
+            memory_limit: "16Gi"
+    
+    # Stricter security
+    security:
+      authentication:
+        requires_2fa: true
+        ip_whitelist: true
+        
+    # Enhanced monitoring
+    monitoring:
+      metrics:
+        interval: "1s"  # More frequent in production

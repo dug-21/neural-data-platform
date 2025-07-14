@@ -1,0 +1,868 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://neural-trader.com/schemas/domain-config/v1.0.0",
+  "title": "Domain Configuration Schema",
+  "description": "Schema for validating domain configuration YAML files",
+  "type": "object",
+  "required": ["domain", "neural", "agents", "pipeline", "api"],
+  "additionalProperties": false,
+  
+  "definitions": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    
+    "resource_limit": {
+      "type": "string",
+      "pattern": "^\\d+(\\.\\d+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$"
+    },
+    
+    "duration": {
+      "type": "string",
+      "pattern": "^\\d+(ns|us|µs|ms|s|m|h|d|w|y)$"
+    },
+    
+    "environment_variable": {
+      "type": "string",
+      "pattern": "^\\$\\{[A-Z_][A-Z0-9_]*(:-.+)?\\}$"
+    },
+    
+    "variable_reference": {
+      "type": "string",
+      "pattern": "^\\$\\{[a-zA-Z_][a-zA-Z0-9_.\\[\\]]*\\}$"
+    },
+    
+    "string_or_var": {
+      "oneOf": [
+        { "type": "string" },
+        { "$ref": "#/definitions/environment_variable" },
+        { "$ref": "#/definitions/variable_reference" }
+      ]
+    },
+    
+    "number_or_var": {
+      "oneOf": [
+        { "type": "number" },
+        { "$ref": "#/definitions/environment_variable" },
+        { "$ref": "#/definitions/variable_reference" }
+      ]
+    },
+    
+    "schema_reference": {
+      "type": "object",
+      "required": ["$ref"],
+      "properties": {
+        "$ref": { "type": "string" }
+      }
+    }
+  },
+  
+  "properties": {
+    "domain": {
+      "type": "object",
+      "required": ["name", "version", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "minLength": 3,
+          "maxLength": 50
+        },
+        "version": { "$ref": "#/definitions/version" },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 500
+        },
+        "author": { "type": "string" },
+        "license": { "type": "string" },
+        "extends": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    
+    "variables": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "number" },
+          { "type": "boolean" },
+          { "type": "array" },
+          { "type": "object" }
+        ]
+      }
+    },
+    
+    "neural": {
+      "type": "object",
+      "required": ["models"],
+      "additionalProperties": false,
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "optimizer": { "type": "string" },
+            "activation": { "type": "string" },
+            "dropout": { "$ref": "#/definitions/number_or_var" },
+            "learning_rate": { "$ref": "#/definitions/number_or_var" },
+            "batch_size": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "architecture"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "feedforward", "lstm", "gru", "transformer",
+                  "autoencoder", "gan", "reinforcement_learning",
+                  "graph_neural_network", "isolation_forest",
+                  "quantized_autoencoder"
+                ]
+              },
+              "architecture": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "input_size": { "type": "integer", "minimum": 1 },
+                  "output_size": { "type": "integer", "minimum": 1 },
+                  "hidden_layers": {
+                    "type": "array",
+                    "items": { "type": "integer", "minimum": 1 }
+                  },
+                  "hidden_size": { "type": "integer", "minimum": 1 },
+                  "num_layers": { "type": "integer", "minimum": 1 },
+                  "activation": { "$ref": "#/definitions/string_or_var" },
+                  "dropout": { "$ref": "#/definitions/number_or_var" }
+                }
+              },
+              "training": {
+                "type": "object",
+                "properties": {
+                  "epochs": { "type": "integer", "minimum": 1 },
+                  "batch_size": { "type": "integer", "minimum": 1 },
+                  "learning_rate": { "$ref": "#/definitions/number_or_var" },
+                  "optimizer": { "$ref": "#/definitions/string_or_var" },
+                  "loss_function": { "type": "string" },
+                  "validation_split": { 
+                    "type": "number", 
+                    "minimum": 0, 
+                    "maximum": 1 
+                  }
+                }
+              },
+              "features": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "persistence": {
+                "type": "object",
+                "properties": {
+                  "save_path": { "$ref": "#/definitions/string_or_var" },
+                  "checkpoint_frequency": { "type": "integer" },
+                  "keep_best_only": { "type": "boolean" }
+                }
+              },
+              "optimization": {
+                "type": "object",
+                "properties": {
+                  "pruning_sparsity": { "type": "number" },
+                  "quantization": { "type": "string" },
+                  "target_size": { "$ref": "#/definitions/string_or_var" },
+                  "target_latency": { "$ref": "#/definitions/string_or_var" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "agents": {
+      "type": "object",
+      "required": ["coordinator", "types"],
+      "additionalProperties": false,
+      "properties": {
+        "coordinator": {
+          "type": "object",
+          "required": ["topology", "max_agents"],
+          "properties": {
+            "topology": {
+              "type": "string",
+              "enum": ["mesh", "ring", "star", "hierarchical"]
+            },
+            "max_agents": { "type": "integer", "minimum": 1 },
+            "coordination_interval": { "$ref": "#/definitions/duration" },
+            "consensus_mechanism": { "type": "string" },
+            "edge_cloud_sync": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "sync_interval": { "$ref": "#/definitions/string_or_var" },
+                "conflict_resolution": { "type": "string" }
+              }
+            }
+          }
+        },
+        "types": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["type", "count", "capabilities"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^[a-z][a-z_]*$"
+              },
+              "count": { "type": "integer", "minimum": 1 },
+              "capabilities": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              },
+              "resources": {
+                "type": "object",
+                "properties": {
+                  "cpu_limit": { "$ref": "#/definitions/resource_limit" },
+                  "memory_limit": { "$ref": "#/definitions/resource_limit" },
+                  "gpu": { "type": "boolean" },
+                  "network_priority": {
+                    "type": "string",
+                    "enum": ["low", "normal", "high", "critical"]
+                  },
+                  "low_latency": { "type": "boolean" }
+                }
+              },
+              "behavior": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": ["aggressive", "conservative", "balanced", "adaptive"]
+                  },
+                  "decision_threshold": { "type": "number" },
+                  "coordination_mode": { "type": "string" }
+                },
+                "additionalProperties": true
+              },
+              "tasks": {
+                "type": "object",
+                "properties": {
+                  "preferred": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "excluded": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "pipeline": {
+      "type": "object",
+      "required": ["sources", "sinks"],
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "config"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "websocket", "http", "file", "database", "kafka",
+                  "mqtt", "coap", "opcua", "grpc"
+                ]
+              },
+              "config": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "schema": {
+                "oneOf": [
+                  { "$ref": "#/definitions/schema_reference" },
+                  { "type": "object" }
+                ]
+              }
+            }
+          }
+        },
+        "transformations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "config"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "config": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "sinks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "config"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "timeseries", "document", "relational", "file",
+                  "redis", "s3", "elasticsearch", "prometheus",
+                  "webhook", "kafka", "spark_streaming", "edge_registry"
+                ]
+              },
+              "config": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "api": {
+      "type": "object",
+      "required": ["gateway"],
+      "additionalProperties": false,
+      "properties": {
+        "gateway": {
+          "type": "object",
+          "required": ["base_path", "rate_limit"],
+          "properties": {
+            "base_path": { "$ref": "#/definitions/string_or_var" },
+            "rate_limit": { "type": "string" },
+            "cors": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "origins": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "authentication": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["jwt", "api_key", "oauth2", "basic"]
+                },
+                "required": { "type": "boolean" }
+              }
+            },
+            "websocket_upgrade": { "type": "boolean" },
+            "tcp_nodelay": { "type": "boolean" },
+            "tcp_quickack": { "type": "boolean" },
+            "protocols": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["http", "https", "websocket", "grpc"]
+              }
+            }
+          }
+        },
+        "rest": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "method", "description"],
+            "properties": {
+              "path": { "type": "string" },
+              "method": {
+                "type": "string",
+                "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"]
+              },
+              "description": { "type": "string" },
+              "public": { "type": "boolean" },
+              "authentication": { "type": "boolean" },
+              "authorization": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "schema": {
+                "oneOf": [
+                  { "$ref": "#/definitions/schema_reference" },
+                  { "type": "object" }
+                ]
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string" },
+                    "required": { "type": "boolean" },
+                    "default": {},
+                    "enum": { "type": "array" },
+                    "minimum": { "type": "number" },
+                    "maximum": { "type": "number" },
+                    "format": { "type": "string" }
+                  }
+                }
+              },
+              "handler": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "function": { "type": "string" },
+                  "target": { "type": "string" },
+                  "model": { "type": "string" },
+                  "preprocessing": { "type": "string" }
+                }
+              },
+              "middleware": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string" },
+                    "config": { "type": "object" }
+                  }
+                }
+              },
+              "cache": { "$ref": "#/definitions/duration" }
+            }
+          }
+        },
+        "graphql": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schema": { "type": "string" },
+            "playground": { "type": "boolean" }
+          }
+        },
+        "websocket": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "description"],
+            "properties": {
+              "path": { "type": "string" },
+              "description": { "type": "string" },
+              "authentication": { "type": "boolean" },
+              "handlers": {
+                "type": "object",
+                "properties": {
+                  "connect": { "type": "string" },
+                  "message": { "type": "string" },
+                  "disconnect": { "type": "string" }
+                }
+              },
+              "channels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "subscribe": { "type": "string" },
+                    "publish": { "type": "string" }
+                  }
+                }
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "$ref": "#/definitions/duration" },
+            "exporters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "port": { "type": "integer" },
+                  "path": { "type": "string" }
+                }
+              }
+            },
+            "custom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "type"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "type": {
+                    "type": "string",
+                    "enum": ["counter", "gauge", "histogram", "summary"]
+                  },
+                  "description": { "type": "string" },
+                  "labels": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "buckets": {
+                    "type": "array",
+                    "items": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "condition", "severity"],
+            "properties": {
+              "name": { "type": "string" },
+              "condition": { "type": "string" },
+              "duration": { "$ref": "#/definitions/duration" },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warning", "critical"]
+              },
+              "notification": {
+                "type": "object",
+                "properties": {
+                  "channels": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        },
+        "dashboards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "config": { "type": "object" },
+              "panels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": { "type": "string" },
+                    "type": { "type": "string" },
+                    "query": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "authentication": {
+          "type": "object",
+          "properties": {
+            "providers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "config": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "authorization": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["rbac", "abac"]
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "permissions"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "permissions": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "limits": { "type": "object" }
+                }
+              }
+            },
+            "device_policies": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "permissions": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "encryption": {
+          "type": "object",
+          "properties": {
+            "data_at_rest": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "algorithm": { "type": "string" },
+                "key_rotation": { "$ref": "#/definitions/duration" }
+              }
+            },
+            "data_in_transit": {
+              "type": "object",
+              "properties": {
+                "tls": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "min_version": { "type": "string" },
+                    "cert_path": { "$ref": "#/definitions/string_or_var" },
+                    "key_path": { "$ref": "#/definitions/string_or_var" }
+                  }
+                },
+                "protocols": { "type": "object" }
+              }
+            }
+          }
+        },
+        "audit": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "events": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "retention": { "$ref": "#/definitions/duration" }
+              }
+            },
+            "log_access": { "type": "boolean" },
+            "query_history": { "type": "boolean" }
+          }
+        },
+        "compliance": {
+          "type": "object",
+          "properties": {
+            "standards": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "device_auth": {
+          "type": "object",
+          "properties": {
+            "methods": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "ca_cert": { "type": "string" },
+                  "verify_cn": { "type": "boolean" },
+                  "key_derivation": { "type": "string" },
+                  "attestation": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "plugins": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "path": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        },
+        "active": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "version"],
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "$ref": "#/definitions/version" },
+              "config": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "on_init": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/lifecycle_hook" }
+        },
+        "on_shutdown": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/lifecycle_hook" }
+        },
+        "on_error": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/lifecycle_hook" }
+        },
+        "on_market_open": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/lifecycle_hook" }
+        },
+        "on_market_close": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/lifecycle_hook" }
+        },
+        "on_emergency": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/lifecycle_hook" }
+        }
+      }
+    },
+    
+    "testing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "data_generation": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "generator": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "config": { "type": "object" }
+              }
+            }
+          }
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "config": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    
+    "environments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  },
+  
+  "definitions": {
+    "lifecycle_hook": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["script", "http", "notification"]
+        },
+        "script": { "type": "string" },
+        "url": { "$ref": "#/definitions/string_or_var" },
+        "method": { "type": "string" },
+        "body": { "type": "object" },
+        "channels": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}
