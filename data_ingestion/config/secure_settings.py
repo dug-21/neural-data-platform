@@ -45,6 +45,7 @@ class SecureSettings(BaseSettings):
     alpaca_api_key: Optional[str] = Field(None, alias="ALPACA_API_KEY")
     alpaca_api_secret: Optional[str] = Field(None, alias="ALPACA_API_SECRET")
     alpaca_subscription_level: Optional[str] = Field("basic", alias="ALPACA_SUBSCRIPTION_LEVEL")
+    alpaca_ws_enabled: bool = Field(False, alias="ALPACA_WS_ENABLED")
     
     # Database Configuration
     timescale_host: str = Field("localhost", alias="TIMESCALE_HOST")

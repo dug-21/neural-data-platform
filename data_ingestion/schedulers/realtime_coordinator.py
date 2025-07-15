@@ -154,7 +154,7 @@ class RealtimeCoordinator:
         self.logger.info(f"Starting stream for {provider_name} with symbols: {symbols}")
         
         try:
-            async for market_data in provider.stream_market_data(symbols):
+            async for market_data in provider.stream_market_data_ws(symbols):
                 if not self._running:
                     break
                 
