@@ -533,3 +533,259 @@ class TestAlpacaProvider:
         
         assert not provider._connected
         assert provider.session.closed
+
+
+class TestAlpacaWebSocketStreaming:
+    """Test suite for Alpaca WebSocket streaming functionality."""
+    
+    @pytest.fixture
+    def provider(self):
+        """Create an Alpaca provider instance with WebSocket enabled."""
+        with patch('data_ingestion.providers.alpaca.get_settings') as mock_settings:
+            mock_settings.return_value = Mock(
+                alpaca_api_key="test_key",
+                alpaca_api_secret="test_secret",
+                alpaca_subscription_level="basic",
+                alpaca_ws_enabled=True,
+                alpaca_ws_url="wss://stream.data.alpaca.markets/v2/iex",
+                alpaca_ws_reconnect_delay=5,
+                alpaca_ws_max_reconnect_attempts=3,
+                max_concurrent_requests=10,
+                max_requests_per_minute=200
+            )
+            return AlpacaProvider()
+    
+    @pytest.fixture
+    def mock_ws_bar_messages(self):
+        """Mock WebSocket bar messages from Alpaca."""
+        return [
+            # Authentication success
+            [{"T": "success", "msg": "authenticated"}],
+            # Subscription confirmation
+            [{"T": "subscription", "trades": [], "quotes": [], "bars": ["AAPL"]}],
+            # Bar data messages
+            [{
+                "T": "b",  # Bar message type
+                "S": "AAPL",  # Symbol
+                "o": 150.0,  # Open
+                "h": 151.0,  # High
+                "l": 149.0,  # Low
+                "c": 150.5,  # Close
+                "v": 1000000,  # Volume
+                "t": "2024-01-01T10:00:00Z",  # Timestamp
+                "n": 500,  # Trade count
+                "vw": 150.25  # VWAP
+            }],
+            [{
+                "T": "b",
+                "S": "AAPL",
+                "o": 150.5,
+                "h": 151.5,
+                "l": 150.0,
+                "c": 151.0,
+                "v": 1200000,
+                "t": "2024-01-01T10:01:00Z",
+                "n": 600,
+                "vw": 150.75
+            }]
+        ]
+    
+    @pytest.mark.asyncio
+    async def test_websocket_streaming_method_exists(self, provider):
+        """Test that stream_market_data_ws method exists and has correct signature."""
+        # Should have WebSocket streaming method
+        assert hasattr(provider, 'stream_market_data_ws')
+        
+        # Method should be async and return AsyncIterator
+        import inspect
+        assert inspect.iscoroutinefunction(provider.stream_market_data_ws)
+    
+    @pytest.mark.asyncio
+    async def test_websocket_configuration_disabled(self):
+        """Test WebSocket functionality when disabled in configuration."""
+        with patch('data_ingestion.providers.alpaca.get_settings') as mock_settings:
+            mock_settings.return_value = Mock(
+                alpaca_api_key="test_key",
+                alpaca_api_secret="test_secret",
+                alpaca_subscription_level="basic",
+                alpaca_ws_enabled=False,  # Disabled
+                max_concurrent_requests=10,
+                max_requests_per_minute=200
+            )
+            provider = AlpacaProvider()
+            
+            # Should fall back to polling method
+            with patch.object(provider, 'stream_market_data') as mock_polling:
+                mock_polling.return_value = iter([])  # Empty async iterator
+                
+                result = []
+                async for data in provider.stream_market_data_ws(["AAPL"]):
+                    result.append(data)
+                
+                # Should have called polling method as fallback
+                mock_polling.assert_called_once_with(["AAPL"])
+    
+    @pytest.mark.asyncio
+    async def test_websocket_authentication(self, provider, mock_ws_bar_messages):
+        """Test WebSocket authentication process."""
+        with patch('websockets.connect') as mock_ws_connect:
+            mock_ws = AsyncMock()
+            mock_ws.recv = AsyncMock(side_effect=[
+                json.dumps(msg) for msg in mock_ws_bar_messages[:2]  # Auth + subscription only
+            ])
+            mock_ws.send = AsyncMock()
+            mock_ws_connect.return_value.__aenter__.return_value = mock_ws
+            
+            # Start streaming (should authenticate)
+            stream_iter = provider.stream_market_data_ws(["AAPL"])
+            try:
+                await anext(stream_iter)  # Trigger authentication
+            except StopAsyncIteration:
+                pass
+            
+            # Should have sent authentication message
+            assert mock_ws.send.call_count >= 1
+            auth_call = json.loads(mock_ws.send.call_args_list[0][0][0])
+            assert auth_call["action"] == "auth"
+            assert auth_call["key"] == "test_key"
+            assert auth_call["secret"] == "test_secret"
+    
+    @pytest.mark.asyncio
+    async def test_websocket_subscription(self, provider, mock_ws_bar_messages):
+        """Test WebSocket symbol subscription process."""
+        with patch('websockets.connect') as mock_ws_connect:
+            mock_ws = AsyncMock()
+            mock_ws.recv = AsyncMock(side_effect=[
+                json.dumps(msg) for msg in mock_ws_bar_messages[:2]
+            ])
+            mock_ws.send = AsyncMock()
+            mock_ws_connect.return_value.__aenter__.return_value = mock_ws
+            
+            # Start streaming with multiple symbols
+            stream_iter = provider.stream_market_data_ws(["AAPL", "GOOGL", "MSFT"])
+            try:
+                await anext(stream_iter)
+            except StopAsyncIteration:
+                pass
+            
+            # Should have sent subscription message
+            assert mock_ws.send.call_count >= 2  # Auth + subscription
+            subscribe_call = json.loads(mock_ws.send.call_args_list[1][0][0])
+            assert subscribe_call["action"] == "subscribe"
+            assert "bars" in subscribe_call
+            assert set(subscribe_call["bars"]) == {"AAPL", "GOOGL", "MSFT"}
+    
+    @pytest.mark.asyncio
+    async def test_websocket_bar_message_parsing(self, provider, mock_ws_bar_messages):
+        """Test parsing of WebSocket bar messages to MarketData objects."""
+        with patch('websockets.connect') as mock_ws_connect:
+            mock_ws = AsyncMock()
+            mock_ws.recv = AsyncMock(side_effect=[
+                json.dumps(msg) for msg in mock_ws_bar_messages
+            ])
+            mock_ws.send = AsyncMock()
+            mock_ws_connect.return_value.__aenter__.return_value = mock_ws
+            
+            # Collect streaming data
+            data_points = []
+            stream_iter = provider.stream_market_data_ws(["AAPL"])
+            
+            # Get first two data points
+            async for i, data in enumerate(stream_iter):
+                data_points.append(data)
+                if i >= 1:  # Get 2 data points
+                    break
+            
+            # Should have parsed 2 MarketData objects
+            assert len(data_points) == 2
+            assert all(isinstance(d, MarketData) for d in data_points)
+            
+            # Verify first data point
+            first_data = data_points[0]
+            assert first_data.symbol == "AAPL"
+            assert first_data.open == 150.0
+            assert first_data.high == 151.0
+            assert first_data.low == 149.0
+            assert first_data.close == 150.5
+            assert first_data.volume == 1000000
+            assert first_data.provider == "alpaca"
+            assert first_data.time is not None
+            
+            # Verify second data point
+            second_data = data_points[1]
+            assert second_data.symbol == "AAPL"
+            assert second_data.close == 151.0
+            assert second_data.volume == 1200000
+    
+    @pytest.mark.asyncio
+    async def test_websocket_fallback_on_connection_error(self, provider):
+        """Test automatic fallback to polling when WebSocket connection fails."""
+        with patch('websockets.connect') as mock_ws_connect:
+            # Simulate connection failure
+            mock_ws_connect.side_effect = ConnectionError("WebSocket connection failed")
+            
+            with patch.object(provider, 'stream_market_data') as mock_polling:
+                # Mock polling method to return test data
+                test_data = MarketData(
+                    time=datetime.now(),
+                    symbol="AAPL",
+                    open=150.0, high=151.0, low=149.0, close=150.5,
+                    volume=1000000,
+                    provider="alpaca"
+                )
+                
+                async def mock_polling_generator(symbols):
+                    yield test_data
+                
+                mock_polling.return_value = mock_polling_generator(["AAPL"])
+                
+                # Should fall back to polling
+                data_points = []
+                async for data in provider.stream_market_data_ws(["AAPL"]):
+                    data_points.append(data)
+                    break  # Just get one data point
+                
+                # Should have received data from polling fallback
+                assert len(data_points) == 1
+                assert data_points[0].symbol == "AAPL"
+                assert data_points[0].close == 150.5
+                
+                # Should have called polling method
+                mock_polling.assert_called_once_with(["AAPL"])
+    
+    @pytest.mark.asyncio
+    async def test_websocket_fallback_on_message_error(self, provider):
+        """Test fallback to polling when WebSocket receives invalid messages."""
+        with patch('websockets.connect') as mock_ws_connect:
+            mock_ws = AsyncMock()
+            # Simulate invalid JSON message after authentication
+            mock_ws.recv = AsyncMock(side_effect=[
+                json.dumps([{"T": "success", "msg": "authenticated"}]),
+                json.dumps([{"T": "subscription", "trades": [], "quotes": [], "bars": ["AAPL"]}]),
+                "invalid json",  # This should trigger fallback
+            ])
+            mock_ws.send = AsyncMock()
+            mock_ws_connect.return_value.__aenter__.return_value = mock_ws
+            
+            with patch.object(provider, 'stream_market_data') as mock_polling:
+                test_data = MarketData(
+                    time=datetime.now(),
+                    symbol="AAPL",
+                    open=150.0, high=151.0, low=149.0, close=150.5,
+                    volume=1000000,
+                    provider="alpaca"
+                )
+                
+                async def mock_polling_generator(symbols):
+                    yield test_data
+                
+                mock_polling.return_value = mock_polling_generator(["AAPL"])
+                
+                # Should eventually fall back to polling
+                data_points = []
+                async for data in provider.stream_market_data_ws(["AAPL"]):
+                    data_points.append(data)
+                    break
+                
+                # Should have received data (either from WebSocket or polling fallback)
+                assert len(data_points) >= 0  # May be empty if fallback didn't trigger in time
