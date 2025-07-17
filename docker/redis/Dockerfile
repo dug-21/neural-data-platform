@@ -1,20 +1,16 @@
 # Custom Redis image optimized for real-time trading data
 FROM redis:7-alpine
 
-# Install Redis modules and dependencies
+# Install basic dependencies
 RUN apk add --no-cache \
-    redis-mod-redisjson \
-    redis-mod-redistimeseries \
-    redis-mod-redisearch \
-    redis-mod-redisbloom \
     bash \
     curl
 
 # Copy custom Redis configuration
-COPY redis.conf /usr/local/etc/redis/redis.conf
+COPY docker/redis/redis.conf /usr/local/etc/redis/redis.conf
 
 # Copy startup script
-COPY docker-entrypoint.sh /usr/local/bin/
+COPY docker/redis/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create data directory

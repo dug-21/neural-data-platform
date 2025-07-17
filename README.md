@@ -1,15 +1,27 @@
-# Neural Trading Platform
+# Neural Trading Platform (MVP)
 
-An autonomous trading platform that leverages advanced neural networks (ruv_fann) and Decentralized Autonomous Agents (DAA) to make intelligent trading decisions. Built with Rust for high-performance core components and Python for flexible data ingestion.
+🚧 **MVP Status**: A working autonomous trading platform MVP with real-time data ingestion, WebSocket streaming, and foundational neural network architecture. Currently focused on data collection and processing with trading capabilities in development.
 
-## 🚀 Key Features
+**Current State**: Production-ready data ingestion service with Alpaca WebSocket streaming, TimescaleDB storage, and monitoring infrastructure. Neural trading engine architecture implemented with basic autonomous decision-making capabilities.
 
-- **Neural Network Ensemble**: Multiple FANN-based models (NHITS, TCN, DeepAR, Transformer, MLP) with weighted consensus predictions
-- **Autonomous Trading**: DAA coordination system for multi-agent decision making with risk management
-- **Real-time Data**: Multi-provider data ingestion supporting 9+ market data sources
-- **Time-Series Optimized**: TimescaleDB for historical data with compression and continuous aggregates
-- **Event-Driven Architecture**: Redis pub/sub and streams for real-time market data flow
-- **Production Ready**: Docker deployment with monitoring stack (Prometheus + Grafana)
+## 🚀 Key Features (MVP)
+
+### ✅ **Currently Working**
+- **Real-time Data Ingestion**: WebSocket streaming from Alpaca Markets with <1 second latency
+- **Time-Series Storage**: TimescaleDB with automated data compression and indexing
+- **Event-Driven Architecture**: Redis pub/sub for real-time market data distribution
+- **Production Infrastructure**: Docker deployment with Prometheus + Grafana monitoring
+- **WebSocket Streaming**: Real-time market data with automatic reconnection
+
+### 🔄 **In Development**
+- **Neural Network Ensemble**: Architecture implemented, training pipeline in progress
+- **Autonomous Trading**: Basic DAA framework functional, advanced strategies developing
+- **Multi-Provider Support**: Alpaca fully operational, other providers configured
+
+### 📋 **MVP Limitations**
+- Currently optimized for Alpaca Markets data (paper trading recommended)
+- Neural models functional but training with limited historical data
+- Additional data providers available but not primary focus
 
 ## 📋 Architecture Overview
 
@@ -51,37 +63,65 @@ git clone https://github.com/yourusername/neural-trader.git
 cd neural-trader
 ```
 
-### 2. Configure Environment
+### 2. Configure Environment (MVP Setup)
 
 Create a `.env` file with your API keys and passwords:
 
 ```bash
-# Database
+# Database Configuration
 POSTGRES_USER=neural_trader
 POSTGRES_PASSWORD=your_secure_password
 POSTGRES_DB=neural_trader_db
 
-# Redis
+# Redis Configuration
 REDIS_PASSWORD=your_redis_password
 
-# API Keys (at least one required)
-YAHOO_API_KEY=your_yahoo_key
+# Primary Data Provider (Required for MVP)
+ALPACA_API_KEY=your_alpaca_key
+ALPACA_API_SECRET=your_alpaca_secret
+ALPACA_WS_ENABLED=true
+
+# Trading Configuration
+TRADING_SYMBOLS_PRIMARY=AAPL,MSFT,GOOGL,AMZN,NVDA
+PRIMARY_PROVIDER=alpaca
+USE_SIMPLE_MODE=false
+
+# Optional: Additional Providers (for future use)
 FINNHUB_API_KEY=your_finnhub_key
 POLYGON_API_KEY=your_polygon_key
-# ... see docker-compose.yml for all supported providers
+ALPHA_VANTAGE_API_KEY=your_av_key
 ```
 
-### 3. Start the Platform
+### 3. Start the Platform (MVP)
 
 ```bash
-# Start all services
-docker-compose up -d
+# Start infrastructure services
+docker-compose up -d timescaledb redis prometheus grafana
 
-# View logs
-docker-compose logs -f neural-trader
+# Start data ingestion service (primary MVP component)
+docker-compose up -d data-ingestion
+
+# Start neural trader (basic autonomous decisions)
+docker-compose up -d neural-trader
+
+# View real-time data ingestion logs
+docker-compose logs -f data-ingestion
 
 # Check service health
 docker-compose ps
+```
+
+### 4. Verify MVP Operation
+
+```bash
+# Check WebSocket streaming is working
+docker-compose logs data-ingestion | grep "WebSocket"
+
+# Verify market data ingestion
+docker-compose logs data-ingestion | grep "AAPL"
+
+# Check neural trader decisions
+docker-compose logs neural-trader | grep "decision"
 ```
 
 ### 4. Access Monitoring
@@ -89,41 +129,68 @@ docker-compose ps
 - Grafana Dashboard: http://localhost:3000 (admin/admin)
 - Prometheus Metrics: http://localhost:9090
 
-## 📊 Supported Data Providers
+## 📊 Data Providers (MVP)
 
-| Provider | Type | Priority | Features |
-|----------|------|----------|----------|
-| Polygon | Market Data | 1 | Professional real-time data |
-| IEX Cloud | Market Data | 2 | Institutional-grade |
-| Finnhub | Market Data | 3 | Comprehensive coverage |
-| Alpha Vantage | Market Data | 4 | Technical indicators |
-| Yahoo Finance | Market Data | 5 | Free tier fallback |
-| NASDAQ Data | Market Data | - | Official exchange data |
-| NewsAPI | Alternative | - | News sentiment |
-| Reddit | Alternative | - | Social sentiment |
-| FRED | Economic | - | Federal Reserve data |
+| Provider | Status | Features | Notes |
+|----------|--------|----------|-------|
+| **Alpaca Markets** | ✅ **Active** | Real-time WebSocket, Paper Trading | Primary provider, fully integrated |
+| Polygon | 🔄 Configured | Professional real-time data | Available but not primary focus |
+| IEX Cloud | 🔄 Configured | Institutional-grade | Available but not primary focus |
+| Finnhub | 🔄 Configured | Comprehensive coverage | Available but not primary focus |
+| Alpha Vantage | 🔄 Configured | Technical indicators | Available but not primary focus |
+| Yahoo Finance | 🔄 Configured | Free tier fallback | Available but not primary focus |
+| NewsAPI | 🔄 Configured | News sentiment | Available but not primary focus |
+| Reddit | 🔄 Configured | Social sentiment | Available but not primary focus |
+| FRED | 🔄 Configured | Federal Reserve data | Available but not primary focus |
 
-## 🧠 Neural Network Models
+**MVP Focus**: The system is currently optimized for Alpaca Markets with real-time WebSocket streaming. Other providers are configured and available but not the primary development focus.
 
-The platform uses an ensemble of neural network models:
+## 🧠 Neural Network Models (MVP)
 
+The platform implements an ensemble architecture with the following models:
+
+### ✅ **Architecture Implemented**
 - **NHITS**: Neural Hierarchical Interpolation for Time Series (128→64→32→16 neurons)
-- **TCN**: Temporal Convolutional Networks (96→48→24 neurons)
+- **TCN**: Temporal Convolutional Networks (96→48→24 neurons) 
 - **DeepAR**: Probabilistic forecasting with uncertainty (100→50→25 neurons)
 - **Transformer**: Attention-based architecture (256→128→64→32 neurons)
 - **MLP**: Multi-Layer Perceptron baseline (64→32→16 neurons)
 
-Models are trained continuously with online learning and weighted based on performance.
+### 🔄 **Current Development Status**
+- **Model Framework**: Fully implemented with ruv_fann integration
+- **Training Pipeline**: Functional with limited historical data (<1 day)
+- **Ensemble Weighting**: Confidence-based consensus implemented
+- **Online Learning**: Continuous model updates as data accumulates
 
-## 🤖 Autonomous Trading System
+### 📊 **MVP Performance**
+- **Data Requirements**: Models need 30-80 samples minimum for operation
+- **Training Time**: Real-time incremental learning (seconds per update)
+- **Prediction Latency**: <500ms for ensemble consensus
+- **Current Limitation**: Limited historical data affects model accuracy initially
+
+## 🤖 Autonomous Trading System (MVP)
 
 The DAA (Decentralized Autonomous Agents) system coordinates trading decisions:
 
-1. **Neural Consensus**: Aggregates predictions from multiple models
-2. **Strategy Signals**: Collects votes from trading strategies (momentum, neural-enhanced)
-3. **Risk Assessment**: Evaluates market, position, and portfolio risk
-4. **Decision Synthesis**: Combines inputs with confidence weighting
-5. **Parameter Adaptation**: Updates based on performance feedback
+### ✅ **Currently Functional**
+1. **Neural Consensus**: Aggregates predictions from ensemble models with confidence weighting
+2. **Strategy Integration**: Momentum and neural-enhanced strategies operational
+3. **Risk Management**: Position sizing (2% max per trade) and stop-loss (2%) implemented
+4. **Real-time Decisions**: 1-second decision cycles with adaptive thresholds
+5. **Event Processing**: Redis pub/sub for market data and decision coordination
+
+### 🔄 **MVP Status**
+- **Decision Frequency**: Every 1 second during market hours
+- **Entry Threshold**: 0.3 combined signal + 0.75 confidence required
+- **Current Focus**: Data accumulation and pattern recognition
+- **Trading Mode**: Paper trading recommended for MVP
+
+### 📊 **Decision Process**
+1. **Neural Consensus** (60% weight): Ensemble model predictions
+2. **Strategy Signals** (40% weight): Traditional indicators
+3. **Risk Assessment**: Volatility-adjusted position sizing
+4. **Confidence Check**: Must exceed 75% threshold for entry
+5. **Execution**: Currently optimized for Alpaca paper trading
 
 ## 🔧 Configuration
 
@@ -169,26 +236,32 @@ strategies:
     position_size: 0.1
 ```
 
-## 📈 Development
+## 📈 Development (MVP)
 
 ### Project Structure
 
 ```
 neural-trader/
-├── src/                    # Rust source code
+├── src/                    # Rust neural trading engine
 │   ├── main.rs            # Main application entry
-│   ├── neural/            # Neural network integration
-│   ├── integration/       # DAA coordination
-│   ├── strategies/        # Trading strategies
-│   └── adapters/          # Data source adapters
-├── data_ingestion/        # Python data ingestion service
-│   ├── providers/         # Market data providers
-│   ├── processors/        # Data processing pipeline
-│   └── schedulers/        # Data collection scheduling
-├── config/                # Configuration files
-├── docker/                # Docker-related files
+│   ├── neural/            # Neural network integration (ruv_fann)
+│   ├── integration/       # DAA coordination system
+│   ├── strategies/        # Trading strategies (momentum, neural-enhanced)
+│   └── adapters/          # Database adapters (TimescaleDB, Redis)
+├── data_ingestion/        # Python data ingestion service (PRIMARY)
+│   ├── providers/         # Market data providers (Alpaca primary)
+│   ├── schedulers/        # WebSocket streaming coordination
+│   └── storage/           # Data storage and processing
+├── config/                # Configuration files (TOML/YAML)
+├── docker/                # Docker deployment files
 └── docker-compose.yml     # Service orchestration
 ```
+
+### MVP Development Focus
+- **Primary Service**: Python data ingestion with real-time WebSocket streaming
+- **Neural Engine**: Rust application with basic autonomous decision-making
+- **Data Pipeline**: TimescaleDB → Redis → Trading Engine
+- **Monitoring**: Prometheus metrics and Grafana dashboards
 
 ### Building from Source
 
@@ -239,12 +312,19 @@ docker-compose -f docker-compose.test.yml up --abort-on-container-exit
 - **System Health**: CPU, memory, latency metrics
 - **Data Quality**: Provider uptime, data completeness
 
-### Performance Characteristics
+### Performance Characteristics (MVP)
 
-- Market data ingestion: < 100ms latency
-- Neural predictions: < 500ms for ensemble
-- Trading decisions: < 1s end-to-end
-- Throughput: 10,000+ market updates/second
+- **Market Data Ingestion**: <1 second latency via WebSocket
+- **Neural Predictions**: <500ms for ensemble consensus
+- **Trading Decisions**: 1-second cycles with adaptive thresholds
+- **Data Throughput**: Real-time processing with Redis pub/sub
+- **Storage**: TimescaleDB with automatic compression
+
+### MVP Benchmarks
+- **WebSocket Latency**: Sub-second market data updates
+- **Decision Frequency**: Every 1 second during market hours
+- **Memory Usage**: ~500MB for full stack
+- **Storage Growth**: ~1GB per day for primary symbols
 
 ## 🔒 Security
 
@@ -272,6 +352,27 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [TimescaleDB](https://www.timescale.com/) - Time-series database
 - All the data provider APIs that make this possible
 
-## ⚠️ Disclaimer
+## ⚠️ Disclaimer & MVP Status
 
-This software is for educational and research purposes only. Trading financial instruments carries risk. Always do your own research and never trade with money you cannot afford to lose.
+### Current MVP Status
+This is a **working MVP** focused on:
+- ✅ Real-time data ingestion and storage
+- ✅ Basic neural network architecture
+- ✅ Simple autonomous decision-making
+- 🔄 Limited historical data for training
+- 📋 Paper trading recommended
+
+### Important Notices
+- **Educational Purpose**: This software is for educational and research purposes
+- **Trading Risk**: Financial trading carries substantial risk of loss
+- **MVP Limitations**: Currently optimized for data collection and basic trading
+- **Data Requirements**: System needs time to accumulate sufficient historical data
+- **Paper Trading**: Recommended for MVP evaluation
+
+### Next Steps
+1. **Data Accumulation**: Let system collect 7-30 days of historical data
+2. **Model Training**: Neural networks improve with more data
+3. **Strategy Development**: Additional trading strategies in development
+4. **Risk Management**: Enhanced risk controls planned
+
+**Always do your own research and never trade with money you cannot afford to lose.**
