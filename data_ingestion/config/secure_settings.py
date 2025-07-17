@@ -28,6 +28,7 @@ class SecureSettings(BaseSettings):
         env_file_encoding='utf-8',
         case_sensitive=False,
         env_nested_delimiter='__',
+        extra='allow',  # Allow extra environment variables
     )
     
     # API Keys (SECRETS - will not load from .env)
