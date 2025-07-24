@@ -2,6 +2,7 @@
 import asyncio
 import signal
 import sys
+import os
 from typing import Optional, List
 import click
 
@@ -258,8 +259,8 @@ def cli():
     '--providers',
     '-p',
     multiple=True,
-    default=['alpaca'],
-    help='Data providers to use'
+    default=None,
+    help='Data providers to use (defaults to environment config)'
 )
 @click.option(
     '--symbols',
@@ -280,7 +281,44 @@ def cli():
 )
 def start(providers, symbols, realtime, batch):
     """Start the data ingestion service."""
+    # Initialize logging first
+    global logger
+    if logger is None:
+        setup_logging()
+        logger = get_logger(__name__)
+    
     service = DataIngestionService()
+    
+    # Debug logging
+    logger.info(f"CLI providers argument: {providers}")
+    logger.info(f"Environment PRIMARY_PROVIDER: {os.environ.get('PRIMARY_PROVIDER', 'NOT SET')}")
+    logger.info(f"Environment DEFAULT_PROVIDER: {os.environ.get('DEFAULT_PROVIDER', 'NOT SET')}")
+    
+    # If no providers specified, check environment variables
+    if not providers:
+        settings = get_settings()
+        # PRIMARY_PROVIDER takes precedence, then DEFAULT_PROVIDER, then hardcoded default
+        primary_provider = getattr(settings, 'primary_provider', None)
+        default_provider = getattr(settings, 'default_provider', None)
+        
+        logger.info(f"Settings primary_provider: {primary_provider}")
+        logger.info(f"Settings default_provider: {default_provider}")
+        
+        if primary_provider:
+            providers = [primary_provider]
+            logger.info(f"Using PRIMARY_PROVIDER from environment: {primary_provider}")
+        elif default_provider:
+            providers = [default_provider]
+            logger.info(f"Using DEFAULT_PROVIDER from environment: {default_provider}")
+        else:
+            # Check for active providers list
+            active_providers = getattr(settings, 'active_providers', None)
+            if active_providers and isinstance(active_providers, list):
+                providers = active_providers
+                logger.info(f"Using ACTIVE_PROVIDERS from environment: {active_providers}")
+            else:
+                providers = ['alpaca']  # Hardcoded fallback
+                logger.info("No provider configuration found, defaulting to: alpaca")
     
     asyncio.run(
         service.start(
