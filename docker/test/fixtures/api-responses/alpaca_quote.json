@@ -1,0 +1,11 @@
+{
+  "quote": {
+    "timeframe": "1Min",
+    "symbol": "AAPL",
+    "timestamp": "2024-01-15T15:30:00Z",
+    "bid": 150.24,
+    "ask": 150.26,
+    "bid_size": 500,
+    "ask_size": 300
+  }
+}
