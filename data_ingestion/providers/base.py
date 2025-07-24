@@ -161,6 +161,18 @@ class BaseProvider(ABC):
         """Stream real-time market data."""
         pass
     
+    async def stream_market_data_ws(
+        self,
+        symbols: List[str]
+    ) -> AsyncIterator[MarketData]:
+        """Stream real-time market data via WebSocket.
+        
+        Default implementation delegates to stream_market_data.
+        Providers can override this for WebSocket-specific implementations.
+        """
+        async for data in self.stream_market_data(symbols):
+            yield data
+    
     async def get_tick_data(
         self,
         symbols: List[str],

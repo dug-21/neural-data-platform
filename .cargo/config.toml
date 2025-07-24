@@ -1,0 +1,21 @@
+# Cargo configuration for neural-trader
+
+[build]
+# Optimize for the native CPU
+rustflags = ["-C", "target-cpu=native"]
+
+[target.x86_64-unknown-linux-gnu]
+# Enable source-based code coverage when using llvm-cov
+rustflags = ["-C", "instrument-coverage"]
+
+[alias]
+# Convenience aliases for coverage commands
+cov = "llvm-cov"
+cov-html = "llvm-cov --html"
+cov-lcov = "llvm-cov --lcov --output-path=target/coverage/lcov.info"
+cov-phase1 = "llvm-cov --package autonomous-platform --features neural"
+
+# Test aliases
+test-unit = "test --lib"
+test-integration = "test --test '*'"
+test-all = "test --all-features"

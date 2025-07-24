@@ -1,0 +1,174 @@
+name: Test Coverage
+
+on:
+  push:
+    branches: [ main, develop, neural-expand ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      phase1_only:
+        description: 'Run Phase 1 coverage only'
+        required: false
+        default: 'false'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  coverage:
+    name: Test Coverage Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        components: llvm-tools-preview
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Cache cargo build
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Install cargo-tarpaulin
+      run: |
+        cargo install cargo-tarpaulin --locked
+        
+    - name: Run full test coverage
+      if: github.event.inputs.phase1_only != 'true'
+      run: |
+        cargo tarpaulin --config tarpaulin.toml \
+          --out Xml \
+          --out Html \
+          --out Lcov \
+          --output-dir target/coverage
+          
+    - name: Run Phase 1 test coverage
+      if: github.event.inputs.phase1_only == 'true'
+      run: |
+        ./scripts/coverage_phase1.sh
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./target/coverage/lcov.info
+        flags: unittests
+        name: neural-trader-coverage
+        fail_ci_if_error: false
+        
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-reports
+        path: |
+          target/coverage/*.html
+          target/coverage/*.xml
+          target/coverage/*.info
+          target/coverage/phase1/**/*.html
+        retention-days: 30
+        
+    - name: Coverage summary
+      run: |
+        echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "target/coverage/tarpaulin-report.json" ]; then
+          COVERAGE=$(jq -r '.coverage' target/coverage/tarpaulin-report.json)
+          echo "📊 **Total Coverage:** ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+          
+          if (( $(echo "$COVERAGE >= 85" | bc -l) )); then
+            echo "✅ Coverage target (85%) achieved!" >> $GITHUB_STEP_SUMMARY
+          else
+            GAP=$(echo "85 - $COVERAGE" | bc)
+            echo "⚠️ Coverage below target. Gap: ${GAP}%" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+        
+    - name: Comment PR with coverage
+      if: github.event_name == 'pull_request'
+      uses: 5monkeys/cobertura-action@master
+      with:
+        path: target/coverage/cobertura.xml
+        minimum_coverage: 85
+        fail_below_threshold: false
+        show_missing: true
+        show_line: true
+        show_branch: true
+        
+  phase1-coverage:
+    name: Phase 1 Component Coverage
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/neural-expand' || contains(github.event.head_commit.message, '[phase1]')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-phase1-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Install dependencies
+      run: |
+        cargo install cargo-tarpaulin --locked
+        sudo apt-get update
+        sudo apt-get install -y bc jq
+        
+    - name: Run Phase 1 coverage analysis
+      run: |
+        chmod +x ./scripts/coverage_phase1.sh
+        ./scripts/coverage_phase1.sh
+        
+    - name: Generate Phase 1 coverage badge
+      run: |
+        if [ -f "target/coverage/phase1/tarpaulin-report.json" ]; then
+          COVERAGE=$(jq -r '.coverage' target/coverage/phase1/tarpaulin-report.json)
+          COLOR="red"
+          if (( $(echo "$COVERAGE >= 85" | bc -l) )); then
+            COLOR="brightgreen"
+          elif (( $(echo "$COVERAGE >= 70" | bc -l) )); then
+            COLOR="yellow"
+          elif (( $(echo "$COVERAGE >= 50" | bc -l) )); then
+            COLOR="orange"
+          fi
+          
+          echo "{\"schemaVersion\": 1, \"label\": \"Phase 1 Coverage\", \"message\": \"${COVERAGE}%\", \"color\": \"${COLOR}\"}" > phase1-coverage.json
+        fi
+        
+    - name: Upload Phase 1 coverage badge data
+      uses: actions/upload-artifact@v3
+      with:
+        name: phase1-coverage-badge
+        path: phase1-coverage.json
+        retention-days: 90
