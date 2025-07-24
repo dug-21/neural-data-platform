@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "label": "coverage",
+  "message": "pending",
+  "color": "yellow",
+  "namedLogo": "rust",
+  "logoColor": "white",
+  "style": "flat-square",
+  "cacheSeconds": 300
+}

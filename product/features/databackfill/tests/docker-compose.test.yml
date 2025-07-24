@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # TimescaleDB for time-series data
+  timescaledb-test:
+    image: timescale/timescaledb:latest-pg14
+    container_name: backfill-timescaledb-test
+    environment:
+      POSTGRES_DB: trading_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d trading_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LocalStack for S3 testing
+  localstack:
+    image: localstack/localstack:latest
+    container_name: backfill-localstack-test
+    environment:
+      - SERVICES=s3
+      - DEFAULT_REGION=us-east-1
+      - EDGE_PORT=4566
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-test-data:/tmp/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching (optional)
+  redis-test:
+    image: redis:7-alpine
+    container_name: backfill-redis-test
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Test data initializer
+  test-initializer:
+    image: postgres:14-alpine
+    container_name: backfill-test-init
+    depends_on:
+      timescaledb-test:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: test_pass
+    volumes:
+      - ./init-test-db.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      sh -c "
+        until pg_isready -h timescaledb-test -U test_user; do
+          echo 'Waiting for TimescaleDB...'
+          sleep 2
+        done
+        
+        echo 'Creating test database schema...'
+        psql -h timescaledb-test -U test_user -d trading_test -c '
+          CREATE EXTENSION IF NOT EXISTS timescaledb;
+          
+          CREATE TABLE IF NOT EXISTS market_data (
+            time TIMESTAMPTZ NOT NULL,
+            symbol VARCHAR(10) NOT NULL,
+            open DECIMAL(10,2),
+            high DECIMAL(10,2),
+            low DECIMAL(10,2),
+            close DECIMAL(10,2),
+            volume BIGINT,
+            PRIMARY KEY (time, symbol)
+          );
+          
+          SELECT create_hypertable(
+            \"market_data\",
+            \"time\",
+            chunk_time_interval => INTERVAL \"1 day\",
+            if_not_exists => TRUE
+          );
+          
+          CREATE INDEX IF NOT EXISTS idx_market_data_symbol 
+            ON market_data (symbol, time DESC);
+          
+          CREATE TABLE IF NOT EXISTS tick_data (
+            time TIMESTAMPTZ NOT NULL,
+            symbol VARCHAR(10) NOT NULL,
+            price DECIMAL(10,4),
+            size INTEGER,
+            bid DECIMAL(10,4),
+            ask DECIMAL(10,4),
+            conditions TEXT[]
+          );
+          
+          SELECT create_hypertable(
+            \"tick_data\",
+            \"time\",
+            chunk_time_interval => INTERVAL \"1 hour\",
+            if_not_exists => TRUE
+          );
+        '
+        
+        echo 'Test database initialized!'
+      "
+
+volumes:
+  timescale-test-data:
+  localstack-test-data:
+
+networks:
+  default:
+    name: backfill-test-network

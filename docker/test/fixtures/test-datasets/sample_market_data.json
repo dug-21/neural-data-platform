@@ -1,0 +1,157 @@
+{
+  "metadata": {
+    "created_at": "2024-01-15T10:00:00Z",
+    "description": "Sample market data for testing neural trader",
+    "version": "1.0",
+    "symbols": ["AAPL", "MSFT", "GOOGL"],
+    "timeframe": "1min",
+    "record_count": 18
+  },
+  "market_data": [
+    {
+      "time": "2024-01-15T09:00:00Z",
+      "symbol": "AAPL",
+      "open": 150.00,
+      "high": 150.50,
+      "low": 149.80,
+      "close": 150.25,
+      "price": 150.25,
+      "volume": 1000000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:01:00Z",
+      "symbol": "AAPL",
+      "open": 150.25,
+      "high": 150.60,
+      "low": 150.10,
+      "close": 150.30,
+      "price": 150.30,
+      "volume": 1100000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:02:00Z",
+      "symbol": "AAPL",
+      "open": 150.30,
+      "high": 150.70,
+      "low": 150.20,
+      "close": 150.45,
+      "price": 150.45,
+      "volume": 950000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:00:00Z",
+      "symbol": "MSFT",
+      "open": 280.00,
+      "high": 281.00,
+      "low": 279.75,
+      "close": 280.50,
+      "price": 280.50,
+      "volume": 800000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:01:00Z",
+      "symbol": "MSFT",
+      "open": 280.50,
+      "high": 281.20,
+      "low": 280.30,
+      "close": 280.75,
+      "price": 280.75,
+      "volume": 850000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:02:00Z",
+      "symbol": "MSFT",
+      "open": 280.75,
+      "high": 281.40,
+      "low": 280.60,
+      "close": 281.00,
+      "price": 281.00,
+      "volume": 900000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:00:00Z",
+      "symbol": "GOOGL",
+      "open": 2150.00,
+      "high": 2155.00,
+      "low": 2145.00,
+      "close": 2150.25,
+      "price": 2150.25,
+      "volume": 500000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:01:00Z",
+      "symbol": "GOOGL",
+      "open": 2150.25,
+      "high": 2157.00,
+      "low": 2148.00,
+      "close": 2152.50,
+      "price": 2152.50,
+      "volume": 520000,
+      "provider": "test"
+    },
+    {
+      "time": "2024-01-15T09:02:00Z",
+      "symbol": "GOOGL",
+      "open": 2152.50,
+      "high": 2160.00,
+      "low": 2151.00,
+      "close": 2155.00,
+      "price": 2155.00,
+      "volume": 480000,
+      "provider": "test"
+    }
+  ],
+  "features": [
+    {
+      "symbol": "AAPL",
+      "time": "2024-01-15T09:02:00Z",
+      "feature_name": "sma_3",
+      "feature_value": 150.33,
+      "feature_type": "technical",
+      "calculation_method": "simple_moving_average"
+    },
+    {
+      "symbol": "MSFT",
+      "time": "2024-01-15T09:02:00Z",
+      "feature_name": "sma_3",
+      "feature_value": 280.75,
+      "feature_type": "technical", 
+      "calculation_method": "simple_moving_average"
+    },
+    {
+      "symbol": "GOOGL",
+      "time": "2024-01-15T09:02:00Z",
+      "feature_name": "sma_3",
+      "feature_value": 2152.58,
+      "feature_type": "technical",
+      "calculation_method": "simple_moving_average"
+    }
+  ],
+  "predictions": [
+    {
+      "model_name": "NHITS",
+      "symbol": "AAPL",
+      "prediction_time": "2024-01-15T09:02:00Z",
+      "target_time": "2024-01-15T09:07:00Z",
+      "predicted_price": 150.65,
+      "confidence_score": 0.75,
+      "model_version": "v1.0"
+    },
+    {
+      "model_name": "TCN",
+      "symbol": "MSFT",
+      "prediction_time": "2024-01-15T09:02:00Z",
+      "target_time": "2024-01-15T09:07:00Z",
+      "predicted_price": 281.20,
+      "confidence_score": 0.72,
+      "model_version": "v1.0"
+    }
+  ]
+}
