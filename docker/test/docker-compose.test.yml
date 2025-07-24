@@ -1,0 +1,281 @@
+# Test Environment Docker Compose - isolated from production
+# Ports adjusted to avoid conflicts with both production and development
+
+services:
+  timescaledb-test:
+    build:
+      context: .
+      dockerfile: images/timescaledb-test.dockerfile
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=test_user
+      - POSTGRES_DB=neural_trader_test
+      - POSTGRES_PASSWORD=test_password_123
+    volumes:
+      - timescaledb_test_data:/var/lib/postgresql/data
+      - ./fixtures/test-datasets:/test-data:ro  # Test data fixtures
+    networks:
+      - neural_trader_test_internal
+    ports:
+      - "127.0.0.1:5434:5432"  # Test TimescaleDB - different from prod (5433)
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # Reduced for testing
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "test_user", "-d", "neural_trader_test"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  redis-test:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_test_data:/data
+    networks:
+      - neural_trader_test_internal
+    ports:
+      - "127.0.0.1:6380:6379"  # Test Redis - different from prod (6379)
+    deploy:
+      resources:
+        limits:
+          memory: 512M  # Reduced for testing
+        reservations:
+          memory: 128M
+
+  neural-trader-test:
+    build:
+      context: ../..
+      dockerfile: docker/test/images/neural-trader-test.dockerfile
+    restart: unless-stopped
+    depends_on:
+      timescaledb-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://test_user:test_password_123@timescaledb-test:5432/neural_trader_test
+      - REDIS_URL=redis://redis-test:6379
+      - LOG_LEVEL=DEBUG  # More verbose logging for testing
+      - MCP_PORT=8081
+      - TESTING_MODE=true
+      - TEST_DATA_PATH=/test-fixtures
+    volumes:
+      - neural_trader_test_data:/var/lib/neural-trader
+      - neural_trader_test_logs:/var/log/neural-trader
+      - ./fixtures:/test-fixtures:ro  # Mount test fixtures
+    networks:
+      - neural_trader_test_internal
+      - test_monitoring
+    ports:
+      - "127.0.0.1:8081:8081"  # Test Neural Trader API - different from prod (8080)
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # Reduced for testing
+          cpus: '1'
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "neural-trader", "health", "--test-mode"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  data-ingestion-test:
+    build:
+      context: ../..
+      dockerfile: docker/test/images/data-ingestion-test.dockerfile
+    restart: unless-stopped
+    depends_on:
+      timescaledb-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://test_user:test_password_123@timescaledb-test:5432/neural_trader_test
+      - REDIS_URL=redis://redis-test:6379
+      - LOG_LEVEL=DEBUG
+      # TimescaleDB connection settings
+      - TIMESCALE_HOST=timescaledb-test
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_DATABASE=neural_trader_test
+      - TIMESCALE_USER=test_user
+      - TIMESCALE_PASSWORD=test_password_123
+      # Redis connection settings
+      - REDIS_HOST=redis-test
+      - REDIS_PORT=6379
+      # Test API Keys (mock values)
+      - ALPACA_API_KEY=test_alpaca_key_123
+      - ALPACA_API_SECRET=test_alpaca_secret_456
+      - ALPACA_WS_ENABLED=false  # Disable WebSocket in tests
+      - FINNHUB_API_KEY=test_finnhub_key_789
+      - ALPHA_VANTAGE_API_KEY=test_av_key_abc
+      - IEX_CLOUD_API_KEY=test_iex_key_def
+      - POLYGON_API_KEY=test_polygon_key_ghi
+      - QUANDL_API_KEY=test_quandl_key_jkl
+      - FRED_API_KEY=test_fred_key_mno
+      - NASDAQ_API_KEY=test_nasdaq_key_pqr
+      - NEWSAPI_KEY=test_news_key_stu
+      - REDDIT_CLIENT_ID=test_reddit_id_vwx
+      - REDDIT_CLIENT_SECRET=test_reddit_secret_yz
+      # Trading configuration for testing
+      - PRIMARY_PROVIDER=mock  # Use mock provider for testing
+      - USE_SIMPLE_MODE=true
+      - TESTING_MODE=true
+      - MOCK_DATA_ENABLED=true
+      - TRADING_SYMBOLS_PRIMARY=AAPL,MSFT,GOOGL  # Reduced set for testing
+      - SYMBOLS=AAPL,MSFT,GOOGL
+      - UPDATE_INTERVAL=5s  # Faster updates for testing
+      - TEST_FIXTURES_PATH=/test-fixtures
+    ports:
+      - "127.0.0.1:8003:8001"  # Test data ingestion API - different from prod (8002)
+      - "127.0.0.1:9094:9090"  # Test data ingestion metrics - different from prod (9092)
+    volumes:
+      - data_ingestion_test_logs:/var/log/data-ingestion
+      - ./fixtures:/test-fixtures:ro  # Mount test fixtures
+    networks:
+      - neural_trader_test_internal
+      - test_monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # Reduced for testing
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health', timeout=5).raise_for_status()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  prometheus-test:
+    build:
+      context: .
+      dockerfile: images/prometheus-test.dockerfile
+    restart: unless-stopped
+    volumes:
+      - prometheus_test_data:/prometheus
+    networks:
+      - test_monitoring
+    ports:
+      - "127.0.0.1:9095:9090"  # Test Prometheus - different from prod (9093)
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'  # Shorter retention for testing
+      - '--web.enable-lifecycle'
+      - '--log.level=debug'  # More verbose for testing
+    deploy:
+      resources:
+        limits:
+          memory: 512M  # Reduced for testing
+        reservations:
+          memory: 256M
+
+  grafana-test:
+    build:
+      context: .
+      dockerfile: images/grafana-test.dockerfile
+    restart: unless-stopped
+    depends_on:
+      prometheus-test:
+        condition: service_started
+      timescaledb-test:
+        condition: service_healthy
+    volumes:
+      - grafana_test_data:/var/lib/grafana
+    networks:
+      - test_monitoring
+      - neural_trader_test_internal  # For TimescaleDB access
+    ports:
+      - "127.0.0.1:3001:3000"  # Test Grafana - different from prod (3000)
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=test_admin_123
+      - POSTGRES_PASSWORD=test_password_123
+      - POSTGRES_USER=test_user
+      - GF_LOG_LEVEL=debug  # More verbose for testing
+      - GF_INSTALL_PLUGINS=  # Disable plugin installation in tests
+    deploy:
+      resources:
+        limits:
+          memory: 256M  # Reduced for testing
+        reservations:
+          memory: 128M
+
+  # Test data generator service
+  test-data-generator:
+    build:
+      context: ../..
+      dockerfile: docker/test/images/test-data-generator.dockerfile
+    restart: "no"  # Run once to generate test data
+    depends_on:
+      timescaledb-test:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://test_user:test_password_123@timescaledb-test:5432/neural_trader_test
+      - GENERATE_HISTORICAL_DATA=true
+      - HISTORICAL_DAYS=30  # Generate 30 days of test data
+      - TEST_SYMBOLS=AAPL,MSFT,GOOGL,AMZN,NVDA
+      - DATA_FREQUENCY=1min  # Generate minute-level test data
+    volumes:
+      - ./fixtures:/test-fixtures
+    networks:
+      - neural_trader_test_internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Mock API server for external services
+  mock-api-server:
+    build:
+      context: ../..
+      dockerfile: docker/test/images/mock-api-server.dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./fixtures/api-responses:/mock-responses:ro
+    networks:
+      - neural_trader_test_internal
+    ports:
+      - "127.0.0.1:8004:8000"  # Mock API server
+    environment:
+      - LOG_LEVEL=DEBUG
+      - MOCK_RESPONSES_PATH=/mock-responses
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+
+networks:
+  neural_trader_test_internal:
+    driver: bridge
+    internal: true  # Isolated test network
+  test_monitoring:
+    driver: bridge
+
+volumes:
+  timescaledb_test_data:
+    driver: local
+  redis_test_data:
+    driver: local
+  prometheus_test_data:
+    driver: local
+  grafana_test_data:
+    driver: local
+  neural_trader_test_data:
+    driver: local
+  neural_trader_test_logs:
+    driver: local
+  data_ingestion_test_logs:
+    driver: local
