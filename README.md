@@ -1,5 +1,8 @@
 # Neural Trading Platform (MVP)
 
+[![Test Coverage](https://img.shields.io/badge/coverage-pending-yellow)](./docs/TEST_COVERAGE.md)
+[![Phase 1 Coverage](https://img.shields.io/badge/phase1%20coverage-pending-yellow)](./docs/TEST_COVERAGE.md)
+
 🚧 **MVP Status**: A working autonomous trading platform MVP with real-time data ingestion, WebSocket streaming, and foundational neural network architecture. Currently focused on data collection and processing with trading capabilities in development.
 
 **Current State**: Production-ready data ingestion service with Alpaca WebSocket streaming, TimescaleDB storage, and monitoring infrastructure. Neural trading engine architecture implemented with basic autonomous decision-making capabilities.
