@@ -92,6 +92,9 @@ cargo-tarpaulin = "0.32"
 rand = "0.8"
 tracing-test = "0.2"
 
+# Additional coverage tools
+# Note: cargo-llvm-cov is installed via cargo install, not as a dependency
+
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
 
