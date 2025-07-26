@@ -31,7 +31,15 @@ class FileMetadata:
 class CheckpointManager:
     """Manages checkpoints for file processing recovery."""
     
-    def __init__(self, checkpoint_dir: str = "/var/lib/data-ingestion/checkpoints"):
+    def __init__(self, checkpoint_dir: str = None):
+        if checkpoint_dir is None:
+            # Use local directory in development, system directory in production
+            if os.path.exists("/var/lib/data-ingestion"):
+                checkpoint_dir = "/var/lib/data-ingestion/checkpoints"
+            else:
+                # Development mode - use local directory
+                checkpoint_dir = os.path.join(os.getcwd(), ".checkpoints")
+                
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
