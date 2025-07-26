@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from .base import BaseProvider, MarketData, TickData, OrderBookData
 from utils.logging import get_logger
+from utils.metrics import metrics
 
 logger = get_logger(__name__)
 
@@ -155,6 +156,9 @@ class FileProvider(BaseProvider):
             f"(starting from row {start_row}, batch size: {self.batch_size})"
         )
         
+        # Start timing for metrics
+        start_time = datetime.now()
+        
         try:
             processed_count = 0
             async for batch in self._stream_file(filepath, format, start_row):
@@ -176,6 +180,14 @@ class FileProvider(BaseProvider):
                             )
                             logger.info(f"Processed {processed_count} rows, checkpoint updated")
                             
+                            # Update progress metric
+                            if metadata.total_rows:
+                                progress = processed_count / metadata.total_rows
+                                metrics.file_backfill_progress.labels(
+                                    file=os.path.basename(filepath),
+                                    format=format
+                                ).set(progress)
+                            
                     except Exception as e:
                         logger.error(f"Error parsing row {row_num}: {e}")
                         continue
@@ -183,6 +195,21 @@ class FileProvider(BaseProvider):
             # Clear checkpoint on successful completion
             self.checkpoint_manager.clear_checkpoint(filepath)
             logger.info(f"Successfully loaded {processed_count} rows from {filepath}")
+            
+            # Update final metrics
+            elapsed = (datetime.now() - start_time).total_seconds()
+            metrics.file_backfill_duration.labels(format=format).observe(elapsed)
+            metrics.file_backfill_rows.labels(
+                file=os.path.basename(filepath),
+                format=format,
+                status='success'
+            ).inc(processed_count)
+            
+            # Set progress to 100%
+            metrics.file_backfill_progress.labels(
+                file=os.path.basename(filepath),
+                format=format
+            ).set(1.0)
             
         except Exception as e:
             logger.error(f"Error loading file {filepath}: {e}")

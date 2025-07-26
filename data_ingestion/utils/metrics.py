@@ -98,6 +98,88 @@ class Metrics:
         )
         
         # Data quality metrics
+        self.data_quality_score = Gauge(
+            'data_ingestion_data_quality_score',
+            'Data quality score (0-1)',
+            ['provider']
+        )
+        
+        # WebSocket specific metrics (Phase 4)
+        self.websocket_connections = Gauge(
+            'data_ingestion_websocket_connections',
+            'Number of active WebSocket connections',
+            ['provider', 'status']
+        )
+        
+        self.websocket_messages = Counter(
+            'data_ingestion_websocket_messages_total',
+            'Total WebSocket messages received',
+            ['provider', 'message_type']
+        )
+        
+        self.websocket_reconnections = Counter(
+            'data_ingestion_websocket_reconnections_total',
+            'Total WebSocket reconnection attempts',
+            ['provider', 'reason']
+        )
+        
+        # Health check metrics (Phase 4)
+        self.health_check_status = Gauge(
+            'data_ingestion_health_status',
+            'Health check status (1=healthy, 0=unhealthy)',
+            ['component']
+        )
+        
+        self.health_check_duration = Histogram(
+            'data_ingestion_health_check_duration_seconds',
+            'Health check duration in seconds',
+            ['component']
+        )
+        
+        # Circuit breaker metrics (Phase 4)
+        self.circuit_breaker_state = Gauge(
+            'data_ingestion_circuit_breaker_state',
+            'Circuit breaker state (0=closed, 1=open, 2=half_open)',
+            ['component']
+        )
+        
+        self.circuit_breaker_failures = Counter(
+            'data_ingestion_circuit_breaker_failures_total',
+            'Total circuit breaker failures',
+            ['component']
+        )
+        
+        # File backfill metrics (Phase 4)
+        self.file_backfill_progress = Gauge(
+            'data_ingestion_file_backfill_progress',
+            'File backfill progress (0-1)',
+            ['file', 'format']
+        )
+        
+        self.file_backfill_rows = Counter(
+            'data_ingestion_file_backfill_rows_total',
+            'Total rows processed in file backfill',
+            ['file', 'format', 'status']
+        )
+        
+        self.file_backfill_duration = Histogram(
+            'data_ingestion_file_backfill_duration_seconds',
+            'File backfill operation duration',
+            ['format']
+        )
+        
+        # Data flow metrics (Phase 4)
+        self.data_flow_age = Gauge(
+            'data_ingestion_data_flow_age_seconds',
+            'Age of last data received in seconds',
+            ['provider', 'symbol']
+        )
+        
+        self.data_flow_rate = Gauge(
+            'data_ingestion_data_flow_rate',
+            'Data points per second',
+            ['provider']
+        )
         self.data_quality_issues = Counter(
             'data_ingestion_data_quality_issues_total',
             'Number of data quality issues',

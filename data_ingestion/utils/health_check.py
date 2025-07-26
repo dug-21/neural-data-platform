@@ -13,6 +13,7 @@ from utils.logging import get_logger
 from utils.metrics import metrics
 from utils.market_hours import MarketHours, is_market_data_expected
 from config import get_settings
+from prometheus_client import generate_latest
 
 logger = get_logger(__name__)
 
@@ -129,6 +130,7 @@ class HealthCheckHandler:
         self.app.router.add_get('/health/detailed', self.detailed_health_check)
         self.app.router.add_get('/health/live', self.liveness_probe)
         self.app.router.add_get('/health/ready', self.readiness_probe)
+        self.app.router.add_get('/metrics', self.metrics_endpoint)
         
     async def start(self, port: Optional[int] = None):
         """Start health check HTTP server."""
@@ -547,3 +549,40 @@ class HealthCheckHandler:
                 return web.Response(text='Not Ready', status=503)
         except Exception as e:
             return web.Response(text=f'Error: {str(e)}', status=503)
+    
+    async def metrics_endpoint(self, request: web.Request) -> web.Response:
+        """Prometheus metrics endpoint."""
+        try:
+            # Update health metrics before serving
+            status = await self.get_health_status()
+            
+            # Update health status metrics
+            for component, check in status.get('checks', {}).items():
+                health_value = 1 if check.get('healthy', False) else 0
+                metrics.health_check_status.labels(component=component).set(health_value)
+            
+            # Update circuit breaker metrics
+            circuit_state_map = {
+                CircuitBreakerState.CLOSED: 0,
+                CircuitBreakerState.OPEN: 1,
+                CircuitBreakerState.HALF_OPEN: 2
+            }
+            
+            for name, breaker in self.circuit_breakers.items():
+                state_value = circuit_state_map.get(breaker.state, -1)
+                metrics.circuit_breaker_state.labels(component=name).set(state_value)
+                
+            # Generate Prometheus metrics
+            metrics_data = generate_latest()
+            
+            return web.Response(
+                body=metrics_data,
+                content_type='text/plain; version=0.0.4; charset=utf-8'
+            )
+        except Exception as e:
+            self.logger.error(f"Metrics endpoint error: {e}")
+            return web.Response(
+                text=f"Error generating metrics: {str(e)}",
+                status=500,
+                content_type='text/plain'
+            )

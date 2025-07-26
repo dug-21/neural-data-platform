@@ -21,6 +21,7 @@ from alpaca.data.enums import DataFeed
 
 from .base import BaseProvider, MarketData, TickData, OrderBookData
 from utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from utils.metrics import metrics
 
 
 class AlpacaProvider(BaseProvider):
@@ -171,6 +172,12 @@ class AlpacaProvider(BaseProvider):
             # Update last message time
             self._last_message_time = datetime.now()
             
+            # Update metrics
+            metrics.websocket_messages.labels(
+                provider='alpaca',
+                message_type=market_data.metadata.get('type', 'unknown')
+            ).inc()
+            
             # Try to put in queue, buffer if full
             try:
                 await self._ws_data_queue.put_nowait(market_data)
@@ -202,6 +209,12 @@ class AlpacaProvider(BaseProvider):
             # Update last message time
             self._last_message_time = datetime.now()
             
+            # Update metrics
+            metrics.websocket_messages.labels(
+                provider='alpaca',
+                message_type=market_data.metadata.get('type', 'unknown')
+            ).inc()
+            
             # Try to put in queue, buffer if full
             try:
                 await self._ws_data_queue.put_nowait(market_data)
@@ -227,6 +240,12 @@ class AlpacaProvider(BaseProvider):
             )
             # Update last message time
             self._last_message_time = datetime.now()
+            
+            # Update metrics
+            metrics.websocket_messages.labels(
+                provider='alpaca',
+                message_type=market_data.metadata.get('type', 'unknown')
+            ).inc()
             
             # Try to put in queue, buffer if full
             try:
@@ -441,6 +460,13 @@ class AlpacaProvider(BaseProvider):
                     await self.circuit_breaker.record_success()
                     self.reconnect_attempts = 0
                     self.logger.info("WebSocket reconnected successfully")
+                    
+                    # Update metrics
+                    metrics.websocket_reconnections.labels(
+                        provider='alpaca',
+                        reason='connection_error'
+                    ).inc()
+                    
                     return
                     
                 except Exception as e:
@@ -477,6 +503,12 @@ class AlpacaProvider(BaseProvider):
                 # Mark connection start
                 self._connection_start_time = datetime.now()
                 self._ws_connected = True
+                
+                # Update connection metrics
+                metrics.websocket_connections.labels(
+                    provider='alpaca',
+                    status='connected'
+                ).inc()
                 
                 # Run the WebSocket stream
                 self.logger.info("Starting WebSocket stream with enhanced resilience...")

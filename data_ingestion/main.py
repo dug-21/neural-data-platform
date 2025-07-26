@@ -74,8 +74,53 @@ class DataIngestionService:
         self.batch_scheduler = BatchScheduler()
         self.stream_manager = StreamManager()
         
+        # Enhanced provider configuration with circuit breakers
+        self._setup_provider_enhancements()
+        
         self._initialized = True
         logger.info("Lazy initialization of components completed")
+    
+    def _setup_provider_enhancements(self):
+        """Setup enhanced features for providers including circuit breakers."""
+        # Import circuit breaker
+        from utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+        
+        # Default circuit breaker config for providers
+        default_cb_config = CircuitBreakerConfig(
+            failure_threshold=5,
+            recovery_timeout=60.0,
+            success_threshold=2
+        )
+        
+        # Provider-specific configurations
+        provider_configs = {
+            'alpaca': {
+                'circuit_breaker_config': CircuitBreakerConfig(
+                    failure_threshold=3,  # More sensitive for real-time
+                    recovery_timeout=30.0,
+                    success_threshold=2
+                ),
+                'reconnect_attempts': 100,
+                'buffer_size': 10000
+            },
+            'polygon': {
+                'circuit_breaker_config': default_cb_config,
+                'reconnect_attempts': 50,
+                'buffer_size': 5000
+            },
+            'file_provider': {
+                'circuit_breaker_config': CircuitBreakerConfig(
+                    failure_threshold=10,  # More tolerant for files
+                    recovery_timeout=10.0,
+                    success_threshold=1
+                ),
+                'batch_size': 1000
+            }
+        }
+        
+        # Store configurations for providers to use
+        self.provider_configs = provider_configs
+        logger.info("Provider enhancement configurations setup complete")
     
     async def start(
         self,
@@ -92,12 +137,22 @@ class DataIngestionService:
         
         # Start metrics server and collection
         try:
-            if self.settings and hasattr(self.settings, 'prometheus_enabled') and self.settings.prometheus_enabled:
-                start_metrics_server(self.settings.prometheus_port)
+            # Always try to start metrics server for Phase 4 integration
+            metrics_port = 9090  # Default Prometheus metrics port
+            if self.settings and hasattr(self.settings, 'prometheus_port'):
+                metrics_port = self.settings.prometheus_port
+            
+            # Start metrics server (metrics endpoint is served by health check server)
+            logger.info(f"Metrics will be available at health check server on /metrics endpoint")
+            
+            # Start metrics collector if available
+            try:
                 metrics_collector.start_collection()
-                logger.info("Started clean metrics collection")
+                logger.info("Started metrics collection")
+            except Exception:
+                pass  # Metrics collector might not be available in all environments
         except Exception as e:
-            logger.warning(f"Metrics server initialization skipped: {e}")
+            logger.warning(f"Metrics initialization warning: {e}")
         
         # Initialize components with lazy loading
         await self._lazy_initialize()
@@ -453,9 +508,7 @@ def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch
         logger = get_logger(__name__)
     
     from pathlib import Path
-    import pandas as pd
     from datetime import datetime
-    import json
     
     # Convert path to Path object
     data_path = Path(path)
@@ -476,28 +529,84 @@ def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch
     service = DataIngestionService()
     
     async def run_file_backfill():
-        """Run the file-based backfill process."""
+        """Run the file-based backfill process using the new FileProvider."""
         await service._lazy_initialize()
         
-        # Import file backfill handler
-        from utils.file_backfill import FileBackfillHandler
+        # Create FileProvider with configuration
+        from providers.file_provider import FileProvider
         
-        # Create handler
-        handler = FileBackfillHandler(
-            path=data_path,
-            format=format,
-            symbols=list(symbols) if symbols else None,
-            start_date=datetime.fromisoformat(start_date) if start_date else None,
-            end_date=datetime.fromisoformat(end_date) if end_date else None,
-            batch_size=batch_size,
-            use_checkpoint=checkpoint,
-            dry_run=dry_run
-        )
+        file_provider = FileProvider({
+            'batch_size': batch_size,
+            'use_checkpoint': checkpoint
+        })
         
-        # Run backfill
-        await handler.run()
+        # Connect the provider
+        await file_provider.connect()
         
-        logger.info("File backfill completed")
+        try:
+            # Process each file in the path
+            files_to_process = []
+            if data_path.is_file():
+                files_to_process.append(data_path)
+            else:
+                # Get all files with the specified format
+                pattern = f"*.{format}"
+                files_to_process.extend(data_path.glob(pattern))
+            
+            logger.info(f"Found {len(files_to_process)} files to process")
+            
+            total_processed = 0
+            for file_path in files_to_process:
+                logger.info(f"Processing file: {file_path}")
+                
+                # Get symbol from filename or use provided symbol
+                file_symbol = None
+                if symbols:
+                    file_symbol = list(symbols)[0]  # Use first symbol if provided
+                else:
+                    # Try to extract symbol from filename
+                    file_symbol = file_path.stem.upper()
+                
+                # Stream data from file
+                async for market_data in file_provider.load_from_file(
+                    filepath=str(file_path),
+                    format=format,
+                    symbol=file_symbol,
+                    data_type='market_data'
+                ):
+                    # Apply date filters if provided
+                    if start_date and market_data.time < datetime.fromisoformat(start_date):
+                        continue
+                    if end_date and market_data.time > datetime.fromisoformat(end_date):
+                        continue
+                    
+                    # Apply symbol filter if provided
+                    if symbols and market_data.symbol not in symbols:
+                        continue
+                    
+                    if not dry_run:
+                        # Store data using the service's storage components
+                        if service.realtime_coordinator:
+                            # Use the timescale and redis from realtime coordinator
+                            await service.realtime_coordinator._store_market_data(market_data)
+                            
+                            # Update health check timestamp
+                            if service.health_check_handler:
+                                service.health_check_handler.update_data_timestamp(
+                                    'file_provider',
+                                    market_data.symbol
+                                )
+                    
+                    total_processed += 1
+                    
+                    # Log progress every 10000 records
+                    if total_processed % 10000 == 0:
+                        logger.info(f"Processed {total_processed} records...")
+            
+            logger.info(f"File backfill completed. Total records processed: {total_processed}")
+            
+        finally:
+            await file_provider.disconnect()
     
     # Run the async function
     asyncio.run(run_file_backfill())
