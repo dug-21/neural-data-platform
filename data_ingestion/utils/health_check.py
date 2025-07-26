@@ -4,6 +4,10 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from aiohttp import web
 import json
+import time
+import random
+from enum import Enum
+from dataclasses import dataclass, field
 
 from utils.logging import get_logger
 from utils.metrics import metrics
@@ -12,17 +16,96 @@ from config import get_settings
 logger = get_logger(__name__)
 
 
+class CircuitBreakerState(Enum):
+    """Circuit breaker states."""
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"      # Failures detected, blocking requests
+    HALF_OPEN = "half_open"  # Testing if service recovered
+
+
+@dataclass
+class CircuitBreaker:
+    """Circuit breaker for health check resilience."""
+    failure_threshold: int = 5
+    recovery_timeout: float = 60.0
+    success_threshold: int = 2
+    
+    state: CircuitBreakerState = field(default=CircuitBreakerState.CLOSED)
+    failure_count: int = field(default=0)
+    success_count: int = field(default=0)
+    last_failure_time: Optional[float] = field(default=None)
+    
+    def should_allow_request(self) -> bool:
+        """Check if request should be allowed."""
+        if self.state == CircuitBreakerState.CLOSED:
+            return True
+        
+        if self.state == CircuitBreakerState.OPEN:
+            # Check if recovery timeout has passed
+            if self.last_failure_time and \
+               time.time() - self.last_failure_time >= self.recovery_timeout:
+                self.state = CircuitBreakerState.HALF_OPEN
+                self.success_count = 0
+                logger.info("Circuit breaker transitioned to HALF_OPEN")
+                return True
+            return False
+        
+        # HALF_OPEN state
+        return True
+    
+    def record_success(self):
+        """Record a successful operation."""
+        if self.state == CircuitBreakerState.HALF_OPEN:
+            self.success_count += 1
+            if self.success_count >= self.success_threshold:
+                self.state = CircuitBreakerState.CLOSED
+                self.failure_count = 0
+                logger.info("Circuit breaker transitioned to CLOSED")
+        elif self.state == CircuitBreakerState.CLOSED:
+            self.failure_count = 0
+    
+    def record_failure(self):
+        """Record a failed operation."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        
+        if self.state == CircuitBreakerState.CLOSED and \
+           self.failure_count >= self.failure_threshold:
+            self.state = CircuitBreakerState.OPEN
+            logger.warning(f"Circuit breaker opened after {self.failure_count} failures")
+        elif self.state == CircuitBreakerState.HALF_OPEN:
+            self.state = CircuitBreakerState.OPEN
+            self.success_count = 0
+            logger.warning("Circuit breaker reopened due to failure in HALF_OPEN state")
+
+
 class HealthCheckHandler:
     """Handles health check requests and monitors service health."""
     
-    def __init__(self):
-        self.settings = get_settings()
+    def __init__(self, port: int = 8080):
+        # Code-first configuration - works without env vars
+        self.port = port
         self.logger = logger
         
-        # Health check thresholds
+        # Try to get settings, but work without them
+        try:
+            self.settings = get_settings()
+        except Exception:
+            self.settings = None
+            logger.warning("Running health checks without environment configuration")
+        
+        # Health check thresholds (code-first defaults)
         self.max_data_age_seconds = 300  # 5 minutes
         self.min_success_rate = 0.8  # 80% success rate
         self.min_active_streams = 1  # At least one active stream
+        
+        # Circuit breakers for each component
+        self.circuit_breakers = {
+            'database': CircuitBreaker(),
+            'redis': CircuitBreaker(),
+            'websocket': CircuitBreaker(),
+            'data_flow': CircuitBreaker()
+        }
         
         # Component references (set by main service)
         self.realtime_coordinator = None
@@ -46,13 +129,16 @@ class HealthCheckHandler:
         self.app.router.add_get('/health/live', self.liveness_probe)
         self.app.router.add_get('/health/ready', self.readiness_probe)
         
-    async def start(self, port: int = 8080):
+    async def start(self, port: Optional[int] = None):
         """Start health check HTTP server."""
+        # Use provided port or instance default
+        actual_port = port or self.port
+        
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
-        site = web.TCPSite(self.runner, '0.0.0.0', port)
+        site = web.TCPSite(self.runner, '0.0.0.0', actual_port)
         await site.start()
-        self.logger.info(f"Health check server started on port {port}")
+        self.logger.info(f"Health check server started on port {actual_port}")
         
     async def stop(self):
         """Stop health check server."""
@@ -66,34 +152,66 @@ class HealthCheckHandler:
         self.last_data_timestamps[key] = datetime.now()
         
     async def check_database_health(self) -> Tuple[bool, str]:
-        """Check database connectivity."""
+        """Check database connectivity with circuit breaker."""
+        breaker = self.circuit_breakers['database']
+        
+        if not breaker.should_allow_request():
+            return False, f"Circuit breaker OPEN (failures: {breaker.failure_count})"
+        
         try:
             if self.timescale_db and hasattr(self.timescale_db, 'pool'):
-                # Execute simple query to check connection
-                async with self.timescale_db.pool.acquire() as conn:
-                    result = await conn.fetchval("SELECT 1")
-                    return result == 1, "Connected"
+                # Execute simple query to check connection with timeout
+                async with asyncio.timeout(5.0):  # 5 second timeout
+                    async with self.timescale_db.pool.acquire() as conn:
+                        result = await conn.fetchval("SELECT 1")
+                        if result == 1:
+                            breaker.record_success()
+                            return True, "Connected"
+            
+            breaker.record_failure()
             return False, "No database connection"
+        except asyncio.TimeoutError:
+            breaker.record_failure()
+            return False, "Database query timeout"
         except Exception as e:
+            breaker.record_failure()
             return False, f"Database error: {str(e)}"
     
     async def check_redis_health(self) -> Tuple[bool, str]:
-        """Check Redis connectivity."""
+        """Check Redis connectivity with circuit breaker."""
+        breaker = self.circuit_breakers['redis']
+        
+        if not breaker.should_allow_request():
+            return False, f"Circuit breaker OPEN (failures: {breaker.failure_count})"
+        
         try:
             if self.redis_store and hasattr(self.redis_store, 'redis'):
-                # Ping Redis
-                pong = await self.redis_store.redis.ping()
-                return pong, "Connected"
+                # Ping Redis with timeout
+                async with asyncio.timeout(3.0):  # 3 second timeout
+                    pong = await self.redis_store.redis.ping()
+                    if pong:
+                        breaker.record_success()
+                        return True, "Connected"
+            
+            breaker.record_failure()
             return False, "No Redis connection"
+        except asyncio.TimeoutError:
+            breaker.record_failure()
+            return False, "Redis ping timeout"
         except Exception as e:
+            breaker.record_failure()
             return False, f"Redis error: {str(e)}"
     
     def check_websocket_health(self) -> Dict[str, Any]:
-        """Check WebSocket connection status."""
+        """Check WebSocket connection status with circuit breaker."""
+        breaker = self.circuit_breakers['websocket']
+        
         ws_status = {
             'total_providers': 0,
             'active_connections': 0,
-            'providers': {}
+            'providers': {},
+            'circuit_breaker': breaker.state.value,
+            'healthy': True
         }
         
         if self.realtime_coordinator:
@@ -117,18 +235,30 @@ class HealthCheckHandler:
                     provider_status['subscribed_symbols'] = len(provider.subscribed_symbols)
                     
                 ws_status['providers'][provider_name] = provider_status
-                
+        
+        # Update circuit breaker based on connection status
+        if ws_status['active_connections'] > 0:
+            breaker.record_success()
+            ws_status['healthy'] = True
+        else:
+            breaker.record_failure()
+            ws_status['healthy'] = False
+            
         return ws_status
     
     def check_data_flow_health(self) -> Dict[str, Any]:
-        """Check data flow recency."""
+        """Check data flow recency with circuit breaker."""
+        breaker = self.circuit_breakers['data_flow']
         now = datetime.now()
+        
         flow_status = {
             'total_flows': len(self.last_data_timestamps),
             'active_flows': 0,
             'stale_flows': 0,
             'oldest_data_age_seconds': None,
-            'details': []
+            'details': [],
+            'circuit_breaker': breaker.state.value,
+            'healthy': True
         }
         
         for key, timestamp in self.last_data_timestamps.items():
@@ -149,6 +279,14 @@ class HealthCheckHandler:
                 
             if flow_status['oldest_data_age_seconds'] is None or age_seconds > flow_status['oldest_data_age_seconds']:
                 flow_status['oldest_data_age_seconds'] = age_seconds
+        
+        # Update circuit breaker based on data flow health
+        if flow_status['active_flows'] >= self.min_active_streams and flow_status['stale_flows'] == 0:
+            breaker.record_success()
+            flow_status['healthy'] = True
+        else:
+            breaker.record_failure()
+            flow_status['healthy'] = False
                 
         return flow_status
     
@@ -266,16 +404,34 @@ class HealthCheckHandler:
         }
     
     async def health_check(self, request: web.Request) -> web.Response:
-        """Simple health check endpoint."""
+        """Simple health check endpoint that works without env vars."""
         try:
             status = await self.get_health_status()
             is_healthy = status['status'] == 'healthy'
             
+            # Add circuit breaker status
+            breaker_status = {
+                breaker_name: {
+                    'state': breaker.state.value,
+                    'failures': breaker.failure_count
+                }
+                for breaker_name, breaker in self.circuit_breakers.items()
+            }
+            
+            response_data = {
+                'status': status['status'],
+                'timestamp': status['timestamp'],
+                'circuit_breakers': breaker_status
+            }
+            
+            # Update Prometheus metrics
+            for name, breaker in self.circuit_breakers.items():
+                metrics.health_check_component_status.labels(
+                    component=f'circuit_breaker_{name}'
+                ).set(1 if breaker.state == CircuitBreakerState.CLOSED else 0)
+            
             return web.Response(
-                text=json.dumps({
-                    'status': status['status'],
-                    'timestamp': status['timestamp']
-                }),
+                text=json.dumps(response_data),
                 status=200 if is_healthy else 503,
                 content_type='application/json'
             )
@@ -284,7 +440,8 @@ class HealthCheckHandler:
             return web.Response(
                 text=json.dumps({
                     'status': 'error',
-                    'message': str(e)
+                    'message': str(e),
+                    'timestamp': datetime.now().isoformat()
                 }),
                 status=503,
                 content_type='application/json'

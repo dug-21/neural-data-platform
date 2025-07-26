@@ -20,7 +20,7 @@ from alpaca.data.models import Bar, Trade, Quote
 from alpaca.data.enums import DataFeed
 
 from .base import BaseProvider, MarketData, TickData, OrderBookData
-from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 
 
 class AlpacaProvider(BaseProvider):

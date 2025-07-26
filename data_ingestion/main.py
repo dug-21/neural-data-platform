@@ -91,10 +91,13 @@ class DataIngestionService:
         )
         
         # Start metrics server and collection
-        if self.settings.prometheus_enabled:
-            start_metrics_server(self.settings.prometheus_port)
-            metrics_collector.start_collection()
-            logger.info("Started clean metrics collection")
+        try:
+            if self.settings and hasattr(self.settings, 'prometheus_enabled') and self.settings.prometheus_enabled:
+                start_metrics_server(self.settings.prometheus_port)
+                metrics_collector.start_collection()
+                logger.info("Started clean metrics collection")
+        except Exception as e:
+            logger.warning(f"Metrics server initialization skipped: {e}")
         
         # Initialize components with lazy loading
         await self._lazy_initialize()
@@ -128,8 +131,16 @@ class DataIngestionService:
         health_tracker.set_handler(self.health_check_handler)
         
         # Start health check server
-        await self.health_check_handler.start(port=8080)
-        logger.info("Health check server started on port 8080")
+        health_port = 8080  # Default port (code-first approach)
+        try:
+            # Try to get port from settings if available
+            if self.settings and hasattr(self.settings, 'health_check_port'):
+                health_port = self.settings.health_check_port
+        except Exception:
+            pass  # Use default port
+        
+        await self.health_check_handler.start(port=health_port)
+        logger.info(f"Health check server started on port {health_port}")
         
         # Setup signal handlers
         def signal_handler(sig, frame):
