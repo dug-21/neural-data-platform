@@ -10,6 +10,8 @@ from config import get_settings
 from utils.logging import get_logger, setup_logging
 from utils.metrics import start_metrics_server
 from utils.metrics_integration import metrics_collector
+from utils.health_check import HealthCheckHandler
+from utils.health_tracker import health_tracker
 
 # Lazy imports to avoid import deadlock
 # These modules will be imported only when needed
@@ -41,6 +43,7 @@ class DataIngestionService:
         self.stream_manager = None
         self._shutdown_event = asyncio.Event()
         self._initialized = False
+        self.health_check_handler = HealthCheckHandler()
     
     async def _lazy_initialize(self):
         """Lazy initialization of components to avoid import deadlock."""
@@ -113,6 +116,20 @@ class DataIngestionService:
                 else:
                     logger.info(f"Retrying initialization in 10 seconds...")
                     await asyncio.sleep(10)
+        
+        # Set component references for health checks
+        self.health_check_handler.realtime_coordinator = self.realtime_coordinator
+        self.health_check_handler.stream_manager = self.stream_manager
+        self.health_check_handler.batch_scheduler = self.batch_scheduler
+        self.health_check_handler.timescale_db = self.realtime_coordinator.timescale if self.realtime_coordinator else None
+        self.health_check_handler.redis_store = self.realtime_coordinator.redis if self.realtime_coordinator else None
+        
+        # Register health handler with tracker
+        health_tracker.set_handler(self.health_check_handler)
+        
+        # Start health check server
+        await self.health_check_handler.start(port=8080)
+        logger.info("Health check server started on port 8080")
         
         # Setup signal handlers
         def signal_handler(sig, frame):
@@ -210,6 +227,10 @@ class DataIngestionService:
     async def shutdown(self):
         """Gracefully shutdown the service."""
         logger.info("Shutting down data ingestion service")
+        
+        # Stop health check server
+        if self.health_check_handler:
+            await self.health_check_handler.stop()
         
         # Stop components if they were initialized
         if self.realtime_coordinator:
@@ -366,6 +387,109 @@ def backfill(symbols, start_date, end_date, providers):
             list(providers) if providers else None
         )
     )
+
+
+@cli.command()
+@click.option(
+    '--path',
+    '-p',
+    required=True,
+    type=click.Path(exists=True, readable=True),
+    help='Path to the mounted file or directory containing historical data'
+)
+@click.option(
+    '--symbols',
+    '-s',
+    multiple=True,
+    help='Symbols to filter (if not specified, processes all symbols in file)'
+)
+@click.option(
+    '--start-date',
+    help='Start date for filtering (YYYY-MM-DD)'
+)
+@click.option(
+    '--end-date',
+    help='End date for filtering (YYYY-MM-DD)'
+)
+@click.option(
+    '--format',
+    type=click.Choice(['csv', 'json', 'parquet'], case_sensitive=False),
+    default='csv',
+    help='File format (default: csv)'
+)
+@click.option(
+    '--checkpoint/--no-checkpoint',
+    default=True,
+    help='Use checkpoint system to track progress (default: enabled)'
+)
+@click.option(
+    '--batch-size',
+    type=int,
+    default=1000,
+    help='Number of records to process in each batch (default: 1000)'
+)
+@click.option(
+    '--dry-run',
+    is_flag=True,
+    help='Preview what would be processed without writing to storage'
+)
+def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch_size, dry_run):
+    """Backfill historical data from a mounted file or directory."""
+    # Initialize logging
+    global logger
+    if logger is None:
+        setup_logging()
+        logger = get_logger(__name__)
+    
+    from pathlib import Path
+    import pandas as pd
+    from datetime import datetime
+    import json
+    
+    # Convert path to Path object
+    data_path = Path(path)
+    
+    # Log operation details
+    logger.info(f"Starting file-based backfill from: {data_path}")
+    logger.info(f"Format: {format}, Batch size: {batch_size}, Checkpoint: {checkpoint}")
+    if symbols:
+        logger.info(f"Filtering symbols: {list(symbols)}")
+    if start_date:
+        logger.info(f"Start date filter: {start_date}")
+    if end_date:
+        logger.info(f"End date filter: {end_date}")
+    if dry_run:
+        logger.info("DRY RUN MODE - No data will be written")
+    
+    # Initialize service and run backfill
+    service = DataIngestionService()
+    
+    async def run_file_backfill():
+        """Run the file-based backfill process."""
+        await service._lazy_initialize()
+        
+        # Import file backfill handler
+        from utils.file_backfill import FileBackfillHandler
+        
+        # Create handler
+        handler = FileBackfillHandler(
+            path=data_path,
+            format=format,
+            symbols=list(symbols) if symbols else None,
+            start_date=datetime.fromisoformat(start_date) if start_date else None,
+            end_date=datetime.fromisoformat(end_date) if end_date else None,
+            batch_size=batch_size,
+            use_checkpoint=checkpoint,
+            dry_run=dry_run
+        )
+        
+        # Run backfill
+        await handler.run()
+        
+        logger.info("File backfill completed")
+    
+    # Run the async function
+    asyncio.run(run_file_backfill())
 
 
 @cli.command()

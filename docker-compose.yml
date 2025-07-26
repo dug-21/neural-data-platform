@@ -126,13 +126,20 @@ services:
       - ALPACA_API_SECRET=${ALPACA_API_SECRET}
       - PRIMARY_PROVIDER=${PRIMARY_PROVIDER:-alpaca}
       - USE_SIMPLE_MODE=${USE_SIMPLE_MODE:-false}
+      # External data mount configuration
+      - EXTERNAL_DATA_PATH=${EXTERNAL_DATA_PATH:-/mnt/external-data}
+      - EXTERNAL_DATA_ENABLED=${EXTERNAL_DATA_ENABLED:-false}
     volumes:
       - ./data_ingestion:/app/data_ingestion:ro
       - ./config:/app/config:ro
       - ingestion_logs:/app/logs
       - ingestion_cache:/app/cache
+      # External drive mount point (read-only by default for safety)
+      # Change :ro to :rw if write access is needed
+      - ${EXTERNAL_MOUNT_PATH:-/mnt/external}:/mnt/external-data:ro
     ports:
       - "8001:8000"  # Metrics port
+      - "8080:8080"  # Health check endpoint
     networks:
       - neural_trader_net
     depends_on:
@@ -140,6 +147,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     deploy:
       resources:
@@ -164,9 +177,15 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
       - RUST_BACKTRACE=${RUST_BACKTRACE:-1}
       - TZ=UTC
+      # External data mount configuration
+      - EXTERNAL_DATA_PATH=${EXTERNAL_DATA_PATH:-/mnt/external-data}
+      - EXTERNAL_DATA_ENABLED=${EXTERNAL_DATA_ENABLED:-false}
     volumes:
       - ./config:/app/config:ro
       - trader_logs:/app/logs
+      # External drive mount point (read-only by default for safety)
+      # Change :ro to :rw if write access is needed
+      - ${EXTERNAL_MOUNT_PATH:-/mnt/external}:/mnt/external-data:ro
     ports:
       - "3030:3030"  # Metrics/API port
     networks:

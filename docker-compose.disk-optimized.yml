@@ -1,0 +1,283 @@
+version: '3.8'
+
+# Disk-optimized configuration for containerized environments
+# Designed to run in < 10GB total disk space
+
+services:
+  # TimescaleDB with aggressive compression
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: neural_trader_timescaledb
+    environment:
+      - POSTGRES_USER=neural_trader
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=neural_trader_db
+      # Optimize for small disk footprint
+      - POSTGRES_SHARED_BUFFERS=256MB
+      - POSTGRES_EFFECTIVE_CACHE_SIZE=512MB
+      - POSTGRES_MAINTENANCE_WORK_MEM=64MB
+      - POSTGRES_WORK_MEM=32MB
+      - POSTGRES_MAX_CONNECTIONS=50
+      - POSTGRES_CHECKPOINT_COMPLETION_TARGET=0.9
+      - POSTGRES_WAL_COMPRESSION=on
+    volumes:
+      # Use tmpfs for non-persistent data
+      - /var/lib/postgresql/data/pg_stat_tmp:tmpfs:size=10M
+      # Persistent data with size limits
+      - timescale_data:/var/lib/postgresql/data:size=5G
+      - ./docker/timescaledb/init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - neural_trader_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neural_trader"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+    # Disk cleanup command on startup
+    command: |
+      bash -c "
+      postgres &
+      sleep 10
+      psql -U neural_trader -d neural_trader_db -c 'VACUUM FULL;'
+      wait
+      "
+
+  # Redis with memory limits and no persistence
+  redis:
+    image: redis:7-alpine
+    container_name: neural_trader_redis
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    volumes:
+      # Use tmpfs for Redis data (non-persistent)
+      - /data:tmpfs:size=256M
+    ports:
+      - "6379:6379"
+    networks:
+      - neural_trader_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # Data ingestion with streaming mode
+  data-ingestion:
+    build:
+      context: .
+      dockerfile: docker/data-ingestion/Dockerfile
+      args:
+        - INSTALL_DEV_DEPS=false
+    image: neural-trader-data-ingestion:disk-optimized
+    container_name: neural_trader_data_ingestion
+    environment:
+      # Database configuration
+      - TIMESCALE_HOST=timescaledb
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_DATABASE=neural_trader_db
+      - TIMESCALE_USER=neural_trader
+      - TIMESCALE_PASSWORD=${POSTGRES_PASSWORD}
+      # Redis configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      # Disk optimization settings
+      - STREAMING_MODE=true
+      - BATCH_SIZE=1000
+      - BUFFER_SIZE_MB=50
+      - MAX_CACHE_SIZE_MB=100
+      - CLEANUP_INTERVAL_SECONDS=300
+      - LOG_LEVEL=WARNING  # Reduce log verbosity
+      # Data retention
+      - TICK_DATA_RETENTION_HOURS=24
+      - MINUTE_DATA_RETENTION_DAYS=7
+      - DAILY_DATA_RETENTION_DAYS=365
+      # API keys
+      - PRIMARY_PROVIDER=${PRIMARY_PROVIDER:-alpaca}
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_API_SECRET=${ALPACA_API_SECRET}
+    volumes:
+      # Use tmpfs for temporary data
+      - /tmp/neural_trader:tmpfs:size=100M
+      - /app/cache:tmpfs:size=100M
+      # Minimal persistent storage for logs
+      - ingestion_logs:/app/logs:size=100M
+    ports:
+      - "8001:8000"
+    networks:
+      - neural_trader_net
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # Neural Trader with minimal footprint
+  neural-trader:
+    build:
+      context: .
+      dockerfile: Dockerfile.minimal
+      target: runtime
+    image: neural-trader:disk-optimized
+    container_name: neural_trader_app
+    environment:
+      - DATABASE_URL=postgresql://neural_trader:${POSTGRES_PASSWORD}@timescaledb:5432/neural_trader_db
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - RUST_LOG=warn
+      - RUST_BACKTRACE=0
+      # Disk optimization
+      - ENABLE_DISK_MANAGER=true
+      - MAX_LOG_SIZE_MB=10
+      - MAX_CACHE_SIZE_MB=50
+      - CLEANUP_INTERVAL_SECONDS=300
+    volumes:
+      # Use tmpfs for temporary data
+      - /tmp/neural_trader:tmpfs:size=50M
+      # Minimal persistent storage
+      - trader_logs:/app/logs:size=50M
+    ports:
+      - "3030:3030"
+    networks:
+      - neural_trader_net
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+
+  # Lightweight monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: neural_trader_prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=500MB'
+      - '--storage.tsdb.wal-compression'
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus:size=500M
+    ports:
+      - "9090:9090"
+    networks:
+      - neural_trader_net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # Disk usage monitor (runs periodically)
+  disk-monitor:
+    image: alpine:latest
+    container_name: neural_trader_disk_monitor
+    command: |
+      sh -c "
+      while true; do
+        echo '=== Disk Usage Report ==='
+        df -h
+        echo '=== Docker Volume Usage ==='
+        du -sh /var/lib/docker/volumes/*
+        echo '=== Container Disk Usage ==='
+        docker ps -q | xargs docker inspect -f '{{.Name}}: {{.GraphDriver.Data.MergedDir}}' | 
+          while read line; do
+            name=$$(echo $$line | cut -d: -f1)
+            path=$$(echo $$line | cut -d: -f2)
+            size=$$(du -sh $$path 2>/dev/null | cut -f1)
+            echo "$$name: $$size"
+          done
+        echo '========================'
+        sleep 3600
+      done
+      "
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    networks:
+      - neural_trader_net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 64M
+
+volumes:
+  # All volumes with size constraints
+  timescale_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /tmp/neural_trader_timescale
+      o: bind,size=5G
+  
+  ingestion_logs:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=100m,mode=1777
+  
+  trader_logs:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=50m,mode=1777
+  
+  prometheus_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /tmp/neural_trader_prometheus
+      o: bind,size=500M
+
+networks:
+  neural_trader_net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: neural_trader_br
+
+# System-wide Docker daemon configuration for disk optimization
+# Add to /etc/docker/daemon.json:
+# {
+#   "log-driver": "json-file",
+#   "log-opts": {
+#     "max-size": "10m",
+#     "max-file": "3"
+#   },
+#   "storage-driver": "overlay2",
+#   "storage-opts": [
+#     "overlay2.override_kernel_check=true"
+#   ]
+# }

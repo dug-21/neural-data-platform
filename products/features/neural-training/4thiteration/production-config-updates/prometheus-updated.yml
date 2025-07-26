@@ -1,0 +1,107 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'neural-trader'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Neural Trader Rust application
+  - job_name: 'neural-trader'
+    static_configs:
+      - targets: ['neural-trader:3030']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Data Ingestion Python service - Enhanced configuration
+  - job_name: 'data-ingestion'
+    static_configs:
+      - targets: ['data-ingestion:9091']  # Updated metrics port
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    metric_relabel_configs:
+      # Add service label for better grouping
+      - source_labels: [__name__]
+        target_label: service
+        replacement: 'data-ingestion'
+
+  # Data Ingestion Health Check endpoint
+  - job_name: 'data-ingestion-health'
+    static_configs:
+      - targets: ['data-ingestion:8001']
+    metrics_path: '/health'
+    scrape_interval: 30s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'up'
+        target_label: __name__
+        replacement: 'data_ingestion_health'
+
+  # WebSocket health monitoring
+  - job_name: 'websocket-health'
+    static_configs:
+      - targets: ['data-ingestion:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    params:
+      format: ['prometheus']
+    metric_relabel_configs:
+      # Filter only WebSocket related metrics
+      - source_labels: [__name__]
+        regex: '(websocket_.*|ws_.*)'
+        action: keep
+      - source_labels: [__name__]
+        target_label: metric_type
+        replacement: 'websocket'
+
+  # TimescaleDB
+  - job_name: 'timescaledb'
+    static_configs:
+      - targets: ['timescaledb:9187']
+    metrics_path: '/metrics'
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:9121']
+    metrics_path: '/metrics'
+
+  # Node Exporter (if added)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+# Recording rules for aggregated metrics
+# These will be loaded from separate files
+rule_files:
+  - '/etc/prometheus/rules/data_ingestion.yml'
+  - '/etc/prometheus/rules/websocket.yml'
+  - '/etc/prometheus/rules/health_checks.yml'
+
+# Remote write configuration (optional)
+# remote_write:
+#   - url: "http://remote-storage:9201/write"
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 200
+#       min_shards: 1
+#       max_samples_per_send: 5000
+#       batch_send_deadline: 10s
+#       min_backoff: 30ms
+#       max_backoff: 100ms

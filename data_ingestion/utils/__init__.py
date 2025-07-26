@@ -13,6 +13,7 @@ from .metrics_helpers import (
     AsyncTaskMonitor,
     MetricCollector
 )
+from .file_backfill import FileBackfillHandler
 
 __all__ = [
     "get_logger", 
@@ -27,5 +28,6 @@ __all__ = [
     "track_data_quality",
     "ProviderHealthTracker",
     "AsyncTaskMonitor",
-    "MetricCollector"
+    "MetricCollector",
+    "FileBackfillHandler"
 ]

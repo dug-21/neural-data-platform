@@ -209,6 +209,24 @@ class Metrics:
             ['pool_name', 'state']
         )
         
+        # Health check metrics
+        self.health_check_status = Gauge(
+            'data_ingestion_health_status',
+            'Overall health status (1=healthy, 0=unhealthy)'
+        )
+        
+        self.health_check_component_status = Gauge(
+            'data_ingestion_health_component_status',
+            'Component health status (1=healthy, 0=unhealthy)',
+            ['component']
+        )
+        
+        self.data_flow_age_seconds = Gauge(
+            'data_ingestion_data_flow_age_seconds',
+            'Age of last received data in seconds',
+            ['provider', 'symbol']
+        )
+        
         # Async operation metrics
         self.async_task_duration = Histogram(
             'data_ingestion_async_task_duration_seconds',

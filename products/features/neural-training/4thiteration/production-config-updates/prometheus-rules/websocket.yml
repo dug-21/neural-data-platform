@@ -1,0 +1,69 @@
+groups:
+  - name: websocket_metrics
+    interval: 30s
+    rules:
+      # WebSocket connection rate
+      - record: websocket:connections_rate_1m
+        expr: rate(websocket_connections_total[1m])
+      
+      # WebSocket message rate
+      - record: websocket:messages_rate_1m
+        expr: rate(websocket_messages_total[1m])
+      
+      # WebSocket error rate
+      - record: websocket:errors_rate_1m
+        expr: rate(websocket_errors_total[1m])
+      
+      # Active WebSocket connections
+      - record: websocket:active_connections
+        expr: websocket_connections_active
+      
+      # WebSocket message latency
+      - record: websocket:message_latency_p95
+        expr: histogram_quantile(0.95, rate(websocket_message_duration_seconds_bucket[5m]))
+      
+      # WebSocket reconnection rate
+      - record: websocket:reconnections_rate_1m
+        expr: rate(websocket_reconnections_total[1m])
+
+  - name: websocket_alerts
+    rules:
+      # Alert on high error rate
+      - alert: WebSocketHighErrorRate
+        expr: websocket:errors_rate_1m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High WebSocket error rate ({{ $labels.provider }})"
+          description: "WebSocket error rate is {{ $value }} errors/sec for provider {{ $labels.provider }}"
+      
+      # Alert on connection failures
+      - alert: WebSocketConnectionFailures
+        expr: websocket:reconnections_rate_1m > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frequent WebSocket reconnections"
+          description: "WebSocket reconnection rate is {{ $value }} reconnections/sec for provider {{ $labels.provider }}"
+      
+      # Alert on high latency
+      - alert: WebSocketHighLatency
+        expr: websocket:message_latency_p95 > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High WebSocket message latency"
+          description: "95th percentile WebSocket latency is {{ $value }}s for provider {{ $labels.provider }}"
+      
+      # Alert on no active connections
+      - alert: WebSocketNoConnections
+        expr: websocket:active_connections == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No active WebSocket connections"
+          description: "No active WebSocket connections for provider {{ $labels.provider }}"

@@ -1,0 +1,93 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'neural-trader-prod'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Data ingestion service metrics
+  - job_name: 'data-ingestion'
+    static_configs:
+      - targets: ['data-ingestion:9090']
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    metrics_path: '/metrics'
+    
+  # Neural trader API metrics
+  - job_name: 'neural-trader-api'
+    static_configs:
+      - targets: ['neural-trader-api:8000']
+    metrics_path: '/metrics'
+    
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+      
+  # Node exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+      
+  # Container metrics from cAdvisor
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    relabel_configs:
+      - source_labels: [__name__]
+        regex: 'container_.*'
+        action: keep
+        
+  # PostgreSQL/TimescaleDB exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+      
+  # Redis exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+      
+  # Service discovery for dynamic WebSocket endpoints
+  - job_name: 'websocket-endpoints'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['websocket-provider']
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: job
+      - source_labels: [__meta_consul_node]
+        target_label: instance
+      - source_labels: [__meta_consul_tags]
+        regex: '.*provider=([^,]+).*'
+        target_label: provider
+        
+# Remote write configuration for long-term storage
+remote_write:
+  - url: 'http://cortex:9009/api/v1/push'
+    queue_config:
+      capacity: 10000
+      max_shards: 30
+      min_shards: 1
+      max_samples_per_send: 5000
+      batch_send_deadline: 5s
+      min_backoff: 30ms
+      max_backoff: 100ms
+    write_relabel_configs:
+      # Drop high-cardinality metrics for remote storage
+      - source_labels: [__name__]
+        regex: 'go_memstats_.*|process_.*'
+        action: drop

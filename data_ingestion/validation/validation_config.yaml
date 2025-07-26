@@ -1,0 +1,286 @@
+# Historical Data Validation Configuration
+# This file defines validation rules, thresholds, and quality standards
+
+validation:
+  # Pre-load validation settings
+  pre_load:
+    # Price validation rules
+    price_rules:
+      min_price: 0.0001
+      max_price: 1000000.0
+      max_price_change_pct: 50.0  # Maximum allowed price change %
+      outlier_threshold_sigma: 5.0  # Standard deviations for outlier detection
+      
+    # Volume validation rules
+    volume_rules:
+      min_volume: 0
+      max_volume: 10000000000  # 10 billion
+      outlier_threshold_sigma: 5.0
+      
+    # Time validation rules
+    time_rules:
+      max_future_minutes: 5  # Allow 5 min future timestamps
+      max_past_years: 50     # 50 years of historical data
+      require_aligned_timestamps: true  # For minute/hour data
+      
+    # OHLC consistency rules
+    ohlc_rules:
+      enforce_high_low_consistency: true  # High >= Low
+      enforce_high_range: true  # High >= Open, Close
+      enforce_low_range: true   # Low <= Open, Close
+      allow_zero_prices: false
+      
+    # Continuity rules
+    continuity_rules:
+      max_gap_multiplier: 10  # Max gap = 10x expected interval
+      check_market_hours: true
+      weekend_data_allowed_symbols: ['BTC', 'ETH', 'CRYPTO']  # Crypto symbols
+      
+    # Batch processing
+    batch_settings:
+      max_batch_size: 50000
+      parallel_validation: true
+      fail_fast: false  # Continue validation even if errors found
+      
+  # Post-load validation settings
+  post_load:
+    # Record count validation
+    record_count:
+      tolerance_pct: 5.0  # Allow 5% difference from expected
+      min_records_per_day: 100  # Minimum records for valid day
+      
+    # Data completeness
+    completeness:
+      max_null_fields_pct: 0.1  # Max 0.1% NULL values
+      required_fields: ['time', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+      
+    # Consistency checks
+    consistency:
+      check_ohlc_rules: true
+      check_duplicate_timestamps: true
+      check_provider_consistency: true
+      max_provider_price_diff_pct: 1.0  # Max 1% price difference between providers
+      
+    # Index health
+    index_health:
+      check_unused_indexes: true
+      min_index_usage_count: 100  # Warn if index used < 100 times
+      
+    # Aggregation validation
+    aggregation:
+      validate_continuous_aggregates: true
+      max_aggregation_diff_pct: 0.01  # Max 0.01% difference in aggregates
+      
+  # Gap detection settings
+  gap_detection:
+    # Expected data intervals (minutes)
+    expected_intervals:
+      tick: 0.0167      # 1 second
+      1min: 1
+      5min: 5
+      15min: 15
+      30min: 30
+      1hour: 60
+      4hour: 240
+      1day: 1440
+      
+    # Market hours (simplified US market)
+    market_hours:
+      open_time: "09:30"
+      close_time: "16:00"
+      timezone: "America/New_York"
+      trading_days: [1, 2, 3, 4, 5]  # Monday-Friday
+      
+    # Gap severity thresholds (minutes)
+    severity_thresholds:
+      market_hours:
+        minor: 5
+        moderate: 30
+        severe: 120
+        critical: 240
+      after_hours:
+        minor: 60
+        moderate: 240
+        severe: 480
+        critical: 960
+        
+    # Gap analysis settings
+    analysis:
+      detailed_gap_limit: 1000  # Max gaps to include in detailed report
+      include_expected_gaps: false  # Include weekends/holidays in report
+      
+  # Checksum validation settings
+  checksum:
+    # Checksum methods
+    methods:
+      md5:
+        enabled: true
+        block_size: 10000
+      statistical:
+        enabled: true
+        tolerance: 0.0001  # Tolerance for float comparisons
+        
+    # Cross-provider validation
+    cross_provider:
+      enabled: true
+      min_providers: 2  # Minimum providers for comparison
+      max_price_discrepancy_pct: 1.0
+      
+    # Integrity scoring
+    scoring:
+      weights:
+        row_count: 0.20
+        checksums: 0.30
+        statistical: 0.30
+        cross_provider: 0.20
+        
+  # Data quality settings
+  quality_analysis:
+    # Dimension weights (must sum to 1.0)
+    dimension_weights:
+      completeness: 0.25
+      accuracy: 0.25
+      consistency: 0.20
+      timeliness: 0.15
+      validity: 0.15
+      
+    # Quality grade thresholds
+    grade_thresholds:
+      A: 90   # Excellent
+      B: 80   # Good
+      C: 70   # Acceptable
+      D: 60   # Poor
+      F: 0    # Failing
+      
+    # Completeness rules
+    completeness:
+      expected_coverage_pct: 95.0
+      max_null_values_pct: 0.1
+      max_gaps_pct: 5.0
+      
+    # Accuracy rules
+    accuracy:
+      max_outliers_pct: 0.1  # Max 0.1% outliers
+      max_price_moves_pct: 20.0  # Max 20% price move
+      zero_price_tolerance: 0  # No zero prices allowed
+      
+    # Timeliness rules
+    timeliness:
+      max_data_age_hours: 24  # Data should be < 24 hours old
+      max_insertion_delay_seconds: 300  # Max 5 min insertion delay
+      
+    # Validity rules
+    validity:
+      enforce_business_rules: true
+      check_static_prices: true  # Detect days with no price movement
+      min_daily_records: 100  # Minimum records for valid trading day
+
+# Reporting configuration
+reporting:
+  # Output settings
+  output:
+    directory: "validation_reports"
+    formats: ["html", "json", "summary"]
+    include_details: true
+    max_issues_shown: 100
+    max_warnings_shown: 50
+    
+  # Email notifications
+  email:
+    enabled: false
+    smtp_server: "smtp.example.com"
+    smtp_port: 587
+    from_address: "validation@example.com"
+    to_addresses: ["team@example.com"]
+    send_on_failure: true
+    send_on_warning: false
+    
+  # Dashboard integration
+  dashboard:
+    enabled: true
+    update_interval_seconds: 300
+    retention_days: 30
+    
+# Performance settings
+performance:
+  # Database connections
+  database:
+    min_connections: 2
+    max_connections: 10
+    connection_timeout: 60
+    command_timeout: 120
+    
+  # Processing limits
+  processing:
+    max_memory_mb: 4096
+    max_concurrent_validations: 5
+    chunk_size: 10000
+    
+  # Caching
+  caching:
+    enabled: true
+    ttl_seconds: 3600
+    max_cache_size_mb: 512
+
+# Monitoring integration
+monitoring:
+  # Metrics export
+  metrics:
+    enabled: true
+    export_interval_seconds: 60
+    include_detailed_metrics: true
+    
+  # Alerting rules
+  alerts:
+    - name: "validation_failure"
+      condition: "overall_status == FAILED"
+      severity: "critical"
+      
+    - name: "low_quality_score"
+      condition: "overall_score < 70"
+      severity: "warning"
+      
+    - name: "high_error_rate"
+      condition: "error_rate > 5.0"
+      severity: "warning"
+      
+    - name: "critical_gaps"
+      condition: "gap_severity == CRITICAL"
+      severity: "critical"
+      
+# Custom validation rules (advanced)
+custom_rules:
+  # Symbol-specific rules
+  symbol_rules:
+    AAPL:
+      min_price: 1.0
+      max_price: 1000.0
+      min_daily_volume: 1000000
+      
+    BTC:
+      allow_weekend_data: true
+      max_price_change_pct: 100.0  # Higher volatility allowed
+      
+  # Time-based rules
+  time_rules:
+    - name: "earnings_season"
+      months: [1, 4, 7, 10]
+      max_price_change_pct: 75.0  # Allow larger moves
+      
+    - name: "year_end"
+      months: [12]
+      min_daily_records: 50  # Lower activity expected
+      
+  # Provider-specific rules
+  provider_rules:
+    polygon:
+      priority: 1
+      weight: 0.4
+      
+    alpaca:
+      priority: 2
+      weight: 0.3
+      
+    yahoo:
+      priority: 3
+      weight: 0.3
