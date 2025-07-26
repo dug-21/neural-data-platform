@@ -131,7 +131,7 @@ class DataIngestionService:
         health_tracker.set_handler(self.health_check_handler)
         
         # Start health check server
-        health_port = 8080  # Default port (code-first approach)
+        health_port = 8001  # Default port matching Dockerfile EXPOSE
         try:
             # Try to get port from settings if available
             if self.settings and hasattr(self.settings, 'health_check_port'):
