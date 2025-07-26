@@ -420,7 +420,7 @@ class HealthCheckHandler:
         is_healthy = all([db_healthy, redis_healthy, ws_healthy or stream_healthy, flow_healthy])
         
         # Update Prometheus metrics
-        metrics.health_check_status.set(1 if is_healthy else 0)
+        metrics.health_check_status.labels(component='overall').set(1 if is_healthy else 0)
         metrics.health_check_component_status.labels(component='database').set(1 if db_healthy else 0)
         metrics.health_check_component_status.labels(component='redis').set(1 if redis_healthy else 0)
         metrics.health_check_component_status.labels(component='websockets').set(1 if ws_healthy else 0)
@@ -431,7 +431,7 @@ class HealthCheckHandler:
         for key, timestamp in self.last_data_timestamps.items():
             provider, symbol = key.split(':', 1)
             age_seconds = (datetime.now() - timestamp).total_seconds()
-            metrics.data_flow_age_seconds.labels(provider=provider, symbol=symbol).set(age_seconds)
+            metrics.data_flow_age.labels(provider=provider, symbol=symbol).set(age_seconds)
         
         return {
             'status': 'healthy' if is_healthy else 'unhealthy',

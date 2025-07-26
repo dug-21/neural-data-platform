@@ -61,7 +61,7 @@ impl AgentClient {
         }
         
         let signal: TradingSignal = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(signal)
     }
@@ -103,7 +103,7 @@ impl AgentClient {
         }
         
         let order: Order = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(order)
     }
@@ -125,7 +125,7 @@ impl AgentClient {
         }
         
         let portfolio: Portfolio = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(portfolio)
     }
@@ -147,7 +147,7 @@ impl AgentClient {
         }
         
         let orders: Vec<Order> = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(orders)
     }
@@ -169,7 +169,7 @@ impl AgentClient {
         }
         
         let order: Order = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(order)
     }
@@ -191,7 +191,7 @@ impl AgentClient {
         }
         
         let strategy: TradingStrategy = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(strategy)
     }
@@ -214,7 +214,7 @@ impl AgentClient {
         }
         
         let strategy: TradingStrategy = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(strategy)
     }

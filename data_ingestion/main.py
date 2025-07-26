@@ -88,7 +88,7 @@ class DataIngestionService:
         # Default circuit breaker config for providers
         default_cb_config = CircuitBreakerConfig(
             failure_threshold=5,
-            recovery_timeout=60.0,
+            timeout=60.0,
             success_threshold=2
         )
         
@@ -97,7 +97,7 @@ class DataIngestionService:
             'alpaca': {
                 'circuit_breaker_config': CircuitBreakerConfig(
                     failure_threshold=3,  # More sensitive for real-time
-                    recovery_timeout=30.0,
+                    timeout=30.0,
                     success_threshold=2
                 ),
                 'reconnect_attempts': 100,
@@ -111,7 +111,7 @@ class DataIngestionService:
             'file_provider': {
                 'circuit_breaker_config': CircuitBreakerConfig(
                     failure_threshold=10,  # More tolerant for files
-                    recovery_timeout=10.0,
+                    timeout=10.0,
                     success_threshold=1
                 ),
                 'batch_size': 1000
