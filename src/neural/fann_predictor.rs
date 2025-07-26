@@ -1335,15 +1335,16 @@ mod tests {
             
             test_data.push(TimeSeriesData {
                 timestamp: base_time + chrono::Duration::minutes(i),
-                entity: "test_symbol".to_string(),
+                entity: Some("test_symbol".to_string()),
                 symbol: "TEST".to_string(),
                 open: price * 0.99,
                 high: price * 1.01,
                 low: price * 0.98,
                 close: price,
                 volume: 1000000.0 + (i as f64 * 10000.0),
-                source: "test".to_string(),
-                metadata: HashMap::new(),
+                source: Some("test".to_string()),
+                value: Some(price),
+                metadata: Some(serde_json::json!({})),
                 indicators,
             });
         }

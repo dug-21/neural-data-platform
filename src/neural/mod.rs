@@ -14,8 +14,24 @@ use crate::data::TimeSeriesData;
 // Module for FANN-based predictions
 pub mod fann_predictor;
 
+// Module for enhanced predictor with Phase 6 features
+pub mod enhanced_predictor;
+
+// Test modules
+#[cfg(test)]
+pub mod tests;
+
 // Re-export the FANN predictor
 pub use fann_predictor::{FannPredictor, FannModelConfig};
+
+// Re-export the enhanced predictor
+pub use enhanced_predictor::{
+    EnhancedNeuralPredictor, 
+    EnhancedPredictionResult, 
+    ConfidenceBreakdown, 
+    RetrainingMetrics,
+    PerformanceTracker
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionResult {

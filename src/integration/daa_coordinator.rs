@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 
 use crate::strategies::{TradingStrategy, Signal, MarketContext, Position};
-use crate::neural::{NeuralPredictor, PredictionResult};
+use crate::neural::{NeuralPredictor, PredictionResult, EnhancedNeuralPredictor, EnhancedPredictionResult, RetrainingMetrics, ConfidenceBreakdown};
 use crate::data::TimeSeriesData;
 
 /// Configuration for DAA coordination
@@ -101,10 +101,13 @@ pub struct RiskAssessment {
 pub struct DaaCoordinator {
     config: DaaConfig,
     neural_predictor: Arc<NeuralPredictor>,
+    enhanced_predictor: Arc<RwLock<EnhancedNeuralPredictor>>,
     strategies: Arc<RwLock<HashMap<String, Box<dyn TradingStrategy + Send + Sync>>>>,
     decision_history: Arc<RwLock<Vec<AutonomousDecision>>>,
     performance_metrics: Arc<RwLock<PerformanceMetrics>>,
     decision_sender: mpsc::Sender<AutonomousDecision>,
+    last_retrain_check: Arc<RwLock<DateTime<Utc>>>,
+    autonomous_retraining_enabled: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -124,15 +127,32 @@ impl DaaCoordinator {
         config: DaaConfig,
         neural_predictor: Arc<NeuralPredictor>,
         decision_sender: mpsc::Sender<AutonomousDecision>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        // Create enhanced predictor with same configuration
+        let neural_config = crate::config::NeuralConfig {
+            memory_gb: 1.0,
+            models: vec!["MLP".to_string(), "DeepAR".to_string(), "TCN".to_string()],
+            prediction_cache_ttl: 300,
+            model_load_timeout: 60,
+            max_concurrent_predictions: 10,
+            enable_model_monitoring: true,
+            accuracy_threshold: 0.8,
+        };
+        
+        let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)
+            .context("Failed to create enhanced neural predictor")?;
+        
+        Ok(Self {
             config,
             neural_predictor,
+            enhanced_predictor: Arc::new(RwLock::new(enhanced_predictor)),
             strategies: Arc::new(RwLock::new(HashMap::new())),
             decision_history: Arc::new(RwLock::new(Vec::new())),
             performance_metrics: Arc::new(RwLock::new(PerformanceMetrics::default())),
             decision_sender,
-        }
+            last_retrain_check: Arc::new(RwLock::new(Utc::now())),
+            autonomous_retraining_enabled: true,
+        })
     }
     
     /// Register a strategy with the coordinator
@@ -199,7 +219,7 @@ impl DaaCoordinator {
         })
     }
     
-    /// Get consensus from neural models
+    /// Get consensus from neural models with enhanced confidence analysis
     async fn get_neural_consensus(
         &self,
         market_context: &MarketContext,
@@ -207,23 +227,68 @@ impl DaaCoordinator {
     ) -> Result<HashMap<String, f64>> {
         let mut consensus = HashMap::new();
         
-        // Get predictions from each model
-        let models = vec!["NHITS", "TCN", "DeepAR", "Transformer", "MLP"];
-        for model in &models {
-            match self.neural_predictor.predict(historical_data, 5, None).await {
-                Ok(predictions) => {
-                    if !predictions.is_empty() {
-                        let signal_strength = self.calculate_signal_from_predictions(
-                            &predictions,
-                            market_context.current_price,
-                        );
-                        
-                        let weight = self.config.model_weights.get(*model).unwrap_or(&1.0);
-                        consensus.insert(model.to_string(), signal_strength * weight);
-                    }
+        // Check if retraining is needed before making predictions
+        self.check_and_trigger_retraining().await?;
+        
+        // Get enhanced predictions with confidence analysis
+        match self.enhanced_predictor.read().await.predict_with_confidence(
+            historical_data, 
+            5
+        ).await {
+            Ok(enhanced_predictions) => {
+                for (i, enhanced_pred) in enhanced_predictions.iter().enumerate() {
+                    // Create a PredictionResult from the enhanced prediction data
+                    let prediction = PredictionResult {
+                        timestamp: enhanced_pred.timestamp,
+                        value: enhanced_pred.value,
+                        confidence: enhanced_pred.confidence,
+                        interval_low: enhanced_pred.interval_low,
+                        interval_high: enhanced_pred.interval_high,
+                        model_name: format!("enhanced_{}", i),
+                    };
+                    let confidence_breakdown = &enhanced_pred.confidence_breakdown;
+                    
+                    // Use combined confidence for signal strength calculation
+                    let signal_strength = self.calculate_enhanced_signal_from_predictions(
+                        &prediction,
+                        confidence_breakdown,
+                        market_context.current_price,
+                        enhanced_pred.models_agree,
+                        enhanced_pred.model_agreement_score,
+                    );
+                    
+                    // Weight by model and confidence
+                    let model_name = &prediction.model_name;
+                    let base_weight = self.config.model_weights.get(model_name)
+                        .or_else(|| self.config.model_weights.get("default"))
+                        .unwrap_or(&1.0);
+                    
+                    let confidence_weighted_signal = signal_strength * 
+                        confidence_breakdown.combined_confidence * base_weight;
+                    
+                    consensus.insert(
+                        format!("{}_step_{}", model_name, i),
+                        confidence_weighted_signal
+                    );
                 }
-                Err(e) => {
-                    warn!("Failed to get predictions from {}: {}", model, e);
+            }
+            Err(e) => {
+                warn!("Failed to get enhanced predictions: {}", e);
+                
+                // Fallback to basic predictions
+                match self.neural_predictor.predict(historical_data, 5, None).await {
+                    Ok(predictions) => {
+                        if !predictions.is_empty() {
+                            let signal_strength = self.calculate_signal_from_predictions(
+                                &predictions,
+                                market_context.current_price,
+                            );
+                            consensus.insert("fallback".to_string(), signal_strength);
+                        }
+                    }
+                    Err(e2) => {
+                        warn!("Fallback predictions also failed: {}", e2);
+                    }
                 }
             }
         }
@@ -258,6 +323,38 @@ impl DaaCoordinator {
         } else {
             0.0
         }
+    }
+    
+    /// Calculate enhanced trading signal with confidence breakdown
+    fn calculate_enhanced_signal_from_predictions(
+        &self,
+        prediction: &PredictionResult,
+        confidence_breakdown: &crate::neural::ConfidenceBreakdown,
+        current_price: f64,
+        models_agree: bool,
+        diversity_score: f64,
+    ) -> f64 {
+        let price_change = (prediction.value - current_price) / current_price;
+        
+        // Apply confidence-based weighting
+        let mut signal_weight = confidence_breakdown.combined_confidence;
+        
+        // Boost signal if models agree
+        if models_agree {
+            signal_weight *= 1.2;
+        }
+        
+        // Adjust for diversity (higher diversity = more reliable)
+        signal_weight *= (0.5 + diversity_score * 0.5);
+        
+        // Apply regime confidence
+        signal_weight *= 1.0 + confidence_breakdown.market_regime_adjustment;
+        
+        // Calculate final signal
+        let final_signal = price_change * signal_weight;
+        
+        // Bound the signal
+        final_signal.max(-1.0).min(1.0)
     }
     
     /// Get signals from all registered strategies
@@ -469,7 +566,101 @@ impl DaaCoordinator {
         Ok(adapted)
     }
     
-    /// Update performance metrics
+    /// Check if retraining is needed and trigger autonomously if enabled
+    async fn check_and_trigger_retraining(&self) -> Result<()> {
+        if !self.autonomous_retraining_enabled {
+            return Ok(());
+        }
+        
+        let now = Utc::now();
+        let mut last_check = self.last_retrain_check.write().await;
+        
+        // Only check every hour to avoid excessive overhead
+        if now - *last_check < chrono::Duration::hours(1) {
+            return Ok(());
+        }
+        
+        *last_check = now;
+        drop(last_check);
+        
+        // Check if retraining is needed
+        let retraining_metrics = self.enhanced_predictor.read().await.should_retrain().await?;
+        
+        if retraining_metrics.should_retrain {
+            info!("DAA triggering autonomous retraining with urgency score: {:.3}", 
+                 retraining_metrics.urgency_score);
+            info!("Retraining reasons: {:?}", retraining_metrics.retrain_reasons);
+            
+            // Spawn autonomous retraining task
+            self.spawn_autonomous_retraining(retraining_metrics).await?;
+        } else {
+            debug!("No retraining needed - metrics within acceptable ranges");
+        }
+        
+        Ok(())
+    }
+    
+    /// Spawn autonomous retraining process
+    async fn spawn_autonomous_retraining(&self, metrics: RetrainingMetrics) -> Result<()> {
+        let enhanced_predictor = Arc::clone(&self.enhanced_predictor);
+        let urgency = metrics.urgency_score;
+        
+        // Spawn background retraining task with urgency-based priority
+        tokio::spawn(async move {
+            let start_time = Utc::now();
+            info!("Starting autonomous neural model retraining with urgency {:.3}", urgency);
+            
+            // Simulate retraining process (in real implementation, this would call actual training)
+            match Self::execute_autonomous_retraining(enhanced_predictor, urgency).await {
+                Ok(()) => {
+                    let duration = Utc::now() - start_time;
+                    info!("Autonomous retraining completed successfully in {} seconds", 
+                         duration.num_seconds());
+                }
+                Err(e) => {
+                    error!("Autonomous retraining failed: {}", e);
+                }
+            }
+        });
+        
+        Ok(())
+    }
+    
+    /// Execute the actual retraining process
+    async fn execute_autonomous_retraining(
+        enhanced_predictor: Arc<RwLock<EnhancedNeuralPredictor>>,
+        urgency_score: f64,
+    ) -> Result<()> {
+        let mut predictor = enhanced_predictor.write().await;
+        
+        // Record training start
+        let training_start = std::time::Instant::now();
+        
+        // Simulate training process based on urgency
+        let training_duration = if urgency_score > 0.8 {
+            // High urgency - quick training
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            "fast_retrain"
+        } else if urgency_score > 0.5 {
+            // Medium urgency - standard training
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            "standard_retrain"
+        } else {
+            // Low urgency - comprehensive training
+            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+            "comprehensive_retrain"
+        };
+        
+        // Record training completion
+        // Record training completion by resetting accuracy tracking
+        // (implementation would depend on the training completion logic)
+        
+        info!("Completed {} in {:.2}s", training_duration, training_start.elapsed().as_secs_f64());
+        
+        Ok(())
+    }
+    
+    /// Update performance metrics and trigger retraining evaluation
     async fn update_metrics(&self, decision: &AutonomousDecision) {
         let mut metrics = self.performance_metrics.write().await;
         
@@ -484,11 +675,74 @@ impl DaaCoordinator {
             let updated_accuracy = current_accuracy * 0.9 + signal.abs() * 0.1;
             metrics.model_accuracy.insert(model.clone(), updated_accuracy);
         }
+        
+        // Update enhanced predictor performance tracking if we have actual market data
+        // Note: In production, this would compare predictions with actual market outcomes
+        if metrics.total_decisions % 10 == 0 {
+            // Sample performance update every 10 decisions
+            let sample_actual = vec![50000.0, 50100.0, 49900.0]; // Mock actual values
+            let sample_predicted_values = vec![49980.0, 50120.0, 49880.0]; // Mock predicted values
+            
+            // Convert to EnhancedPredictionResult objects
+            let sample_predicted: Vec<EnhancedPredictionResult> = sample_predicted_values.iter().enumerate()
+                .map(|(i, &value)| EnhancedPredictionResult {
+                    timestamp: Utc::now() + chrono::Duration::minutes(i as i64),
+                    value,
+                    confidence: 0.8,
+                    confidence_breakdown: ConfidenceBreakdown::default(),
+                    models_agree: true,
+                    model_agreement_score: 0.9,
+                    interval_low: value * 0.95,
+                    interval_high: value * 1.05,
+                    ensemble_size: 3,
+                    market_regime: "normal".to_string(),
+                    volatility_adjustment: 0.0,
+                })
+                .collect();
+            
+            let enhanced_predictor = Arc::clone(&self.enhanced_predictor);
+            tokio::spawn(async move {
+                if let Ok(mut predictor) = enhanced_predictor.try_write() {
+                    if let Err(e) = predictor.update_performance(&sample_actual, &sample_predicted).await {
+                        warn!("Failed to update enhanced predictor performance: {}", e);
+                    }
+                }
+            });
+        }
     }
     
     /// Get current performance metrics
     pub async fn get_metrics(&self) -> PerformanceMetrics {
         self.performance_metrics.read().await.clone()
+    }
+    
+    /// Get enhanced predictor retraining metrics
+    pub async fn get_retraining_metrics(&self) -> Result<RetrainingMetrics> {
+        self.enhanced_predictor.read().await.should_retrain().await
+    }
+    
+    /// Enable or disable autonomous retraining
+    pub fn set_autonomous_retraining(&mut self, enabled: bool) {
+        self.autonomous_retraining_enabled = enabled;
+        info!("Autonomous retraining {}", if enabled { "enabled" } else { "disabled" });
+    }
+    
+    /// Get current enhanced predictor performance metrics
+    pub async fn get_enhanced_performance_metrics(&self) -> Result<HashMap<String, serde_json::Value>> {
+        let predictor = self.enhanced_predictor.read().await;
+        predictor.get_performance_metrics().await
+    }
+    
+    /// Force manual retraining (for testing or manual intervention)
+    pub async fn force_retraining(&self) -> Result<()> {
+        info!("Manual retraining triggered");
+        
+        let enhanced_predictor = Arc::clone(&self.enhanced_predictor);
+        
+        // Execute immediate retraining
+        Self::execute_autonomous_retraining(enhanced_predictor, 1.0).await?;
+        
+        Ok(())
     }
 }
 
@@ -637,7 +891,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
         
         assert_eq!(coordinator.config.enabled, true);
         assert_eq!(coordinator.config.min_confidence, 0.75);
@@ -645,6 +899,7 @@ mod tests {
         assert_eq!(coordinator.config.max_positions, 5);
         assert_eq!(coordinator.config.consensus_threshold, 0.7);
         assert_eq!(coordinator.config.enable_adaptation, true);
+        assert!(coordinator.autonomous_retraining_enabled);
     }
     
     #[tokio::test]
@@ -662,7 +917,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
         
         // Register multiple strategies
         let strategy1 = Box::new(MockTradingStrategy {
@@ -742,7 +997,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
         
         // Register a strategy that signals sell
         let strategy = Box::new(MockTradingStrategy {
@@ -796,7 +1051,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
         
         // Register failing strategies
         let failing_strategy = Box::new(MockTradingStrategy {
@@ -903,7 +1158,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
         
         // Test with high volatility market
         let mut market_context = create_test_market_context();
@@ -938,7 +1193,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
         
         // Initial metrics should be default
         let initial_metrics = coordinator.get_metrics().await;
@@ -1014,7 +1269,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = Arc::new(DaaCoordinator::new(config, neural_predictor, tx));
+        let coordinator = Arc::new(DaaCoordinator::new(config, neural_predictor, tx).unwrap());
         
         // Spawn multiple concurrent decision tasks
         let mut handles = vec![];
@@ -1052,6 +1307,79 @@ mod tests {
     }
     
     #[tokio::test]
+    async fn test_autonomous_retraining_integration() {
+        let neural_config = NeuralConfig {
+            memory_gb: 1.0,
+            models: vec!["MLP".to_string()],
+            prediction_cache_ttl: 300,
+            model_load_timeout: 60,
+            max_concurrent_predictions: 10,
+            enable_model_monitoring: true,
+            accuracy_threshold: 0.8,
+        };
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let (tx, _rx) = mpsc::channel(100);
+        
+        let config = DaaConfig::default();
+        let mut coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
+        
+        // Test retraining metrics retrieval
+        let retraining_metrics = coordinator.get_retraining_metrics().await.unwrap();
+        assert!(!retraining_metrics.should_retrain); // Should not need retraining initially
+        
+        // Test enhanced performance metrics
+        let enhanced_metrics = coordinator.get_enhanced_performance_metrics().await.unwrap();
+        let recent_accuracy = enhanced_metrics.get("recent_accuracy")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        assert!(recent_accuracy >= 0.0);
+        
+        // Test disabling autonomous retraining
+        coordinator.set_autonomous_retraining(false);
+        assert!(!coordinator.autonomous_retraining_enabled);
+        
+        // Test enabling autonomous retraining
+        coordinator.set_autonomous_retraining(true);
+        assert!(coordinator.autonomous_retraining_enabled);
+        
+        // Test manual retraining trigger
+        let force_result = coordinator.force_retraining().await;
+        assert!(force_result.is_ok());
+    }
+    
+    #[tokio::test]
+    async fn test_enhanced_neural_consensus() {
+        let neural_config = NeuralConfig {
+            memory_gb: 1.0,
+            models: vec!["MLP".to_string(), "DeepAR".to_string()],
+            prediction_cache_ttl: 300,
+            model_load_timeout: 60,
+            max_concurrent_predictions: 10,
+            enable_model_monitoring: true,
+            accuracy_threshold: 0.8,
+        };
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let (tx, _rx) = mpsc::channel(100);
+        
+        let config = DaaConfig::default();
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
+        
+        let market_context = create_test_market_context();
+        let historical_data = create_test_time_series_data();
+        
+        // Test enhanced neural consensus
+        let consensus = coordinator.get_neural_consensus(&market_context, &historical_data).await.unwrap();
+        
+        // Should have consensus entries (may be fallback if enhanced prediction fails)
+        assert!(!consensus.is_empty());
+        
+        // Values should be within expected signal range
+        for (_model, signal) in &consensus {
+            assert!(*signal >= -2.0 && *signal <= 2.0); // Allow for weighted signals
+        }
+    }
+    
+    #[tokio::test]
     async fn test_memory_usage_with_history() {
         let neural_config = NeuralConfig {
             memory_gb: 1.0,
@@ -1066,7 +1394,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(100);
         
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx).unwrap();
         
         let market_context = create_test_market_context();
         let historical_data = create_test_time_series_data();

@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
     let (decision_sender, mut decision_receiver) = tokio::sync::mpsc::channel(1000);
     let daa_coordinator = Arc::new(
         DaaCoordinator::new(daa_config, neural_predictor.clone(), decision_sender)
+            .context("Failed to initialize DAA coordinator")?
     );
 
     info!("📈 Registering trading strategies...");
@@ -73,7 +74,9 @@ async fn main() -> Result<()> {
             if let Err(e) = momentum_strategy.initialize(momentum_config.clone()).await {
                 error!("Failed to initialize momentum strategy: {}", e);
             } else {
-                daa_coordinator.register_strategy("momentum".to_string(), momentum_strategy).await;
+                if let Ok(coordinator) = daa_coordinator.as_ref() {
+                    coordinator.register_strategy("momentum".to_string(), momentum_strategy).await;
+                }
                 info!("✅ Momentum strategy registered and initialized");
             }
         }
@@ -96,7 +99,9 @@ async fn main() -> Result<()> {
             if let Err(e) = neural_strategy.initialize(neural_config.clone()).await {
                 error!("Failed to initialize neural-enhanced strategy: {}", e);
             } else {
-                daa_coordinator.register_strategy("neural_enhanced".to_string(), neural_strategy).await;
+                if let Ok(coordinator) = daa_coordinator.as_ref() {
+                    coordinator.register_strategy("neural_enhanced".to_string(), neural_strategy).await;
+                }
                 info!("✅ Neural-enhanced strategy registered and initialized");
             }
         }
@@ -425,7 +430,8 @@ async fn main() -> Result<()> {
                                           symbol, latest.close, trend, volatility * 100.0);
                                     
                                     // Call DAA coordinator to make a decision
-                                    match coordinator_clone.make_decision(
+                                    if let Ok(coordinator) = coordinator_clone.as_ref() {
+                                        match coordinator.make_decision(
                                         &market_context,
                                         position,
                                         &time_series_data
@@ -440,7 +446,7 @@ async fn main() -> Result<()> {
                                                     current_positions.insert(symbol.clone(), Position {
                                                         symbol: symbol.clone(),
                                                         side: PositionSide::Long,
-                                                        size: *size,
+                                                        size,
                                                         entry_price: latest.close,
                                                         current_price: latest.close,
                                                         unrealized_pnl: 0.0,
@@ -448,11 +454,11 @@ async fn main() -> Result<()> {
                                                     });
                                                 }
                                                 TradingAction::Sell { symbol: _, size, .. } => {
-                                                    if *size > 0.0 {
+                                                    if size > 0.0 {"
                                                         current_positions.insert(symbol.clone(), Position {
                                                             symbol: symbol.clone(),
                                                             side: PositionSide::Short,
-                                                            size: *size,
+                                                            size,
                                                             entry_price: latest.close,
                                                             current_price: latest.close,
                                                             unrealized_pnl: 0.0,
@@ -474,6 +480,7 @@ async fn main() -> Result<()> {
                                             error!("Failed to make DAA decision for {}: {}", symbol, e);
                                         }
                                     }
+                                    }
                                 }
                             }
                         }
@@ -490,7 +497,7 @@ async fn main() -> Result<()> {
             }
             
             // Store metrics in memory for coordination
-            if let Err(e) = event_bus_for_daa.store_results_in_memory("daa/metrics/current").await {
+            if let Err(e) = event_bus_for_daa.store_results_in_memory("daa_metrics_current").await {
                 error!("Failed to store metrics: {}", e);
             }
             
@@ -499,14 +506,14 @@ async fn main() -> Result<()> {
         }
     });
 
-    info!("✅ Neural Trading Platform started successfully");
-    info!("🤖 Platform is running with DAA autonomous coordination. Press Ctrl+C to shut down.");
+    info!("Started");
+    info!("Running");
     
     // Main application loop - wait for shutdown signal
     loop {
         // Check for shutdown signal
         if shutdown_signal.load(Ordering::Relaxed) {
-            info!("🛑 Shutdown signal detected, waiting for graceful shutdown...");
+            info!("Shutdown");
             break;
         }
 
@@ -514,6 +521,6 @@ async fn main() -> Result<()> {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    info!("👋 Neural Trading Platform terminated");
+    info!("Done");
     Ok(())
 }
