@@ -2,7 +2,10 @@
 import asyncio
 import json
 import websockets
-from typing import List, AsyncIterator, Optional
+import random
+import sys
+from collections import deque
+from typing import List, AsyncIterator, Optional, Deque
 from datetime import datetime, timedelta
 
 from alpaca.data.historical import StockHistoricalDataClient
@@ -17,6 +20,7 @@ from alpaca.data.models import Bar, Trade, Quote
 from alpaca.data.enums import DataFeed
 
 from .base import BaseProvider, MarketData, TickData, OrderBookData
+from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 
 
 class AlpacaProvider(BaseProvider):
@@ -57,13 +61,31 @@ class AlpacaProvider(BaseProvider):
         self.api_secret = self.settings.alpaca_api_secret
         self.subscription_level = self.settings.alpaca_subscription_level or "basic"
         
-        # WebSocket configuration (for direct WebSocket connection)
+        # Enhanced WebSocket configuration with resilience features
         self._ws_config = {
             "enabled": getattr(self.settings, 'alpaca_ws_enabled', False),
             "url": getattr(self.settings, 'alpaca_ws_url', 'wss://stream.data.alpaca.markets/v2/iex'),
-            "reconnect_delay": getattr(self.settings, 'alpaca_ws_reconnect_delay', 5),
-            "max_reconnect_attempts": getattr(self.settings, 'alpaca_ws_max_reconnect_attempts', 3)
+            "reconnect_delay": getattr(self.settings, 'alpaca_ws_reconnect_delay', 1.0),
+            "max_reconnect_attempts": getattr(self.settings, 'alpaca_ws_max_reconnect_attempts', 100)
         }
+        
+        # Resilience features
+        self.reconnect_attempts = 0
+        self.max_reconnect_attempts = 100
+        self.reconnect_delay = 1.0
+        self.message_buffer: Deque[MarketData] = deque(maxlen=10000)
+        
+        # Circuit breaker configuration
+        cb_config = CircuitBreakerConfig(
+            failure_threshold=5,
+            success_threshold=3,
+            timeout=60.0,
+            half_open_requests=3,
+            on_open=self._on_circuit_open,
+            on_close=self._on_circuit_close,
+            on_half_open=self._on_circuit_half_open
+        )
+        self.circuit_breaker = CircuitBreaker(cb_config)
         
         # Initialize clients
         self.stock_client: Optional[StockHistoricalDataClient] = None
@@ -81,6 +103,11 @@ class AlpacaProvider(BaseProvider):
         
         # Register WebSocket message handlers
         self._register_ws_handlers()
+        
+        # Track connection health
+        self._last_message_time = None
+        self._health_check_task = None
+        self._connection_start_time = None
     
     async def connect(self):
         """Initialize Alpaca SDK clients."""
@@ -141,7 +168,15 @@ class AlpacaProvider(BaseProvider):
                     "conditions": trade.conditions
                 }
             )
-            await self._ws_data_queue.put(market_data)
+            # Update last message time
+            self._last_message_time = datetime.now()
+            
+            # Try to put in queue, buffer if full
+            try:
+                await self._ws_data_queue.put_nowait(market_data)
+            except asyncio.QueueFull:
+                self.message_buffer.append(market_data)
+                self.logger.warning(f"Queue full, buffered message. Buffer size: {len(self.message_buffer)}")
         
         async def on_quote(quote):
             # Convert quote to MarketData using bid/ask midpoint
@@ -164,7 +199,15 @@ class AlpacaProvider(BaseProvider):
                     "spread": float(quote.ask_price - quote.bid_price)
                 }
             )
-            await self._ws_data_queue.put(market_data)
+            # Update last message time
+            self._last_message_time = datetime.now()
+            
+            # Try to put in queue, buffer if full
+            try:
+                await self._ws_data_queue.put_nowait(market_data)
+            except asyncio.QueueFull:
+                self.message_buffer.append(market_data)
+                self.logger.warning(f"Queue full, buffered message. Buffer size: {len(self.message_buffer)}")
         
         async def on_bar(bar):
             market_data = MarketData(
@@ -182,7 +225,15 @@ class AlpacaProvider(BaseProvider):
                     "vwap": float(bar.vwap) if bar.vwap else None
                 }
             )
-            await self._ws_data_queue.put(market_data)
+            # Update last message time
+            self._last_message_time = datetime.now()
+            
+            # Try to put in queue, buffer if full
+            try:
+                await self._ws_data_queue.put_nowait(market_data)
+            except asyncio.QueueFull:
+                self.message_buffer.append(market_data)
+                self.logger.warning(f"Queue full, buffered message. Buffer size: {len(self.message_buffer)}")
         
         # Store handlers
         self._ws_handlers = {
@@ -373,21 +424,64 @@ class AlpacaProvider(BaseProvider):
             self.logger.error(f"Failed to connect WebSocket: {e}")
             raise
     
-    async def _run_websocket(self):
-        """Run the WebSocket connection with automatic reconnection."""
-        retry_count = 0
-        max_retries = 10
+    async def _enhanced_reconnect(self):
+        """Enhanced reconnection with exponential backoff and circuit breaker."""
+        while self.reconnect_attempts < self.max_reconnect_attempts:
+            if self.circuit_breaker.should_allow_request():
+                try:
+                    self.logger.info(f"Attempting reconnection {self.reconnect_attempts + 1}/{self.max_reconnect_attempts}")
+                    
+                    # Attempt to connect
+                    await self._connect_websocket()
+                    
+                    # If successful, run the stream
+                    await self.stock_stream.run()
+                    
+                    # Record success
+                    await self.circuit_breaker.record_success()
+                    self.reconnect_attempts = 0
+                    self.logger.info("WebSocket reconnected successfully")
+                    return
+                    
+                except Exception as e:
+                    await self.circuit_breaker.record_failure(e)
+                    self.reconnect_attempts += 1
+                    
+                    # Calculate backoff with jitter
+                    delay = min(300, self.reconnect_delay * (2 ** self.reconnect_attempts))
+                    jitter = random.uniform(0, 1)
+                    total_delay = delay + jitter
+                    
+                    self.logger.warning(f"Reconnection failed: {e}. Waiting {total_delay:.1f}s before retry")
+                    await asyncio.sleep(total_delay)
+            else:
+                # Circuit is open, wait before checking again
+                self.logger.warning("Circuit breaker is open. Waiting before retry...")
+                await asyncio.sleep(10)
+                
+        self.logger.error(f"Max reconnection attempts ({self.max_reconnect_attempts}) reached")
         
+    async def _run_websocket(self):
+        """Run the WebSocket connection with enhanced resilience."""
         # Ensure stream is available
         if not hasattr(self, 'stock_stream') or self.stock_stream is None:
             self.logger.error("StockDataStream not available for WebSocket connection")
             return
-        
-        while retry_count < max_retries:
+            
+        # Start health check task
+        if self._health_check_task is None:
+            self._health_check_task = asyncio.create_task(self._websocket_health_check())
+            
+        while self.reconnect_attempts < self.max_reconnect_attempts:
             try:
+                # Mark connection start
+                self._connection_start_time = datetime.now()
+                self._ws_connected = True
+                
                 # Run the WebSocket stream
-                self.logger.info("Starting WebSocket stream...")
+                self.logger.info("Starting WebSocket stream with enhanced resilience...")
                 await self.stock_stream.run()
+                
                 # If we reach here, the stream ended normally
                 self.logger.info("WebSocket stream ended normally")
                 break
@@ -397,20 +491,29 @@ class AlpacaProvider(BaseProvider):
                 break
                 
             except Exception as e:
-                self.logger.error(f"WebSocket error: {e}")
-                retry_count += 1
-                
-                if retry_count >= max_retries:
-                    self.logger.error(f"Max reconnection attempts ({max_retries}) reached")
-                    break
-                
-                # Exponential backoff
-                wait_time = min(2 ** retry_count, 60)
-                self.logger.info(f"Reconnecting in {wait_time} seconds... (attempt {retry_count}/{max_retries})")
-                await asyncio.sleep(wait_time)
-                
-                # Reset connection state for retry
                 self._ws_connected = False
+                self.logger.error(f"WebSocket error: {e}")
+                
+                # Drain message buffer if needed
+                if len(self.message_buffer) > 0:
+                    self.logger.info(f"Draining {len(self.message_buffer)} buffered messages")
+                    while self.message_buffer:
+                        try:
+                            msg = self.message_buffer.popleft()
+                            await self._ws_data_queue.put(msg)
+                        except:
+                            break
+                            
+                # Use enhanced reconnection
+                await self._enhanced_reconnect()
+                
+        # Clean up health check task
+        if self._health_check_task:
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
                 
         self.logger.info("WebSocket stream task completed")
     
@@ -843,3 +946,67 @@ class AlpacaProvider(BaseProvider):
             spread=ask_price - bid_price if bid_price and ask_price else 0,
             provider=self.name
         )
+    
+    def _on_circuit_open(self):
+        """Callback when circuit breaker opens."""
+        self.logger.error("Circuit breaker OPENED - WebSocket connections blocked")
+        # Could emit metrics or alerts here
+        
+    def _on_circuit_close(self):
+        """Callback when circuit breaker closes."""
+        self.logger.info("Circuit breaker CLOSED - WebSocket connections restored")
+        # Reset any error counters
+        
+    def _on_circuit_half_open(self):
+        """Callback when circuit breaker enters half-open state."""
+        self.logger.info("Circuit breaker HALF-OPEN - Testing WebSocket recovery")
+        
+    async def _websocket_health_check(self):
+        """Monitor WebSocket health and trigger reconnection if needed."""
+        health_check_interval = 30  # seconds
+        stale_threshold = 60  # seconds without data
+        
+        while True:
+            try:
+                await asyncio.sleep(health_check_interval)
+                
+                if not self._ws_connected:
+                    continue
+                    
+                # Check if we're receiving data
+                if self._last_message_time:
+                    time_since_last = (datetime.now() - self._last_message_time).total_seconds()
+                    
+                    if time_since_last > stale_threshold:
+                        self.logger.warning(f"No WebSocket data for {time_since_last:.0f}s - triggering reconnection")
+                        # Force reconnection
+                        if self.stock_stream:
+                            self.stock_stream.stop()
+                            
+                # Log connection uptime
+                if self._connection_start_time:
+                    uptime = (datetime.now() - self._connection_start_time).total_seconds() / 3600
+                    self.logger.info(f"WebSocket connection uptime: {uptime:.1f} hours")
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Health check error: {e}")
+                
+    def get_connection_stats(self) -> dict:
+        """Get WebSocket connection statistics."""
+        stats = {
+            "connected": self._ws_connected,
+            "reconnect_attempts": self.reconnect_attempts,
+            "circuit_breaker": self.circuit_breaker.get_stats(),
+            "buffered_messages": len(self.message_buffer),
+            "subscribed_symbols": len(self._ws_subscriptions),
+        }
+        
+        if self._connection_start_time and self._ws_connected:
+            stats["uptime_hours"] = (datetime.now() - self._connection_start_time).total_seconds() / 3600
+            
+        if self._last_message_time:
+            stats["last_message_age_seconds"] = (datetime.now() - self._last_message_time).total_seconds()
+            
+        return stats
