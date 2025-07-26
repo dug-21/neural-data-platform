@@ -333,7 +333,7 @@ mod tests {
     #[tokio::test]
     async fn test_platform_management() {
         let orchestrator = PlatformOrchestrator::default();
-        let platform = Platform::new("test_platform", serde_json::json!({}));
+        let platform = Platform::new("test_platform".to_string(), "test_platform".to_string());
         
         assert!(orchestrator.add_platform("test".to_string(), platform).await.is_ok());
         
