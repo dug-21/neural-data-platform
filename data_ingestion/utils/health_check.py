@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from utils.logging import get_logger
 from utils.metrics import metrics
+from utils.market_hours import MarketHours, is_market_data_expected
 from config import get_settings
 
 logger = get_logger(__name__)
@@ -211,7 +212,8 @@ class HealthCheckHandler:
             'active_connections': 0,
             'providers': {},
             'circuit_breaker': breaker.state.value,
-            'healthy': True
+            'healthy': True,
+            'market_status': {}
         }
         
         if self.realtime_coordinator:
@@ -221,8 +223,15 @@ class HealthCheckHandler:
                 provider_status = {
                     'connected': False,
                     'subscribed_symbols': 0,
-                    'last_error': None
+                    'last_error': None,
+                    'market_open': False,
+                    'market_message': ''
                 }
+                
+                # Check market status for this provider
+                market_open, market_message = is_market_data_expected(provider_name)
+                provider_status['market_open'] = market_open
+                provider_status['market_message'] = market_message
                 
                 # Check if provider has WebSocket connection
                 if hasattr(provider, 'ws') and provider.ws:
@@ -236,11 +245,26 @@ class HealthCheckHandler:
                     
                 ws_status['providers'][provider_name] = provider_status
         
-        # Update circuit breaker based on connection status
+        # Check if any provider should have data right now
+        any_market_open = any(
+            p.get('market_open', False) 
+            for p in ws_status['providers'].values()
+        )
+        
+        # Update circuit breaker and health status based on connection status and market hours
         if ws_status['active_connections'] > 0:
             breaker.record_success()
             ws_status['healthy'] = True
+        elif not any_market_open:
+            # Markets are closed, so no connections is expected
+            breaker.record_success()  # Don't penalize for closed markets
+            ws_status['healthy'] = True
+            ws_status['market_status'] = {
+                'all_markets_closed': True,
+                'message': 'All markets are closed - no data expected'
+            }
         else:
+            # Markets are open but no connections - this is a problem
             breaker.record_failure()
             ws_status['healthy'] = False
             
@@ -258,18 +282,39 @@ class HealthCheckHandler:
             'oldest_data_age_seconds': None,
             'details': [],
             'circuit_breaker': breaker.state.value,
-            'healthy': True
+            'healthy': True,
+            'market_considerations': {}
         }
+        
+        # Check which markets are open
+        markets_open = {}
+        for provider in ['alpaca', 'polygon', 'finnhub', 'binance']:
+            market_open, message = is_market_data_expected(provider)
+            markets_open[provider] = {'open': market_open, 'message': message}
+        
+        flow_status['market_considerations'] = markets_open
+        any_market_open = any(m['open'] for m in markets_open.values())
         
         for key, timestamp in self.last_data_timestamps.items():
             age_seconds = (now - timestamp).total_seconds()
-            is_stale = age_seconds > self.max_data_age_seconds
+            provider_name = key.split(':')[0] if ':' in key else 'unknown'
+            
+            # Check if this provider's market is open
+            provider_market_open = markets_open.get(provider_name, {}).get('open', True)
+            
+            # If market is closed, be more lenient with staleness
+            if not provider_market_open:
+                # Allow up to 24 hours for closed markets
+                is_stale = age_seconds > 86400  # 24 hours
+            else:
+                is_stale = age_seconds > self.max_data_age_seconds
             
             flow_status['details'].append({
                 'flow': key,
                 'last_update': timestamp.isoformat(),
                 'age_seconds': age_seconds,
-                'is_stale': is_stale
+                'is_stale': is_stale,
+                'market_open': provider_market_open
             })
             
             if is_stale:
@@ -281,7 +326,22 @@ class HealthCheckHandler:
                 flow_status['oldest_data_age_seconds'] = age_seconds
         
         # Update circuit breaker based on data flow health
-        if flow_status['active_flows'] >= self.min_active_streams and flow_status['stale_flows'] == 0:
+        if not any_market_open:
+            # If no markets are open, don't require active flows
+            breaker.record_success()
+            flow_status['healthy'] = True
+            flow_status['message'] = 'Markets closed - data staleness is expected'
+        elif flow_status['total_flows'] == 0 and not any_market_open:
+            # No flows when markets are closed is fine
+            breaker.record_success()
+            flow_status['healthy'] = True
+            flow_status['message'] = 'No data flows - markets are closed'
+        elif flow_status['total_flows'] == 0:
+            # No flows when markets are open might be startup
+            breaker.record_success()
+            flow_status['healthy'] = True
+            flow_status['message'] = 'No data flows yet - service may be starting up'
+        elif flow_status['active_flows'] >= self.min_active_streams and flow_status['stale_flows'] == 0:
             breaker.record_success()
             flow_status['healthy'] = True
         else:
@@ -341,11 +401,11 @@ class HealthCheckHandler:
         
         # WebSocket health
         ws_status = self.check_websocket_health()
-        ws_healthy = ws_status['active_connections'] > 0
+        ws_healthy = ws_status['healthy']  # Now uses market-aware logic
         
         # Data flow health
         flow_status = self.check_data_flow_health()
-        flow_healthy = flow_status['active_flows'] >= self.min_active_streams and flow_status['stale_flows'] == 0
+        flow_healthy = flow_status['healthy']  # Now uses market-aware logic
         
         # Stream health
         stream_status = self.check_stream_health()

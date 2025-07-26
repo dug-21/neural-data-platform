@@ -14,6 +14,7 @@ from .metrics_helpers import (
     MetricCollector
 )
 from .file_backfill import FileBackfillHandler
+from .market_hours import MarketHours, MarketStatus, is_market_data_expected
 
 __all__ = [
     "get_logger", 
@@ -29,5 +30,8 @@ __all__ = [
     "ProviderHealthTracker",
     "AsyncTaskMonitor",
     "MetricCollector",
-    "FileBackfillHandler"
+    "FileBackfillHandler",
+    "MarketHours",
+    "MarketStatus",
+    "is_market_data_expected"
 ]
