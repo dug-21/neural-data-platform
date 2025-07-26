@@ -1,368 +1,383 @@
-"""File-based data provider for reading market data from mounted external drives."""
+"""File-based data provider for backfill operations."""
 import asyncio
-import gzip
 import csv
-import os
 import json
+import os
+from typing import Dict, Any, List, AsyncIterator, Optional, Tuple
+from datetime import datetime
 from pathlib import Path
-from typing import List, AsyncIterator, Optional, Dict, Any, Set
-from datetime import datetime, timezone
-from dataclasses import dataclass, asdict
-import aiofiles
-from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+import pyarrow.parquet as pq
+from dataclasses import dataclass
 
-from .base import BaseProvider, MarketData, DataType
-from utils.retry import with_retry
-from utils.metrics import metrics
+from .base import BaseProvider, MarketData, TickData, OrderBookData
 from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
-class FileCheckpoint:
-    """Checkpoint data for resuming file processing."""
-    file_path: str
-    processed_lines: int
-    last_timestamp: Optional[datetime]
-    bad_records: int
-    total_records: int
+class FileMetadata:
+    """Metadata about the file being processed."""
+    filepath: str
+    format: str
+    total_rows: Optional[int] = None
+    columns: Optional[List[str]] = None
+    symbol: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+
+
+class CheckpointManager:
+    """Manages checkpoints for file processing recovery."""
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        data = asdict(self)
-        if self.last_timestamp:
-            data['last_timestamp'] = self.last_timestamp.isoformat()
-        return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'FileCheckpoint':
-        """Create from dictionary."""
-        if data.get('last_timestamp'):
-            data['last_timestamp'] = datetime.fromisoformat(data['last_timestamp'])
-        return cls(**data)
+    def __init__(self, checkpoint_dir: str = "/var/lib/data-ingestion/checkpoints"):
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+    def _get_checkpoint_path(self, filepath: str) -> Path:
+        """Get checkpoint file path for a given file."""
+        file_hash = str(hash(filepath))
+        return self.checkpoint_dir / f"checkpoint_{file_hash}.json"
+        
+    def get_checkpoint(self, filepath: str) -> int:
+        """Get the last processed row for a file."""
+        checkpoint_path = self._get_checkpoint_path(filepath)
+        
+        if checkpoint_path.exists():
+            try:
+                with open(checkpoint_path, 'r') as f:
+                    data = json.load(f)
+                    logger.info(f"Resuming from checkpoint: row {data['last_row']} for {filepath}")
+                    return data['last_row']
+            except Exception as e:
+                logger.warning(f"Failed to load checkpoint: {e}")
+                
+        return 0
+        
+    def update_checkpoint(self, filepath: str, last_row: int, metadata: Optional[Dict] = None):
+        """Update checkpoint with last processed row."""
+        checkpoint_path = self._get_checkpoint_path(filepath)
+        
+        data = {
+            'filepath': filepath,
+            'last_row': last_row,
+            'updated_at': datetime.now().isoformat(),
+            'metadata': metadata or {}
+        }
+        
+        try:
+            with open(checkpoint_path, 'w') as f:
+                json.dump(data, f)
+        except Exception as e:
+            logger.error(f"Failed to update checkpoint: {e}")
+            
+    def clear_checkpoint(self, filepath: str):
+        """Clear checkpoint for a file (on successful completion)."""
+        checkpoint_path = self._get_checkpoint_path(filepath)
+        if checkpoint_path.exists():
+            checkpoint_path.unlink()
+            logger.info(f"Cleared checkpoint for {filepath}")
 
 
 class FileProvider(BaseProvider):
-    """
-    File-based provider for reading market data from CSV files.
+    """File-based data provider for backfill operations."""
     
-    Features:
-    - Reads from mounted external drives
-    - Parses gzipped CSV files efficiently
-    - Filters for specific symbols during processing
-    - Validates OHLC consistency
-    - Tracks bad records and fails if >1%
-    - Supports checkpoint/resume functionality
-    """
-    
-    CSV_EXPECTED_HEADERS = ['timestamp', 'symbol', 'open', 'high', 'low', 'close', 'volume']
-    MAX_BAD_RECORD_PERCENTAGE = 0.01  # 1%
-    CHUNK_SIZE = 10000  # Process files in chunks
-    
-    def __init__(self, base_path: str, checkpoint_dir: Optional[str] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize file provider."""
+        # Initialize with 'file' as provider name
+        super().__init__("file")
+        
+        # Override with config if provided
+        if config:
+            self.config = config
+        else:
+            self.config = {}
+            
+        self.supported_formats = ['csv', 'json', 'parquet']
+        self.checkpoint_manager = CheckpointManager()
+        self.batch_size = self.config.get('batch_size', 1000)
+        self.encoding = self.config.get('encoding', 'utf-8')
+        
+    async def connect(self):
+        """No connection needed for file provider."""
+        self._connected = True
+        logger.info("File provider ready")
+        
+    async def disconnect(self):
+        """No disconnection needed for file provider."""
+        self._connected = False
+        logger.info("File provider stopped")
+        
+    async def load_from_file(
+        self, 
+        filepath: str, 
+        format: str = 'csv',
+        symbol: Optional[str] = None,
+        data_type: str = 'market_data'
+    ) -> AsyncIterator[MarketData]:
         """
-        Initialize the file provider.
+        Load data from file with progress tracking and checkpoint recovery.
         
         Args:
-            base_path: Base directory path for data files (e.g., /mnt/external/market_data)
-            checkpoint_dir: Directory to store checkpoint files for resume capability
+            filepath: Path to the file to load
+            format: File format (csv, json, parquet)
+            symbol: Symbol override (if not in file)
+            data_type: Type of data to parse
+            
+        Yields:
+            MarketData objects
         """
-        super().__init__("file_provider")
-        self.base_path = Path(base_path)
-        self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else Path.home() / '.neural_trader' / 'checkpoints'
-        self._executor = ThreadPoolExecutor(max_workers=4)
-        self._checkpoints: Dict[str, FileCheckpoint] = {}
-        self._active_files: Set[str] = set()
-        
-        # Validate base path exists
-        if not self.base_path.exists():
-            raise ValueError(f"Base path does not exist: {self.base_path}")
-        
-        # Create checkpoint directory
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        
-        self.logger.info(f"Initialized FileProvider with base_path={self.base_path}, checkpoint_dir={self.checkpoint_dir}")
-    
-    async def connect(self):
-        """Initialize provider connection."""
-        await super().connect()
-        await self._load_checkpoints()
-        self.logger.info("FileProvider connected and checkpoints loaded")
-    
-    async def disconnect(self):
-        """Clean up provider connection."""
-        await self._save_checkpoints()
-        self._executor.shutdown(wait=True)
-        await super().disconnect()
-        self.logger.info("FileProvider disconnected and checkpoints saved")
-    
-    async def _load_checkpoints(self):
-        """Load existing checkpoints from disk."""
-        checkpoint_file = self.checkpoint_dir / "file_provider_checkpoints.json"
-        if checkpoint_file.exists():
-            try:
-                async with aiofiles.open(checkpoint_file, 'r') as f:
-                    data = json.loads(await f.read())
-                    self._checkpoints = {
-                        k: FileCheckpoint.from_dict(v) 
-                        for k, v in data.items()
-                    }
-                self.logger.info(f"Loaded {len(self._checkpoints)} checkpoints")
-            except Exception as e:
-                self.logger.error(f"Failed to load checkpoints: {e}")
-    
-    async def _save_checkpoints(self):
-        """Save current checkpoints to disk."""
-        checkpoint_file = self.checkpoint_dir / "file_provider_checkpoints.json"
-        try:
-            data = {
-                k: v.to_dict() 
-                for k, v in self._checkpoints.items()
-            }
-            async with aiofiles.open(checkpoint_file, 'w') as f:
-                await f.write(json.dumps(data, indent=2))
-            self.logger.info(f"Saved {len(self._checkpoints)} checkpoints")
-        except Exception as e:
-            self.logger.error(f"Failed to save checkpoints: {e}")
-    
-    def _find_data_files(self, symbols: List[str], start_time: datetime, end_time: datetime) -> List[Path]:
-        """
-        Find relevant data files based on symbols and time range.
-        
-        Expected file structure:
-        - /base_path/YYYY/MM/DD/market_data_YYYYMMDD.csv.gz
-        - /base_path/symbols/SYMBOL/YYYY/market_data_SYMBOL_YYYYMM.csv.gz
-        """
-        files = []
-        
-        # Search for daily files in date-based structure
-        current = start_time.date()
-        end_date = end_time.date()
-        
-        while current <= end_date:
-            # Check date-based path
-            date_path = self.base_path / str(current.year) / f"{current.month:02d}" / f"{current.day:02d}"
-            if date_path.exists():
-                for file_path in date_path.glob("*.csv.gz"):
-                    files.append(file_path)
-                for file_path in date_path.glob("*.csv"):
-                    files.append(file_path)
+        if format not in self.supported_formats:
+            raise ValueError(f"Unsupported format: {format}. Supported: {self.supported_formats}")
             
-            # Check symbol-based paths
-            for symbol in symbols:
-                symbol_path = self.base_path / "symbols" / symbol / str(current.year)
-                if symbol_path.exists():
-                    pattern_gz = f"*{symbol}*{current.year}{current.month:02d}*.csv.gz"
-                    pattern_csv = f"*{symbol}*{current.year}{current.month:02d}*.csv"
-                    for file_path in symbol_path.glob(pattern_gz):
-                        files.append(file_path)
-                    for file_path in symbol_path.glob(pattern_csv):
-                        files.append(file_path)
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File not found: {filepath}")
             
-            # Move to next day
-            current = current.replace(day=current.day + 1) if current.day < 28 else \
-                     current.replace(month=current.month + 1, day=1) if current.month < 12 else \
-                     current.replace(year=current.year + 1, month=1, day=1)
+        # Get file metadata
+        metadata = await self._get_file_metadata(filepath, format)
+        if symbol:
+            metadata.symbol = symbol
+            
+        # Resume from checkpoint if exists
+        start_row = self.checkpoint_manager.get_checkpoint(filepath)
         
-        # Remove duplicates and sort
-        files = sorted(list(set(files)))
-        self.logger.info(f"Found {len(files)} data files for symbols {symbols} from {start_time} to {end_time}")
-        
-        return files
-    
-    def _parse_csv_line(self, line: str, line_number: int, file_path: str) -> Optional[Dict[str, Any]]:
-        """Parse a single CSV line and return parsed data or None if invalid."""
-        try:
-            reader = csv.reader([line])
-            row = next(reader)
-            
-            if len(row) < len(self.CSV_EXPECTED_HEADERS):
-                self.logger.warning(f"Invalid row in {file_path}:{line_number} - insufficient columns")
-                return None
-            
-            # Parse fields
-            data = {
-                'timestamp': row[0],
-                'symbol': row[1],
-                'open': float(row[2]),
-                'high': float(row[3]),
-                'low': float(row[4]),
-                'close': float(row[5]),
-                'volume': int(row[6])
-            }
-            
-            return data
-            
-        except (ValueError, IndexError) as e:
-            self.logger.warning(f"Failed to parse line {line_number} in {file_path}: {e}")
-            return None
-    
-    async def _process_file(
-        self, 
-        file_path: Path, 
-        symbols: Set[str],
-        start_time: datetime,
-        end_time: datetime
-    ) -> AsyncIterator[MarketData]:
-        """Process a single file and yield market data."""
-        file_key = str(file_path)
-        
-        # Get or create checkpoint
-        checkpoint = self._checkpoints.get(file_key, FileCheckpoint(
-            file_path=file_key,
-            processed_lines=0,
-            last_timestamp=None,
-            bad_records=0,
-            total_records=0
-        ))
-        
-        # Track file as active
-        self._active_files.add(file_key)
+        logger.info(
+            f"Loading {format} file: {filepath} "
+            f"(starting from row {start_row}, batch size: {self.batch_size})"
+        )
         
         try:
-            # Determine if file is gzipped
-            if file_path.suffix == '.gz':
-                open_func = gzip.open
-                mode = 'rt'
-            else:
-                open_func = open
-                mode = 'r'
-            
-            with open_func(file_path, mode, encoding='utf-8') as f:
-                # Skip to checkpoint if resuming
-                for _ in range(checkpoint.processed_lines):
-                    next(f, None)
-                
-                # Skip header if at beginning
-                if checkpoint.processed_lines == 0:
-                    header = next(f, None)
-                    if header:
-                        checkpoint.processed_lines += 1
-                
-                # Process lines in chunks
-                chunk = []
-                
-                for line_num, line in enumerate(f, start=checkpoint.processed_lines + 1):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    
-                    # Parse line
-                    data = self._parse_csv_line(line, line_num, file_key)
-                    
-                    if data is None:
-                        checkpoint.bad_records += 1
-                        checkpoint.total_records += 1
-                        
-                        # Check bad record percentage
-                        if checkpoint.total_records > 100:  # Only check after 100 records
-                            bad_percentage = checkpoint.bad_records / checkpoint.total_records
-                            if bad_percentage > self.MAX_BAD_RECORD_PERCENTAGE:
-                                raise ValueError(
-                                    f"Bad record percentage ({bad_percentage:.2%}) exceeds "
-                                    f"maximum allowed ({self.MAX_BAD_RECORD_PERCENTAGE:.2%}) "
-                                    f"in file {file_path}"
-                                )
-                        continue
-                    
-                    checkpoint.total_records += 1
-                    
-                    # Filter by symbol
-                    if data['symbol'] not in symbols:
-                        continue
-                    
+            processed_count = 0
+            async for batch in self._stream_file(filepath, format, start_row):
+                for row_num, row_data in batch:
                     try:
-                        # Parse timestamp
-                        timestamp = datetime.fromisoformat(data['timestamp'])
-                        if timestamp.tzinfo is None:
-                            timestamp = timestamp.replace(tzinfo=timezone.utc)
-                        
-                        # Filter by time range
-                        if timestamp < start_time or timestamp > end_time:
-                            continue
-                        
-                        # Create MarketData object (will validate OHLC)
-                        market_data = MarketData(
-                            time=timestamp,
-                            symbol=data['symbol'],
-                            open=data['open'],
-                            high=data['high'],
-                            low=data['low'],
-                            close=data['close'],
-                            volume=data['volume'],
-                            provider=self.name,
-                            metadata={'source_file': file_key, 'line_number': line_num}
-                        )
-                        
-                        chunk.append(market_data)
-                        checkpoint.last_timestamp = timestamp
-                        
-                        # Yield chunk when full
-                        if len(chunk) >= self.CHUNK_SIZE:
-                            for item in chunk:
-                                yield item
-                                
-                                # Update metrics
-                                metrics.data_points_processed.labels(
-                                    provider=self.name,
-                                    data_type=DataType.MARKET_DATA.value
-                                ).inc()
+                        # Parse row based on data type
+                        if data_type == 'market_data':
+                            market_data = self._parse_market_data(row_data, metadata)
+                            yield market_data
                             
-                            chunk = []
-                            
-                            # Update checkpoint periodically
-                            checkpoint.processed_lines = line_num
-                            self._checkpoints[file_key] = checkpoint
-                            
-                            # Allow other tasks to run
-                            await asyncio.sleep(0)
-                    
-                    except ValueError as e:
-                        self.logger.warning(f"Invalid data at line {line_num} in {file_path}: {e}")
-                        checkpoint.bad_records += 1
+                        processed_count += 1
                         
-                        # Check bad record percentage
-                        bad_percentage = checkpoint.bad_records / checkpoint.total_records
-                        if bad_percentage > self.MAX_BAD_RECORD_PERCENTAGE:
-                            raise ValueError(
-                                f"Bad record percentage ({bad_percentage:.2%}) exceeds "
-                                f"maximum allowed ({self.MAX_BAD_RECORD_PERCENTAGE:.2%}) "
-                                f"in file {file_path}"
+                        # Update checkpoint every batch
+                        if processed_count % self.batch_size == 0:
+                            self.checkpoint_manager.update_checkpoint(
+                                filepath, 
+                                row_num,
+                                {'processed': processed_count}
                             )
-                
-                # Yield remaining items
-                for item in chunk:
-                    yield item
-                    metrics.data_points_processed.labels(
-                        provider=self.name,
-                        data_type=DataType.MARKET_DATA.value
-                    ).inc()
-                
-                # Mark file as completed
-                checkpoint.processed_lines = line_num if 'line_num' in locals() else checkpoint.processed_lines
-                self._checkpoints[file_key] = checkpoint
-                
-                self.logger.info(
-                    f"Completed processing {file_path}: "
-                    f"{checkpoint.total_records} total records, "
-                    f"{checkpoint.bad_records} bad records "
-                    f"({checkpoint.bad_records/checkpoint.total_records*100:.2f}%)"
-                )
-        
-        except Exception as e:
-            self.logger.error(f"Error processing file {file_path}: {e}")
-            metrics.processing_errors.labels(
-                provider=self.name,
-                error_type=type(e).__name__
-            ).inc()
-            raise
-        
-        finally:
-            # Remove from active files
-            self._active_files.discard(file_key)
+                            logger.info(f"Processed {processed_count} rows, checkpoint updated")
+                            
+                    except Exception as e:
+                        logger.error(f"Error parsing row {row_num}: {e}")
+                        continue
+                        
+            # Clear checkpoint on successful completion
+            self.checkpoint_manager.clear_checkpoint(filepath)
+            logger.info(f"Successfully loaded {processed_count} rows from {filepath}")
             
-            # Save checkpoint
-            await self._save_checkpoints()
-    
+        except Exception as e:
+            logger.error(f"Error loading file {filepath}: {e}")
+            raise
+            
+    async def _get_file_metadata(self, filepath: str, format: str) -> FileMetadata:
+        """Extract metadata from file."""
+        metadata = FileMetadata(filepath=filepath, format=format)
+        
+        try:
+            if format == 'csv':
+                # Read first few rows to get columns
+                with open(filepath, 'r', encoding=self.encoding) as f:
+                    reader = csv.DictReader(f)
+                    metadata.columns = reader.fieldnames
+                    
+                    # Count total rows (for progress tracking)
+                    row_count = sum(1 for _ in f)
+                    metadata.total_rows = row_count
+                    
+            elif format == 'json':
+                with open(filepath, 'r', encoding=self.encoding) as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and data:
+                        metadata.columns = list(data[0].keys())
+                        metadata.total_rows = len(data)
+                        
+            elif format == 'parquet':
+                pf = pq.ParquetFile(filepath)
+                metadata.columns = pf.schema.names
+                metadata.total_rows = pf.metadata.num_rows
+                
+        except Exception as e:
+            logger.warning(f"Failed to extract metadata: {e}")
+            
+        return metadata
+        
+    async def _stream_file(
+        self, 
+        filepath: str, 
+        format: str, 
+        start_row: int = 0
+    ) -> AsyncIterator[List[Tuple[int, Dict]]]:
+        """
+        Stream file in batches.
+        
+        Yields:
+            List of tuples (row_number, row_data)
+        """
+        if format == 'csv':
+            async for batch in self._stream_csv(filepath, start_row):
+                yield batch
+                
+        elif format == 'json':
+            async for batch in self._stream_json(filepath, start_row):
+                yield batch
+                
+        elif format == 'parquet':
+            async for batch in self._stream_parquet(filepath, start_row):
+                yield batch
+                
+    async def _stream_csv(self, filepath: str, start_row: int = 0) -> AsyncIterator[List[Tuple[int, Dict]]]:
+        """Stream CSV file in batches."""
+        def read_csv_batch():
+            batch = []
+            with open(filepath, 'r', encoding=self.encoding) as f:
+                reader = csv.DictReader(f)
+                
+                # Skip to start row
+                for _ in range(start_row):
+                    next(reader, None)
+                    
+                row_num = start_row
+                for row in reader:
+                    batch.append((row_num, row))
+                    row_num += 1
+                    
+                    if len(batch) >= self.batch_size:
+                        yield batch
+                        batch = []
+                        
+                if batch:
+                    yield batch
+                    
+        # Run in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        for batch in read_csv_batch():
+            yield batch
+            await asyncio.sleep(0)  # Allow other tasks to run
+            
+    async def _stream_json(self, filepath: str, start_row: int = 0) -> AsyncIterator[List[Tuple[int, Dict]]]:
+        """Stream JSON file in batches."""
+        def read_json_batch():
+            with open(filepath, 'r', encoding=self.encoding) as f:
+                data = json.load(f)
+                
+                if not isinstance(data, list):
+                    data = [data]
+                    
+                batch = []
+                for row_num, row in enumerate(data[start_row:], start=start_row):
+                    batch.append((row_num, row))
+                    
+                    if len(batch) >= self.batch_size:
+                        yield batch
+                        batch = []
+                        
+                if batch:
+                    yield batch
+                    
+        loop = asyncio.get_event_loop()
+        for batch in read_json_batch():
+            yield batch
+            await asyncio.sleep(0)
+            
+    async def _stream_parquet(self, filepath: str, start_row: int = 0) -> AsyncIterator[List[Tuple[int, Dict]]]:
+        """Stream Parquet file in batches."""
+        def read_parquet_batch():
+            pf = pq.ParquetFile(filepath)
+            batch = []
+            row_num = 0
+            
+            for batch_df in pf.iter_batches(batch_size=self.batch_size):
+                df = batch_df.to_pandas()
+                
+                for idx, row in df.iterrows():
+                    if row_num >= start_row:
+                        batch.append((row_num, row.to_dict()))
+                        
+                        if len(batch) >= self.batch_size:
+                            yield batch
+                            batch = []
+                            
+                    row_num += 1
+                    
+            if batch:
+                yield batch
+                
+        loop = asyncio.get_event_loop()
+        for batch in read_parquet_batch():
+            yield batch
+            await asyncio.sleep(0)
+            
+    def _parse_market_data(self, row_data: Dict, metadata: FileMetadata) -> MarketData:
+        """Parse row data into MarketData object."""
+        # Common field mappings
+        field_mappings = {
+            'timestamp': ['timestamp', 'time', 'date', 'datetime'],
+            'symbol': ['symbol', 'ticker', 'code'],
+            'open': ['open', 'open_price', 'o'],
+            'high': ['high', 'high_price', 'h'],
+            'low': ['low', 'low_price', 'l'],
+            'close': ['close', 'close_price', 'c'],
+            'volume': ['volume', 'vol', 'v']
+        }
+        
+        # Extract fields with fallbacks
+        parsed = {}
+        for field, possible_names in field_mappings.items():
+            for name in possible_names:
+                if name in row_data:
+                    parsed[field] = row_data[name]
+                    break
+                    
+        # Parse timestamp
+        if 'timestamp' in parsed:
+            if isinstance(parsed['timestamp'], str):
+                try:
+                    # Try common formats
+                    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']:
+                        try:
+                            parsed['timestamp'] = datetime.strptime(parsed['timestamp'], fmt)
+                            break
+                        except ValueError:
+                            continue
+                except:
+                    parsed['timestamp'] = datetime.now()
+            elif isinstance(parsed['timestamp'], (int, float)):
+                parsed['timestamp'] = datetime.fromtimestamp(parsed['timestamp'])
+        else:
+            parsed['timestamp'] = datetime.now()
+            
+        # Use metadata symbol if not in row
+        if 'symbol' not in parsed and metadata.symbol:
+            parsed['symbol'] = metadata.symbol
+            
+        # Create MarketData object
+        return MarketData(
+            time=parsed.get('timestamp', datetime.now()),
+            symbol=parsed.get('symbol', 'UNKNOWN'),
+            open=float(parsed.get('open', 0)),
+            high=float(parsed.get('high', 0)),
+            low=float(parsed.get('low', 0)),
+            close=float(parsed.get('close', 0)),
+            volume=int(float(parsed.get('volume', 0))),
+            provider=self.name,
+            metadata={
+                'source_file': metadata.filepath,
+                'format': metadata.format
+            }
+        )
+        
+    # Implement required abstract methods
     async def get_market_data(
         self,
         symbols: List[str],
@@ -370,93 +385,35 @@ class FileProvider(BaseProvider):
         end_time: datetime,
         interval: str = "1min"
     ) -> AsyncIterator[MarketData]:
-        """
-        Fetch historical market data from files.
+        """Not implemented for file provider - use load_from_file instead."""
+        raise NotImplementedError("Use load_from_file method for file-based data")
         
-        Args:
-            symbols: List of symbols to fetch
-            start_time: Start time for data
-            end_time: End time for data
-            interval: Data interval (used for timestamp normalization)
-        """
-        symbols = self._validate_symbols(symbols)
-        symbol_set = set(symbols)
+    async def stream_market_data(
+        self,
+        symbols: List[str]
+    ) -> AsyncIterator[MarketData]:
+        """Not implemented for file provider - use load_from_file instead."""
+        raise NotImplementedError("File provider does not support streaming")
         
-        # Find relevant files
-        files = self._find_data_files(symbols, start_time, end_time)
+    async def get_tick_data(
+        self,
+        symbols: List[str],
+        start_time: datetime,
+        end_time: datetime
+    ) -> AsyncIterator[TickData]:
+        """Not implemented for file provider."""
+        raise NotImplementedError("Use load_from_file method for file-based data")
         
-        if not files:
-            self.logger.warning(f"No data files found for symbols {symbols} in range {start_time} to {end_time}")
-            return
+    async def stream_tick_data(
+        self,
+        symbols: List[str]
+    ) -> AsyncIterator[TickData]:
+        """Not implemented for file provider."""
+        raise NotImplementedError("File provider does not support streaming")
         
-        self.logger.info(f"Processing {len(files)} files for symbols {symbols}")
-        
-        # Process files sequentially to maintain order
-        for file_path in files:
-            self.logger.info(f"Processing file: {file_path}")
-            
-            try:
-                async for data in self._process_file(file_path, symbol_set, start_time, end_time):
-                    yield data
-                    
-            except Exception as e:
-                self.logger.error(f"Failed to process file {file_path}: {e}")
-                
-                # Check if we should continue or fail
-                if "Bad record percentage" in str(e):
-                    raise  # Re-raise bad record percentage errors
-                
-                # Continue with next file for other errors
-                continue
-    
-    async def stream_market_data(self, symbols: List[str]) -> AsyncIterator[MarketData]:
-        """
-        File provider does not support real-time streaming.
-        This method raises NotImplementedError.
-        """
-        raise NotImplementedError("FileProvider does not support real-time streaming")
-    
-    def get_checkpoint_status(self) -> Dict[str, Any]:
-        """Get current checkpoint status for monitoring."""
-        active_count = len(self._active_files)
-        completed_count = len([
-            cp for cp in self._checkpoints.values()
-            if cp.file_path not in self._active_files
-        ])
-        
-        total_records = sum(cp.total_records for cp in self._checkpoints.values())
-        total_bad_records = sum(cp.bad_records for cp in self._checkpoints.values())
-        
-        return {
-            'active_files': active_count,
-            'completed_files': completed_count,
-            'total_checkpoints': len(self._checkpoints),
-            'total_records_processed': total_records,
-            'total_bad_records': total_bad_records,
-            'bad_record_percentage': (total_bad_records / total_records * 100) if total_records > 0 else 0
-        }
-    
-    async def clear_checkpoints(self, file_patterns: Optional[List[str]] = None):
-        """
-        Clear checkpoints for specific files or all files.
-        
-        Args:
-            file_patterns: Optional list of file patterns to clear. If None, clears all.
-        """
-        if file_patterns:
-            # Clear specific patterns
-            cleared = 0
-            for pattern in file_patterns:
-                for key in list(self._checkpoints.keys()):
-                    if pattern in key:
-                        del self._checkpoints[key]
-                        cleared += 1
-            
-            self.logger.info(f"Cleared {cleared} checkpoints matching patterns {file_patterns}")
-        else:
-            # Clear all
-            count = len(self._checkpoints)
-            self._checkpoints.clear()
-            self.logger.info(f"Cleared all {count} checkpoints")
-        
-        await self._save_checkpoints()
+    async def get_order_book(
+        self,
+        symbols: List[str]
+    ) -> AsyncIterator[OrderBookData]:
+        """Not implemented for file provider."""
+        raise NotImplementedError("File provider does not support order book data")

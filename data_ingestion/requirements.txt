@@ -21,6 +21,7 @@ psycopg2-binary>=2.9.9
 pandas>=2.1.4
 numpy>=1.24.3
 ta>=0.10.2  # Technical Analysis library
+pyarrow>=14.0.0  # Parquet file support
 
 # Configuration and validation
 pydantic>=2.5.0
