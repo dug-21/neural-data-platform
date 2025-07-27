@@ -1,15 +1,14 @@
 use crate::error::{Error, Result};
 use crate::models::{
     SystemHealth, ComponentHealth, ComponentHealthMap, PerformanceMetrics, 
-    NetworkIO, APILatency, LogEntry, Alert
+    NetworkIO, APILatency, LogEntry, Alert, HealthCheckResult, HealthCheckDetail
 };
-use chrono::{DateTime, Utc};
-use sysinfo::{System, SystemExt, ProcessExt, CpuExt, DiskExt, NetworkExt};
-use std::collections::HashMap;
+use chrono::Utc;
+use sysinfo::{System, Disks, Networks};
 use std::sync::{Arc, Mutex};
-use tracing::{info, error, debug};
+use tracing::info;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct MonitorClient {
     system: Arc<Mutex<System>>,
     alerts: Arc<Mutex<Vec<Alert>>>,
@@ -82,9 +81,10 @@ impl MonitorClient {
         };
         
         // Disk usage
+        let disks = Disks::new_with_refreshed_list();
         let mut total_disk = 0;
         let mut used_disk = 0;
-        for disk in system.disks() {
+        for disk in &disks {
             total_disk += disk.total_space();
             used_disk += disk.total_space() - disk.available_space();
         }
@@ -95,9 +95,10 @@ impl MonitorClient {
         };
         
         // Network I/O
+        let networks = Networks::new_with_refreshed_list();
         let mut bytes_sent = 0;
         let mut bytes_received = 0;
-        for (_, network) in system.networks() {
+        for (_, network) in &networks {
             bytes_sent += network.transmitted();
             bytes_received += network.received();
         }
@@ -295,7 +296,8 @@ impl MonitorClient {
         
         // Keep only last 1000 entries
         if logs.len() > 1000 {
-            logs.drain(0..logs.len() - 1000);
+            let drain_count = logs.len() - 1000;
+            logs.drain(0..drain_count);
         }
     }
     
@@ -323,21 +325,3 @@ impl MonitorClient {
         }
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheckResult {
-    pub checks_passed: u64,
-    pub checks_failed: u64,
-    pub details: Vec<HealthCheckDetail>,
-    pub timestamp: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheckDetail {
-    pub check: String,
-    pub status: String,
-    pub value: String,
-}
-
-// UUID dependency
-use serde::{Serialize, Deserialize};

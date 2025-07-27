@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::models::{TradingSignal, Order, Portfolio, Position};
+use crate::models::{TradingSignal, Order, Portfolio};
 use reqwest::{Client, StatusCode};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
@@ -7,7 +7,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use tracing::{info, error, debug};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AgentClient {
     client: Client,
     base_url: String,

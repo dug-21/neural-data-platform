@@ -9,6 +9,11 @@ pub struct PriceData {
     pub volume: Option<f64>,
     pub bid: Option<f64>,
     pub ask: Option<f64>,
+    // OHLC fields for compatibility
+    pub open: Option<f64>,
+    pub high: Option<f64>,
+    pub low: Option<f64>,
+    pub close: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +132,10 @@ pub struct TradingSignal {
     pub price: f64,
     pub reasoning: String,
     pub timestamp: DateTime<Utc>,
+    pub entry_price: f64,
+    pub take_profit: Option<f64>,
+    pub stop_loss: Option<f64>,
+    pub risk_reward: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,4 +239,65 @@ pub struct Alert {
     pub message: String,
     pub triggered_at: DateTime<Utc>,
     pub resolved_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckResult {
+    pub checks_passed: usize,
+    pub checks_failed: usize,
+    pub details: Vec<HealthCheckDetail>,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckDetail {
+    pub check: String,
+    pub status: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeDecision {
+    pub symbol: String,
+    pub action: String, // buy, sell, hold
+    pub quantity: f64,
+    pub price: f64,
+    pub stop_loss: Option<f64>,
+    pub take_profit: Option<f64>,
+    pub reasoning: String,
+    pub timestamp: DateTime<Utc>,
+    pub confidence: f64,
+    pub reasons: Vec<String>,
+    pub entry_price: f64,
+    pub position_size: f64,
+    pub risk_reward_ratio: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiskAssessment {
+    pub symbol: String,
+    pub risk_score: f64, // 0.0 to 1.0
+    pub max_loss: f64,
+    pub probability_of_loss: f64,
+    pub risk_reward_ratio: f64,
+    pub recommendation: String,
+    pub risk_level: String,
+    pub exposure_percentage: f64,
+    pub recommendations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionSize {
+    pub symbol: String,
+    pub recommended_size: f64,
+    pub max_size: f64,
+    pub risk_per_trade: f64,
+    pub account_risk_percent: f64,
+    pub recommended_shares: f64,
+    pub position_value: f64,
+    pub risk_amount: f64,
+    pub percentage_of_capital: f64,
+    pub entry_price: f64,
+    pub stop_loss: f64,
+    pub risk_per_share: f64,
 }

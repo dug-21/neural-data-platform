@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::models::{PricePrediction, TrendAnalysis, ChartPattern, PredictionPoint};
+use crate::models::{PricePrediction, TrendAnalysis, ChartPattern};
 use reqwest::{Client, StatusCode};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
@@ -7,7 +7,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use tracing::{info, error, debug};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NeuralClient {
     client: Client,
     base_url: String,
@@ -72,7 +72,7 @@ impl NeuralClient {
         }
         
         let prediction: PricePrediction = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(prediction)
     }
@@ -98,7 +98,7 @@ impl NeuralClient {
         }
         
         let analysis: TrendAnalysis = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(analysis)
     }
@@ -129,7 +129,7 @@ impl NeuralClient {
         }
         
         let patterns: Vec<ChartPattern> = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(patterns)
     }
@@ -162,7 +162,7 @@ impl NeuralClient {
         }
         
         let risk: RiskAssessment = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(risk)
     }
@@ -184,7 +184,7 @@ impl NeuralClient {
         }
         
         let info: ModelInfo = response.json().await
-            .map_err(|e| Error::Serialization(e))?;
+            .map_err(|e| Error::Http(e))?;
         
         Ok(info)
     }

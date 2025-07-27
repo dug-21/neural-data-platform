@@ -1,12 +1,12 @@
 use crate::error::{Error, Result};
 use crate::models::{PriceData, OHLCV, Orderbook, OrderbookLevel, MarketStats};
 use chrono::{DateTime, Utc};
-use deadpool_postgres::{Config, Manager, ManagerConfig, Pool, RecyclingMethod};
+use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use tokio_postgres::{NoTls, Row};
 use std::sync::Arc;
-use tracing::{info, error, debug};
+use tracing::info;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DatabaseClient {
     pool: Arc<Pool>,
 }
@@ -26,11 +26,11 @@ impl DatabaseClient {
         let pool = Pool::builder(mgr)
             .max_size(16)
             .build()
-            .map_err(|e| Error::Database(e.into()))?;
+            .map_err(|_| Error::Config("Failed to create database pool".to_string()))?;
         
         // Test connection
-        let client = pool.get().await
-            .map_err(|e| Error::Database(e.into()))?;
+        let _client = pool.get().await
+            .map_err(|e| Error::ServiceUnavailable(format!("Database pool error: {}", e)))?;
         
         info!("Database connection established");
         
@@ -41,7 +41,7 @@ impl DatabaseClient {
     
     pub async fn get_latest_price(&self, symbol: &str) -> Result<PriceData> {
         let client = self.pool.get().await
-            .map_err(|e| Error::Database(e.into()))?;
+            .map_err(|_| Error::ServiceUnavailable("Database connection pool error".to_string()))?;
         
         let row = client.query_one(
             "SELECT symbol, price, timestamp, volume, bid, ask 
@@ -61,6 +61,29 @@ impl DatabaseClient {
         
         Ok(self.row_to_price_data(&row))
     }
+
+    pub async fn get_latest_prices(&self, symbol: &str, limit: usize) -> Result<Vec<PriceData>> {
+        let client = self.pool.get().await
+            .map_err(|_| Error::ServiceUnavailable("Database connection pool error".to_string()))?;
+        
+        let rows = client.query(
+            "SELECT symbol, price, timestamp, volume, bid, ask 
+             FROM market_data 
+             WHERE symbol = $1 
+             ORDER BY timestamp DESC 
+             LIMIT $2",
+            &[&symbol, &(limit as i64)]
+        ).await
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                Error::NotFound(format!("Symbol not found: {}", symbol))
+            } else {
+                Error::Database(e)
+            }
+        })?;
+        
+        Ok(rows.iter().map(|row| self.row_to_price_data(row)).collect())
+    }
     
     pub async fn get_historical_data(
         &self,
@@ -70,7 +93,7 @@ impl DatabaseClient {
         end_time: DateTime<Utc>,
     ) -> Result<Vec<OHLCV>> {
         let client = self.pool.get().await
-            .map_err(|e| Error::Database(e.into()))?;
+            .map_err(|_| Error::ServiceUnavailable("Database connection pool error".to_string()))?;
         
         let interval_seconds = self.parse_interval(interval)?;
         
@@ -103,7 +126,7 @@ impl DatabaseClient {
     
     pub async fn get_orderbook(&self, symbol: &str, depth: usize) -> Result<Orderbook> {
         let client = self.pool.get().await
-            .map_err(|e| Error::Database(e.into()))?;
+            .map_err(|_| Error::ServiceUnavailable("Database connection pool error".to_string()))?;
         
         // Get bids
         let bid_rows = client.query(
@@ -145,7 +168,7 @@ impl DatabaseClient {
     
     pub async fn get_market_stats(&self, symbol: &str, period: &str) -> Result<MarketStats> {
         let client = self.pool.get().await
-            .map_err(|e| Error::Database(e.into()))?;
+            .map_err(|_| Error::ServiceUnavailable("Database connection pool error".to_string()))?;
         
         let period_interval = match period {
             "1h" => "1 hour",
@@ -198,6 +221,10 @@ impl DatabaseClient {
             volume: row.try_get("volume").ok(),
             bid: row.try_get("bid").ok(),
             ask: row.try_get("ask").ok(),
+            open: row.try_get("open").ok(),
+            high: row.try_get("high").ok(),
+            low: row.try_get("low").ok(),
+            close: row.try_get("close").ok(),
         }
     }
     

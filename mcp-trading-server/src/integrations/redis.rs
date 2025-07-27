@@ -2,9 +2,9 @@ use crate::error::{Error, Result};
 use redis::{AsyncCommands, Client, aio::MultiplexedConnection};
 use serde::{Serialize, Deserialize};
 use std::time::Duration;
-use tracing::{info, error, debug};
+use tracing::{info, debug};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RedisClient {
     conn: MultiplexedConnection,
 }

@@ -34,6 +34,12 @@ pub enum Error {
     
     #[error("Timeout error: {0}")]
     Timeout(String),
+    
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
 }
 
 impl From<std::env::VarError> for Error {

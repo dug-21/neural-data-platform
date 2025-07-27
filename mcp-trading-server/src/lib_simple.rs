@@ -1,3 +1,4 @@
+// Simplified MCP Trading Server implementation for debugging
 pub mod tools;
 pub mod integrations;
 pub mod models;
@@ -48,10 +49,6 @@ impl MCPTradingServer {
         info!("Initializing monitor client...");
         let monitor_client = Arc::new(MonitorClient::new());
         
-        // TODO: Integrate MCP SDK 0.0.3 once proper documentation is available
-        // The examples found online are for rust-mcp-sdk which has a different API
-        info!("MCP server integration pending - handlers are ready");
-        
         Ok(Self {
             db_client,
             redis_client,
@@ -64,30 +61,9 @@ impl MCPTradingServer {
     pub async fn start(&self) -> Result<(), error::Error> {
         info!("Starting MCP Trading Server...");
         
-        // TODO: Properly start MCP server with stdio transport
-        // For now, the handlers are available for direct use
+        // For now, just run a simple HTTP server or similar
+        // The MCP SDK integration needs proper documentation
         
         Ok(())
-    }
-    
-    // Direct handler methods for testing
-    pub fn get_db_client(&self) -> &Arc<DatabaseClient> {
-        &self.db_client
-    }
-    
-    pub fn get_redis_client(&self) -> &Arc<RedisClient> {
-        &self.redis_client
-    }
-    
-    pub fn get_neural_client(&self) -> &Arc<NeuralClient> {
-        &self.neural_client
-    }
-    
-    pub fn get_agent_client(&self) -> &Arc<AgentClient> {
-        &self.agent_client
-    }
-    
-    pub fn get_monitor_client(&self) -> &Arc<MonitorClient> {
-        &self.monitor_client
     }
 }
