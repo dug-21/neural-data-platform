@@ -31,10 +31,10 @@ if ! command -v claude &> /dev/null; then
     npm install -g @anthropic-ai/claude-code | sh
 fi
 
-# Install ruv-swarm
+# Install claude-flow
 echo "🐝 Installing ruv-swarm..."
-if ! command -v ruv-swarm &> /dev/null; then
-    npm install -g ruv-swarm
+if ! command -v claude-flow &> /dev/null; then
+    npm install -g claude-flow@alpha
 fi
 
 # Wait for Claude to be fully installed
@@ -97,12 +97,6 @@ alias nb='npm run build'
 alias py='python3'
 alias pip='pip3'
 alias venv='python3 -m venv'
-
-# Claude and ruv-swarm aliases
-alias claude='claude'
-alias swarm='ruv-swarm'
-alias swarm-init='ruv-swarm swarm init'
-alias swarm-status='ruv-swarm swarm status'
 
 # Git aliases
 alias gs='git status'
@@ -168,7 +162,7 @@ echo "  - Rust: $(rustc --version)"
 echo "  - Node.js: $(node --version)"
 echo "  - Python: $(python3 --version)"
 echo "  - Claude Code: $(claude --version 2>/dev/null || echo 'Installing...')"
-echo "  - ruv-swarm: $(ruv-swarm --version 2>/dev/null || echo 'Installing...')"
+echo "  - claude-flow: $(claude-flow --version 2>/dev/null || echo 'Installing...')"
 echo ""
 echo "🔧 Next steps:"
 echo "  1. Set AGENT_TOKEN environment variable for GitHub MCP access"
