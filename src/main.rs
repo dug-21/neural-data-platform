@@ -31,26 +31,26 @@ async fn main() -> Result<()> {
         .with_line_number(true)
         .init();
 
-    info!("🚀 Starting Neural Trading Platform...");
+    info!("Starting Neural Trading Platform...");
 
     // Load configuration
     let config = load_default_config()
         .context("Failed to load platform configuration")?;
 
-    info!("📋 Configuration loaded successfully");
+    info!("Configuration loaded successfully");
     info!("   Database: {}", config.database.url);
     info!("   Redis: {}", config.redis.url);
     info!("   Neural Memory: {}GB", config.neural.memory_gb);
     info!("   Models: {:?}", config.neural.models);
 
     // Initialize DAA components
-    info!("🧠 Initializing neural predictor...");
+    info!("Initializing neural predictor...");
     let neural_predictor = Arc::new(
         NeuralPredictor::new(config.neural.clone())
             .context("Failed to initialize neural predictor")?
     );
 
-    info!("🎯 Initializing DAA coordinator...");
+    info!("Initializing DAA coordinator...");
     let daa_config = DaaConfig::default();
     let (decision_sender, mut decision_receiver) = tokio::sync::mpsc::channel(1000);
     let daa_coordinator = Arc::new(
@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
             .context("Failed to initialize DAA coordinator")?
     );
 
-    info!("📈 Registering trading strategies...");
+    info!("Registering trading strategies...");
     
     // Register momentum strategy
     let momentum_config = StrategyConfig {
@@ -74,10 +74,8 @@ async fn main() -> Result<()> {
             if let Err(e) = momentum_strategy.initialize(momentum_config.clone()).await {
                 error!("Failed to initialize momentum strategy: {}", e);
             } else {
-                if let Ok(coordinator) = daa_coordinator.as_ref() {
-                    coordinator.register_strategy("momentum".to_string(), momentum_strategy).await;
-                }
-                info!("✅ Momentum strategy registered and initialized");
+                daa_coordinator.register_strategy("momentum".to_string(), momentum_strategy).await;
+                info!("Momentum strategy registered and initialized");
             }
         }
         Err(e) => {
@@ -99,10 +97,8 @@ async fn main() -> Result<()> {
             if let Err(e) = neural_strategy.initialize(neural_config.clone()).await {
                 error!("Failed to initialize neural-enhanced strategy: {}", e);
             } else {
-                if let Ok(coordinator) = daa_coordinator.as_ref() {
-                    coordinator.register_strategy("neural_enhanced".to_string(), neural_strategy).await;
-                }
-                info!("✅ Neural-enhanced strategy registered and initialized");
+                daa_coordinator.register_strategy("neural_enhanced".to_string(), neural_strategy).await;
+                info!("Neural-enhanced strategy registered and initialized");
             }
         }
         Err(e) => {
@@ -110,7 +106,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    info!("🔌 Initializing Redis adapter...");
+    info!("Initializing Redis adapter...");
     // Parse Redis URL to extract host, port, and password
     let redis_url = &config.redis.url;
     let (host, port, password) = if redis_url.starts_with("redis://") {
@@ -153,7 +149,7 @@ async fn main() -> Result<()> {
         .context("Failed to connect to Redis")?;
     let redis_adapter = Arc::new(redis_adapter);
     
-    info!("💾 Initializing storage components...");
+    info!("Initializing storage components...");
     // Initialize TimescaleDB storage
     let storage = Arc::new(
         TimescaleDBStorage::new(&config.database.url)
@@ -175,14 +171,14 @@ async fn main() -> Result<()> {
             .context("Failed to initialize data access layer")?
     );
 
-    info!("🚀 Initializing event bus...");
+    info!("Initializing event bus...");
     let event_bus = Arc::new(
         EventBusIntegration::new(data_access.clone())
             .await
             .context("Failed to initialize event bus")?
     );
 
-    info!("✅ All DAA components initialized successfully");
+    info!("All DAA components initialized successfully");
 
     // Setup graceful shutdown handler
     let shutdown_signal = Arc::new(AtomicBool::new(false));
@@ -192,7 +188,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         match signal::ctrl_c().await {
             Ok(()) => {
-                info!("🛑 Received shutdown signal (Ctrl+C)");
+                info!("Received shutdown signal (Ctrl+C)");
                 shutdown_clone.store(true, Ordering::Relaxed);
             }
             Err(err) => {
@@ -205,12 +201,12 @@ async fn main() -> Result<()> {
     let _daa_clone = daa_coordinator.clone();
     let loop_signal = shutdown_signal.clone();
     tokio::spawn(async move {
-        info!("🔄 Starting DAA decision processing loop...");
+        info!("Starting DAA decision processing loop...");
         while let Some(decision) = decision_receiver.recv().await {
             if loop_signal.load(Ordering::Relaxed) {
                 break;
             }
-            info!("📊 DAA Decision: {:?}", decision);
+            info!("DAA Decision: {:?}", decision);
             // Here decisions would be executed via trading adapters
         }
     });
@@ -220,12 +216,12 @@ async fn main() -> Result<()> {
     let event_bus_clone = event_bus.clone();
     let stream_signal = shutdown_signal.clone();
     tokio::spawn(async move {
-        info!("📡 Starting Redis market data streaming...");
+        info!("Starting Redis market data streaming...");
         
         // Subscribe to market data channel
         match redis_clone.subscribe_market_data("market:updates").await {
             Ok(mut stream) => {
-                info!("✅ Subscribed to Redis market data channel");
+                info!("Subscribed to Redis market data channel");
                 
                 while let Some(result) = stream.next().await {
                     if stream_signal.load(Ordering::Relaxed) {
@@ -272,7 +268,7 @@ async fn main() -> Result<()> {
             }
         }
         
-        info!("📡 Redis market data streaming stopped");
+        info!("Redis market data streaming stopped");
     });
 
     // Start the main DAA coordination loop
@@ -280,7 +276,7 @@ async fn main() -> Result<()> {
     let event_bus_for_daa = event_bus.clone();
     let coordination_signal = shutdown_signal.clone();
     tokio::spawn(async move {
-        info!("🤖 Starting DAA coordination loop...");
+        info!("Starting DAA coordination loop...");
         
         // Enable event bus performance monitoring
         event_bus_for_daa.enable_performance_monitoring(true).await.ok();
@@ -426,18 +422,17 @@ async fn main() -> Result<()> {
                                     // Get current position for this symbol
                                     let position = current_positions.get(&symbol);
                                     
-                                    info!("📊 Making DAA decision for {} - Price: ${:.2}, Trend: {}, Volatility: {:.2}%",
+                                    info!("Making DAA decision for {} - Price: ${:.2}, Trend: {}, Volatility: {:.2}%",
                                           symbol, latest.close, trend, volatility * 100.0);
                                     
                                     // Call DAA coordinator to make a decision
-                                    if let Ok(coordinator) = coordinator_clone.as_ref() {
-                                        match coordinator.make_decision(
+                                    match coordinator_clone.make_decision(
                                         &market_context,
                                         position,
                                         &time_series_data
                                     ).await {
                                         Ok(decision) => {
-                                            info!("🎯 DAA Decision for {}: {:?} (confidence: {:.2}%)",
+                                            info!("DAA Decision for {}: {:?} (confidence: {:.2}%)",
                                                   symbol, decision.action, decision.confidence * 100.0);
                                             
                                             // Update position tracking based on decision
@@ -446,7 +441,7 @@ async fn main() -> Result<()> {
                                                     current_positions.insert(symbol.clone(), Position {
                                                         symbol: symbol.clone(),
                                                         side: PositionSide::Long,
-                                                        size,
+                                                        size: *size,
                                                         entry_price: latest.close,
                                                         current_price: latest.close,
                                                         unrealized_pnl: 0.0,
@@ -454,11 +449,11 @@ async fn main() -> Result<()> {
                                                     });
                                                 }
                                                 TradingAction::Sell { symbol: _, size, .. } => {
-                                                    if size > 0.0 {"
+                                                    if *size > 0.0 {
                                                         current_positions.insert(symbol.clone(), Position {
                                                             symbol: symbol.clone(),
                                                             side: PositionSide::Short,
-                                                            size,
+                                                            size: *size,
                                                             entry_price: latest.close,
                                                             current_price: latest.close,
                                                             unrealized_pnl: 0.0,
@@ -479,7 +474,6 @@ async fn main() -> Result<()> {
                                         Err(e) => {
                                             error!("Failed to make DAA decision for {}: {}", symbol, e);
                                         }
-                                    }
                                     }
                                 }
                             }

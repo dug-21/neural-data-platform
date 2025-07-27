@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc};
 
 use crate::strategies::{TradingStrategy, Signal, MarketContext, Position};
 use crate::neural::{NeuralPredictor, PredictionResult, EnhancedNeuralPredictor, EnhancedPredictionResult, RetrainingMetrics, ConfidenceBreakdown};
+use crate::daa::autonomous_training::{AutonomousTrainingEngine, PerformanceSnapshot};
 use crate::data::TimeSeriesData;
 
 /// Configuration for DAA coordination
@@ -108,6 +109,7 @@ pub struct DaaCoordinator {
     decision_sender: mpsc::Sender<AutonomousDecision>,
     last_retrain_check: Arc<RwLock<DateTime<Utc>>>,
     autonomous_retraining_enabled: bool,
+    autonomous_training: Option<Arc<AutonomousTrainingEngine>>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -152,6 +154,7 @@ impl DaaCoordinator {
             decision_sender,
             last_retrain_check: Arc::new(RwLock::new(Utc::now())),
             autonomous_retraining_enabled: true,
+            autonomous_training: None,
         })
     }
     
@@ -741,6 +744,45 @@ impl DaaCoordinator {
         
         // Execute immediate retraining
         Self::execute_autonomous_retraining(enhanced_predictor, 1.0).await?;
+        
+        Ok(())
+    }
+    
+    /// Set autonomous training engine for enhanced training decisions
+    pub fn set_autonomous_training(&mut self, training_engine: Arc<AutonomousTrainingEngine>) {
+        self.autonomous_training = Some(training_engine);
+        info!("Autonomous training engine integrated with DAA coordinator");
+    }
+    
+    /// Evaluate training need using autonomous training engine
+    pub async fn evaluate_autonomous_training(
+        &self,
+        market_context: &MarketContext,
+        historical_data: &[TimeSeriesData],
+    ) -> Result<()> {
+        if let Some(training_engine) = &self.autonomous_training {
+            // Calculate performance snapshot from current state
+            let metrics = self.performance_metrics.read().await;
+            
+            let performance_snapshot = PerformanceSnapshot {
+                timestamp: Utc::now(),
+                accuracy: metrics.avg_confidence, // Use average confidence as proxy for accuracy
+                confidence: metrics.avg_confidence,
+                price_error: 1.0 - metrics.avg_confidence, // Convert confidence to error
+                sharpe_ratio: metrics.sharpe_ratio,
+                max_drawdown: metrics.max_drawdown,
+                volatility: market_context.volatility,
+                model_agreement: 0.8, // Default value - would be calculated from ensemble
+                consecutive_failures: 0, // Would be tracked separately
+                trading_volume: market_context.volume_24h,
+                profit_loss: metrics.total_pnl,
+            };
+            
+            // Evaluate training need
+            let _training_decision = training_engine.evaluate_training_need(performance_snapshot).await?;
+            
+            // Training decision is automatically sent to DAA via the engine's channel
+        }
         
         Ok(())
     }

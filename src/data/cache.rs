@@ -61,7 +61,7 @@ impl RedisCache {
                     .arg(key)
                     .arg(ttl)
                     .arg(serialized)
-                    .query_async::<_, ()>(&mut conn)
+                    .query_async(&mut conn)
                     .await
                     .context("Failed to set value with TTL")?;
             }
@@ -69,7 +69,7 @@ impl RedisCache {
                 redis::cmd("SET")
                     .arg(key)
                     .arg(serialized)
-                    .query_async::<_, ()>(&mut conn)
+                    .query_async(&mut conn)
                     .await
                     .context("Failed to set value")?;
             }
@@ -121,7 +121,7 @@ impl RedisCache {
         
         redis::cmd("DEL")
             .arg(key)
-            .query_async::<_, ()>(&mut conn)
+            .query_async(&mut conn)
             .await
             .context("Failed to invalidate key")?;
         

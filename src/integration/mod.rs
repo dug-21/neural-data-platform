@@ -11,6 +11,7 @@ use anyhow::Result;
 pub mod data_access;
 pub mod daa_coordinator;
 pub mod autonomous_decisions;
+pub mod autonomous_neural_coordinator;
 
 // Re-export commonly used types
 pub use daa_coordinator::{DaaCoordinator, DaaConfig, AutonomousDecision, TradingAction};

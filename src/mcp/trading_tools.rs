@@ -161,7 +161,7 @@ impl TradingMcpTools {
             
             for key in &keys {
                 let mut conn = cache.conn.clone();
-                if let Ok(value) = redis::cmd("GET").arg(key).query_async::<_, Option<String>>(&mut conn).await {
+                if let Ok(value) = redis::cmd("GET").arg(key).query_async::<Option<String>>(&mut conn).await {
                     if let Some(value) = value {
                         if let Ok(parsed) = serde_json::from_str::<Value>(&value) {
                             data[key] = parsed;
@@ -232,11 +232,11 @@ impl TradingMcpTools {
             "length": match key_type.as_str() {
                 "list" => {
                     let mut conn = cache.conn.clone();
-                    redis::cmd("LLEN").arg(&key).query_async::<_, i64>(&mut conn).await.ok()
+                    redis::cmd("LLEN").arg(&key).query_async::<i64>(&mut conn).await.ok()
                 },
                 "hash" => {
                     let mut conn = cache.conn.clone();
-                    redis::cmd("HLEN").arg(&key).query_async::<_, i64>(&mut conn).await.ok()
+                    redis::cmd("HLEN").arg(&key).query_async::<i64>(&mut conn).await.ok()
                 },
                 _ => None,
             },

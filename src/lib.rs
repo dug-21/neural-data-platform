@@ -84,6 +84,7 @@ pub mod mcp;
 pub mod neural;
 pub mod agents;
 pub mod orchestration;
+pub mod daa;
 
 // Re-export commonly used types
 pub use anyhow::Result;
