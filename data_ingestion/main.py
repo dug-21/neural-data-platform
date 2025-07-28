@@ -508,7 +508,7 @@ def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch
         logger = get_logger(__name__)
     
     from pathlib import Path
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     # Convert path to Path object
     data_path = Path(path)
@@ -517,7 +517,8 @@ def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch
     logger.info(f"Starting file-based backfill from: {data_path}")
     logger.info(f"Format: {format}, Batch size: {batch_size}, Checkpoint: {checkpoint}")
     if symbols:
-        logger.info(f"Filtering symbols: {list(symbols)}")
+        symbols_list = list(symbols)
+        logger.info(f"Filtering symbols: {symbols_list} (type: {type(symbols)}, first symbol: '{symbols_list[0]}', length: {len(symbols_list[0])})")
     if start_date:
         logger.info(f"Start date filter: {start_date}")
     if end_date:
@@ -531,6 +532,20 @@ def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch
     async def run_file_backfill():
         """Run the file-based backfill process using the new FileProvider."""
         await service._lazy_initialize()
+        
+        # Initialize storage connections directly for backfill
+        if service.realtime_coordinator:
+            # Initialize TimescaleDB and Redis directly without providers
+            from storage.timescale import TimescaleDB
+            from storage.redis_store import RedisStore
+            
+            service.realtime_coordinator.timescale = TimescaleDB()
+            service.realtime_coordinator.redis = RedisStore()
+            
+            await service.realtime_coordinator.timescale.connect()
+            await service.realtime_coordinator.redis.connect()
+            
+            logger.info("Storage connections initialized for backfill")
         
         # Create FileProvider with configuration
         from providers.file_provider import FileProvider
@@ -549,46 +564,100 @@ def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch
             if data_path.is_file():
                 files_to_process.append(data_path)
             else:
-                # Get all files with the specified format
-                pattern = f"*.{format}"
-                files_to_process.extend(data_path.glob(pattern))
-            
-            logger.info(f"Found {len(files_to_process)} files to process")
+                # Get all files with the specified format, including compressed files
+                if format == 'csv':
+                    patterns = ["*.csv", "*.csv.gz"]
+                else:
+                    patterns = [f"*.{format}"]
+                
+                # Use rglob for recursive search
+                for pattern in patterns:
+                    files_to_process.extend(data_path.rglob(pattern))
+                
+                # Filter out system files and hidden files
+                files_to_process = [
+                    f for f in files_to_process 
+                    if not f.name.startswith('.') and not f.name.startswith('._')
+                ]
             
             total_processed = 0
-            for file_path in files_to_process:
-                logger.info(f"Processing file: {file_path}")
+            total_symbol_matches = 0
+            
+            logger.info(f"Starting backfill for {len(files_to_process)} files")
+            
+            for file_idx, file_path in enumerate(files_to_process, 1):
+                file_matches = 0
+                logger.info(f"[{file_idx}/{len(files_to_process)}] Starting file: {file_path.name}")
                 
                 # Get symbol from filename or use provided symbol
                 file_symbol = None
                 if symbols:
                     file_symbol = list(symbols)[0]  # Use first symbol if provided
                 else:
-                    # Try to extract symbol from filename
-                    file_symbol = file_path.stem.upper()
+                    # Try to extract symbol from filename (handle compressed files)
+                    if file_path.suffix == '.gz' and file_path.stem.endswith('.csv'):
+                        # For .csv.gz files, get the stem of the stem to get actual symbol
+                        file_symbol = Path(file_path.stem).stem.upper()
+                    else:
+                        file_symbol = file_path.stem.upper()
                 
                 # Stream data from file
+                first_record = True
                 async for market_data in file_provider.load_from_file(
                     filepath=str(file_path),
                     format=format,
                     symbol=file_symbol,
                     data_type='market_data'
                 ):
-                    # Apply date filters if provided
-                    if start_date and market_data.time < datetime.fromisoformat(start_date):
-                        continue
-                    if end_date and market_data.time > datetime.fromisoformat(end_date):
-                        continue
+                    # Count total rows
+                    total_processed += 1
+                    
+                    # Debug: Log first record from each file
+                    if first_record:
+                        logger.info(f"First record in file - Symbol: '{market_data.symbol}' Time: {market_data.time}")
+                        first_record = False
+                    
+                    # Debug AAPL when found
+                    if market_data.symbol == 'AAPL' and file_matches == 0:
+                        logger.info(f"Found first AAPL! Time: {market_data.time}, Price: {market_data.close}")
+                    # Apply date filters if provided (make both timezone-aware)
+                    if start_date:
+                        start_dt = datetime.fromisoformat(start_date)
+                        if start_dt.tzinfo is None:
+                            start_dt = start_dt.replace(tzinfo=timezone.utc)
+                        if market_data.time.tzinfo is None:
+                            market_data_time = market_data.time.replace(tzinfo=timezone.utc)
+                        else:
+                            market_data_time = market_data.time
+                        if market_data_time < start_dt:
+                            continue
+                    
+                    if end_date:
+                        end_dt = datetime.fromisoformat(end_date)
+                        if end_dt.tzinfo is None:
+                            end_dt = end_dt.replace(tzinfo=timezone.utc)
+                        if market_data.time.tzinfo is None:
+                            market_data_time = market_data.time.replace(tzinfo=timezone.utc)
+                        else:
+                            market_data_time = market_data.time
+                        if market_data_time > end_dt:
+                            continue
                     
                     # Apply symbol filter if provided
                     if symbols and market_data.symbol not in symbols:
                         continue
                     
+                    # Found a matching symbol
+                    total_symbol_matches += 1
+                    file_matches += 1
+                    if file_matches == 1:
+                        logger.info(f"Found first {market_data.symbol} record in {file_path.name}")
+                    
                     if not dry_run:
                         # Store data using the service's storage components
                         if service.realtime_coordinator:
                             # Use the timescale and redis from realtime coordinator
-                            await service.realtime_coordinator._store_market_data(market_data)
+                            await service.realtime_coordinator._process_market_data(market_data, 'file_provider')
                             
                             # Update health check timestamp
                             if service.health_check_handler:
@@ -596,14 +665,13 @@ def backfill_file(path, symbols, start_date, end_date, format, checkpoint, batch
                                     'file_provider',
                                     market_data.symbol
                                 )
-                    
-                    total_processed += 1
-                    
-                    # Log progress every 10000 records
-                    if total_processed % 10000 == 0:
-                        logger.info(f"Processed {total_processed} records...")
+                        else:
+                            logger.warning("Realtime coordinator not initialized - data not stored!")
+                
+                # Log file completion
+                logger.info(f"[{file_idx}/{len(files_to_process)}] Completed: {file_path.name} - Found {file_matches} {list(symbols)[0] if symbols else 'symbol'} records")
             
-            logger.info(f"File backfill completed. Total records processed: {total_processed}")
+            logger.info(f"Backfill completed. Total {list(symbols)[0] if symbols else 'symbol'} records found: {total_symbol_matches}")
             
         finally:
             await file_provider.disconnect()

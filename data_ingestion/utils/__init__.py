@@ -13,7 +13,7 @@ from .metrics_helpers import (
     AsyncTaskMonitor,
     MetricCollector
 )
-from .file_backfill import FileBackfillHandler
+# FileBackfillHandler removed - use main.py backfill-file command instead
 from .market_hours import MarketHours, MarketStatus, is_market_data_expected
 
 __all__ = [
@@ -30,7 +30,7 @@ __all__ = [
     "ProviderHealthTracker",
     "AsyncTaskMonitor",
     "MetricCollector",
-    "FileBackfillHandler",
+    # "FileBackfillHandler", # Removed - use main.py backfill-file command
     "MarketHours",
     "MarketStatus",
     "is_market_data_expected"
