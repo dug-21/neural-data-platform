@@ -40,6 +40,7 @@ pool_timeout_seconds = 30
 # Production neural network configuration
 memory_gb = 4.0
 models = ["NHITS", "DeepAR", "TCN", "MLP", "Transformer"]
+use_real_models = true
 prediction_cache_ttl = 1800
 # Model loading timeout in seconds
 model_load_timeout = 300

@@ -35,6 +35,7 @@ pool_timeout_seconds = 10
 # Development neural network configuration with reduced resources
 memory_gb = 1.0
 models = ["NHITS", "DeepAR", "TCN", "MLP"]
+use_real_models = true
 prediction_cache_ttl = 300
 model_load_timeout = 120
 max_concurrent_predictions = 10
