@@ -1,6 +1,7 @@
 """File-based data provider for backfill operations."""
 import asyncio
 import csv
+import gzip
 import json
 import os
 from typing import Dict, Any, List, AsyncIterator, Optional, Tuple
@@ -171,14 +172,16 @@ class FileProvider(BaseProvider):
                             
                         processed_count += 1
                         
-                        # Update checkpoint every batch
+                        # Update checkpoint every batch (silently)
                         if processed_count % self.batch_size == 0:
                             self.checkpoint_manager.update_checkpoint(
                                 filepath, 
                                 row_num,
                                 {'processed': processed_count}
                             )
-                            logger.info(f"Processed {processed_count} rows, checkpoint updated")
+                            # Only log every 100k rows to reduce noise
+                            if processed_count % 100000 == 0:
+                                logger.debug(f"Checkpoint: {processed_count} rows processed")
                             
                             # Update progress metric
                             if metadata.total_rows:
@@ -221,14 +224,24 @@ class FileProvider(BaseProvider):
         
         try:
             if format == 'csv':
-                # Read first few rows to get columns
-                with open(filepath, 'r', encoding=self.encoding) as f:
-                    reader = csv.DictReader(f)
-                    metadata.columns = reader.fieldnames
-                    
-                    # Count total rows (for progress tracking)
-                    row_count = sum(1 for _ in f)
-                    metadata.total_rows = row_count
+                # Read first few rows to get columns (handle both regular and compressed CSV)
+                if filepath.endswith('.gz'):
+                    with gzip.open(filepath, 'rt', encoding=self.encoding) as f:
+                        reader = csv.DictReader(f)
+                        metadata.columns = reader.fieldnames
+                        logger.info(f"CSV columns from {filepath}: {reader.fieldnames}")
+                        
+                        # Count total rows (for progress tracking)
+                        row_count = sum(1 for _ in f)
+                        metadata.total_rows = row_count
+                else:
+                    with open(filepath, 'r', encoding=self.encoding) as f:
+                        reader = csv.DictReader(f)
+                        metadata.columns = reader.fieldnames
+                        
+                        # Count total rows (for progress tracking)
+                        row_count = sum(1 for _ in f)
+                        metadata.total_rows = row_count
                     
             elif format == 'json':
                 with open(filepath, 'r', encoding=self.encoding) as f:
@@ -272,10 +285,16 @@ class FileProvider(BaseProvider):
                 yield batch
                 
     async def _stream_csv(self, filepath: str, start_row: int = 0) -> AsyncIterator[List[Tuple[int, Dict]]]:
-        """Stream CSV file in batches."""
+        """Stream CSV file in batches (supports both regular and gzipped CSV)."""
         def read_csv_batch():
             batch = []
-            with open(filepath, 'r', encoding=self.encoding) as f:
+            # Handle both regular and compressed CSV files
+            if filepath.endswith('.gz'):
+                file_opener = lambda: gzip.open(filepath, 'rt', encoding=self.encoding)
+            else:
+                file_opener = lambda: open(filepath, 'r', encoding=self.encoding)
+                
+            with file_opener() as f:
                 reader = csv.DictReader(f)
                 
                 # Skip to start row
@@ -355,10 +374,10 @@ class FileProvider(BaseProvider):
             
     def _parse_market_data(self, row_data: Dict, metadata: FileMetadata) -> MarketData:
         """Parse row data into MarketData object."""
-        # Common field mappings
+        # Common field mappings (check most specific first)
         field_mappings = {
-            'timestamp': ['timestamp', 'time', 'date', 'datetime'],
-            'symbol': ['symbol', 'ticker', 'code'],
+            'timestamp': ['window_start', 'timestamp', 'time', 'date', 'datetime'],
+            'symbol': ['ticker', 'symbol', 'code'],
             'open': ['open', 'open_price', 'o'],
             'high': ['high', 'high_price', 'h'],
             'low': ['low', 'low_price', 'l'],
@@ -377,18 +396,31 @@ class FileProvider(BaseProvider):
         # Parse timestamp
         if 'timestamp' in parsed:
             if isinstance(parsed['timestamp'], str):
-                try:
-                    # Try common formats
-                    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']:
-                        try:
-                            parsed['timestamp'] = datetime.strptime(parsed['timestamp'], fmt)
-                            break
-                        except ValueError:
-                            continue
-                except:
-                    parsed['timestamp'] = datetime.now()
+                # Check if it's a numeric string (Unix timestamp)
+                if parsed['timestamp'].isdigit():
+                    timestamp_int = int(parsed['timestamp'])
+                    # Handle Unix timestamps - could be seconds or nanoseconds
+                    if timestamp_int > 1e11:  # Likely nanoseconds if > 100 billion
+                        parsed['timestamp'] = datetime.fromtimestamp(timestamp_int / 1e9)
+                    else:
+                        parsed['timestamp'] = datetime.fromtimestamp(timestamp_int)
+                else:
+                    # Try common date formats
+                    try:
+                        for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']:
+                            try:
+                                parsed['timestamp'] = datetime.strptime(parsed['timestamp'], fmt)
+                                break
+                            except ValueError:
+                                continue
+                    except:
+                        parsed['timestamp'] = datetime.now()
             elif isinstance(parsed['timestamp'], (int, float)):
-                parsed['timestamp'] = datetime.fromtimestamp(parsed['timestamp'])
+                # Handle Unix timestamps - could be seconds or nanoseconds
+                if parsed['timestamp'] > 1e11:  # Likely nanoseconds if > 100 billion
+                    parsed['timestamp'] = datetime.fromtimestamp(parsed['timestamp'] / 1e9)
+                else:
+                    parsed['timestamp'] = datetime.fromtimestamp(parsed['timestamp'])
         else:
             parsed['timestamp'] = datetime.now()
             
