@@ -91,6 +91,53 @@ pub struct NeuralConfig {
     pub enable_model_monitoring: bool,
     #[serde(default = "default_accuracy_threshold")]
     pub accuracy_threshold: f64,
+    #[serde(default = "default_false")]
+    pub use_real_models: bool,
+    #[serde(default = "default_true")]
+    pub enable_health_checks: bool,
+    #[serde(default = "default_true")]
+    pub enable_fallback: bool,
+    #[serde(default = "default_true")]
+    pub enable_circuit_breakers: bool,
+    #[serde(default = "default_false")]
+    pub enable_graceful_degradation: bool,
+    #[serde(default = "default_true")]
+    pub enable_performance_monitoring: bool,
+    #[serde(default = "default_true")]
+    pub enable_adaptive_retry: bool,
+    #[serde(default = "default_false")]
+    pub enable_model_ensembles: bool,
+    #[serde(default = "default_model_timeout_seconds")]
+    pub model_timeout_seconds: u64,
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    #[serde(default = "default_error_threshold")]
+    pub error_threshold: f64,
+}
+
+impl Default for NeuralConfig {
+    fn default() -> Self {
+        Self {
+            memory_gb: 2.0,
+            models: vec!["MLP".to_string(), "NHITS".to_string(), "DeepAR".to_string()],
+            prediction_cache_ttl: 300,
+            model_load_timeout: default_model_load_timeout(),
+            max_concurrent_predictions: default_max_concurrent_predictions(),
+            enable_model_monitoring: default_true(),
+            accuracy_threshold: default_accuracy_threshold(),
+            use_real_models: default_false(),
+            enable_health_checks: default_true(),
+            enable_fallback: default_true(),
+            enable_circuit_breakers: default_true(),
+            enable_graceful_degradation: default_false(),
+            enable_performance_monitoring: default_true(),
+            enable_adaptive_retry: default_true(),
+            enable_model_ensembles: default_false(),
+            model_timeout_seconds: default_model_timeout_seconds(),
+            max_retries: default_max_retries(),
+            error_threshold: default_error_threshold(),
+        }
+    }
 }
 
 /// Monitoring configuration
@@ -367,6 +414,9 @@ fn default_circuit_breaker_half_open_max_calls() -> u32 { 10 }
 fn default_shutdown_timeout_seconds() -> u64 { 30 }
 fn default_drain_timeout_seconds() -> u64 { 10 }
 fn default_api_version() -> String { "v1".to_string() }
+fn default_model_timeout_seconds() -> u64 { 30 }
+fn default_max_retries() -> u32 { 3 }
+fn default_error_threshold() -> f64 { 0.05 }
 
 // Security-related default functions
 fn default_enable_tls() -> bool { false }
@@ -525,6 +575,38 @@ impl PlatformConfig {
         if let Ok(threshold) = env::var("NEURAL_ACCURACY_THRESHOLD") {
             self.neural.accuracy_threshold = threshold.parse()
                 .context("Invalid NEURAL_ACCURACY_THRESHOLD")?;
+        }
+        if let Ok(use_real) = env::var("NEURAL_USE_REAL_MODELS") {
+            self.neural.use_real_models = use_real.parse()
+                .context("Invalid NEURAL_USE_REAL_MODELS")?;
+        }
+        if let Ok(enable_health) = env::var("NEURAL_ENABLE_HEALTH_CHECKS") {
+            self.neural.enable_health_checks = enable_health.parse()
+                .context("Invalid NEURAL_ENABLE_HEALTH_CHECKS")?;
+        }
+        if let Ok(enable_fallback) = env::var("NEURAL_ENABLE_FALLBACK") {
+            self.neural.enable_fallback = enable_fallback.parse()
+                .context("Invalid NEURAL_ENABLE_FALLBACK")?;
+        }
+        if let Ok(enable_cb) = env::var("NEURAL_ENABLE_CIRCUIT_BREAKERS") {
+            self.neural.enable_circuit_breakers = enable_cb.parse()
+                .context("Invalid NEURAL_ENABLE_CIRCUIT_BREAKERS")?;
+        }
+        if let Ok(enable_degradation) = env::var("NEURAL_ENABLE_GRACEFUL_DEGRADATION") {
+            self.neural.enable_graceful_degradation = enable_degradation.parse()
+                .context("Invalid NEURAL_ENABLE_GRACEFUL_DEGRADATION")?;
+        }
+        if let Ok(timeout) = env::var("NEURAL_MODEL_TIMEOUT_SECONDS") {
+            self.neural.model_timeout_seconds = timeout.parse()
+                .context("Invalid NEURAL_MODEL_TIMEOUT_SECONDS")?;
+        }
+        if let Ok(retries) = env::var("NEURAL_MAX_RETRIES") {
+            self.neural.max_retries = retries.parse()
+                .context("Invalid NEURAL_MAX_RETRIES")?;
+        }
+        if let Ok(threshold) = env::var("NEURAL_ERROR_THRESHOLD") {
+            self.neural.error_threshold = threshold.parse()
+                .context("Invalid NEURAL_ERROR_THRESHOLD")?;
         }
         
         // Monitoring overrides
@@ -929,6 +1011,55 @@ impl PlatformConfig {
         }
         if self.graceful_shutdown.force_shutdown_after_secs == 0 {
             anyhow::bail!("Graceful shutdown force_shutdown_after_secs must be greater than 0");
+        }
+        
+        // Validate feature flag configuration
+        self.validate_model_availability()?;
+        
+        Ok(())
+    }
+    
+    /// Validate model availability based on use_real_models flag
+    fn validate_model_availability(&self) -> Result<()> {
+        let real_model_names = [
+            "TimeMixer", "NeuralForecast", "TimesFM", "DeepAR", "NHITS", "TCN"
+        ];
+        let fann_model_names = [
+            "MLP", "LSTM", "GRU", "Transformer", "DeepAR", "NHITS", "TCN"
+        ];
+        
+        // Check if any configured models are real models when feature flag is disabled
+        if !self.neural.use_real_models {
+            let real_models_configured: Vec<&String> = self.neural.models.iter()
+                .filter(|model| real_model_names.contains(&model.as_str()))
+                .collect();
+            
+            if !real_models_configured.is_empty() {
+                // Log warning but don't fail - fallback to FANN implementation
+                eprintln!("Warning: Real models {:?} configured but use_real_models=false. Will use FANN fallback implementations.", real_models_configured);
+            }
+        }
+        
+        // Ensure at least one model is FANN-compatible for fallback
+        let fann_compatible_models: Vec<&String> = self.neural.models.iter()
+            .filter(|model| fann_model_names.contains(&model.as_str()))
+            .collect();
+        
+        if fann_compatible_models.is_empty() {
+            anyhow::bail!(
+                "No FANN-compatible models configured. At least one model must have FANN fallback support: {:?}", 
+                fann_model_names
+            );
+        }
+        
+        // Validate model timeout settings when real models are enabled
+        if self.neural.use_real_models {
+            if self.neural.model_timeout_seconds < 10 {
+                anyhow::bail!("Neural model_timeout_seconds must be at least 10 seconds for real models");
+            }
+            if self.neural.max_retries == 0 {
+                anyhow::bail!("Neural max_retries must be greater than 0 when using real models");
+            }
         }
         
         Ok(())

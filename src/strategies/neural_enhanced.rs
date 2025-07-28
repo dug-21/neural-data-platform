@@ -613,10 +613,9 @@ mod tests {
             memory_gb: 1.0,
             models: vec!["MLP".to_string()],
             prediction_cache_ttl: 3600,
-            model_load_timeout: 60,
-            max_concurrent_predictions: 10,
-            enable_model_monitoring: false,
             accuracy_threshold: 0.7,
+            enable_model_monitoring: false,
+            ..Default::default()
         };
         
         let neural_predictor = match NeuralPredictor::new(neural_config) {
