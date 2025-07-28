@@ -238,10 +238,10 @@ impl DAAServiceHandle {
 // FFI exports for JS/WASM communication
 #[no_mangle]
 pub extern "C" fn daa_create_analysis_request(
-    symbol_ptr: *const u8,
-    symbol_len: usize,
-    data_ptr: *const u8,
-    data_len: usize,
+    _symbol_ptr: *const u8,
+    _symbol_len: usize,
+    _data_ptr: *const u8,
+    _data_len: usize,
 ) -> *mut u8 {
     // Implementation for FFI boundary crossing
     // This would deserialize the data and create the request
@@ -250,8 +250,8 @@ pub extern "C" fn daa_create_analysis_request(
 
 #[no_mangle]
 pub extern "C" fn daa_parse_trading_decision(
-    message_ptr: *const u8,
-    message_len: usize,
+    _message_ptr: *const u8,
+    _message_len: usize,
 ) -> *mut u8 {
     // Implementation for FFI boundary crossing
     // This would parse the DAA message and return the decision
