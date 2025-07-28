@@ -22,7 +22,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from providers.file_provider import FileProvider
-from utils.file_backfill import FileBackfillHandler
+# FileBackfillHandler removed - use main.py backfill-file command for file-based backfill
 from utils.logging import get_logger
 from utils.metrics import metrics
 from storage.timescale import TimescaleDB
