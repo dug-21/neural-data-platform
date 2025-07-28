@@ -50,25 +50,31 @@ class PolygonS3Downloader:
     
     def __init__(
         self,
-        aws_profile: str,
-        external_drive_path: str,
+        aws_profile: Optional[str] = None,
+        external_drive_path: str = ".",
         bucket_name: str = "flatfiles",
         region: str = "us-east-1",
         checkpoint_file: str = ".polygon_download_checkpoint.pkl",
-        log_file: Optional[str] = None
+        log_file: Optional[str] = None,
+        access_key: Optional[str] = None,
+        secret_key: Optional[str] = None
     ):
         """
         Initialize the downloader.
         
         Args:
-            aws_profile: AWS profile name to use for authentication
+            aws_profile: AWS profile name to use for authentication (optional)
             external_drive_path: Path to external drive for downloads
             bucket_name: S3 bucket name (default: flatfiles)
             region: AWS region (default: us-east-1)
             checkpoint_file: File to store download progress
             log_file: Optional log file path
+            access_key: AWS access key (optional, will use env var if not provided)
+            secret_key: AWS secret key (optional, will use env var if not provided)
         """
         self.aws_profile = aws_profile
+        self.access_key = access_key or os.environ.get('AWS_ACCESS_KEY_ID')
+        self.secret_key = secret_key or os.environ.get('AWS_SECRET_ACCESS_KEY')
         self.external_drive_path = Path(external_drive_path)
         self.bucket_name = bucket_name
         self.region = region
@@ -109,13 +115,11 @@ class PolygonS3Downloader:
         self.logger = logging.getLogger(__name__)
         
     def _init_s3_client(self):
-        """Initialize S3 client with AWS profile."""
+        """Initialize S3 client with AWS credentials."""
         try:
-            # Create session with profile
-            session = boto3.Session(profile_name=self.aws_profile)
-            
             # Configure with retries and timeouts
             config = Config(
+                signature_version='s3v4',
                 region_name=self.region,
                 retries={
                     'max_attempts': 10,
@@ -125,14 +129,43 @@ class PolygonS3Downloader:
                 connect_timeout=60
             )
             
-            self.s3_client = session.client('s3', config=config)
+            # Create S3 client with different authentication methods
+            if self.aws_profile:
+                # Use AWS profile if provided
+                session = boto3.Session(profile_name=self.aws_profile)
+                self.s3_client = session.client(
+                    's3',
+                    endpoint_url='https://files.polygon.io',
+                    config=config
+                )
+                auth_method = f"profile '{self.aws_profile}'"
+            elif self.access_key and self.secret_key:
+                # Use explicit credentials
+                self.s3_client = boto3.client(
+                    's3',
+                    aws_access_key_id=self.access_key,
+                    aws_secret_access_key=self.secret_key,
+                    endpoint_url='https://files.polygon.io',
+                    config=config
+                )
+                auth_method = "provided credentials"
+            else:
+                # Fall back to default credential chain (env vars, IAM role, etc.)
+                self.s3_client = boto3.client(
+                    's3',
+                    endpoint_url='https://files.polygon.io',
+                    config=config
+                )
+                auth_method = "default credential chain"
             
             # Test connection
             self.s3_client.head_bucket(Bucket=self.bucket_name)
-            self.logger.info(f"Connected to S3 bucket '{self.bucket_name}' using profile '{self.aws_profile}'")
+            self.logger.info(f"Connected to S3 bucket '{self.bucket_name}' using {auth_method}")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize S3 client: {e}")
+            if not self.aws_profile and not self.access_key:
+                self.logger.error("No credentials found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables or use --profile")
             raise
             
     def _setup_signal_handlers(self):
@@ -489,14 +522,32 @@ class PolygonS3Downloader:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Download Polygon market data from S3 to external drive"
+        description="Download Polygon market data from S3 to external drive",
+        epilog="""
+Environment Variables:
+  AWS_ACCESS_KEY_ID     - AWS access key for Polygon S3 (required if no profile)
+  AWS_SECRET_ACCESS_KEY - AWS secret key for Polygon S3 (required if no profile)
+
+Examples:
+  # Using environment variables:
+  export AWS_ACCESS_KEY_ID=your_polygon_access_key
+  export AWS_SECRET_ACCESS_KEY=your_polygon_secret_key
+  python download_polygon_s3.py --destination /mnt/external/polygon
+  
+  # Using AWS profile:
+  python download_polygon_s3.py --profile polygon-s3 --destination /mnt/external/polygon
+  
+  # Download specific date range:
+  python download_polygon_s3.py --destination /mnt/external/polygon \\
+    --start-date 2024-01-01 --end-date 2024-01-31
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    # Required arguments
+    # Arguments
     parser.add_argument(
         '--profile',
-        required=True,
-        help='AWS profile name to use for authentication'
+        help='AWS profile name to use for authentication (optional if using env vars)'
     )
     parser.add_argument(
         '--destination',

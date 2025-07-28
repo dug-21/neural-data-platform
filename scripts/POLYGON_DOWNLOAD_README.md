@@ -19,18 +19,30 @@ A standalone Python script for downloading Polygon market data from S3 to an ext
 pip install -r scripts/requirements_polygon_download.txt
 ```
 
-2. **Configure AWS credentials** using AWS CLI:
-```bash
-aws configure --profile polygon
-# Enter your AWS Access Key ID, Secret Access Key, and region
-```
+2. **Configure AWS credentials** - Choose one method:
+
+   **Option A: Environment Variables (Recommended)**
+   ```bash
+   export AWS_ACCESS_KEY_ID=your_polygon_access_key
+   export AWS_SECRET_ACCESS_KEY=your_polygon_secret_key
+   ```
+
+   **Option B: AWS Profile**
+   ```bash
+   aws configure --profile polygon
+   # Enter your AWS Access Key ID, Secret Access Key, and region
+   ```
 
 ## Usage
 
 ### Basic Usage
 
 ```bash
-# Download daily aggregates to external drive
+# Download daily aggregates to external drive (using environment variables)
+python3 scripts/download_polygon_s3.py \
+    --destination /mnt/external/polygon_data
+
+# Or with AWS profile
 python3 scripts/download_polygon_s3.py \
     --profile polygon \
     --destination /mnt/external/polygon_data
