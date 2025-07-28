@@ -17,6 +17,19 @@ pub mod fann_predictor;
 // Module for enhanced predictor with Phase 6 features
 pub mod enhanced_predictor;
 
+// Performance optimization module
+pub mod performance_optimizer;
+
+// Batch processing optimization
+pub mod batch_optimizer;
+
+// Performance benchmarking module
+#[cfg(test)]
+pub mod performance_benchmarks;
+
+// Ensemble types
+pub mod ensemble_types;
+
 // Test modules
 #[cfg(test)]
 pub mod tests;
@@ -33,6 +46,12 @@ pub use enhanced_predictor::{
     PerformanceTracker
 };
 
+// Re-export performance optimization components
+pub use performance_optimizer::{
+    OptimizedFannPredictor,
+    PerformanceMetrics
+};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionResult {
     pub timestamp: DateTime<Utc>,
@@ -41,6 +60,7 @@ pub struct PredictionResult {
     pub interval_low: f64,
     pub interval_high: f64,
     pub model_name: String,
+    pub metadata: Option<HashMap<String, serde_json::Value>>,
 }
 
 // Public trait for neural predictors
@@ -115,6 +135,17 @@ impl Default for NeuralPredictor {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.8,
+            use_real_models: false,
+            enable_health_checks: true,
+            enable_fallback: true,
+            enable_circuit_breakers: true,
+            enable_graceful_degradation: false,
+            enable_performance_monitoring: true,
+            enable_adaptive_retry: true,
+            enable_model_ensembles: false,
+            model_timeout_seconds: 30,
+            max_retries: 3,
+            error_threshold: 0.05,
         };
         Self::new(config).unwrap()
     }
@@ -134,6 +165,17 @@ mod tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.8,
+            use_real_models: false,
+            enable_health_checks: true,
+            enable_fallback: true,
+            enable_circuit_breakers: true,
+            enable_graceful_degradation: false,
+            enable_performance_monitoring: true,
+            enable_adaptive_retry: true,
+            enable_model_ensembles: false,
+            model_timeout_seconds: 30,
+            max_retries: 3,
+            error_threshold: 0.1,
         };
         
         let predictor = NeuralPredictor::new(config);

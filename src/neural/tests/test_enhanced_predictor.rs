@@ -91,10 +91,7 @@ fn create_test_config() -> NeuralConfig {
         memory_gb: 1.0,
         models: vec!["MLP".to_string(), "DeepAR".to_string(), "LSTM".to_string()],
         prediction_cache_ttl: 300,
-        model_load_timeout: 60,
-        max_concurrent_predictions: 10,
-        enable_model_monitoring: true,
-        accuracy_threshold: 0.75,
+        ..Default::default()
     }
 }
 
@@ -104,10 +101,8 @@ fn create_low_accuracy_config() -> NeuralConfig {
         memory_gb: 1.0,
         models: vec!["MLP".to_string()],
         prediction_cache_ttl: 300,
-        model_load_timeout: 60,
-        max_concurrent_predictions: 10,
-        enable_model_monitoring: true,
         accuracy_threshold: 0.6, // Low threshold for testing
+        ..Default::default()
     }
 }
 

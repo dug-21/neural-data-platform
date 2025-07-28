@@ -38,6 +38,17 @@ fn create_performance_config() -> NeuralConfig {
         max_concurrent_predictions: 50,
         enable_model_monitoring: true,
         accuracy_threshold: 0.8,
+        use_real_models: false,
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 120,
+        max_retries: 3,
+        error_threshold: 0.05,
     }
 }
 

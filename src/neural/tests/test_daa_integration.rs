@@ -108,7 +108,19 @@ mod daa_neural_integration_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.75,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = Arc::new(EnhancedNeuralPredictor::new(neural_config)?);
         
         // Create DAA coordinator
@@ -159,7 +171,19 @@ mod daa_neural_integration_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.8,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
         
         let test_data = create_daa_test_data(30);
@@ -197,7 +221,19 @@ mod daa_neural_integration_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
         
         // Simulate poor predictions to trigger retraining
@@ -279,7 +315,19 @@ mod daa_neural_integration_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.75,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
         
         // Test different market regimes
@@ -361,7 +409,19 @@ mod performance_feedback_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.8,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
         
         let test_data = create_daa_test_data(30);
@@ -469,7 +529,19 @@ mod performance_feedback_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.75,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
         
         let test_data = create_daa_test_data(25);
@@ -559,7 +631,19 @@ mod edge_case_integration_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.8,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
         
         // Test with very little data
@@ -596,7 +680,19 @@ mod edge_case_integration_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.75,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
         
         // Create extreme market data
@@ -648,7 +744,19 @@ mod edge_case_integration_tests {
             max_concurrent_predictions: 20,
             enable_model_monitoring: true,
             accuracy_threshold: 0.75,
-        };
+            use_real_models: false,
+        
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
+    };
         let enhanced_predictor = Arc::new(EnhancedNeuralPredictor::new(neural_config)?);
         
         let test_data = create_daa_test_data(25);
@@ -703,6 +811,18 @@ async fn test_comprehensive_daa_neural_integration() -> Result<()> {
         max_concurrent_predictions: 10,
         enable_model_monitoring: true,
         accuracy_threshold: 0.75,
+            use_real_models: false,
+    
+        enable_health_checks: true,
+        enable_fallback: true,
+        enable_circuit_breakers: true,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: true,
+        enable_adaptive_retry: true,
+        enable_model_ensembles: false,
+        model_timeout_seconds: 30,
+        max_retries: 3,
+        error_threshold: 0.05,
     };
     let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
     

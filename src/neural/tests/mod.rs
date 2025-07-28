@@ -13,9 +13,14 @@ pub mod test_enhanced_predictor;
 pub mod test_fann_predictor;
 pub mod test_daa_integration;
 pub mod test_performance_benchmarks;
+pub mod test_real_models_integration;
+pub mod test_feature_flag;
+pub mod test_performance_regression;
 
 // Re-export test utilities for other test modules
 pub use test_enhanced_predictor::*;
 pub use test_fann_predictor::*;
 pub use test_daa_integration::*;
 pub use test_performance_benchmarks::*;
+pub use test_real_models_integration::*;
+pub use test_feature_flag::*;

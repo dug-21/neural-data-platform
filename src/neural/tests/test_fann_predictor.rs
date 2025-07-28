@@ -27,10 +27,7 @@ fn create_fann_test_config() -> NeuralConfig {
         memory_gb: 1.0,
         models: vec!["MLP".to_string(), "NHITS".to_string(), "DeepAR".to_string()],
         prediction_cache_ttl: 300,
-        model_load_timeout: 60,
-        max_concurrent_predictions: 10,
-        enable_model_monitoring: true,
-        accuracy_threshold: 0.75,
+        ..Default::default()
     }
 }
 
@@ -50,8 +47,8 @@ fn create_comprehensive_fann_config() -> NeuralConfig {
         prediction_cache_ttl: 600,
         model_load_timeout: 120,
         max_concurrent_predictions: 20,
-        enable_model_monitoring: true,
         accuracy_threshold: 0.8,
+        ..Default::default()
     }
 }
 
@@ -98,7 +95,7 @@ fn create_regime_specific_data(regime: &str, count: usize) -> Vec<TimeSeriesData
             };
             
             let base_price = 100.0;
-            let trend_price = base_price * price_factor.powf(i as f64 / count as f64);
+            let trend_price = base_price * (price_factor as f64).powf(i as f64 / count as f64);
             let volatility = volatility_factor * (i as f64 * 0.1).sin() * 2.0;
             
             TimeSeriesData {
@@ -129,10 +126,11 @@ mod fann_initialization_tests {
         let predictor = FannPredictor::new(config.clone())?;
         
         // Verify model configurations are created for all specified models
-        assert_eq!(predictor.model_configs.len(), 3);
-        assert!(predictor.model_configs.contains_key("MLP"));
-        assert!(predictor.model_configs.contains_key("NHITS"));
-        assert!(predictor.model_configs.contains_key("DeepAR"));
+        let model_configs = predictor.get_model_configs();
+        assert_eq!(model_configs.len(), 3);
+        assert!(model_configs.contains_key("MLP"));
+        assert!(model_configs.contains_key("NHITS"));
+        assert!(model_configs.contains_key("DeepAR"));
         
         // Test ensemble manager initialization
         let stats = predictor.get_ensemble_stats().await?;
@@ -151,20 +149,20 @@ mod fann_initialization_tests {
         // Verify all model types are configured
         let expected_models = ["MLP", "NHITS", "TCN", "DeepAR", "LSTM", "GRU", "Transformer"];
         for model in &expected_models {
-            assert!(predictor.model_configs.contains_key(&model.to_string()));
+            assert!(predictor.get_model_configs().contains_key(&model.to_string()));
         }
         
         // Test model-specific configurations
-        let nhits_config = &predictor.model_configs["NHITS"];
+        let nhits_config = &predictor.get_model_configs()["NHITS"];
         assert_eq!(nhits_config.input_size, 50);
         assert_eq!(nhits_config.output_size, 10);
         assert_eq!(nhits_config.hidden_activation, ActivationFunction::ReLU);
         
-        let transformer_config = &predictor.model_configs["Transformer"];
+        let transformer_config = &predictor.get_model_configs()["Transformer"];
         assert_eq!(transformer_config.input_size, 80);
         assert!(transformer_config.use_cascade);
         
-        let lstm_config = &predictor.model_configs["LSTM"];
+        let lstm_config = &predictor.get_model_configs()["LSTM"];
         assert_eq!(lstm_config.input_size, 100);
         assert!(lstm_config.use_cascade);
         
@@ -178,7 +176,7 @@ mod fann_initialization_tests {
         let predictor = FannPredictor::new(config)?;
         
         // Test specific model architecture configurations
-        let model_configs = &predictor.model_configs;
+        let model_configs = predictor.get_model_configs();
         
         // DeepAR should be configured for probabilistic forecasting
         let deepar = &model_configs["DeepAR"];
