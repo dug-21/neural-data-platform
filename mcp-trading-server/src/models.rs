@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceData {
@@ -142,7 +142,7 @@ pub struct TradingSignal {
 pub struct Order {
     pub order_id: String,
     pub symbol: String,
-    pub side: String, // buy, sell
+    pub side: String,       // buy, sell
     pub order_type: String, // market, limit
     pub quantity: f64,
     pub price: Option<f64>,

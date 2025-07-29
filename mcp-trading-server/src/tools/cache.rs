@@ -4,9 +4,9 @@ use tracing::info;
 
 use crate::error::Result;
 use crate::integrations::redis::RedisClient;
+use anyhow::Result as AnyhowResult;
 use mcp_sdk::tools::Tool;
 use mcp_sdk::types::{CallToolResponse, ToolResponseContent};
-use anyhow::Result as AnyhowResult;
 
 #[derive(Debug, Clone)]
 pub struct CacheTool {
@@ -16,10 +16,20 @@ pub struct CacheTool {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "operation")]
 pub enum CacheRequest {
-    Get { key: String },
-    Set { key: String, value: String, ttl: Option<u64> },
-    Delete { key: String },
-    Clear { pattern: Option<String> },
+    Get {
+        key: String,
+    },
+    Set {
+        key: String,
+        value: String,
+        ttl: Option<u64>,
+    },
+    Delete {
+        key: String,
+    },
+    Clear {
+        pattern: Option<String>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,7 +88,7 @@ impl CacheTool {
                 info!("Clearing cache with pattern: {:?}", pattern);
                 // Clear cache not directly supported - would need to scan and delete
                 return Err(crate::error::Error::NotImplemented(
-                    "Clear cache operation not implemented".to_string()
+                    "Clear cache operation not implemented".to_string(),
                 ));
                 Ok(CacheResponse {
                     success: true,
@@ -154,15 +164,13 @@ impl Tool for CacheTool {
                     meta: None,
                 })
             }
-            Err(e) => {
-                Ok(CallToolResponse {
-                    content: vec![ToolResponseContent::Text {
-                        text: format!("Error: {}", e),
-                    }],
-                    is_error: Some(true),
-                    meta: None,
-                })
-            }
+            Err(e) => Ok(CallToolResponse {
+                content: vec![ToolResponseContent::Text {
+                    text: format!("Error: {}", e),
+                }],
+                is_error: Some(true),
+                meta: None,
+            }),
         }
     }
 }

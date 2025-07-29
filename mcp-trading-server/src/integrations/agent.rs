@@ -1,11 +1,11 @@
 use crate::error::{Error, Result};
-use crate::models::{TradingSignal, Order, Portfolio};
+use crate::models::{Order, Portfolio, TradingSignal};
+use chrono::{DateTime, Utc};
 use reqwest::{Client, StatusCode};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
 #[derive(Debug, Clone)]
 pub struct AgentClient {
@@ -16,12 +16,12 @@ pub struct AgentClient {
 impl AgentClient {
     pub async fn new(base_url: &str) -> Result<Self> {
         info!("Initializing trading agent client...");
-        
+
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
             .map_err(|e| Error::Http(e))?;
-        
+
         // Test connection
         let health_url = format!("{}/health", base_url);
         match client.get(&health_url).send().await {
@@ -30,42 +30,55 @@ impl AgentClient {
             }
             Ok(response) => {
                 error!("Agent service returned status: {}", response.status());
-                return Err(Error::ServiceUnavailable(format!("Agent service returned status: {}", response.status())));
+                return Err(Error::ServiceUnavailable(format!(
+                    "Agent service returned status: {}",
+                    response.status()
+                )));
             }
             Err(e) => {
                 error!("Failed to connect to agent service: {}", e);
-                return Err(Error::ServiceUnavailable(format!("Agent service unavailable: {}", e)));
+                return Err(Error::ServiceUnavailable(format!(
+                    "Agent service unavailable: {}",
+                    e
+                )));
             }
         }
-        
+
         Ok(Self {
             client,
             base_url: base_url.to_string(),
         })
     }
-    
+
     pub async fn get_trading_signal(&self, symbol: &str) -> Result<TradingSignal> {
         debug!("Requesting trading signal for {}", symbol);
-        
+
         let url = format!("{}/signal/{}", self.base_url, symbol);
-        
-        let response = self.client.get(&url)
+
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Agent service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Agent service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let signal: TradingSignal = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let signal: TradingSignal = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(signal)
     }
-    
+
     pub async fn execute_trade(
         &self,
         symbol: &str,
@@ -75,11 +88,14 @@ impl AgentClient {
         take_profit: Option<f64>,
         stop_loss: Option<f64>,
     ) -> Result<Order> {
-        debug!("Executing {} order for {} ({} units)", side, symbol, quantity);
-        
+        debug!(
+            "Executing {} order for {} ({} units)",
+            side, symbol, quantity
+        );
+
         let url = format!("{}/orders", self.base_url);
         let order_type = if price.is_some() { "limit" } else { "market" };
-        
+
         let request = json!({
             "symbol": symbol,
             "side": side,
@@ -89,133 +105,179 @@ impl AgentClient {
             "take_profit": take_profit,
             "stop_loss": stop_loss,
         });
-        
-        let response = self.client.post(&url)
+
+        let response = self
+            .client
+            .post(&url)
             .json(&request)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Agent service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Agent service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let order: Order = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let order: Order = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(order)
     }
-    
+
     pub async fn get_portfolio(&self) -> Result<Portfolio> {
         debug!("Requesting portfolio status");
-        
+
         let url = format!("{}/portfolio", self.base_url);
-        
-        let response = self.client.get(&url)
+
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Agent service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Agent service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let portfolio: Portfolio = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let portfolio: Portfolio = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(portfolio)
     }
-    
+
     pub async fn get_active_orders(&self) -> Result<Vec<Order>> {
         debug!("Requesting active orders");
-        
+
         let url = format!("{}/orders/active", self.base_url);
-        
-        let response = self.client.get(&url)
+
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Agent service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Agent service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let orders: Vec<Order> = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let orders: Vec<Order> = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(orders)
     }
-    
+
     pub async fn cancel_order(&self, order_id: &str) -> Result<Order> {
         debug!("Cancelling order {}", order_id);
-        
+
         let url = format!("{}/orders/{}/cancel", self.base_url, order_id);
-        
-        let response = self.client.post(&url)
+
+        let response = self
+            .client
+            .post(&url)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Agent service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Agent service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let order: Order = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let order: Order = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(order)
     }
-    
+
     pub async fn get_strategy(&self, symbol: &str) -> Result<TradingStrategy> {
         debug!("Requesting trading strategy for {}", symbol);
-        
+
         let url = format!("{}/strategy/{}", self.base_url, symbol);
-        
-        let response = self.client.get(&url)
+
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Agent service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Agent service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let strategy: TradingStrategy = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let strategy: TradingStrategy = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(strategy)
     }
-    
-    pub async fn update_strategy(&self, symbol: &str, parameters: StrategyParameters) -> Result<TradingStrategy> {
+
+    pub async fn update_strategy(
+        &self,
+        symbol: &str,
+        parameters: StrategyParameters,
+    ) -> Result<TradingStrategy> {
         debug!("Updating trading strategy for {}", symbol);
-        
+
         let url = format!("{}/strategy/{}", self.base_url, symbol);
-        
-        let response = self.client.put(&url)
+
+        let response = self
+            .client
+            .put(&url)
             .json(&parameters)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Agent service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Agent service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let strategy: TradingStrategy = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let strategy: TradingStrategy = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(strategy)
     }
 }

@@ -4,9 +4,9 @@ use tracing::info;
 
 use crate::error::Result;
 use crate::integrations::database::DatabaseClient;
+use anyhow::Result as AnyhowResult;
 use mcp_sdk::tools::Tool;
 use mcp_sdk::types::{CallToolResponse, ToolResponseContent};
-use anyhow::Result as AnyhowResult;
 
 #[derive(Debug, Clone)]
 pub struct MarketDataTool {
@@ -53,13 +53,18 @@ impl MarketDataTool {
     }
 
     pub async fn execute(&self, request: MarketDataRequest) -> Result<MarketDataResponse> {
-        info!("Fetching market data for {} ({})", request.symbol, request.timeframe);
-        
-        let prices = self.db_client
+        info!(
+            "Fetching market data for {} ({})",
+            request.symbol, request.timeframe
+        );
+
+        let prices = self
+            .db_client
             .get_latest_prices(&request.symbol, request.limit)
             .await?;
-            
-        let data = prices.into_iter()
+
+        let data = prices
+            .into_iter()
             .map(|price| ToolPriceData {
                 timestamp: price.timestamp,
                 open: price.open.unwrap_or(price.price),
@@ -69,7 +74,7 @@ impl MarketDataTool {
                 volume: price.volume.unwrap_or(0.0),
             })
             .collect();
-            
+
         Ok(MarketDataResponse {
             symbol: request.symbol,
             timeframe: request.timeframe,
@@ -136,15 +141,13 @@ impl Tool for MarketDataTool {
                     meta: None,
                 })
             }
-            Err(e) => {
-                Ok(CallToolResponse {
-                    content: vec![ToolResponseContent::Text {
-                        text: format!("Error: {}", e),
-                    }],
-                    is_error: Some(true),
-                    meta: None,
-                })
-            }
+            Err(e) => Ok(CallToolResponse {
+                content: vec![ToolResponseContent::Text {
+                    text: format!("Error: {}", e),
+                }],
+                is_error: Some(true),
+                meta: None,
+            }),
         }
     }
 }

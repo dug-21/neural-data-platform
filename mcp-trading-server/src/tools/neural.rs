@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::error::Result;
 use crate::integrations::neural::NeuralClient;
-use crate::models::{PricePrediction, TrendAnalysis, ChartPattern};
+use crate::models::{ChartPattern, PricePrediction, TrendAnalysis};
 
 #[derive(Debug, Clone)]
 pub struct NeuralPredictionTool {
@@ -14,16 +14,16 @@ pub struct NeuralPredictionTool {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "operation")]
 pub enum NeuralRequest {
-    PredictPrice { 
-        symbol: String, 
+    PredictPrice {
+        symbol: String,
         horizon: String,
         confidence_threshold: Option<f64>,
     },
-    AnalyzeTrend { 
+    AnalyzeTrend {
         symbol: String,
     },
-    RecognizePatterns { 
-        symbol: String, 
+    RecognizePatterns {
+        symbol: String,
         timeframe: String,
     },
 }
@@ -43,7 +43,11 @@ impl NeuralPredictionTool {
 
     pub async fn execute(&self, request: NeuralRequest) -> Result<NeuralResponse> {
         match request {
-            NeuralRequest::PredictPrice { symbol, horizon, confidence_threshold } => {
+            NeuralRequest::PredictPrice {
+                symbol,
+                horizon,
+                confidence_threshold,
+            } => {
                 info!("Predicting price for {} (horizon: {})", symbol, horizon);
                 // Convert horizon to timeframe and periods
                 let (timeframe, periods) = match horizon.as_str() {
@@ -53,21 +57,21 @@ impl NeuralPredictionTool {
                     "1w" => ("4h", 42),
                     _ => ("1h", 24), // default
                 };
-                let prediction = self.neural_client
+                let prediction = self
+                    .neural_client
                     .predict_price(&symbol, timeframe, periods)
                     .await?;
                 Ok(NeuralResponse::PricePrediction(prediction))
             }
             NeuralRequest::AnalyzeTrend { symbol } => {
                 info!("Analyzing trend for {}", symbol);
-                let analysis = self.neural_client
-                    .analyze_trend(&symbol)
-                    .await?;
+                let analysis = self.neural_client.analyze_trend(&symbol).await?;
                 Ok(NeuralResponse::TrendAnalysis(analysis))
             }
             NeuralRequest::RecognizePatterns { symbol, timeframe } => {
                 info!("Recognizing patterns for {} ({})", symbol, timeframe);
-                let patterns = self.neural_client
+                let patterns = self
+                    .neural_client
                     .recognize_patterns(&symbol, &timeframe)
                     .await?;
                 Ok(NeuralResponse::PatternRecognition { patterns })

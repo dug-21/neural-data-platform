@@ -6,12 +6,12 @@
 
 use crate::error::Result;
 use crate::integrations::neural::{AccuracyMetrics, ModelInfo};
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::sync::{mpsc, RwLock};
 use std::sync::Arc;
-use tracing::{info, warn, error, debug};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{debug, error, info, warn};
 
 /// Performance thresholds that trigger neural training decisions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,13 +51,13 @@ impl Default for TrainingTrigger {
         Self {
             id: "default_trigger".to_string(),
             name: "Default Performance Trigger".to_string(),
-            min_accuracy_threshold: 0.65, // 65% minimum accuracy
-            max_price_mae_threshold: 50.0, // $50 max mean absolute error
-            max_price_rmse_threshold: 75.0, // $75 max RMSE
-            min_sharpe_ratio_threshold: 0.5, // Minimum 0.5 Sharpe ratio
-            max_drawdown_threshold: 0.15, // 15% max drawdown
-            evaluation_window_hours: 24, // 24-hour evaluation window
-            min_confidence_threshold: 0.7, // 70% minimum confidence
+            min_accuracy_threshold: 0.65,      // 65% minimum accuracy
+            max_price_mae_threshold: 50.0,     // $50 max mean absolute error
+            max_price_rmse_threshold: 75.0,    // $75 max RMSE
+            min_sharpe_ratio_threshold: 0.5,   // Minimum 0.5 Sharpe ratio
+            max_drawdown_threshold: 0.15,      // 15% max drawdown
+            evaluation_window_hours: 24,       // 24-hour evaluation window
+            min_confidence_threshold: 0.7,     // 70% minimum confidence
             consecutive_failures_threshold: 5, // 5 consecutive failures
             priority: 5,
             enabled: true,
@@ -237,7 +237,10 @@ impl TrainingDecisionEngine {
     }
 
     /// Initialize with DAA coordinator communication channel
-    pub fn with_daa_communication(mut self, sender: mpsc::UnboundedSender<TrainingDecision>) -> Self {
+    pub fn with_daa_communication(
+        mut self,
+        sender: mpsc::UnboundedSender<TrainingDecision>,
+    ) -> Self {
         self.daa_sender = Some(sender);
         self
     }
@@ -303,7 +306,7 @@ impl TrainingDecisionEngine {
         {
             let mut history = self.performance_history.write().await;
             history.push(snapshot.clone());
-            
+
             // Keep only last 1000 snapshots to prevent memory bloat
             let history_len = history.len();
             if history_len > 1000 {
@@ -312,10 +315,10 @@ impl TrainingDecisionEngine {
         }
 
         debug!("Recorded performance snapshot for {}", snapshot.symbol);
-        
+
         // Trigger autonomous decision making
         self.evaluate_training_need().await?;
-        
+
         Ok(())
     }
 
@@ -331,7 +334,7 @@ impl TrainingDecisionEngine {
     pub async fn evaluate_training_need(&self) -> Result<Option<TrainingDecision>> {
         let triggers = self.triggers.read().await;
         let history = self.performance_history.read().await;
-        
+
         if history.is_empty() {
             return Ok(None);
         }
@@ -382,9 +385,11 @@ impl TrainingDecisionEngine {
                     }
                 }
 
-                info!("Generated training decision: {} (triggered by {})", 
-                      decision.decision_id, trigger.id);
-                
+                info!(
+                    "Generated training decision: {} (triggered by {})",
+                    decision.decision_id, trigger.id
+                );
+
                 return Ok(Some(decision));
             }
         }
@@ -422,8 +427,7 @@ impl TrainingDecisionEngine {
         if latest.accuracy_metrics.price_mae > trigger.max_price_mae_threshold {
             trigger_reasons.push(format!(
                 "Price MAE ${:.2} exceeds threshold ${:.2}",
-                latest.accuracy_metrics.price_mae,
-                trigger.max_price_mae_threshold
+                latest.accuracy_metrics.price_mae, trigger.max_price_mae_threshold
             ));
             trigger_confidence += 0.25;
             if matches!(decision_type, TrainingDecisionType::NoTrainingRequired) {
@@ -435,8 +439,7 @@ impl TrainingDecisionEngine {
         if latest.accuracy_metrics.price_rmse > trigger.max_price_rmse_threshold {
             trigger_reasons.push(format!(
                 "Price RMSE ${:.2} exceeds threshold ${:.2}",
-                latest.accuracy_metrics.price_rmse,
-                trigger.max_price_rmse_threshold
+                latest.accuracy_metrics.price_rmse, trigger.max_price_rmse_threshold
             ));
             trigger_confidence += 0.25;
         }
@@ -445,8 +448,7 @@ impl TrainingDecisionEngine {
         if latest.accuracy_metrics.sharpe_ratio < trigger.min_sharpe_ratio_threshold {
             trigger_reasons.push(format!(
                 "Sharpe ratio {:.2} below threshold {:.2}",
-                latest.accuracy_metrics.sharpe_ratio,
-                trigger.min_sharpe_ratio_threshold
+                latest.accuracy_metrics.sharpe_ratio, trigger.min_sharpe_ratio_threshold
             ));
             trigger_confidence += 0.2;
         }
@@ -476,8 +478,7 @@ impl TrainingDecisionEngine {
         if latest.consecutive_failures >= trigger.consecutive_failures_threshold {
             trigger_reasons.push(format!(
                 "Consecutive failures {} exceeds threshold {}",
-                latest.consecutive_failures,
-                trigger.consecutive_failures_threshold
+                latest.consecutive_failures, trigger.consecutive_failures_threshold
             ));
             trigger_confidence += 0.35;
             decision_type = TrainingDecisionType::EmergencyRetraining;
@@ -519,9 +520,7 @@ impl TrainingDecisionEngine {
 
         // Create training decision
         let decision = TrainingDecision {
-            decision_id: format!("train_{}_{}", 
-                                Utc::now().timestamp(), 
-                                trigger.id),
+            decision_id: format!("train_{}_{}", Utc::now().timestamp(), trigger.id),
             decision_type: decision_type.clone(),
             confidence: trigger_confidence.min(1.0f64),
             reasoning: trigger_reasons,
@@ -552,13 +551,13 @@ impl TrainingDecisionEngine {
     pub async fn get_recent_decisions(&self, hours: i64) -> Result<Vec<TrainingDecisionRecord>> {
         let memory = self.decision_memory.read().await;
         let cutoff = Utc::now() - Duration::hours(hours);
-        
+
         let recent: Vec<TrainingDecisionRecord> = memory
             .values()
             .filter(|record| record.decision.timestamp > cutoff)
             .cloned()
             .collect();
-        
+
         Ok(recent)
     }
 
@@ -583,8 +582,11 @@ impl TrainingDecisionEngine {
         if let Some(record) = memory.get_mut(decision_id) {
             record.execution_completed = Some(Utc::now());
             record.training_results = Some(results.clone());
-            info!("Recorded training completion for {}: {:.2}% accuracy", 
-                  decision_id, results.final_accuracy * 100.0);
+            info!(
+                "Recorded training completion for {}: {:.2}% accuracy",
+                decision_id,
+                results.final_accuracy * 100.0
+            );
         }
         Ok(())
     }
@@ -593,7 +595,7 @@ impl TrainingDecisionEngine {
     pub async fn get_performance_stats(&self) -> Result<PerformanceStatistics> {
         let history = self.performance_history.read().await;
         let memory = self.decision_memory.read().await;
-        
+
         if history.is_empty() {
             return Ok(PerformanceStatistics::default());
         }
@@ -616,15 +618,14 @@ impl TrainingDecisionEngine {
             avg_accuracy_24h: recent_snapshots
                 .iter()
                 .map(|s| s.accuracy_metrics.directional_accuracy)
-                .sum::<f64>() / recent_snapshots.len().max(1) as f64,
+                .sum::<f64>()
+                / recent_snapshots.len().max(1) as f64,
             avg_confidence_24h: recent_snapshots
                 .iter()
                 .map(|s| s.avg_confidence)
-                .sum::<f64>() / recent_snapshots.len().max(1) as f64,
-            pending_training_decisions: recent_decisions
-                .iter()
-                .filter(|r| !r.executed)
-                .count(),
+                .sum::<f64>()
+                / recent_snapshots.len().max(1) as f64,
+            pending_training_decisions: recent_decisions.iter().filter(|r| !r.executed).count(),
             completed_training_sessions: recent_decisions
                 .iter()
                 .filter(|r| r.training_results.is_some())
@@ -689,10 +690,10 @@ impl DAATrainingIntegration {
     pub async fn start_coordination(&mut self) -> Result<()> {
         let (_sender, receiver) = mpsc::unbounded_channel();
         self.daa_receiver = Some(receiver);
-        
+
         // Update decision engine with communication channel
         // Note: This would need to be done during initialization in real implementation
-        
+
         info!("Started DAA training coordination");
         Ok(())
     }
@@ -701,31 +702,42 @@ impl DAATrainingIntegration {
     pub async fn process_training_decisions(&mut self) -> Result<()> {
         if let Some(receiver) = &mut self.daa_receiver {
             while let Some(decision) = receiver.recv().await {
-                info!("Processing training decision: {} (priority {})", 
-                      decision.decision_id, decision.priority);
-                      
+                info!(
+                    "Processing training decision: {} (priority {})",
+                    decision.decision_id, decision.priority
+                );
+
                 // Execute training based on decision type
                 match decision.decision_type {
                     TrainingDecisionType::EmergencyRetraining => {
-                        warn!("Executing emergency retraining for symbols: {:?}", 
-                              decision.target_symbols);
+                        warn!(
+                            "Executing emergency retraining for symbols: {:?}",
+                            decision.target_symbols
+                        );
                         let engine = Arc::clone(&self.decision_engine);
                         Self::execute_emergency_training_static(engine, &decision).await?;
-                    },
+                    }
                     TrainingDecisionType::FullRetraining => {
-                        info!("Executing full retraining for symbols: {:?}", 
-                              decision.target_symbols);
+                        info!(
+                            "Executing full retraining for symbols: {:?}",
+                            decision.target_symbols
+                        );
                         let engine = Arc::clone(&self.decision_engine);
                         Self::execute_full_training_static(engine, &decision).await?;
-                    },
+                    }
                     TrainingDecisionType::IncrementalTraining => {
-                        info!("Executing incremental training for symbols: {:?}", 
-                              decision.target_symbols);
+                        info!(
+                            "Executing incremental training for symbols: {:?}",
+                            decision.target_symbols
+                        );
                         let engine = Arc::clone(&self.decision_engine);
                         Self::execute_incremental_training_static(engine, &decision).await?;
-                    },
+                    }
                     _ => {
-                        debug!("No training required for decision: {}", decision.decision_id);
+                        debug!(
+                            "No training required for decision: {}",
+                            decision.decision_id
+                        );
                     }
                 }
             }
@@ -735,17 +747,15 @@ impl DAATrainingIntegration {
 
     /// Execute emergency training (highest priority)
     async fn execute_emergency_training_static(
-        engine: Arc<TrainingDecisionEngine>, 
-        decision: &TrainingDecision
+        engine: Arc<TrainingDecisionEngine>,
+        decision: &TrainingDecision,
     ) -> Result<()> {
-        engine
-            .mark_decision_executed(&decision.decision_id)
-            .await?;
-            
+        engine.mark_decision_executed(&decision.decision_id).await?;
+
         // Implement emergency training logic here
         // This would integrate with the neural client to start training
         warn!("Emergency training triggered - implementing training execution");
-        
+
         // Mock training results for now
         let results = TrainingResults {
             final_accuracy: 0.75,
@@ -755,36 +765,32 @@ impl DAATrainingIntegration {
             new_model_version: format!("emergency_v{}", Utc::now().timestamp()),
             performance_improvement: 0.1,
         };
-        
+
         engine
             .record_training_completion(&decision.decision_id, results)
             .await?;
-            
+
         Ok(())
     }
 
     /// Execute full model retraining
     async fn execute_full_training_static(
-        engine: Arc<TrainingDecisionEngine>, 
-        decision: &TrainingDecision
+        engine: Arc<TrainingDecisionEngine>,
+        decision: &TrainingDecision,
     ) -> Result<()> {
-        engine
-            .mark_decision_executed(&decision.decision_id)
-            .await?;
-            
+        engine.mark_decision_executed(&decision.decision_id).await?;
+
         info!("Full training execution not yet implemented");
         Ok(())
     }
 
     /// Execute incremental training
     async fn execute_incremental_training_static(
-        engine: Arc<TrainingDecisionEngine>, 
-        decision: &TrainingDecision
+        engine: Arc<TrainingDecisionEngine>,
+        decision: &TrainingDecision,
     ) -> Result<()> {
-        engine
-            .mark_decision_executed(&decision.decision_id)
-            .await?;
-            
+        engine.mark_decision_executed(&decision.decision_id).await?;
+
         info!("Incremental training execution not yet implemented");
         Ok(())
     }
@@ -812,7 +818,7 @@ mod tests {
     async fn test_add_default_triggers() {
         let engine = TrainingDecisionEngine::new();
         engine.add_default_triggers().await.unwrap();
-        
+
         let triggers = engine.triggers.read().await;
         assert_eq!(triggers.len(), 3);
         assert!(triggers.contains_key("performance_degradation"));

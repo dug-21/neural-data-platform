@@ -15,8 +15,9 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Result<Self> {
         Ok(Self {
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost/neural_trader".to_string()),
+            database_url: env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgresql://postgres:postgres@localhost/neural_trader".to_string()
+            }),
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string()),
             neural_service_url: env::var("NEURAL_SERVICE_URL")
@@ -27,8 +28,7 @@ impl Config {
                 .unwrap_or_else(|_| "8003".to_string())
                 .parse()
                 .map_err(|e| Error::Config(format!("Invalid port: {}", e)))?,
-            log_level: env::var("LOG_LEVEL")
-                .unwrap_or_else(|_| "info".to_string()),
+            log_level: env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
         })
     }
 }

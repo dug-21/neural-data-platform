@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::error::Result;
 use crate::integrations::monitor::MonitorClient;
-use crate::models::{SystemHealth, ComponentHealth, PerformanceMetrics};
+use crate::models::{ComponentHealth, PerformanceMetrics, SystemHealth};
 
 #[derive(Debug, Clone)]
 pub struct HealthMonitorTool {

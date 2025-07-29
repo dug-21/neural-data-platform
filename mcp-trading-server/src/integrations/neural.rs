@@ -1,11 +1,11 @@
 use crate::error::{Error, Result};
-use crate::models::{PricePrediction, TrendAnalysis, ChartPattern};
+use crate::models::{ChartPattern, PricePrediction, TrendAnalysis};
+use chrono::{DateTime, Utc};
 use reqwest::{Client, StatusCode};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
 #[derive(Debug, Clone)]
 pub struct NeuralClient {
@@ -16,12 +16,12 @@ pub struct NeuralClient {
 impl NeuralClient {
     pub async fn new(base_url: &str) -> Result<Self> {
         info!("Initializing neural network client...");
-        
+
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
             .map_err(|e| Error::Http(e))?;
-        
+
         // Test connection
         let health_url = format!("{}/health", base_url);
         match client.get(&health_url).send().await {
@@ -30,162 +30,212 @@ impl NeuralClient {
             }
             Ok(response) => {
                 error!("Neural service returned status: {}", response.status());
-                return Err(Error::ServiceUnavailable(format!("Neural service returned status: {}", response.status())));
+                return Err(Error::ServiceUnavailable(format!(
+                    "Neural service returned status: {}",
+                    response.status()
+                )));
             }
             Err(e) => {
                 error!("Failed to connect to neural service: {}", e);
-                return Err(Error::ServiceUnavailable(format!("Neural service unavailable: {}", e)));
+                return Err(Error::ServiceUnavailable(format!(
+                    "Neural service unavailable: {}",
+                    e
+                )));
             }
         }
-        
+
         Ok(Self {
             client,
             base_url: base_url.to_string(),
         })
     }
-    
+
     pub async fn predict_price(
         &self,
         symbol: &str,
         timeframe: &str,
         periods: usize,
     ) -> Result<PricePrediction> {
-        debug!("Requesting price prediction for {} ({}, {} periods)", symbol, timeframe, periods);
-        
+        debug!(
+            "Requesting price prediction for {} ({}, {} periods)",
+            symbol, timeframe, periods
+        );
+
         let url = format!("{}/predict/price", self.base_url);
         let request = json!({
             "symbol": symbol,
             "timeframe": timeframe,
             "periods": periods,
         });
-        
-        let response = self.client.post(&url)
+
+        let response = self
+            .client
+            .post(&url)
             .json(&request)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Neural service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Neural service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let prediction: PricePrediction = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let prediction: PricePrediction = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(prediction)
     }
-    
+
     pub async fn analyze_trend(&self, symbol: &str) -> Result<TrendAnalysis> {
         debug!("Requesting trend analysis for {}", symbol);
-        
+
         let url = format!("{}/analyze/trend", self.base_url);
         let request = json!({
             "symbol": symbol,
         });
-        
-        let response = self.client.post(&url)
+
+        let response = self
+            .client
+            .post(&url)
             .json(&request)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Neural service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Neural service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let analysis: TrendAnalysis = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let analysis: TrendAnalysis = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(analysis)
     }
-    
+
     pub async fn recognize_patterns(
         &self,
         symbol: &str,
         timeframe: &str,
     ) -> Result<Vec<ChartPattern>> {
-        debug!("Requesting pattern recognition for {} ({})", symbol, timeframe);
-        
+        debug!(
+            "Requesting pattern recognition for {} ({})",
+            symbol, timeframe
+        );
+
         let url = format!("{}/analyze/patterns", self.base_url);
         let request = json!({
             "symbol": symbol,
             "timeframe": timeframe,
         });
-        
-        let response = self.client.post(&url)
+
+        let response = self
+            .client
+            .post(&url)
             .json(&request)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Neural service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Neural service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let patterns: Vec<ChartPattern> = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let patterns: Vec<ChartPattern> = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(patterns)
     }
-    
+
     pub async fn assess_risk(
         &self,
         symbol: &str,
         position_size: f64,
         position_type: &str,
     ) -> Result<RiskAssessment> {
-        debug!("Requesting risk assessment for {} ({} {})", symbol, position_size, position_type);
-        
+        debug!(
+            "Requesting risk assessment for {} ({} {})",
+            symbol, position_size, position_type
+        );
+
         let url = format!("{}/analyze/risk", self.base_url);
         let request = json!({
             "symbol": symbol,
             "position_size": position_size,
             "position_type": position_type,
         });
-        
-        let response = self.client.post(&url)
+
+        let response = self
+            .client
+            .post(&url)
             .json(&request)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Neural service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Neural service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let risk: RiskAssessment = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let risk: RiskAssessment = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(risk)
     }
-    
+
     pub async fn get_model_info(&self) -> Result<ModelInfo> {
         debug!("Requesting neural model information");
-        
+
         let url = format!("{}/model/info", self.base_url);
-        
-        let response = self.client.get(&url)
+
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| Error::Http(e))?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Error::ServiceUnavailable(format!("Neural service error {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(Error::ServiceUnavailable(format!(
+                "Neural service error {}: {}",
+                status, error_text
+            )));
         }
-        
-        let info: ModelInfo = response.json().await
-            .map_err(|e| Error::Http(e))?;
-        
+
+        let info: ModelInfo = response.json().await.map_err(|e| Error::Http(e))?;
+
         Ok(info)
     }
 }
