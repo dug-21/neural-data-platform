@@ -1,13 +1,13 @@
 //! Configuration Parsing Demo
-//! 
+//!
 //! This example demonstrates how to use the configuration utility functions
 //! to parse Redis and PostgreSQL URLs and convert them to adapter configurations.
 
-use autonomous_platform::orchestration::{
-    config_utils::{parse_redis_url, parse_postgres_url, build_redis_url, build_postgres_url},
-    config_bridge::ConfigBridge,
-};
 use autonomous_platform::config::PlatformConfig;
+use autonomous_platform::orchestration::{
+    config_bridge::ConfigBridge,
+    config_utils::{build_postgres_url, build_redis_url, parse_postgres_url, parse_redis_url},
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔧 Configuration Parsing Demo");
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📡 Redis URL Parsing:");
     let redis_url = "redis://:mypassword@localhost:6379/1";
     println!("URL: {}", redis_url);
-    
+
     match parse_redis_url(redis_url) {
         Ok(config) => {
             println!("✅ Parsed successfully:");
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🐘 PostgreSQL URL Parsing:");
     let postgres_url = "postgres://user:secret@localhost:5432/trading_db";
     println!("URL: {}", postgres_url);
-    
+
     match parse_postgres_url(postgres_url) {
         Ok(config) => {
             println!("✅ Parsed successfully:");
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔨 URL Building:");
     let rebuilt_redis = build_redis_url("localhost", 6379, Some("mypassword"), 1);
     println!("Built Redis URL: {}", rebuilt_redis);
-    
+
     let rebuilt_postgres = build_postgres_url("localhost", 5432, "user", "secret", "trading_db");
     println!("Built PostgreSQL URL: {}", rebuilt_postgres);
 

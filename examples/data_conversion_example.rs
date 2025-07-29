@@ -1,60 +1,56 @@
 //! Data conversion example demonstrating the complete conversion pipeline
-//! 
+//!
 //! This example shows how to convert TimeSeriesData to vendor formats,
 //! handle predictions, and manage type conversions safely.
 
-use std::collections::HashMap;
-use chrono::Utc;
 use anyhow::Result;
+use chrono::Utc;
+use std::collections::HashMap;
 
 // Import neural-trader types
-use neural_trader::data::TimeSeriesData;
 use neural_trader::adapters::neural::{
-    VendorFormatConverter,
-    VendorDataConverter,
-    SafeF32Convert,
-    StreamingConverter,
-    BatchConverter,
+    BatchConverter, SafeF32Convert, StreamingConverter, VendorDataConverter, VendorFormatConverter,
 };
+use neural_trader::data::TimeSeriesData;
 
 fn main() -> Result<()> {
     println!("🔄 Neural Trader Data Conversion Example");
     println!("==========================================");
-    
+
     // Create sample data
     let sample_data = create_sample_data()?;
     println!("✅ Created {} sample data points", sample_data.len());
-    
+
     // Example 1: Basic f64 to f32 conversion
     demonstrate_type_conversion()?;
-    
+
     // Example 2: Convert to vendor format
     demonstrate_vendor_conversion(&sample_data)?;
-    
+
     // Example 3: Batch conversion
     demonstrate_batch_conversion()?;
-    
+
     // Example 4: Streaming conversion for large datasets
     demonstrate_streaming_conversion()?;
-    
+
     // Example 5: Prediction result conversion
     demonstrate_prediction_conversion(&sample_data)?;
-    
+
     println!("\n🎉 All conversion examples completed successfully!");
-    
+
     Ok(())
 }
 
 fn create_sample_data() -> Result<Vec<TimeSeriesData>> {
     let mut data = Vec::new();
     let base_time = Utc::now();
-    
+
     for i in 0..24 {
         let mut indicators = HashMap::new();
         indicators.insert("rsi".to_string(), 50.0 + (i as f64 * 2.0));
         indicators.insert("macd".to_string(), 0.001 * i as f64);
         indicators.insert("ema_20".to_string(), 51000.0 + i as f64 * 50.0);
-        
+
         let point = TimeSeriesData {
             symbol: "BTC/USD".to_string(),
             timestamp: base_time + chrono::Duration::hours(i),
@@ -69,85 +65,109 @@ fn create_sample_data() -> Result<Vec<TimeSeriesData>> {
             value: None,
             metadata: None,
         };
-        
+
         data.push(point);
     }
-    
+
     Ok(data)
 }
 
 fn demonstrate_type_conversion() -> Result<()> {
     println!("\n🔢 Type Conversion Examples:");
-    
+
     // Safe f64 to f32 conversion
     let large_value = 123456789.123456789_f64;
     let converted = large_value.to_f32_safe()?;
     println!("  Large value: {} -> {}", large_value, converted);
-    
+
     // Handle edge cases
-    let extreme_values = vec![f64::MAX, f64::MIN, f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
-    
+    let extreme_values = vec![
+        f64::MAX,
+        f64::MIN,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    ];
+
     for &value in &extreme_values {
         match value.to_f32_safe() {
             Ok(converted) => {
-                println!("  Edge case: {} -> {}", 
-                    if value.is_nan() { "NaN".to_string() } 
-                    else if value.is_infinite() { 
-                        if value.is_sign_positive() { "∞".to_string() } else { "-∞".to_string() }
-                    } else { value.to_string() },
-                    if converted.is_nan() { "NaN".to_string() } 
-                    else if converted.is_infinite() { 
-                        if converted.is_sign_positive() { "∞".to_string() } else { "-∞".to_string() }
-                    } else { converted.to_string() }
+                println!(
+                    "  Edge case: {} -> {}",
+                    if value.is_nan() {
+                        "NaN".to_string()
+                    } else if value.is_infinite() {
+                        if value.is_sign_positive() {
+                            "∞".to_string()
+                        } else {
+                            "-∞".to_string()
+                        }
+                    } else {
+                        value.to_string()
+                    },
+                    if converted.is_nan() {
+                        "NaN".to_string()
+                    } else if converted.is_infinite() {
+                        if converted.is_sign_positive() {
+                            "∞".to_string()
+                        } else {
+                            "-∞".to_string()
+                        }
+                    } else {
+                        converted.to_string()
+                    }
                 );
             }
             Err(e) => println!("  Conversion error: {}", e),
         }
     }
-    
+
     Ok(())
 }
 
 fn demonstrate_vendor_conversion(data: &[TimeSeriesData]) -> Result<()> {
     println!("\n🏭 Vendor Format Conversion:");
-    
+
     let converter = VendorFormatConverter::new();
-    
+
     // Convert to neuro-divergent format
     let vendor_data = converter.to_neuro_divergent_f32(data, "BTC/USD")?;
-    
+
     println!("  ✅ Converted to neuro-divergent format:");
     println!("     Series ID: {}", vendor_data.series_id);
     println!("     Data points: {}", vendor_data.len());
     println!("     First value: {}", vendor_data.data_points[0].value);
-    println!("     Has exogenous: {}", vendor_data.data_points[0].exogenous.is_some());
-    
+    println!(
+        "     Has exogenous: {}",
+        vendor_data.data_points[0].exogenous.is_some()
+    );
+
     if let Some(ref exog) = vendor_data.data_points[0].exogenous {
         println!("     Exogenous features: {}", exog.len());
     }
-    
+
     // Validate conversion integrity
     converter.validate_conversion(data, &vendor_data)?;
     println!("  ✅ Conversion validation passed");
-    
+
     Ok(())
 }
 
 fn demonstrate_batch_conversion() -> Result<()> {
     println!("\n📦 Batch Conversion:");
-    
+
     let mut data_batch = HashMap::new();
-    
+
     // Create data for multiple symbols
     let symbols = vec!["BTC/USD", "ETH/USD", "ADA/USD"];
     for symbol in &symbols {
         let mut symbol_data = Vec::new();
         let base_time = Utc::now();
-        
+
         for i in 0..12 {
             let mut indicators = HashMap::new();
             indicators.insert("rsi".to_string(), 45.0 + i as f64 * 3.0);
-            
+
             let point = TimeSeriesData {
                 symbol: symbol.to_string(),
                 timestamp: base_time + chrono::Duration::hours(i),
@@ -162,91 +182,96 @@ fn demonstrate_batch_conversion() -> Result<()> {
                 value: None,
                 metadata: None,
             };
-            
+
             symbol_data.push(point);
         }
-        
+
         data_batch.insert(symbol.to_string(), symbol_data);
     }
-    
+
     // Convert batch
     let converter = VendorFormatConverter::new();
     let converted_batch = converter.convert_batch(&data_batch)?;
-    
+
     println!("  ✅ Batch conversion completed:");
     for (symbol, vendor_data) in &converted_batch {
         println!("     {}: {} data points", symbol, vendor_data.len());
     }
-    
+
     // Verify batch conversion
     BatchConverter::verify_conversions(&data_batch, &converted_batch)?;
     println!("  ✅ Batch verification passed");
-    
+
     Ok(())
 }
 
 fn demonstrate_streaming_conversion() -> Result<()> {
     println!("\n🌊 Streaming Conversion:");
-    
+
     // Create a large dataset iterator
     let large_dataset = create_large_dataset_iterator(1000);
-    
+
     let streaming_converter = StreamingConverter::new(100); // 100 item chunks
     let converter = VendorFormatConverter::new();
-    
+
     let result = converter.convert_streaming(large_dataset, "LARGE/DATASET", 100)?;
-    
+
     println!("  ✅ Streaming conversion completed:");
     println!("     Series ID: {}", result.series_id);
     println!("     Total data points: {}", result.len());
     println!("     Memory efficient: Uses chunked processing");
-    
+
     Ok(())
 }
 
 fn demonstrate_prediction_conversion(base_data: &[TimeSeriesData]) -> Result<()> {
     println!("\n🔮 Prediction Result Conversion:");
-    
+
     // Simulate model predictions
     let predictions = vec![
-        52000.0_f32, 52500.0_f32, 53000.0_f32, 
-        53200.0_f32, 53800.0_f32, 54100.0_f32
+        52000.0_f32,
+        52500.0_f32,
+        53000.0_f32,
+        53200.0_f32,
+        53800.0_f32,
+        54100.0_f32,
     ];
-    
+
     let converter = VendorFormatConverter::new();
     let prediction_results = converter.from_vendor_predictions_f32(
         &predictions,
         &base_data[0],
         6, // forecast horizon
     )?;
-    
+
     println!("  ✅ Prediction conversion completed:");
     println!("     Forecast steps: {}", prediction_results.len());
-    
+
     for (i, pred) in prediction_results.iter().enumerate() {
-        println!("     Step {}: ${:.2} at {}", 
-            i + 1, 
-            pred.close, 
+        println!(
+            "     Step {}: ${:.2} at {}",
+            i + 1,
+            pred.close,
             pred.timestamp.format("%Y-%m-%d %H:%M")
         );
-        
+
         // Show metadata
         if let Some(ref metadata) = pred.metadata {
             println!("       Forecast step: {}", metadata["forecast_step"]);
         }
     }
-    
+
     Ok(())
 }
 
 fn create_large_dataset_iterator(size: usize) -> impl Iterator<Item = TimeSeriesData> {
     let base_time = Utc::now();
-    
+
     (0..size).map(move |i| {
         let mut indicators = HashMap::new();
         indicators.insert("rsi".to_string(), 30.0 + (i % 70) as f64);
         indicators.insert("macd".to_string(), -0.001 + (i as f64 * 0.0001));
-        
+
         TimeSeriesData {
             symbol: "STREAM/DATA".to_string(),
             timestamp: base_time + chrono::Duration::minutes(i as i64),
@@ -267,7 +292,7 @@ fn create_large_dataset_iterator(size: usize) -> impl Iterator<Item = TimeSeries
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_example_conversion_pipeline() {
         let result = std::panic::catch_unwind(|| {
@@ -276,7 +301,10 @@ mod tests {
                 main().unwrap();
             });
         });
-        
-        assert!(result.is_ok(), "Conversion pipeline example should run without panics");
+
+        assert!(
+            result.is_ok(),
+            "Conversion pipeline example should run without panics"
+        );
     }
 }
