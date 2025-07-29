@@ -1,24 +1,26 @@
 //! Enhanced Neural Adapter with Feature Flags and Error Handling
-//! 
+//!
 //! This module provides a production-ready neural adapter with comprehensive
 //! error handling, health monitoring, and graceful fallback capabilities.
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{info, warn, error, debug};
-use serde::{Deserialize, Serialize};
-use async_trait::async_trait;
+use tracing::{debug, error, info, warn};
 
+use super::errors::{AdapterError, CircuitBreakerState, ErrorSeverity};
+use super::errors::{HealthCheckResult, HealthMetrics};
+use super::fallback_manager::{
+    FallbackManager, FallbackResult, FallbackStrategy, UltimateFallbackStrategy,
+};
+use super::health_monitor::{HealthChecker, HealthMonitor, HealthMonitorConfig, HealthStatus};
+use super::neuro_divergent::NeuroDivergentAdapter;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::{PredictionResult, NeuralPredictorTrait, FannPredictor};
-use super::errors::{AdapterError, ErrorSeverity, CircuitBreakerState};
-use super::health_monitor::{HealthMonitor, HealthMonitorConfig, HealthChecker, HealthStatus};
-use super::errors::{HealthCheckResult, HealthMetrics};
-use super::fallback_manager::{FallbackManager, FallbackStrategy, FallbackResult, UltimateFallbackStrategy};
-use super::neuro_divergent::NeuroDivergentAdapter;
+use crate::neural::{FannPredictor, NeuralPredictorTrait, PredictionResult};
 
 /// Enhanced configuration with feature flags and error handling
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +85,7 @@ impl Default for EnhancedNeuralConfig {
                 max_concurrent_predictions: 50,
                 enable_model_monitoring: true,
                 accuracy_threshold: 0.85,
-                use_real_models: false,
+                use_real_models: true,
                 enable_health_checks: true,
                 enable_fallback: true,
                 enable_circuit_breakers: true,
@@ -95,7 +97,7 @@ impl Default for EnhancedNeuralConfig {
                 max_retries: 3,
                 error_threshold: 0.05,
             },
-            use_real_models: false,
+            use_real_models: true,
             enable_health_monitoring: true,
             enable_fallback: true,
             enable_caching: true,
@@ -153,21 +155,22 @@ impl EnhancedNeuralAdapter {
     /// Create new enhanced neural adapter
     pub async fn new(config: EnhancedNeuralConfig) -> Result<Self, AdapterError> {
         info!("Initializing Enhanced Neural Adapter with feature flags");
-        
+
         // Initialize FANN predictor (always available as fallback)
-        let mut neural_config = config.neural.clone();
-        neural_config.use_real_models = false; // FANN predictor always uses simulated models
-        let fann_predictor = Arc::new(FannPredictor::new(neural_config)
-            .map_err(|e| AdapterError::ModelInitialization {
+        let neural_config = config.neural.clone();
+        // Respect the original use_real_models setting from config
+        let fann_predictor = Arc::new(FannPredictor::new(neural_config).map_err(|e| {
+            AdapterError::ModelInitialization {
                 model: "FANN".to_string(),
                 reason: e.to_string(),
-            })?);
+            }
+        })?);
 
         // Initialize real model adapter if enabled
         let neuro_divergent_adapter = if config.use_real_models {
             info!("Real models enabled - initializing neuro-divergent adapter");
             let mut adapter = NeuroDivergentAdapter::new();
-            
+
             // Initialize supported real models
             for model in &config.neural.models {
                 match model.as_str() {
@@ -175,18 +178,21 @@ impl EnhancedNeuralAdapter {
                         if let Err(e) = adapter.init_deepar().await {
                             warn!("Failed to initialize DeepAR: {}", e);
                         }
-                    },
+                    }
                     "TCN" => {
                         if let Err(e) = adapter.init_tcn().await {
                             warn!("Failed to initialize TCN: {}", e);
                         }
-                    },
+                    }
                     _ => {
-                        debug!("Model {} not supported by real adapter, will use FANN", model);
+                        debug!(
+                            "Model {} not supported by real adapter, will use FANN",
+                            model
+                        );
                     }
                 }
             }
-            
+
             Some(Arc::new(RwLock::new(adapter)))
         } else {
             info!("Real models disabled - using FANN models only");
@@ -197,7 +203,7 @@ impl EnhancedNeuralAdapter {
         let health_monitor = if config.enable_health_monitoring {
             info!("Health monitoring enabled");
             let mut monitor = HealthMonitor::new(config.health_config.clone());
-            
+
             // Register health checkers for all models
             for model in &config.neural.models {
                 let checker = Arc::new(ModelHealthChecker::new(
@@ -207,14 +213,14 @@ impl EnhancedNeuralAdapter {
                 ));
                 monitor.register_health_checker(model.clone(), checker);
             }
-            
+
             let monitor = Arc::new(monitor);
-            
+
             // Start monitoring
             if let Err(e) = monitor.start_monitoring().await {
                 warn!("Failed to start health monitoring: {}", e);
             }
-            
+
             Some(monitor)
         } else {
             info!("Health monitoring disabled");
@@ -225,11 +231,11 @@ impl EnhancedNeuralAdapter {
         let fallback_manager = if config.enable_fallback {
             info!("Fallback system enabled");
             let mut manager = FallbackManager::new(config.fallback_strategy.clone());
-            
+
             if let Some(ref monitor) = health_monitor {
                 manager.set_health_monitor(Arc::clone(monitor));
             }
-            
+
             Some(Arc::new(manager))
         } else {
             info!("Fallback system disabled");
@@ -266,7 +272,7 @@ impl EnhancedNeuralAdapter {
         if let Some(ref health_monitor) = self.health_monitor {
             // Get health status for all models
             let mut healthy_models = Vec::new();
-            
+
             for model in &self.config.neural.models {
                 let status = health_monitor.get_health_status(model).await;
                 if status == HealthStatus::Healthy || status == HealthStatus::Degraded {
@@ -331,7 +337,8 @@ impl EnhancedNeuralAdapter {
 
         // Execute prediction with fallback if enabled
         let result = if self.config.enable_fallback && self.fallback_manager.is_some() {
-            self.predict_with_fallback(data, horizon, &recommended_model).await
+            self.predict_with_fallback(data, horizon, &recommended_model)
+                .await
         } else {
             self.predict_direct(data, horizon, &recommended_model).await
         };
@@ -345,10 +352,10 @@ impl EnhancedNeuralAdapter {
                 Ok(_) => stats.successful_predictions += 1,
                 Err(_) => stats.failed_predictions += 1,
             }
-            
+
             // Update average response time
             let total = stats.total_predictions;
-            stats.average_response_time = 
+            stats.average_response_time =
                 (stats.average_response_time * (total - 1) as u32 + duration) / total as u32;
         }
 
@@ -380,23 +387,35 @@ impl EnhancedNeuralAdapter {
         horizon: usize,
         _preferred_model: &str,
     ) -> Result<Vec<PredictionResult>, AdapterError> {
-        let fallback_manager = self.fallback_manager.as_ref()
-            .ok_or_else(|| AdapterError::ConfigurationError {
-                field: "fallback_manager".to_string(),
-                issue: "not initialized".to_string(),
-            })?;
+        let fallback_manager =
+            self.fallback_manager
+                .as_ref()
+                .ok_or_else(|| AdapterError::ConfigurationError {
+                    field: "fallback_manager".to_string(),
+                    issue: "not initialized".to_string(),
+                })?;
 
         let data_clone = data.to_vec();
         let horizon_clone = horizon;
-        let self_ref = self;
+        // Clone the fann_predictor Arc to ensure Send safety
+        let fann_predictor_clone = Arc::clone(&self.fann_predictor);
 
-        let fallback_result = fallback_manager.predict_with_fallback(
-            |model_name, data, horizon| async move {
-                self_ref.predict_with_specific_model(&data, horizon, &model_name).await
-            },
-            &data_clone,
-            horizon_clone,
-        ).await;
+        let fallback_result = fallback_manager
+            .predict_with_fallback(
+                move |model_name, data, horizon| {
+                    let fann_predictor_clone = Arc::clone(&fann_predictor_clone);
+                    async move {
+                        // Use the FANN predictor directly for fallback operations
+                        fann_predictor_clone
+                            .predict_with_model(&model_name, &data, horizon)
+                            .await
+                            .map_err(|e| AdapterError::Prediction(e.to_string()))
+                    }
+                },
+                &data_clone,
+                horizon_clone,
+            )
+            .await;
 
         // Update fallback stats
         if fallback_result.fallback_triggered {
@@ -414,7 +433,8 @@ impl EnhancedNeuralAdapter {
         horizon: usize,
         model_name: &str,
     ) -> Result<Vec<PredictionResult>, AdapterError> {
-        self.predict_with_specific_model(data, horizon, model_name).await
+        self.predict_with_specific_model(data, horizon, model_name)
+            .await
     }
 
     /// Predict using a specific model with error handling
@@ -424,21 +444,31 @@ impl EnhancedNeuralAdapter {
         horizon: usize,
         model_name: &str,
     ) -> Result<Vec<PredictionResult>, AdapterError> {
-        let timeout = self.config.model_timeouts
+        let timeout = self
+            .config
+            .model_timeouts
             .get(model_name)
             .copied()
             .unwrap_or(Duration::from_secs(30));
 
         // Check if model should use real implementation
-        let use_real = self.config.use_real_models && 
-                      self.is_real_model_supported(model_name) &&
-                      self.neuro_divergent_adapter.is_some();
+        let use_real = self.config.use_real_models
+            && self.is_real_model_supported(model_name)
+            && self.neuro_divergent_adapter.is_some();
 
         // Apply timeout to the prediction future
         let prediction_result = if use_real {
-            tokio::time::timeout(timeout, self.predict_with_real_model(data, horizon, model_name)).await
+            tokio::time::timeout(
+                timeout,
+                self.predict_with_real_model(data, horizon, model_name),
+            )
+            .await
         } else {
-            tokio::time::timeout(timeout, self.predict_with_fann_model(data, horizon, model_name)).await
+            tokio::time::timeout(
+                timeout,
+                self.predict_with_fann_model(data, horizon, model_name),
+            )
+            .await
         };
 
         match prediction_result {
@@ -458,13 +488,15 @@ impl EnhancedNeuralAdapter {
         horizon: usize,
         model_name: &str,
     ) -> Result<Vec<PredictionResult>, AdapterError> {
-        let adapter = self.neuro_divergent_adapter.as_ref()
-            .ok_or_else(|| AdapterError::ModelNotAvailable {
+        let adapter = self.neuro_divergent_adapter.as_ref().ok_or_else(|| {
+            AdapterError::ModelNotAvailable {
                 model: model_name.to_string(),
-            })?;
+            }
+        })?;
 
         let adapter_guard = adapter.read().await;
-        let symbol = data.first()
+        let symbol = data
+            .first()
             .map(|d| d.symbol.clone())
             .unwrap_or_else(|| "UNKNOWN".to_string());
 
@@ -503,7 +535,9 @@ impl EnhancedNeuralAdapter {
         model_name: &str,
     ) -> Result<Vec<PredictionResult>, AdapterError> {
         // Use FANN predictor's test method for specific model prediction
-        self.fann_predictor.test_predict_with_model(model_name, data, horizon).await
+        self.fann_predictor
+            .test_predict_with_model(model_name, data, horizon)
+            .await
             .map_err(|e| AdapterError::PredictionFailed {
                 model: model_name.to_string(),
                 reason: e.to_string(),
@@ -534,11 +568,13 @@ impl EnhancedNeuralAdapter {
             Some(SystemHealthStatus {
                 overall_healthy: summary.healthy_models > 0,
                 healthy_models: summary.healthy_models,
-                total_models: summary.healthy_models + summary.degraded_models + summary.unhealthy_models,
-                error_rate: if summary.total_errors > 0 { 
-                    100.0 - summary.recovery_success_rate 
-                } else { 
-                    0.0 
+                total_models: summary.healthy_models
+                    + summary.degraded_models
+                    + summary.unhealthy_models,
+                error_rate: if summary.total_errors > 0 {
+                    100.0 - summary.recovery_success_rate
+                } else {
+                    0.0
                 },
             })
         } else {
@@ -645,27 +681,29 @@ impl ModelHealthChecker {
 impl HealthChecker for ModelHealthChecker {
     async fn check_health(&self, model_name: &str) -> HealthCheckResult {
         let start = Instant::now();
-        
+
         // Create minimal test data
-        let test_data = vec![
-            TimeSeriesData {
-                symbol: "TEST".to_string(),
-                timestamp: chrono::Utc::now(),
-                open: 100.0,
-                high: 101.0,
-                low: 99.0,
-                close: 100.5,
-                volume: 1000.0,
-                indicators: HashMap::new(),
-                source: Some("health_check".to_string()),
-                entity: Some("test".to_string()),
-                value: Some(100.5),
-                metadata: None,
-            }
-        ];
+        let test_data = vec![TimeSeriesData {
+            symbol: "TEST".to_string(),
+            timestamp: chrono::Utc::now(),
+            open: 100.0,
+            high: 101.0,
+            low: 99.0,
+            close: 100.5,
+            volume: 1000.0,
+            indicators: HashMap::new(),
+            source: Some("health_check".to_string()),
+            entity: Some("test".to_string()),
+            value: Some(100.5),
+            metadata: None,
+        }];
 
         // Try a simple prediction to check health
-        let healthy = match self.fann_predictor.test_predict_with_model(model_name, &test_data, 1).await {
+        let healthy = match self
+            .fann_predictor
+            .test_predict_with_model(model_name, &test_data, 1)
+            .await
+        {
             Ok(_) => true,
             Err(e) => {
                 debug!("Health check failed for {}: {}", model_name, e);
@@ -674,12 +712,16 @@ impl HealthChecker for ModelHealthChecker {
         };
 
         let response_time = start.elapsed();
-        
+
         HealthCheckResult {
             model: model_name.to_string(),
             healthy,
             response_time,
-            error: if healthy { None } else { Some("Prediction test failed".to_string()) },
+            error: if healthy {
+                None
+            } else {
+                Some("Prediction test failed".to_string())
+            },
             timestamp: std::time::SystemTime::now(),
             metrics: self.get_metrics(model_name).await,
         }
@@ -710,9 +752,11 @@ impl NeuralPredictorTrait for EnhancedNeuralAdapter {
         horizon: usize,
         _features: Option<HashMap<String, serde_json::Value>>,
     ) -> anyhow::Result<Vec<PredictionResult>> {
-        let result = self.predict_enhanced(data, horizon, None).await
+        let result = self
+            .predict_enhanced(data, horizon, None)
+            .await
             .map_err(|e| anyhow::anyhow!("Enhanced prediction failed: {}", e))?;
-        
+
         Ok(result.predictions)
     }
 
@@ -724,7 +768,9 @@ impl NeuralPredictorTrait for EnhancedNeuralAdapter {
         _features: Option<HashMap<String, serde_json::Value>>,
     ) -> anyhow::Result<Vec<PredictionResult>> {
         // Use the FANN predictor's ensemble capability
-        self.fann_predictor.predict_ensemble(data, horizon, models, None).await
+        self.fann_predictor
+            .predict_ensemble(data, horizon, models, None)
+            .await
     }
 
     async fn get_feature_importance(&self) -> anyhow::Result<HashMap<String, f64>> {
@@ -759,11 +805,11 @@ mod tests {
         };
 
         let adapter = EnhancedNeuralAdapter::new(config).await.unwrap();
-        
+
         // Test with configured model
         let available = adapter.is_model_available("FANN_MLP").await;
         assert!(available);
-        
+
         // Test with non-configured model
         let not_available = adapter.is_model_available("NonExistentModel").await;
         assert!(!not_available);
@@ -779,29 +825,27 @@ mod tests {
         };
 
         let adapter = EnhancedNeuralAdapter::new(config).await.unwrap();
-        
-        let test_data = vec![
-            TimeSeriesData {
-                symbol: "BTC/USD".to_string(),
-                timestamp: chrono::Utc::now(),
-                open: 50000.0,
-                high: 51000.0,
-                low: 49500.0,
-                close: 50500.0,
-                volume: 1000.0,
-                indicators: HashMap::new(),
-                source: None,
-                entity: None,
-                value: None,
-                metadata: None,
-            }
-        ];
+
+        let test_data = vec![TimeSeriesData {
+            symbol: "BTC/USD".to_string(),
+            timestamp: chrono::Utc::now(),
+            open: 50000.0,
+            high: 51000.0,
+            low: 49500.0,
+            close: 50500.0,
+            volume: 1000.0,
+            indicators: HashMap::new(),
+            source: None,
+            entity: None,
+            value: None,
+            metadata: None,
+        }];
 
         let result = adapter.predict_enhanced(&test_data, 5, None).await;
-        
+
         // Should work with FANN models
         assert!(result.is_ok() || result.is_err()); // Either success or graceful error handling
-        
+
         if let Ok(result) = result {
             assert_eq!(result.predictions.len(), 5);
             assert!(!result.model_used.is_empty());

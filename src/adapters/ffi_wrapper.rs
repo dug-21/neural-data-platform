@@ -1,12 +1,12 @@
 //! FFI Wrapper for JS/WASM DAA Service Communication
-//! 
+//!
 //! This module provides C-compatible FFI functions for cross-boundary
 //! communication between Rust and the JS/WASM DAA service.
 
+use serde_json::{json, Value};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::slice;
-use serde_json::{json, Value};
 
 use super::daa_service::{DAAMessage, DAATradingDecision};
 
@@ -61,18 +61,18 @@ pub extern "C" fn ffi_create_analysis_request(
         let symbol_str = unsafe { CStr::from_ptr(symbol) }
             .to_str()
             .map_err(|_| "Invalid symbol string")?;
-        
+
         let data_str = unsafe { CStr::from_ptr(data_json) }
             .to_str()
             .map_err(|_| "Invalid data JSON")?;
-        
+
         let analysis_type_str = unsafe { CStr::from_ptr(analysis_type) }
             .to_str()
             .map_err(|_| "Invalid analysis type")?;
 
         // Parse market data
-        let data_value: Value = serde_json::from_str(data_str)
-            .map_err(|_| "Failed to parse market data JSON")?;
+        let data_value: Value =
+            serde_json::from_str(data_str).map_err(|_| "Failed to parse market data JSON")?;
 
         // Create request message
         let request = json!({
@@ -108,8 +108,8 @@ pub extern "C" fn ffi_parse_trading_decision(message_json: *const c_char) -> FFI
             .to_str()
             .map_err(|_| "Invalid message JSON")?;
 
-        let message: DAAMessage = serde_json::from_str(message_str)
-            .map_err(|_| "Failed to parse DAA message")?;
+        let message: DAAMessage =
+            serde_json::from_str(message_str).map_err(|_| "Failed to parse DAA message")?;
 
         let decision: DAATradingDecision = serde_json::from_value(message.payload)
             .map_err(|_| "Failed to parse trading decision")?;

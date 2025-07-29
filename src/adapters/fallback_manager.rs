@@ -1,19 +1,19 @@
 //! Fallback management system for neural model adapters
-//! 
+//!
 //! Provides intelligent fallback strategies, automatic model switching,
 //! and graceful degradation for production neural trading systems.
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
-use tracing::{info, warn, error, debug};
-use serde::{Deserialize, Serialize};
-use async_trait::async_trait;
+use tracing::{debug, error, info, warn};
 
 use super::errors::{
-    AdapterError, FallbackConfig, RecoveryStrategy, ErrorHandler, DefaultErrorHandler,
-    ErrorContext, ErrorSeverity
+    AdapterError, DefaultErrorHandler, ErrorContext, ErrorHandler, ErrorSeverity, FallbackConfig,
+    RecoveryStrategy,
 };
 use super::health_monitor::{HealthMonitor, HealthStatus};
 use crate::data::TimeSeriesData;
@@ -165,10 +165,7 @@ impl FallbackManager {
     }
 
     /// Execute with fallback strategy
-    pub async fn execute_with_fallback<F, T, Fut>(
-        &self,
-        operation: F,
-    ) -> FallbackResult<T>
+    pub async fn execute_with_fallback<F, T, Fut>(&self, operation: F) -> FallbackResult<T>
     where
         F: Fn(String) -> Fut + Send + Sync,
         Fut: std::future::Future<Output = Result<T, AdapterError>> + Send,
@@ -188,11 +185,9 @@ impl FallbackManager {
                 fallback_triggered = true;
             }
 
-            let model_result = self.try_model_with_retries(
-                &operation,
-                model_name.clone(),
-                position as u32,
-            ).await;
+            let model_result = self
+                .try_model_with_retries(&operation, model_name.clone(), position as u32)
+                .await;
 
             attempts.extend(model_result.attempts);
 
@@ -200,7 +195,7 @@ impl FallbackManager {
                 Ok(result) => {
                     // Success! Update metrics and return
                     self.record_success(model_name, &attempts).await;
-                    
+
                     return FallbackResult {
                         result: Ok(result),
                         model_used: model_name.clone(),
@@ -211,9 +206,12 @@ impl FallbackManager {
                 }
                 Err(error) => {
                     warn!("Model {} failed: {}", model_name, error);
-                    
+
                     // Check if we should continue trying other models
-                    if !self.should_continue_fallback(&error, position, &execution_order).await {
+                    if !self
+                        .should_continue_fallback(&error, position, &execution_order)
+                        .await
+                    {
                         self.record_failure(&attempts).await;
                         return FallbackResult {
                             result: Err(error),
@@ -263,12 +261,12 @@ impl FallbackManager {
     /// Build optimal execution order based on health and performance
     async fn build_execution_order(&self) -> Vec<String> {
         let mut order = vec![self.strategy.primary_model.clone()];
-        
+
         if let Some(health_monitor) = &self.health_monitor {
             // Filter out unhealthy models and reorder based on health status
             let mut healthy_fallbacks = Vec::new();
             let mut degraded_fallbacks = Vec::new();
-            
+
             for model in &self.strategy.fallback_chain {
                 match health_monitor.get_health_status(model).await {
                     HealthStatus::Healthy => healthy_fallbacks.push(model.clone()),
@@ -278,7 +276,7 @@ impl FallbackManager {
                     }
                 }
             }
-            
+
             // Prioritize healthy models first, then degraded ones
             order.extend(healthy_fallbacks);
             order.extend(degraded_fallbacks);
@@ -311,14 +309,14 @@ impl FallbackManager {
 
         loop {
             let attempt_start = Instant::now();
-            
+
             // Check if model is available before attempting
             if let Some(health_monitor) = &self.health_monitor {
                 if !health_monitor.can_execute(&model_name).await {
-                    let error = AdapterError::CircuitBreakerOpen { 
-                        model: model_name.clone() 
+                    let error = AdapterError::CircuitBreakerOpen {
+                        model: model_name.clone(),
                     };
-                    
+
                     attempts.push(FallbackAttempt {
                         model: model_name.clone(),
                         error: Some(error.clone()),
@@ -348,7 +346,9 @@ impl FallbackManager {
 
                     // Record success in health monitor
                     if let Some(health_monitor) = &self.health_monitor {
-                        health_monitor.record_execution_result(&model_name, true).await;
+                        health_monitor
+                            .record_execution_result(&model_name, true)
+                            .await;
                     }
 
                     return ModelAttemptResult {
@@ -359,7 +359,9 @@ impl FallbackManager {
                 Err(error) => {
                     // Record failure in health monitor
                     if let Some(health_monitor) = &self.health_monitor {
-                        health_monitor.record_execution_result(&model_name, false).await;
+                        health_monitor
+                            .record_execution_result(&model_name, false)
+                            .await;
                     }
 
                     let context = ErrorContext {
@@ -370,7 +372,7 @@ impl FallbackManager {
                     };
 
                     let recovery_strategy = self.error_handler.handle_error(&error, &context);
-                    
+
                     attempts.push(FallbackAttempt {
                         model: model_name.clone(),
                         error: Some(error.clone()),
@@ -426,16 +428,17 @@ impl FallbackManager {
     }
 
     /// Try ultimate fallback strategies when all models fail
-    async fn try_ultimate_fallback<T>(&self, _attempts: &[FallbackAttempt]) -> Result<T, AdapterError>
+    async fn try_ultimate_fallback<T>(
+        &self,
+        _attempts: &[FallbackAttempt],
+    ) -> Result<T, AdapterError>
     where
         T: Clone,
     {
         match self.strategy.ultimate_fallback {
-            UltimateFallbackStrategy::FailFast => {
-                Err(AdapterError::FallbackExhausted {
-                    models: vec!["all".to_string()],
-                })
-            }
+            UltimateFallbackStrategy::FailFast => Err(AdapterError::FallbackExhausted {
+                models: vec!["all".to_string()],
+            }),
             UltimateFallbackStrategy::UseLastKnownPrediction => {
                 // This would need to be implemented specifically for the prediction type
                 // For now, return an error
@@ -461,13 +464,15 @@ impl FallbackManager {
     /// Record successful execution metrics
     async fn record_success(&self, model_name: &str, attempts: &[FallbackAttempt]) {
         let mut metrics = self.metrics.write().await;
-        
+
         if attempts.len() > 1 {
             metrics.successful_fallbacks += 1;
         }
 
         // Update model usage stats
-        let stats = metrics.model_usage_stats.entry(model_name.to_string())
+        let stats = metrics
+            .model_usage_stats
+            .entry(model_name.to_string())
             .or_insert_with(|| ModelUsageStats {
                 attempts: 0,
                 successes: 0,
@@ -483,8 +488,9 @@ impl FallbackManager {
         // Update average response time
         let total_time = attempts.iter().map(|a| a.duration).sum::<Duration>();
         let total_attempts = stats.attempts;
-        stats.average_response_time = 
-            (stats.average_response_time * (total_attempts - 1) as u32 + total_time) / total_attempts as u32;
+        stats.average_response_time = (stats.average_response_time * (total_attempts - 1) as u32
+            + total_time)
+            / total_attempts as u32;
 
         metrics.last_updated = SystemTime::now();
     }
@@ -492,7 +498,7 @@ impl FallbackManager {
     /// Record failed execution metrics
     async fn record_failure(&self, attempts: &[FallbackAttempt]) {
         let mut metrics = self.metrics.write().await;
-        
+
         if attempts.len() > 1 {
             metrics.failed_fallbacks += 1;
         }
@@ -554,7 +560,8 @@ impl FallbackManager {
         F: Fn(String, Vec<TimeSeriesData>, usize) -> Fut + Send + Sync,
         Fut: std::future::Future<Output = Result<Vec<PredictionResult>, AdapterError>> + Send,
     {
-        let cache_key = format!("{}_{}_{}",
+        let cache_key = format!(
+            "{}_{}_{}",
             data.last().map(|d| d.symbol.clone()).unwrap_or_default(),
             data.len(),
             horizon
@@ -575,15 +582,18 @@ impl FallbackManager {
         }
 
         let data_clone = data.to_vec();
-        let result = self.execute_with_fallback(|model_name| {
-            let data = data_clone.clone();
-            predictor_fn(model_name, data, horizon)
-        }).await;
+        let result = self
+            .execute_with_fallback(|model_name| {
+                let data = data_clone.clone();
+                predictor_fn(model_name, data, horizon)
+            })
+            .await;
 
         // Cache successful results
         if let Ok(ref predictions) = result.result {
             if self.strategy.cache_results {
-                self.cache_prediction(&cache_key, predictions.clone(), &result.model_used).await;
+                self.cache_prediction(&cache_key, predictions.clone(), &result.model_used)
+                    .await;
             }
         }
 
@@ -591,7 +601,10 @@ impl FallbackManager {
     }
 
     /// Get cached prediction if available and valid
-    async fn get_cached_prediction(&self, cache_key: &str) -> Option<CacheEntry<Vec<PredictionResult>>> {
+    async fn get_cached_prediction(
+        &self,
+        cache_key: &str,
+    ) -> Option<CacheEntry<Vec<PredictionResult>>> {
         let cache = self.prediction_cache.read().await;
         if let Some(entry) = cache.get(cache_key) {
             if entry.timestamp.elapsed().unwrap_or(Duration::MAX) <= self.cache_ttl {
@@ -602,9 +615,14 @@ impl FallbackManager {
     }
 
     /// Cache prediction result
-    async fn cache_prediction(&self, cache_key: &str, predictions: Vec<PredictionResult>, model_used: &str) {
+    async fn cache_prediction(
+        &self,
+        cache_key: &str,
+        predictions: Vec<PredictionResult>,
+        model_used: &str,
+    ) {
         let mut cache = self.prediction_cache.write().await;
-        
+
         // Calculate average confidence
         let avg_confidence = if predictions.is_empty() {
             0.0
@@ -614,12 +632,15 @@ impl FallbackManager {
 
         // Only cache if confidence meets threshold
         if avg_confidence >= self.strategy.min_confidence_threshold {
-            cache.insert(cache_key.to_string(), CacheEntry {
-                result: predictions,
-                model_used: model_used.to_string(),
-                timestamp: SystemTime::now(),
-                confidence: avg_confidence,
-            });
+            cache.insert(
+                cache_key.to_string(),
+                CacheEntry {
+                    result: predictions,
+                    model_used: model_used.to_string(),
+                    timestamp: SystemTime::now(),
+                    confidence: avg_confidence,
+                },
+            );
         }
 
         // Cleanup old entries (simple LRU-like behavior)
@@ -678,10 +699,12 @@ mod tests {
         };
 
         let manager = FallbackManager::new(strategy);
-        
-        let result = manager.execute_with_fallback(|model_name| async move {
-            Ok(format!("success_{}", model_name))
-        }).await;
+
+        let result = manager
+            .execute_with_fallback(
+                |model_name| async move { Ok(format!("success_{}", model_name)) },
+            )
+            .await;
 
         assert!(result.result.is_ok());
         assert_eq!(result.model_used, "good_model");
@@ -698,25 +721,27 @@ mod tests {
         };
 
         let manager = FallbackManager::new(strategy);
-        
+
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = Arc::clone(&call_count);
-        
-        let result = manager.execute_with_fallback(|model_name| {
-            let count = Arc::clone(&call_count_clone);
-            async move {
-                let current_count = count.fetch_add(1, Ordering::SeqCst);
-                if model_name == "failing_model" {
-                    Err(AdapterError::NetworkError {
-                        model: model_name,
-                        details: "Mock failure".to_string(),
-                        timeout_ms: 1000,
-                    })
-                } else {
-                    Ok(format!("success_{}_attempt_{}", model_name, current_count))
+
+        let result = manager
+            .execute_with_fallback(|model_name| {
+                let count = Arc::clone(&call_count_clone);
+                async move {
+                    let current_count = count.fetch_add(1, Ordering::SeqCst);
+                    if model_name == "failing_model" {
+                        Err(AdapterError::NetworkError {
+                            model: model_name,
+                            details: "Mock failure".to_string(),
+                            timeout_ms: 1000,
+                        })
+                    } else {
+                        Ok(format!("success_{}_attempt_{}", model_name, current_count))
+                    }
                 }
-            }
-        }).await;
+            })
+            .await;
 
         assert!(result.result.is_ok());
         assert_eq!(result.model_used, "good_model");
@@ -735,13 +760,15 @@ mod tests {
 
         let manager = FallbackManager::new(strategy);
         let test_data = vec![];
-        
-        let result = manager.predict_with_fallback(mock_predictor, &test_data, 5).await;
-        
+
+        let result = manager
+            .predict_with_fallback(mock_predictor, &test_data, 5)
+            .await;
+
         assert!(result.result.is_ok());
         assert_eq!(result.model_used, "good_model");
         assert!(result.fallback_triggered);
-        
+
         let predictions = result.result.unwrap();
         assert_eq!(predictions.len(), 5);
     }
@@ -755,19 +782,21 @@ mod tests {
         };
 
         let manager = FallbackManager::new(strategy);
-        
+
         // Execute a fallback scenario
-        let _result = manager.execute_with_fallback(|model_name| async move {
-            if model_name == "failing_model" {
-                Err(AdapterError::NetworkError {
-                    model: model_name,
-                    details: "Test error".to_string(),
-                    timeout_ms: 1000,
-                })
-            } else {
-                Ok("success".to_string())
-            }
-        }).await;
+        let _result = manager
+            .execute_with_fallback(|model_name| async move {
+                if model_name == "failing_model" {
+                    Err(AdapterError::NetworkError {
+                        model: model_name,
+                        details: "Test error".to_string(),
+                        timeout_ms: 1000,
+                    })
+                } else {
+                    Ok("success".to_string())
+                }
+            })
+            .await;
 
         let metrics = manager.get_metrics().await;
         assert!(metrics.successful_fallbacks > 0);

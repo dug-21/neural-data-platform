@@ -1,21 +1,20 @@
 //! Health monitoring system for neural model adapters
-//! 
+//!
 //! Provides comprehensive health checks, performance monitoring, and automatic
 //! recovery for production neural trading systems.
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, timeout};
-use tracing::{info, warn, error, debug};
-use serde::{Deserialize, Serialize};
-use async_trait::async_trait;
+use tracing::{debug, error, info, warn};
 
 use super::errors::{
-    AdapterError, HealthCheckResult, HealthMetrics, ErrorMetrics, 
-    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState,
-    ErrorReporter, ConsoleErrorReporter
+    AdapterError, CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, ConsoleErrorReporter,
+    ErrorMetrics, ErrorReporter, HealthCheckResult, HealthMetrics,
 };
 use crate::data::TimeSeriesData;
 
@@ -53,9 +52,9 @@ impl Default for HealthMonitorConfig {
             unhealthy_threshold: 3,
             recovery_threshold: 2,
             metrics_interval: Duration::from_secs(60),
-            memory_warning_threshold: 500, // 500 MB
-            cpu_warning_threshold: 80.0,   // 80%
-            error_rate_warning_threshold: 10.0, // 10%
+            memory_warning_threshold: 500,         // 500 MB
+            cpu_warning_threshold: 80.0,           // 80%
+            error_rate_warning_threshold: 10.0,    // 10%
             response_time_warning_threshold: 5000, // 5 seconds
         }
     }
@@ -200,14 +199,14 @@ impl HealthMonitor {
     /// Start health monitoring for all registered models
     pub async fn start_monitoring(&self) -> Result<(), AdapterError> {
         let mut tasks = self.monitoring_tasks.lock().await;
-        
+
         for model_name in self.health_checkers.keys() {
             // Initialize circuit breaker
             {
                 let mut circuit_breakers = self.circuit_breakers.write().await;
                 circuit_breakers.insert(
                     model_name.clone(),
-                    CircuitBreaker::new(CircuitBreakerConfig::default())
+                    CircuitBreaker::new(CircuitBreakerConfig::default()),
                 );
             }
 
@@ -216,14 +215,17 @@ impl HealthMonitor {
                 let mut trackers = self.performance_trackers.write().await;
                 trackers.insert(
                     model_name.clone(),
-                    ModelPerformanceTracker::new(self.config.history_size)
+                    ModelPerformanceTracker::new(self.config.history_size),
                 );
             }
 
             // Initialize health history
             {
                 let mut history = self.health_history.write().await;
-                history.insert(model_name.clone(), VecDeque::with_capacity(self.config.history_size));
+                history.insert(
+                    model_name.clone(),
+                    VecDeque::with_capacity(self.config.history_size),
+                );
             }
 
             // Start monitoring task for this model
@@ -235,7 +237,10 @@ impl HealthMonitor {
         let metrics_task = self.start_metrics_collection().await;
         tasks.push(metrics_task);
 
-        info!("Health monitoring started for {} models", self.health_checkers.len());
+        info!(
+            "Health monitoring started for {} models",
+            self.health_checkers.len()
+        );
         Ok(())
     }
 
@@ -269,19 +274,18 @@ impl HealthMonitor {
                 let start_time = Instant::now();
 
                 // Perform health check with timeout
-                let health_result = match timeout(config.check_timeout, checker.check_health(&model_name)).await {
-                    Ok(result) => result,
-                    Err(_) => {
-                        HealthCheckResult {
+                let health_result =
+                    match timeout(config.check_timeout, checker.check_health(&model_name)).await {
+                        Ok(result) => result,
+                        Err(_) => HealthCheckResult {
                             model: model_name.clone(),
                             healthy: false,
                             response_time: config.check_timeout,
                             error: Some("Health check timeout".to_string()),
                             timestamp: SystemTime::now(),
                             metrics: HealthMetrics::default(),
-                        }
-                    }
-                };
+                        },
+                    };
 
                 let response_time = start_time.elapsed();
 
@@ -333,24 +337,40 @@ impl HealthMonitor {
 
                 // Check for state transitions
                 if consecutive_failures >= config.unhealthy_threshold {
-                    warn!("Model {} marked as unhealthy after {} consecutive failures", 
-                          model_name, consecutive_failures);
+                    warn!(
+                        "Model {} marked as unhealthy after {} consecutive failures",
+                        model_name, consecutive_failures
+                    );
                 } else if consecutive_successes >= config.recovery_threshold {
-                    info!("Model {} recovered after {} consecutive successes", 
-                          model_name, consecutive_successes);
+                    info!(
+                        "Model {} recovered after {} consecutive successes",
+                        model_name, consecutive_successes
+                    );
                 }
 
                 // Log warnings for concerning metrics
                 if health_result.metrics.memory_usage_mb > config.memory_warning_threshold {
-                    warn!("High memory usage for {}: {} MB", model_name, health_result.metrics.memory_usage_mb);
+                    warn!(
+                        "High memory usage for {}: {} MB",
+                        model_name, health_result.metrics.memory_usage_mb
+                    );
                 }
 
                 if health_result.metrics.cpu_usage_percent > config.cpu_warning_threshold {
-                    warn!("High CPU usage for {}: {:.1}%", model_name, health_result.metrics.cpu_usage_percent);
+                    warn!(
+                        "High CPU usage for {}: {:.1}%",
+                        model_name, health_result.metrics.cpu_usage_percent
+                    );
                 }
 
-                if health_result.response_time.as_millis() > config.response_time_warning_threshold as u128 {
-                    warn!("Slow response time for {}: {} ms", model_name, health_result.response_time.as_millis());
+                if health_result.response_time.as_millis()
+                    > config.response_time_warning_threshold as u128
+                {
+                    warn!(
+                        "Slow response time for {}: {} ms",
+                        model_name,
+                        health_result.response_time.as_millis()
+                    );
                 }
             }
         })
@@ -381,7 +401,9 @@ impl HealthMonitor {
                     }
 
                     // Update model-specific error counts
-                    metrics.errors_by_model.insert(model_name.clone(), tracker.error_count);
+                    metrics
+                        .errors_by_model
+                        .insert(model_name.clone(), tracker.error_count);
                 }
 
                 // Calculate overall statistics
@@ -390,17 +412,19 @@ impl HealthMonitor {
                 let total_requests = total_errors + total_successes;
 
                 if total_requests > 0 {
-                    metrics.recovery_success_rate = (total_successes as f32 / total_requests as f32) * 100.0;
+                    metrics.recovery_success_rate =
+                        (total_successes as f32 / total_requests as f32) * 100.0;
                 }
 
                 metrics.total_errors = total_errors;
                 metrics.last_updated = SystemTime::now();
 
                 // Calculate average response time across all models
-                let response_times: Vec<Duration> = trackers.values()
+                let response_times: Vec<Duration> = trackers
+                    .values()
                     .map(|t| t.get_average_response_time())
                     .collect();
-                
+
                 if !response_times.is_empty() {
                     let total_time: Duration = response_times.iter().sum();
                     metrics.average_recovery_time = total_time / response_times.len() as u32;
@@ -472,7 +496,8 @@ impl HealthMonitor {
             }
 
             // Count recent health checks
-            let recent_checks = model_history.iter()
+            let recent_checks = model_history
+                .iter()
                 .rev()
                 .take(self.config.unhealthy_threshold as usize)
                 .collect::<Vec<_>>();
@@ -577,20 +602,24 @@ pub struct BasicHealthChecker;
 impl HealthChecker for BasicHealthChecker {
     async fn check_health(&self, model_name: &str) -> HealthCheckResult {
         let start = Instant::now();
-        
+
         // Simulate health check work
         sleep(Duration::from_millis(10)).await;
-        
+
         let response_time = start.elapsed();
-        
+
         // For testing, consider model healthy if name doesn't contain "failed"
         let healthy = !model_name.contains("failed");
-        
+
         HealthCheckResult {
             model: model_name.to_string(),
             healthy,
             response_time,
-            error: if healthy { None } else { Some("Simulated failure".to_string()) },
+            error: if healthy {
+                None
+            } else {
+                Some("Simulated failure".to_string())
+            },
             timestamp: SystemTime::now(),
             metrics: self.get_metrics(model_name).await,
         }
@@ -623,38 +652,35 @@ mod tests {
             check_interval: Duration::from_millis(100),
             ..Default::default()
         };
-        
+
         let mut monitor = HealthMonitor::new(config);
-        monitor.register_health_checker(
-            "test_model".to_string(),
-            Arc::new(BasicHealthChecker)
-        );
+        monitor.register_health_checker("test_model".to_string(), Arc::new(BasicHealthChecker));
 
         // Start monitoring briefly
         monitor.start_monitoring().await.unwrap();
-        
+
         // Wait for a few health checks
         tokio::time::sleep(Duration::from_millis(250)).await;
-        
+
         // Check health status
         let status = monitor.get_health_status("test_model").await;
         assert_eq!(status, HealthStatus::Healthy);
-        
+
         let is_healthy = monitor.is_model_healthy("test_model").await;
         assert!(is_healthy);
-        
+
         let can_execute = monitor.can_execute("test_model").await;
         assert!(can_execute);
-        
+
         // Get performance metrics
         let metrics = monitor.get_performance_metrics("test_model").await;
         assert!(metrics.is_some());
-        
+
         // Get system summary
         let summary = monitor.get_system_health_summary().await;
         assert_eq!(summary.healthy_models, 1);
         assert_eq!(summary.overall_status, SystemStatus::Healthy);
-        
+
         monitor.stop_monitoring().await;
     }
 
@@ -665,22 +691,22 @@ mod tests {
             unhealthy_threshold: 2,
             ..Default::default()
         };
-        
+
         let mut monitor = HealthMonitor::new(config);
         monitor.register_health_checker(
             "failed_model".to_string(), // Will be considered unhealthy
-            Arc::new(BasicHealthChecker)
+            Arc::new(BasicHealthChecker),
         );
 
         monitor.start_monitoring().await.unwrap();
-        
+
         // Wait for health checks to detect failure
         tokio::time::sleep(Duration::from_millis(200)).await;
-        
+
         // Check that model is marked as unhealthy
         let status = monitor.get_health_status("failed_model").await;
         assert_eq!(status, HealthStatus::Unhealthy);
-        
+
         monitor.stop_monitoring().await;
     }
 }

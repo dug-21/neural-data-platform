@@ -1,21 +1,21 @@
 //! Integration Bridge between DAA Service and Trading Strategies
-//! 
+//!
 //! This module provides the integration layer that connects the JS/WASM DAA service
 //! with Rust trading strategies, handling data flow and decision coordination.
 
+use anyhow::{Context, Result};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use anyhow::{Result, Context};
-use serde_json::Value;
 
-use crate::data::TimeSeriesData;
-use crate::strategies::MarketContext;
-use crate::strategies::{TradingStrategy, Signal};
 use super::{
-    daa_service::{DAAServiceAdapter, DAAMessage, DAATradingDecision},
+    daa_service::{DAAMessage, DAAServiceAdapter, DAATradingDecision},
     neuro_divergent::NeuroDivergentAdapter,
     AdapterError,
 };
+use crate::data::TimeSeriesData;
+use crate::strategies::MarketContext;
+use crate::strategies::{Signal, TradingStrategy};
 
 /// Neural prediction result
 #[derive(Debug, Clone)]
@@ -79,7 +79,7 @@ impl IntegrationBridge {
     /// Create a new integration bridge
     pub fn new(config: BridgeConfig) -> Self {
         let (daa_tx, daa_rx) = mpsc::channel(100);
-        
+
         Self {
             config,
             daa_tx,
@@ -107,20 +107,21 @@ impl IntegrationBridge {
             context.ask = latest.close * 1.001;
             // Simple volatility calculation
             if data.len() > 20 {
-                let returns: Vec<f64> = data.windows(2)
+                let returns: Vec<f64> = data
+                    .windows(2)
                     .map(|w| (w[1].close - w[0].close) / w[0].close)
                     .collect();
                 let mean = returns.iter().sum::<f64>() / returns.len() as f64;
-                let variance = returns.iter()
-                    .map(|r| (r - mean).powi(2))
-                    .sum::<f64>() / returns.len() as f64;
+                let variance =
+                    returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
                 context.volatility = variance.sqrt();
             }
         }
 
         // Get strategy signal
         let context = self.market_context.read().await;
-        let strategy_signal = strategy.generate_signal(&*context, None)
+        let strategy_signal = strategy
+            .generate_signal(&*context, None)
             .await
             .context("Failed to generate strategy signal")?;
 
@@ -144,27 +145,28 @@ impl IntegrationBridge {
 
     /// Get decision from DAA service
     async fn get_daa_decision(&self, data: &[TimeSeriesData]) -> Result<DAATradingDecision> {
-        let symbol = data.first()
+        let symbol = data
+            .first()
             .ok_or_else(|| AdapterError::Serialization("Empty data".to_string()))?
-            .symbol.clone();
+            .symbol
+            .clone();
 
         // Create analysis request
-        let request = DAAServiceAdapter::create_analysis_request(
-            &symbol,
-            data,
-            "comprehensive",
-        )?;
+        let request = DAAServiceAdapter::create_analysis_request(&symbol, data, "comprehensive")?;
 
         // Send request to DAA service
-        self.daa_tx.send(request.clone()).await
+        self.daa_tx
+            .send(request.clone())
+            .await
             .context("Failed to send DAA request")?;
 
         // Wait for response (with timeout)
         let response = tokio::time::timeout(
             std::time::Duration::from_secs(5),
-            self.wait_for_daa_response(&request.correlation_id.unwrap())
-        ).await
-            .context("DAA response timeout")?;
+            self.wait_for_daa_response(&request.correlation_id.unwrap()),
+        )
+        .await
+        .context("DAA response timeout")?;
 
         DAAServiceAdapter::parse_trading_decision(&response)
     }
@@ -173,12 +175,11 @@ impl IntegrationBridge {
     async fn get_neural_prediction(&self, data: &[TimeSeriesData]) -> Result<NeuralPrediction> {
         // Convert to neuro-divergent format
         let _df = NeuroDivergentAdapter::to_neuro_divergent_df(data)?;
-        
+
         // Prepare model input
         let (_features, _) = NeuroDivergentAdapter::prepare_model_input(
-            data,
-            20,  // lookback window
-            5,   // forecast horizon
+            data, 20, // lookback window
+            5,  // forecast horizon
         )?;
 
         // Here we would call the actual neural model
@@ -193,13 +194,13 @@ impl IntegrationBridge {
     /// Wait for DAA response with correlation ID
     async fn wait_for_daa_response(&self, correlation_id: &str) -> DAAMessage {
         let mut rx = self.daa_rx.write().await;
-        
+
         while let Some(message) = rx.recv().await {
             if message.correlation_id.as_deref() == Some(correlation_id) {
                 return message;
             }
         }
-        
+
         panic!("DAA channel closed unexpectedly");
     }
 
@@ -230,9 +231,9 @@ impl IntegrationBridge {
             let daa_weight = self.config.decision_weight_daa * daa.confidence;
             let daa_action_value = match &daa.action {
                 super::daa_service::TradingAction::Buy => 1.0,
-                super::daa_service::TradingAction::Sell |
-                super::daa_service::TradingAction::StopLoss |
-                super::daa_service::TradingAction::TakeProfit => -1.0,
+                super::daa_service::TradingAction::Sell
+                | super::daa_service::TradingAction::StopLoss
+                | super::daa_service::TradingAction::TakeProfit => -1.0,
                 super::daa_service::TradingAction::Hold => 0.0,
             };
             weighted_action += daa_action_value * daa_weight;
@@ -252,12 +253,15 @@ impl IntegrationBridge {
             };
             weighted_action += neural_action_value * neural_weight;
             total_confidence += neural_weight;
-            reasoning.push(format!("Neural prediction: {:.2}% trend probability", 
-                neural.trend_probability * 100.0));
+            reasoning.push(format!(
+                "Neural prediction: {:.2}% trend probability",
+                neural.trend_probability * 100.0
+            ));
         }
 
         // Normalize
-        let final_confidence = total_confidence / (strategy_weight + self.config.decision_weight_daa + 0.2);
+        let final_confidence =
+            total_confidence / (strategy_weight + self.config.decision_weight_daa + 0.2);
         let normalized_action = weighted_action / total_confidence;
 
         // Determine final action
@@ -271,9 +275,9 @@ impl IntegrationBridge {
             FinalAction::Hold
         };
 
-        let risk_assessment = daa_decision.as_ref().and_then(|d| 
-            serde_json::to_value(&d.risk_assessment).ok()
-        );
+        let risk_assessment = daa_decision
+            .as_ref()
+            .and_then(|d| serde_json::to_value(&d.risk_assessment).ok());
 
         Ok(CombinedDecision {
             action: final_action,
@@ -301,13 +305,14 @@ impl IntegrationBridge {
             market_data,
         );
 
-        self.daa_tx.send(feedback).await
+        self.daa_tx
+            .send(feedback)
+            .await
             .context("Failed to send performance feedback")?;
 
         Ok(())
     }
 }
-
 
 /// Bridge builder for easier configuration
 pub struct BridgeBuilder {

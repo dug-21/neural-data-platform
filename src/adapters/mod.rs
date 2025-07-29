@@ -1,49 +1,57 @@
 //! Data source adapters module
-//! 
+//!
 //! This module provides adapters for various data sources including
 //! TimescaleDB for historical data and Redis for real-time streaming.
 
+pub mod daa_service;
+pub mod enhanced_neural_adapter;
+pub mod errors;
+pub mod fallback_manager;
+pub mod ffi_wrapper;
+pub mod health_monitor;
+pub mod integration_bridge;
+pub mod model_rollback;
+pub mod model_storage;
+pub mod neural;
+pub mod neuro_divergent;
 pub mod redis;
 pub mod timescale;
-pub mod neuro_divergent;
 pub mod vendor_bridge;
-pub mod errors;
-pub mod health_monitor;
-pub mod fallback_manager;
-pub mod enhanced_neural_adapter;
-pub mod daa_service;
-pub mod integration_bridge;
-pub mod ffi_wrapper;
-pub mod neural;
 
 use async_trait::async_trait;
 
 // Re-export enhanced error handling
 pub use errors::{
-    AdapterError, ErrorSeverity, CircuitBreaker, CircuitBreakerConfig, 
-    HealthCheckResult, HealthMetrics, FallbackConfig, RecoveryStrategy,
-    ErrorHandler, DefaultErrorHandler, ErrorMonitoringEvent, ErrorContext
+    AdapterError, CircuitBreaker, CircuitBreakerConfig, DefaultErrorHandler, ErrorContext,
+    ErrorHandler, ErrorMonitoringEvent, ErrorSeverity, FallbackConfig, HealthCheckResult,
+    HealthMetrics, RecoveryStrategy,
 };
 
 // Re-export health monitoring
 pub use health_monitor::{
-    HealthMonitor, HealthMonitorConfig, HealthChecker, HealthStatus,
-    SystemHealthSummary, SystemStatus, BasicHealthChecker
+    BasicHealthChecker, HealthChecker, HealthMonitor, HealthMonitorConfig, HealthStatus,
+    SystemHealthSummary, SystemStatus,
 };
 
 // Re-export fallback management
 pub use fallback_manager::{
-    FallbackManager, FallbackStrategy, FallbackResult, UltimateFallbackStrategy,
-    FallbackMetrics, ModelUsageStats
+    FallbackManager, FallbackMetrics, FallbackResult, FallbackStrategy, ModelUsageStats,
+    UltimateFallbackStrategy,
 };
 
 // Re-export enhanced neural adapter
 pub use enhanced_neural_adapter::{
     EnhancedNeuralAdapter, EnhancedNeuralConfig, EnhancedPredictionResult,
-    PredictionRequirements, SystemHealthStatus, PerformanceStatsSnapshot,
-    RetryConfig, PerformanceThresholds
+    PerformanceStatsSnapshot, PerformanceThresholds, PredictionRequirements, RetryConfig,
+    SystemHealthStatus,
 };
 
+// Re-export model storage
+pub use model_storage::{
+    CheckpointMetrics, DataInfo, ModelMetadata, ModelStorage, ModelStorageConfig,
+    PerformanceMetrics, PersistableModel, SemanticVersion, StorageMetrics, TrainingParams,
+    VersionIncrement,
+};
 
 /// Metadata for adapter configuration and runtime information
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -72,16 +80,16 @@ pub enum ConnectionStatus {
 pub trait DataAdapter: Send + Sync {
     /// Connect to the data source
     async fn connect(&mut self) -> Result<(), AdapterError>;
-    
+
     /// Disconnect from the data source
     async fn disconnect(&mut self) -> Result<(), AdapterError>;
-    
+
     /// Check if the adapter is connected
     fn is_connected(&self) -> bool;
-    
+
     /// Get adapter name
     fn name(&self) -> &str;
-    
+
     /// Get adapter metadata
     fn metadata(&self) -> AdapterMetadata {
         AdapterMetadata {

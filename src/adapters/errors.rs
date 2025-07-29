@@ -1,13 +1,13 @@
 //! Comprehensive error handling for neural model adapters
-//! 
+//!
 //! This module provides detailed error types, fallback strategies, and health monitoring
 //! for production-ready neural trading systems.
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::time::{Duration, SystemTime};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{error, warn, info, debug};
+use tracing::{debug, error, info, warn};
 
 /// Comprehensive error types for adapter failures
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
@@ -26,9 +26,9 @@ pub enum AdapterError {
 
     /// Prediction failed with context
     #[error("Prediction failed for {model}: {reason} (retry_count: {retry_count})")]
-    PredictionFailed { 
-        model: String, 
-        reason: String, 
+    PredictionFailed {
+        model: String,
+        reason: String,
         retry_count: u32,
         recoverable: bool,
     },
@@ -39,8 +39,8 @@ pub enum AdapterError {
 
     /// Network/connectivity issues
     #[error("Network error for {model}: {details} (timeout: {timeout_ms}ms)")]
-    NetworkError { 
-        model: String, 
+    NetworkError {
+        model: String,
         details: String,
         timeout_ms: u64,
     },
@@ -48,29 +48,29 @@ pub enum AdapterError {
     /// Resource exhaustion (memory, CPU, etc.)
     #[error("Resource exhaustion: {resource} - {details}")]
     ResourceExhaustion { resource: String, details: String },
-    
+
     // Legacy variants for backward compatibility
     #[error("Connection error: {0}")]
     Connection(String),
-    
+
     #[error("Query error: {0}")]
     Query(String),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(String),
-    
+
     #[error("Configuration error: {0}")]
     Configuration(String),
-    
+
     #[error("Model creation error: {0}")]
     ModelCreation(String),
-    
+
     #[error("Model not initialized: {0}")]
     ModelNotInitialized(String),
-    
+
     #[error("Training error: {0}")]
     Training(String),
-    
+
     #[error("Prediction error: {0}")]
     Prediction(String),
 
@@ -80,9 +80,9 @@ pub enum AdapterError {
 
     /// Vendor-specific errors
     #[error("Vendor model error ({vendor}): {error_code} - {message}")]
-    VendorError { 
+    VendorError {
         vendor: String,
-        error_code: String, 
+        error_code: String,
         message: String,
         is_temporary: bool,
     },
@@ -107,7 +107,9 @@ pub enum AdapterError {
 // Implement From<anyhow::Error> for AdapterError
 impl From<anyhow::Error> for AdapterError {
     fn from(err: anyhow::Error) -> Self {
-        AdapterError::Generic { message: err.to_string() }
+        AdapterError::Generic {
+            message: err.to_string(),
+        }
     }
 }
 
@@ -124,14 +126,16 @@ impl AdapterError {
             AdapterError::ModelNotAvailable { .. } => false,
             AdapterError::ConfigurationError { .. } => false,
             _ => true,
-    }
+        }
     }
 
     /// Get suggested retry delay
     pub fn retry_delay(&self) -> Duration {
         match self {
             AdapterError::NetworkError { .. } => Duration::from_secs(5),
-            AdapterError::VendorError { is_temporary: true, .. } => Duration::from_secs(10),
+            AdapterError::VendorError {
+                is_temporary: true, ..
+            } => Duration::from_secs(10),
             AdapterError::ResourceExhaustion { .. } => Duration::from_secs(30),
             AdapterError::PredictionFailed { .. } => Duration::from_secs(2),
             _ => Duration::from_secs(1),
@@ -168,34 +172,32 @@ impl AdapterError {
     /// Get additional context for error analysis
     fn get_context(&self) -> ErrorContext {
         match self {
-            AdapterError::PredictionFailed { model, retry_count, .. } => {
-                ErrorContext {
-                    model: Some(model.clone()),
-                    retry_count: Some(*retry_count),
-                    resource_info: None,
-                    vendor_info: None,
-                }
+            AdapterError::PredictionFailed {
+                model, retry_count, ..
+            } => ErrorContext {
+                model: Some(model.clone()),
+                retry_count: Some(*retry_count),
+                resource_info: None,
+                vendor_info: None,
             },
-            AdapterError::VendorError { vendor, error_code, .. } => {
-                ErrorContext {
-                    model: None,
-                    retry_count: None,
-                    resource_info: None,
-                    vendor_info: Some(VendorErrorInfo {
-                        vendor: vendor.clone(),
-                        error_code: error_code.clone(),
-                    }),
-                }
+            AdapterError::VendorError {
+                vendor, error_code, ..
+            } => ErrorContext {
+                model: None,
+                retry_count: None,
+                resource_info: None,
+                vendor_info: Some(VendorErrorInfo {
+                    vendor: vendor.clone(),
+                    error_code: error_code.clone(),
+                }),
             },
-            AdapterError::ResourceExhaustion { resource, .. } => {
-                ErrorContext {
-                    model: None,
-                    retry_count: None,
-                    resource_info: Some(ResourceInfo {
-                        resource_type: resource.clone(),
-                    }),
-                    vendor_info: None,
-                }
+            AdapterError::ResourceExhaustion { resource, .. } => ErrorContext {
+                model: None,
+                retry_count: None,
+                resource_info: Some(ResourceInfo {
+                    resource_type: resource.clone(),
+                }),
+                vendor_info: None,
             },
             _ => ErrorContext::default(),
         }
@@ -245,9 +247,9 @@ pub struct VendorErrorInfo {
 /// Circuit breaker states for model health management
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitBreakerState {
-    Closed,    // Normal operation
-    Open,      // Preventing calls due to failures
-    HalfOpen,  // Testing if service has recovered
+    Closed,   // Normal operation
+    Open,     // Preventing calls due to failures
+    HalfOpen, // Testing if service has recovered
 }
 
 /// Circuit breaker configuration
@@ -310,10 +312,8 @@ impl CircuitBreaker {
                 } else {
                     false
                 }
-            },
-            CircuitBreakerState::HalfOpen => {
-                self.half_open_calls < self.config.half_open_max_calls
-            },
+            }
+            CircuitBreakerState::HalfOpen => self.half_open_calls < self.config.half_open_max_calls,
         }
     }
 
@@ -322,7 +322,7 @@ impl CircuitBreaker {
         match self.state {
             CircuitBreakerState::Closed => {
                 self.failure_count = 0;
-            },
+            }
             CircuitBreakerState::HalfOpen => {
                 self.success_count += 1;
                 if self.success_count >= self.config.success_threshold {
@@ -332,8 +332,8 @@ impl CircuitBreaker {
                     self.success_count = 0;
                     self.half_open_calls = 0;
                 }
-            },
-            CircuitBreakerState::Open => {},
+            }
+            CircuitBreakerState::Open => {}
         }
     }
 
@@ -345,17 +345,20 @@ impl CircuitBreaker {
             CircuitBreakerState::Closed => {
                 self.failure_count += 1;
                 if self.failure_count >= self.config.failure_threshold {
-                    warn!("Circuit breaker opening due to failures: {}", self.failure_count);
+                    warn!(
+                        "Circuit breaker opening due to failures: {}",
+                        self.failure_count
+                    );
                     self.state = CircuitBreakerState::Open;
                 }
-            },
+            }
             CircuitBreakerState::HalfOpen => {
                 warn!("Circuit breaker opening again - service still failing");
                 self.state = CircuitBreakerState::Open;
                 self.success_count = 0;
                 self.half_open_calls = 0;
-            },
-            CircuitBreakerState::Open => {},
+            }
+            CircuitBreakerState::Open => {}
         }
     }
 
@@ -430,7 +433,7 @@ impl Default for FallbackConfig {
         Self {
             fallback_chain: vec![
                 "DeepAR".to_string(),
-                "NHITS".to_string(), 
+                "NHITS".to_string(),
                 "TCN".to_string(),
                 "LSTM".to_string(),
                 "FANN_MLP".to_string(),
@@ -490,29 +493,26 @@ impl ErrorHandler for DefaultErrorHandler {
                 } else {
                     RecoveryStrategy::FailFast
                 }
-            },
-            AdapterError::VendorError { is_temporary: true, .. } => {
-                RecoveryStrategy::ExponentialBackoff
-            },
-            AdapterError::VendorError { is_temporary: false, .. } => {
-                RecoveryStrategy::FallbackToNext
-            },
-            AdapterError::ResourceExhaustion { .. } => {
-                RecoveryStrategy::FallbackToFANN
-            },
-            AdapterError::ModelNotAvailable { .. } => {
-                RecoveryStrategy::FallbackToNext
-            },
-            AdapterError::CircuitBreakerOpen { .. } => {
-                RecoveryStrategy::FallbackToNext
-            },
-            AdapterError::PredictionFailed { recoverable: true, .. } => {
+            }
+            AdapterError::VendorError {
+                is_temporary: true, ..
+            } => RecoveryStrategy::ExponentialBackoff,
+            AdapterError::VendorError {
+                is_temporary: false,
+                ..
+            } => RecoveryStrategy::FallbackToNext,
+            AdapterError::ResourceExhaustion { .. } => RecoveryStrategy::FallbackToFANN,
+            AdapterError::ModelNotAvailable { .. } => RecoveryStrategy::FallbackToNext,
+            AdapterError::CircuitBreakerOpen { .. } => RecoveryStrategy::FallbackToNext,
+            AdapterError::PredictionFailed {
+                recoverable: true, ..
+            } => {
                 if context.retry_count.unwrap_or(0) < self.max_retries {
                     RecoveryStrategy::ImmediateRetry
                 } else {
                     RecoveryStrategy::FallbackToNext
                 }
-            },
+            }
             _ => RecoveryStrategy::FailFast,
         }
     }
@@ -553,7 +553,8 @@ use std::future::Future;
 use std::pin::Pin;
 
 pub trait ErrorReporter: Send + Sync {
-    fn report_error(&self, event: ErrorMonitoringEvent) -> Pin<Box<dyn Future<Output = ()> + Send>>;
+    fn report_error(&self, event: ErrorMonitoringEvent)
+        -> Pin<Box<dyn Future<Output = ()> + Send>>;
     fn report_metrics(&self, metrics: ErrorMetrics) -> Pin<Box<dyn Future<Output = ()> + Send>>;
     fn report_health(&self, health: HealthCheckResult) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 }
@@ -562,7 +563,10 @@ pub trait ErrorReporter: Send + Sync {
 pub struct ConsoleErrorReporter;
 
 impl ErrorReporter for ConsoleErrorReporter {
-    fn report_error(&self, event: ErrorMonitoringEvent) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn report_error(
+        &self,
+        event: ErrorMonitoringEvent,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         Box::pin(async move {
             match event.severity {
                 ErrorSeverity::Critical => error!("CRITICAL ERROR: {:?}", event),
@@ -582,9 +586,15 @@ impl ErrorReporter for ConsoleErrorReporter {
     fn report_health(&self, health: HealthCheckResult) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         Box::pin(async move {
             if health.healthy {
-                debug!("Health check passed for {}: {:?}", health.model, health.metrics);
+                debug!(
+                    "Health check passed for {}: {:?}",
+                    health.model, health.metrics
+                );
             } else {
-                warn!("Health check failed for {}: {:?}", health.model, health.error);
+                warn!(
+                    "Health check failed for {}: {:?}",
+                    health.model, health.error
+                );
             }
         })
     }
@@ -618,26 +628,26 @@ mod tests {
             timeout: Duration::from_millis(100),
             half_open_max_calls: 1,
         };
-        
+
         let mut cb = CircuitBreaker::new(config);
-        
+
         // Initially closed
         assert_eq!(cb.state(), CircuitBreakerState::Closed);
         assert!(cb.can_execute());
-        
+
         // Record failures to open circuit
         cb.record_failure();
         assert_eq!(cb.state(), CircuitBreakerState::Closed);
-        
+
         cb.record_failure();
         assert_eq!(cb.state(), CircuitBreakerState::Open);
         assert!(!cb.can_execute());
-        
+
         // Wait for timeout and check half-open
         std::thread::sleep(Duration::from_millis(150));
         assert!(cb.can_execute());
         assert_eq!(cb.state(), CircuitBreakerState::HalfOpen);
-        
+
         // Record success to close circuit
         cb.record_call_attempt();
         cb.record_success();

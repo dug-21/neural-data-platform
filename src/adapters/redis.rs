@@ -1,14 +1,14 @@
 //! Redis adapter for real-time market data streaming
-//! 
+//!
 //! Provides high-performance pub/sub and caching capabilities
 //! for real-time market data and order book updates.
 
 use super::{AdapterError, DataAdapter, MarketData, OrderBook};
 use async_trait::async_trait;
-use redis::{aio::ConnectionManager, AsyncCommands, Client, Value, streams::{StreamRangeReply}};
+use futures::StreamExt;
+use redis::{aio::ConnectionManager, streams::StreamRangeReply, AsyncCommands, Client, Value};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use futures::StreamExt;
 
 /// Redis configuration
 #[derive(Debug, Clone)]
@@ -61,8 +61,8 @@ impl RedisAdapter {
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?
             .clone();
 
-        let json = serde_json::to_string(data)
-            .map_err(|e| AdapterError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string(data).map_err(|e| AdapterError::Serialization(e.to_string()))?;
 
         conn.publish::<_, _, ()>(channel, json)
             .await
@@ -87,7 +87,7 @@ impl RedisAdapter {
             .await
             .map_err(|e| AdapterError::Connection(e.to_string()))?
             .into_pubsub();
-        
+
         let mut pubsub = pubsub_conn;
 
         pubsub
@@ -111,9 +111,11 @@ impl RedisAdapter {
     pub async fn cache_order_book(&self, order_book: &OrderBook) -> Result<(), AdapterError> {
         // Validate order book before caching
         if order_book.symbol.is_empty() {
-            return Err(AdapterError::Serialization("Order book symbol cannot be empty".to_string()));
+            return Err(AdapterError::Serialization(
+                "Order book symbol cannot be empty".to_string(),
+            ));
         }
-        
+
         let conn = self
             .connection
             .as_ref()
@@ -140,7 +142,7 @@ impl RedisAdapter {
 
         let key = format!("orderbook:{}", symbol);
         let mut conn = conn.clone();
-        
+
         let result: Option<String> = conn
             .get(&key)
             .await
@@ -180,10 +182,7 @@ impl RedisAdapter {
     }
 
     /// Get latest price for a symbol
-    pub async fn get_latest_price(
-        &self,
-        symbol: &str,
-    ) -> Result<Option<(f64, i64)>, AdapterError> {
+    pub async fn get_latest_price(&self, symbol: &str) -> Result<Option<(f64, i64)>, AdapterError> {
         let conn = self
             .connection
             .as_ref()
@@ -191,7 +190,7 @@ impl RedisAdapter {
 
         let key = format!("price:latest:{}", symbol);
         let mut conn = conn.clone();
-        
+
         let result: Option<String> = conn
             .get(&key)
             .await
@@ -209,7 +208,9 @@ impl RedisAdapter {
                         .map_err(|e| AdapterError::Serialization(e.to_string()))?;
                     Ok(Some((price, timestamp)))
                 } else {
-                    Err(AdapterError::Serialization("Invalid price format".to_string()))
+                    Err(AdapterError::Serialization(
+                        "Invalid price format".to_string(),
+                    ))
                 }
             }
             None => Ok(None),
@@ -228,7 +229,7 @@ impl RedisAdapter {
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
         let mut conn = conn.clone();
-        
+
         // Create stream entry fields with owned strings
         let timestamp_str = data.timestamp.to_string();
         let open_str = data.open.to_string();
@@ -236,7 +237,7 @@ impl RedisAdapter {
         let low_str = data.low.to_string();
         let close_str = data.close.to_string();
         let volume_str = data.volume.to_string();
-        
+
         let fields = vec![
             ("symbol", data.symbol.as_str()),
             ("timestamp", timestamp_str.as_str()),
@@ -269,7 +270,7 @@ impl RedisAdapter {
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
         let mut conn = conn.clone();
-        
+
         // Read from stream
         let reply: StreamRangeReply = conn
             .xrange_count(stream_key, start_id, "+", count)
@@ -299,44 +300,32 @@ impl RedisAdapter {
                     }
                     "timestamp" => {
                         if let Value::BulkString(bytes) = value {
-                            data.timestamp = String::from_utf8_lossy(&bytes)
-                                .parse()
-                                .unwrap_or(0);
+                            data.timestamp = String::from_utf8_lossy(&bytes).parse().unwrap_or(0);
                         }
                     }
                     "open" => {
                         if let Value::BulkString(bytes) = value {
-                            data.open = String::from_utf8_lossy(&bytes)
-                                .parse()
-                                .unwrap_or(0.0);
+                            data.open = String::from_utf8_lossy(&bytes).parse().unwrap_or(0.0);
                         }
                     }
                     "high" => {
                         if let Value::BulkString(bytes) = value {
-                            data.high = String::from_utf8_lossy(&bytes)
-                                .parse()
-                                .unwrap_or(0.0);
+                            data.high = String::from_utf8_lossy(&bytes).parse().unwrap_or(0.0);
                         }
                     }
                     "low" => {
                         if let Value::BulkString(bytes) = value {
-                            data.low = String::from_utf8_lossy(&bytes)
-                                .parse()
-                                .unwrap_or(0.0);
+                            data.low = String::from_utf8_lossy(&bytes).parse().unwrap_or(0.0);
                         }
                     }
                     "close" => {
                         if let Value::BulkString(bytes) = value {
-                            data.close = String::from_utf8_lossy(&bytes)
-                                .parse()
-                                .unwrap_or(0.0);
+                            data.close = String::from_utf8_lossy(&bytes).parse().unwrap_or(0.0);
                         }
                     }
                     "volume" => {
                         if let Value::BulkString(bytes) = value {
-                            data.volume = String::from_utf8_lossy(&bytes)
-                                .parse()
-                                .unwrap_or(0.0);
+                            data.volume = String::from_utf8_lossy(&bytes).parse().unwrap_or(0.0);
                         }
                     }
                     _ => {}
@@ -361,7 +350,7 @@ impl RedisAdapter {
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
         let mut conn = conn.clone();
-        
+
         // Create consumer group starting from beginning of stream
         let _: Result<(), _> = conn
             .xgroup_create_mkstream(stream_key, group_name, "$")
@@ -386,8 +375,8 @@ impl DataAdapter for RedisAdapter {
             )
         };
 
-        let client = Client::open(redis_url)
-            .map_err(|e| AdapterError::Connection(e.to_string()))?;
+        let client =
+            Client::open(redis_url).map_err(|e| AdapterError::Connection(e.to_string()))?;
 
         let connection = ConnectionManager::new(client.clone())
             .await
