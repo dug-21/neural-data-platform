@@ -1,6 +1,6 @@
 //! Test real models integration in FannPredictor
 
-use super::super::*;
+use crate::neural::FannPredictor;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
 use chrono::Utc;
@@ -34,11 +34,11 @@ fn create_test_config(models: Vec<String>, use_real_models: bool) -> NeuralConfi
 async fn test_fann_predictor_with_real_models_enabled() {
     let config = create_test_config(
         vec!["DeepAR".to_string(), "TCN".to_string(), "NHITS".to_string()],
-        true
+        true,
     );
 
     let predictor = FannPredictor::new(config).unwrap();
-    
+
     // Test that adapters are available
     assert!(predictor.has_neuro_divergent_adapter());
 
@@ -49,19 +49,19 @@ async fn test_fann_predictor_with_real_models_enabled() {
 async fn test_fann_predictor_with_real_models_disabled() {
     let config = create_test_config(
         vec!["DeepAR".to_string(), "TCN".to_string(), "NHITS".to_string()],
-        false
+        false,
     );
 
     let predictor = FannPredictor::new(config).unwrap();
-    
+
     // Test that it should still work in FANN-only mode
     let mut test_data = Vec::new();
     let base_time = Utc::now();
-    
+
     for i in 0..50 {
         let mut indicators = HashMap::new();
         indicators.insert("rsi".to_string(), 50.0 + i as f64);
-        
+
         test_data.push(TimeSeriesData {
             timestamp: base_time + chrono::Duration::minutes(i),
             entity: Some("test".to_string()),
@@ -78,7 +78,10 @@ async fn test_fann_predictor_with_real_models_disabled() {
         });
     }
 
-    let predictions = predictor.test_predict_with_model("DeepAR", &test_data, 5).await.unwrap();
+    let predictions = predictor
+        .test_predict_with_model("DeepAR", &test_data, 5)
+        .await
+        .unwrap();
     assert_eq!(predictions.len(), 5);
 
     println!("✅ FANN-only mode test passed");
@@ -86,21 +89,18 @@ async fn test_fann_predictor_with_real_models_disabled() {
 
 #[tokio::test]
 async fn test_real_model_specific_behavior() {
-    let config = create_test_config(
-        vec!["DeepAR".to_string()],
-        true
-    );
+    let config = create_test_config(vec!["DeepAR".to_string()], true);
 
     let predictor = FannPredictor::new(config).unwrap();
-    
+
     // Create minimal test data
     let mut test_data = Vec::new();
     let base_time = Utc::now();
-    
+
     for i in 0..30 {
         let mut indicators = HashMap::new();
         indicators.insert("rsi".to_string(), 50.0 + i as f64);
-        
+
         test_data.push(TimeSeriesData {
             timestamp: base_time + chrono::Duration::minutes(i),
             entity: Some("test".to_string()),
@@ -118,7 +118,10 @@ async fn test_real_model_specific_behavior() {
     }
 
     // Should attempt real model first, then fallback to FANN
-    let predictions = predictor.test_predict_with_model("DeepAR", &test_data, 3).await.unwrap();
+    let predictions = predictor
+        .test_predict_with_model("DeepAR", &test_data, 3)
+        .await
+        .unwrap();
     assert!(!predictions.is_empty());
 
     println!("✅ Real model specific behavior test passed");
@@ -128,11 +131,11 @@ async fn test_real_model_specific_behavior() {
 async fn test_model_not_real_but_flag_enabled() {
     let config = create_test_config(
         vec!["MLP".to_string()],
-        true  // Enable real models
+        true, // Enable real models
     );
 
     let predictor = FannPredictor::new(config).unwrap();
-    
+
     let test_data = vec![TimeSeriesData {
         timestamp: Utc::now(),
         entity: Some("test".to_string()),
@@ -149,7 +152,10 @@ async fn test_model_not_real_but_flag_enabled() {
     }];
 
     // MLP is not a real model, so should use FANN implementation regardless of flag
-    let predictions = predictor.test_predict_with_model("MLP", &test_data, 3).await.unwrap();
+    let predictions = predictor
+        .test_predict_with_model("MLP", &test_data, 3)
+        .await
+        .unwrap();
     assert!(!predictions.is_empty());
 
     println!("✅ Non-real model with flag enabled test passed");
@@ -159,11 +165,11 @@ async fn test_model_not_real_but_flag_enabled() {
 async fn test_backward_compatibility() {
     let config = create_test_config(
         vec!["DeepAR".to_string()],
-        false  // Explicit false for backward compatibility
+        false, // Explicit false for backward compatibility
     );
 
     let predictor = FannPredictor::new(config).unwrap();
-    
+
     // Should work in FANN-only mode
     assert!(predictor.has_neuro_divergent_adapter()); // Adapter may be present but not used
 

@@ -1,18 +1,33 @@
 //! Neural Network Integration Module
-//! 
+//!
 //! Provides neural network prediction capabilities with real FANN integration
 
 use anyhow::Result;
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
-use async_trait::async_trait;
 
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
 
 // Module for FANN-based predictions
 pub mod fann_predictor;
+
+// FANN Model Adapter with persistence integration
+pub mod fann_model_adapter;
+
+// Module for MLP adapter (if needed)
+pub mod mlp_adapter;
+
+// Streaming data connector for real-time processing
+pub mod streaming_connector;
+
+// Online validation system
+pub mod online_validator;
+
+// Online learning manager - unified API
+pub mod online_learning_manager;
 
 // Module for enhanced predictor with Phase 6 features
 pub mod enhanced_predictor;
@@ -34,23 +49,24 @@ pub mod ensemble_types;
 #[cfg(test)]
 pub mod tests;
 
+// Online learning test suite
+#[cfg(test)]
+pub mod online_learning_tests;
+
 // Re-export the FANN predictor
-pub use fann_predictor::{FannPredictor, FannModelConfig};
+pub use fann_predictor::{FannModelConfig, FannPredictor};
+
+// Re-export the FANN model adapter
+pub use fann_model_adapter::{FannModelAdapter, FannModelConfig as FannAdapterConfig, TrainingRecord, PerformanceTracker as FannPerformanceTracker};
 
 // Re-export the enhanced predictor
 pub use enhanced_predictor::{
-    EnhancedNeuralPredictor, 
-    EnhancedPredictionResult, 
-    ConfidenceBreakdown, 
+    ConfidenceBreakdown, EnhancedNeuralPredictor, EnhancedPredictionResult, PerformanceTracker,
     RetrainingMetrics,
-    PerformanceTracker
 };
 
 // Re-export performance optimization components
-pub use performance_optimizer::{
-    OptimizedFannPredictor,
-    PerformanceMetrics
-};
+pub use performance_optimizer::{OptimizedFannPredictor, PerformanceMetrics};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionResult {
@@ -72,7 +88,7 @@ pub trait NeuralPredictorTrait: Send + Sync {
         horizon: usize,
         features: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<Vec<PredictionResult>>;
-    
+
     async fn predict_ensemble(
         &self,
         data: &[TimeSeriesData],
@@ -80,7 +96,7 @@ pub trait NeuralPredictorTrait: Send + Sync {
         models: &[String],
         features: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<Vec<PredictionResult>>;
-    
+
     async fn get_feature_importance(&self) -> Result<HashMap<String, f64>>;
 }
 
@@ -94,12 +110,12 @@ impl NeuralPredictor {
         let fann_predictor = FannPredictor::new(config)?;
         Ok(Self { fann_predictor })
     }
-    
+
     pub async fn load_historical_data(&self, _data: Vec<TimeSeriesData>) -> Result<()> {
         // Data loading is handled internally by the predictor
         Ok(())
     }
-    
+
     pub async fn predict(
         &self,
         data: &[TimeSeriesData],
@@ -108,7 +124,7 @@ impl NeuralPredictor {
     ) -> Result<Vec<PredictionResult>> {
         self.fann_predictor.predict(data, horizon, features).await
     }
-    
+
     pub async fn predict_ensemble(
         &self,
         data: &[TimeSeriesData],
@@ -116,9 +132,11 @@ impl NeuralPredictor {
         models: &[String],
         features: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<Vec<PredictionResult>> {
-        self.fann_predictor.predict_ensemble(data, horizon, models, features).await
+        self.fann_predictor
+            .predict_ensemble(data, horizon, models, features)
+            .await
     }
-    
+
     pub async fn get_feature_importance(&self) -> Result<HashMap<String, f64>> {
         self.fann_predictor.get_feature_importance().await
     }
@@ -152,9 +170,9 @@ impl Default for NeuralPredictor {
 }
 
 #[cfg(test)]
-mod tests {
+mod integration_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_neural_predictor_creation() {
         let config = NeuralConfig {
@@ -177,7 +195,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.1,
         };
-        
+
         let predictor = NeuralPredictor::new(config);
         assert!(predictor.is_ok());
     }
