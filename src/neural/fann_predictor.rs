@@ -337,7 +337,17 @@ impl FannPredictor {
         &self.model_configs
     }
 
-    pub fn new(config: NeuralConfig) -> Result<Self> {
+    pub fn new(mut config: NeuralConfig) -> Result<Self> {
+        // Always respect the environment variable if set
+        if let Ok(env_value) = std::env::var("NEURAL_USE_REAL_MODELS") {
+            match env_value.to_lowercase().as_str() {
+                "true" | "1" | "yes" => config.use_real_models = true,
+                "false" | "0" | "no" => config.use_real_models = false,
+                _ => {} // Keep the config value if env var is invalid
+            }
+            info!("🔧 FannPredictor: Overriding use_real_models from env: {}", config.use_real_models);
+        }
+        
         let mut model_configs = HashMap::new();
 
         // Configure each model type with appropriate architecture
