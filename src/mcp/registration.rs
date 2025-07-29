@@ -1,5 +1,5 @@
 //! MCP Tool Registration
-//! 
+//!
 //! Registers Neural Trader tools with the ruv-swarm MCP server
 
 use anyhow::Result;
@@ -187,7 +187,7 @@ pub async fn register_mcp_tools(_tools: Arc<TradingMcpTools>) -> Result<()> {
             }),
         },
     ];
-    
+
     // Register each tool with the MCP server
     let tool_count = tool_definitions.len();
     for tool in tool_definitions {
@@ -195,19 +195,21 @@ pub async fn register_mcp_tools(_tools: Arc<TradingMcpTools>) -> Result<()> {
         // Here we would call the actual ruv-swarm MCP registration API
         // For now, we'll just log the registration
     }
-    
+
     println!("Successfully registered {} MCP tools", tool_count);
     Ok(())
 }
 
 /// Create MCP tool handler
-pub fn create_tool_handler(tools: Arc<TradingMcpTools>) -> impl Fn(&str, serde_json::Value) -> Result<serde_json::Value> {
+pub fn create_tool_handler(
+    tools: Arc<TradingMcpTools>,
+) -> impl Fn(&str, serde_json::Value) -> Result<serde_json::Value> {
     move |method: &str, params: serde_json::Value| -> Result<serde_json::Value> {
         let tools = tools.clone();
-        
+
         // Use tokio runtime for async operations
         let runtime = tokio::runtime::Runtime::new()?;
-        
+
         runtime.block_on(async move {
             match method {
                 "query_market_data" => tools.query_market_data(params).await,

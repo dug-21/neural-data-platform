@@ -1,9 +1,9 @@
 //! Test the NeuroDivergentAdapter independently
 
-use std::collections::HashMap;
-use chrono::Utc;
+use autonomous_platform::adapters::neuro_divergent::{AdapterConfig, NeuroDivergentAdapter};
 use autonomous_platform::data::TimeSeriesData;
-use autonomous_platform::adapters::neuro_divergent::{NeuroDivergentAdapter, AdapterConfig};
+use chrono::Utc;
+use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,28 +14,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     indicators.insert("rsi".to_string(), 65.5);
     indicators.insert("macd".to_string(), 0.0012);
 
-    let data = vec![
-        TimeSeriesData {
-            symbol: "BTC/USD".to_string(),
-            timestamp: Utc::now(),
-            open: 50000.0,
-            high: 51000.0,
-            low: 49500.0,
-            close: 50500.0,
-            volume: 1000.0,
-            indicators,
-            source: None,
-            entity: None,
-            value: None,
-            metadata: None,
-        }
-    ];
+    let data = vec![TimeSeriesData {
+        symbol: "BTC/USD".to_string(),
+        timestamp: Utc::now(),
+        open: 50000.0,
+        high: 51000.0,
+        low: 49500.0,
+        close: 50500.0,
+        volume: 1000.0,
+        indicators,
+        source: None,
+        entity: None,
+        value: None,
+        metadata: None,
+    }];
 
     // Test DataFrame conversion
     println!("Testing DataFrame conversion...");
-    let df = NeuroDivergentAdapter::to_neuro_divergent_df(&data)?;
-    println!("DataFrame height: {}", df.height());
-    println!("DataFrame columns: {:?}", df.get_column_names());
+    let df_string = NeuroDivergentAdapter::to_neuro_divergent_df(&data)?;
+    println!("DataFrame string representation: {}", df_string);
+    println!("DataFrame length: {} characters", df_string.len());
 
     // Test adapter creation
     println!("Testing adapter initialization...");

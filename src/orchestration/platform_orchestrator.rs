@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 use tracing::info;
 
 // TODO: These platform modules need to be implemented
@@ -24,10 +24,7 @@ pub struct Platform {
 
 impl Platform {
     pub fn new(id: String, name: String) -> Self {
-        Self {
-            id,
-            name,
-        }
+        Self { id, name }
     }
 }
 
@@ -131,7 +128,11 @@ impl PlatformOrchestrator {
         Ok(())
     }
 
-    pub async fn add_platform(&self, platform_id: String, platform: Platform) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn add_platform(
+        &self,
+        platform_id: String,
+        platform: Platform,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut platforms = self.platforms.write().await;
         platforms.insert(platform_id, Arc::new(platform));
 
@@ -142,7 +143,10 @@ impl PlatformOrchestrator {
         Ok(())
     }
 
-    pub async fn remove_platform(&self, platform_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn remove_platform(
+        &self,
+        platform_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut platforms = self.platforms.write().await;
         platforms.remove(platform_id);
 
@@ -152,27 +156,35 @@ impl PlatformOrchestrator {
         Ok(())
     }
 
-    pub async fn start_agent(&self, platform_id: &str, agent_config: serde_json::Value) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start_agent(
+        &self,
+        platform_id: &str,
+        agent_config: serde_json::Value,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let platforms = self.platforms.read().await;
-        let platform = platforms.get(platform_id)
+        let platform = platforms
+            .get(platform_id)
             .ok_or_else(|| format!("Platform not found: {}", platform_id))?;
 
         // Create and start agent
         let agent_id = format!("agent_{}_{}", platform_id, uuid::Uuid::new_v4());
-        
+
         // Here you would implement the actual agent creation and startup logic
         // For now, we'll just simulate it
-        
+
         let mut status = self.status.write().await;
         status.active_agents += 1;
 
         Ok(agent_id)
     }
 
-    pub async fn stop_agent(&self, agent_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn stop_agent(
+        &self,
+        agent_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Here you would implement the actual agent stopping logic
         // For now, we'll just simulate it
-        
+
         let mut status = self.status.write().await;
         if status.active_agents > 0 {
             status.active_agents -= 1;
@@ -243,10 +255,12 @@ impl PlatformOrchestrator {
         Ok(())
     }
 
-    pub async fn run_orchestration_loop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn run_orchestration_loop(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         loop {
             let state = *self.state.read().await;
-            
+
             match state {
                 OrchestrationState::Running => {
                     // Perform regular orchestration tasks
@@ -258,7 +272,9 @@ impl PlatformOrchestrator {
                     // Do minimal work while paused
                     self.health_check().await?;
                 }
-                OrchestrationState::Stopped | OrchestrationState::Emergency | OrchestrationState::ShuttingDown => {
+                OrchestrationState::Stopped
+                | OrchestrationState::Emergency
+                | OrchestrationState::ShuttingDown => {
                     break;
                 }
                 OrchestrationState::Initializing => {
@@ -286,26 +302,26 @@ impl PlatformOrchestrator {
 
     pub async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("🛑 Initiating platform orchestrator shutdown...");
-        
+
         // Update state to shutting down
         {
             let mut state = self.state.write().await;
             *state = OrchestrationState::ShuttingDown;
         }
-        
+
         // Stop all platforms
         let platforms = self.platforms.read().await;
         for (platform_id, _platform) in platforms.iter() {
             info!("Stopping platform: {}", platform_id);
             // Platform-specific shutdown logic would go here
         }
-        
+
         // Final state update
         {
             let mut state = self.state.write().await;
             *state = OrchestrationState::Stopped;
         }
-        
+
         info!("✅ Platform orchestrator shutdown complete");
         Ok(())
     }
@@ -325,7 +341,7 @@ mod tests {
     async fn test_orchestrator_initialization() {
         let orchestrator = PlatformOrchestrator::default();
         assert!(orchestrator.initialize().await.is_ok());
-        
+
         let status = orchestrator.get_status().await;
         assert_eq!(status.state, OrchestrationState::Running);
     }
@@ -334,9 +350,12 @@ mod tests {
     async fn test_platform_management() {
         let orchestrator = PlatformOrchestrator::default();
         let platform = Platform::new("test_platform".to_string(), "test_platform".to_string());
-        
-        assert!(orchestrator.add_platform("test".to_string(), platform).await.is_ok());
-        
+
+        assert!(orchestrator
+            .add_platform("test".to_string(), platform)
+            .await
+            .is_ok());
+
         let platforms = orchestrator.get_platform_list().await;
         assert_eq!(platforms.len(), 1);
         assert_eq!(platforms[0], "test");
@@ -345,13 +364,13 @@ mod tests {
     #[tokio::test]
     async fn test_state_transitions() {
         let orchestrator = PlatformOrchestrator::default();
-        
+
         assert!(orchestrator.initialize().await.is_ok());
         assert!(orchestrator.pause_all().await.is_ok());
-        
+
         let status = orchestrator.get_status().await;
         assert_eq!(status.state, OrchestrationState::Paused);
-        
+
         assert!(orchestrator.resume_all().await.is_ok());
         let status = orchestrator.get_status().await;
         assert_eq!(status.state, OrchestrationState::Running);
