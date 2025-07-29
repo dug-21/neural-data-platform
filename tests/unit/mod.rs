@@ -33,3 +33,10 @@ pub mod api_routes_test;
 
 // Configuration tests
 pub mod config_test;
+
+// Model storage tests
+pub mod model_storage_test;
+
+// Training scheduler tests
+pub mod training_scheduler_test;
+pub mod market_hours_test;

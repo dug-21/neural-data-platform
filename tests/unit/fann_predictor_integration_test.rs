@@ -137,7 +137,7 @@ mod fann_predictor_initialization_tests {
     #[tokio::test]
     async fn test_fann_predictor_new() {
         let config = create_test_config();
-        let predictor = FannPredictor::new(config.clone()).await;
+        let predictor = FannPredictor::new(config.clone());
         
         assert!(predictor.is_ok());
         // Predictor should be initialized with empty networks
@@ -148,7 +148,7 @@ mod fann_predictor_initialization_tests {
         let mut config = create_test_config();
         config.ensemble_models = vec!["lstm".to_string(), "gru".to_string()];
         
-        let predictor = FannPredictor::new(config).await;
+        let predictor = FannPredictor::new(config);
         assert!(predictor.is_ok());
     }
 }

@@ -113,6 +113,7 @@ fn create_test_predictions(
             interval_low: base_value * (0.98 - 0.01 * i as f64),
             interval_high: base_value * (1.02 + 0.01 * i as f64),
             model_name: model_name.to_string(),
+            metadata: None,
         }
     }).collect()
 }

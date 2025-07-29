@@ -1,5 +1,5 @@
 //! Unit tests for trading strategies
-//! 
+//!
 //! SPARC Architecture:
 //! - Specification: Test strategy signal generation and risk management
 //! - Pseudocode: TDD approach for momentum strategy implementation
@@ -8,12 +8,11 @@
 //! - Completion: Comprehensive strategy behavior validation
 
 use neural_trader::strategies::{
-    MarketContext, Position, PositionSide, Signal, StrategyConfig, 
+    momentum::MomentumStrategy, MarketContext, Position, PositionSide, Signal, StrategyConfig,
     StrategyError, StrategyFactory, TradingStrategy,
-    momentum::MomentumStrategy,
 };
-use std::collections::HashMap;
 use serde_json::json;
+use std::collections::HashMap;
 
 #[cfg(test)]
 mod momentum_strategy_tests {
@@ -76,7 +75,7 @@ mod momentum_strategy_tests {
 
             let mut strategy = MomentumStrategy::new();
             let result = strategy.initialize(config).await;
-            
+
             assert!(result.is_err(), "Expected error for invalid configuration");
             assert!(matches!(result, Err(StrategyError::Configuration(_))));
         }
@@ -86,7 +85,7 @@ mod momentum_strategy_tests {
     async fn test_momentum_signal_generation_no_position() {
         // GIVEN: A properly initialized momentum strategy
         let mut strategy = create_test_momentum_strategy().await;
-        
+
         // WHEN: Market context shows bullish momentum with no position
         let context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -116,7 +115,7 @@ mod momentum_strategy_tests {
     async fn test_momentum_stop_loss_trigger() {
         // GIVEN: A position with significant loss
         let strategy = create_test_momentum_strategy().await;
-        
+
         let mut position = Position {
             symbol: "BTC/USD".to_string(),
             side: PositionSide::Long,
@@ -144,7 +143,11 @@ mod momentum_strategy_tests {
         // THEN: Should generate sell signal for stop loss
         assert!(result.is_ok());
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert!(reason.contains("Stop loss"));
@@ -157,7 +160,7 @@ mod momentum_strategy_tests {
     async fn test_momentum_take_profit_trigger() {
         // GIVEN: A position with significant profit
         let strategy = create_test_momentum_strategy().await;
-        
+
         let mut position = Position {
             symbol: "BTC/USD".to_string(),
             side: PositionSide::Long,
@@ -185,7 +188,11 @@ mod momentum_strategy_tests {
         // THEN: Should generate sell signal for take profit
         assert!(result.is_ok());
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert!(reason.contains("Take profit"));
@@ -225,55 +232,70 @@ mod momentum_strategy_tests {
         // Test various market conditions
         let test_cases = vec![
             // Normal conditions - should execute
-            (MarketContext {
-                symbol: "BTC/USD".to_string(),
-                current_price: 50000.0,
-                bid: 49990.0,
-                ask: 50010.0,
-                volume_24h: 1_000_000.0,
-                volatility: 0.03,
-                timestamp: 1704067200,
-            }, true),
+            (
+                MarketContext {
+                    symbol: "BTC/USD".to_string(),
+                    current_price: 50000.0,
+                    bid: 49990.0,
+                    ask: 50010.0,
+                    volume_24h: 1_000_000.0,
+                    volatility: 0.03,
+                    timestamp: 1704067200,
+                },
+                true,
+            ),
             // Zero volume - should not execute
-            (MarketContext {
-                symbol: "BTC/USD".to_string(),
-                current_price: 50000.0,
-                bid: 49990.0,
-                ask: 50010.0,
-                volume_24h: 0.0,
-                volatility: 0.03,
-                timestamp: 1704067200,
-            }, false),
+            (
+                MarketContext {
+                    symbol: "BTC/USD".to_string(),
+                    current_price: 50000.0,
+                    bid: 49990.0,
+                    ask: 50010.0,
+                    volume_24h: 0.0,
+                    volatility: 0.03,
+                    timestamp: 1704067200,
+                },
+                false,
+            ),
             // High spread - should not execute
-            (MarketContext {
-                symbol: "BTC/USD".to_string(),
-                current_price: 50000.0,
-                bid: 49000.0,
-                ask: 51000.0, // 2% spread
-                volume_24h: 1_000_000.0,
-                volatility: 0.03,
-                timestamp: 1704067200,
-            }, false),
+            (
+                MarketContext {
+                    symbol: "BTC/USD".to_string(),
+                    current_price: 50000.0,
+                    bid: 49000.0,
+                    ask: 51000.0, // 2% spread
+                    volume_24h: 1_000_000.0,
+                    volatility: 0.03,
+                    timestamp: 1704067200,
+                },
+                false,
+            ),
             // Extreme volatility - should not execute
-            (MarketContext {
-                symbol: "BTC/USD".to_string(),
-                current_price: 50000.0,
-                bid: 49990.0,
-                ask: 50010.0,
-                volume_24h: 1_000_000.0,
-                volatility: 0.6, // 60% volatility
-                timestamp: 1704067200,
-            }, false),
+            (
+                MarketContext {
+                    symbol: "BTC/USD".to_string(),
+                    current_price: 50000.0,
+                    bid: 49990.0,
+                    ask: 50010.0,
+                    volume_24h: 1_000_000.0,
+                    volatility: 0.6, // 60% volatility
+                    timestamp: 1704067200,
+                },
+                false,
+            ),
         ];
 
         for (context, expected) in test_cases {
             let result = strategy.can_execute(&context);
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), expected, 
-                "Failed for context: {:?}", context);
+            assert_eq!(
+                result.unwrap(),
+                expected,
+                "Failed for context: {:?}",
+                context
+            );
         }
     }
-
 }
 
 #[cfg(test)]
@@ -329,16 +351,16 @@ mod strategy_metrics_tests {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         // GIVEN: An initialized momentum strategy
         let mut strategy = create_test_momentum_strategy().await;
-        
+
         // WHEN: We update parameters
         let new_params = HashMap::from([
             ("fast_period".to_string(), json!(10)),
             ("slow_period".to_string(), json!(20)),
             ("momentum_threshold".to_string(), json!(0.03)),
         ]);
-        
+
         let result = strategy.update_parameters(new_params).await;
-        
+
         // THEN: Update should succeed
         assert!(result.is_ok());
     }
@@ -348,15 +370,15 @@ mod strategy_metrics_tests {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         // GIVEN: An initialized momentum strategy
         let mut strategy = create_test_momentum_strategy().await;
-        
+
         // WHEN: We update with invalid parameters
         let invalid_params = HashMap::from([
             ("fast_period".to_string(), json!(30)),
             ("slow_period".to_string(), json!(20)), // Fast > Slow
         ]);
-        
+
         let result = strategy.update_parameters(invalid_params).await;
-        
+
         // THEN: Update should fail
         assert!(result.is_err());
         match result {
@@ -372,14 +394,12 @@ mod strategy_metrics_tests {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         // GIVEN: An initialized momentum strategy
         let mut strategy = create_test_momentum_strategy().await;
-        
+
         // WHEN: We update with unknown parameter
-        let params = HashMap::from([
-            ("unknown_parameter".to_string(), json!(123)),
-        ]);
-        
+        let params = HashMap::from([("unknown_parameter".to_string(), json!(123))]);
+
         let result = strategy.update_parameters(params).await;
-        
+
         // THEN: Update should fail
         assert!(result.is_err());
         match result {
@@ -395,10 +415,10 @@ mod strategy_metrics_tests {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         // GIVEN: A momentum strategy
         let strategy = create_test_momentum_strategy().await;
-        
+
         // WHEN: We get metrics
         let metrics = strategy.get_metrics();
-        
+
         // THEN: Metrics should be empty initially
         assert!(metrics.is_empty());
     }
@@ -406,7 +426,7 @@ mod strategy_metrics_tests {
     #[test]
     fn test_momentum_config_default() {
         use neural_trader::strategies::momentum::MomentumConfig;
-        
+
         let config = MomentumConfig::default();
         assert_eq!(config.fast_period, 12);
         assert_eq!(config.slow_period, 26);
@@ -428,7 +448,7 @@ mod strategy_metrics_tests {
     async fn test_momentum_edge_case_spread() {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         let strategy = create_test_momentum_strategy().await;
-        
+
         // Test exact 1% spread (boundary)
         let context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -439,11 +459,11 @@ mod strategy_metrics_tests {
             volatility: 0.2,
             timestamp: 1704067200,
         };
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(result.unwrap());
-        
+
         // Test just over 1% spread
         let context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -454,7 +474,7 @@ mod strategy_metrics_tests {
             volatility: 0.2,
             timestamp: 1704067200,
         };
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -464,7 +484,7 @@ mod strategy_metrics_tests {
     async fn test_momentum_edge_case_volatility() {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         let strategy = create_test_momentum_strategy().await;
-        
+
         // Test exact 0.5 volatility (boundary)
         let context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -475,11 +495,11 @@ mod strategy_metrics_tests {
             volatility: 0.5,
             timestamp: 1704067200,
         };
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(result.unwrap());
-        
+
         // Test just over 0.5 volatility
         let context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -490,7 +510,7 @@ mod strategy_metrics_tests {
             volatility: 0.50001,
             timestamp: 1704067200,
         };
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -500,7 +520,7 @@ mod strategy_metrics_tests {
     async fn test_momentum_short_position_stop_loss() {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         let strategy = create_test_momentum_strategy().await;
-        
+
         let mut position = Position {
             symbol: "BTC/USD".to_string(),
             side: PositionSide::Short,
@@ -524,9 +544,13 @@ mod strategy_metrics_tests {
 
         let result = strategy.generate_signal(&context, Some(&position)).await;
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert!(reason.contains("Stop loss"));
@@ -539,7 +563,7 @@ mod strategy_metrics_tests {
     async fn test_momentum_short_position_take_profit() {
         use super::momentum_strategy_tests::create_test_momentum_strategy;
         let strategy = create_test_momentum_strategy().await;
-        
+
         let mut position = Position {
             symbol: "BTC/USD".to_string(),
             side: PositionSide::Short,
@@ -563,9 +587,13 @@ mod strategy_metrics_tests {
 
         let result = strategy.generate_signal(&context, Some(&position)).await;
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert!(reason.contains("Take profit"));
@@ -577,17 +605,17 @@ mod strategy_metrics_tests {
     #[test]
     fn test_strategy_metrics_update() {
         use neural_trader::strategies::StrategyMetrics;
-        
+
         // GIVEN: A new strategy metrics instance
         let mut metrics = StrategyMetrics::default();
-        
+
         // WHEN: We record multiple trades
-        metrics.update_trade(500.0);  // Win
+        metrics.update_trade(500.0); // Win
         metrics.update_trade(-200.0); // Loss
-        metrics.update_trade(300.0);  // Win
+        metrics.update_trade(300.0); // Win
         metrics.update_trade(-100.0); // Loss
-        metrics.update_trade(600.0);  // Win
-        
+        metrics.update_trade(600.0); // Win
+
         // THEN: Metrics should be calculated correctly
         assert_eq!(metrics.total_trades, 5);
         assert_eq!(metrics.winning_trades, 3);
@@ -642,7 +670,7 @@ mod risk_management_tests {
             // Normal risk
             (100000.0, 50000.0, 0.02, 1.0), // $100k balance, $50k price, 2% risk
             // Small account
-            (10000.0, 50000.0, 0.02, 0.2),  // $10k balance, $50k price, 2% risk
+            (10000.0, 50000.0, 0.02, 0.2), // $10k balance, $50k price, 2% risk
             // High price asset
             (100000.0, 500000.0, 0.02, 0.1), // $100k balance, $500k price, 2% risk
         ];
@@ -651,11 +679,13 @@ mod risk_management_tests {
             // Calculate position size based on risk
             let risk_amount = balance * risk_pct;
             let position_size = (risk_amount / price).min(balance / price);
-            
+
             assert!(
                 (position_size - expected_size).abs() < 0.01,
                 "Position size calculation failed for balance: {}, price: {}, risk: {}",
-                balance, price, risk_pct
+                balance,
+                price,
+                risk_pct
             );
         }
     }

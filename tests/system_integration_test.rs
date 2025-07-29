@@ -1,5 +1,5 @@
 //! System Integration Tests
-//! 
+//!
 //! This module tests comprehensive cross-component integration scenarios:
 //! - Data pipeline to DAA agent communication
 //! - DAA agent to neural network coordination
@@ -9,21 +9,23 @@
 //! - Memory usage patterns
 //! - Inter-service communication
 
-use autonomous_platform::data::{DataPipeline, TimescaleDBStorage, RedisCache, TimeSeriesData};
-use autonomous_platform::integration::{
-    platform_orchestrator::{PlatformOrchestrator, SystemHealth, ValidationResult},
-    streaming::{StreamingPipeline, MarketData, NewsData, StreamConfig},
-    data_access::{DataAccessLayer, DataRequest, Timeframe},
-    neural_predictions::{NeuralPredictionSystem, DecisionContext, ModelType}
-};
-use autonomous_platform::config::{PlatformConfig, DatabaseConfig, RedisConfig, NeuralConfig, MonitoringConfig, PlatformInfo};
-use std::sync::Arc;
-use chrono::{DateTime, Utc, Duration};
-use tokio::sync::mpsc;
 use anyhow::Result;
+use autonomous_platform::config::{
+    DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
+};
+use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::integration::{
+    data_access::{DataAccessLayer, DataRequest, Timeframe},
+    neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
+    platform_orchestrator::{PlatformOrchestrator, SystemHealth, ValidationResult},
+    streaming::{MarketData, NewsData, StreamConfig, StreamingPipeline},
+};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::mpsc;
 
 /// Create a comprehensive test configuration
 fn create_integration_config() -> PlatformConfig {
@@ -58,7 +60,7 @@ fn create_integration_config() -> PlatformConfig {
 fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) -> MarketData {
     let price_variance = (sequence as f64 * 0.1).sin() * 50.0; // Simulate price movement
     let current_price = base_price + price_variance;
-    
+
     MarketData {
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
@@ -84,15 +86,24 @@ fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) ->
 fn create_realistic_news_data(symbol: &str, sequence: u64) -> NewsData {
     let sentiment = (sequence as f64 * 0.2).sin() * 0.3 + 0.5; // Varying sentiment
     let relevance = 0.7 + (sequence as f64 * 0.01) % 0.3;
-    
+
     NewsData {
         id: format!("news_{}_{}", symbol, sequence),
         timestamp: Utc::now(),
         title: format!("{} Market Update: {} Analysis", symbol, sequence),
-        content: format!("Market analysis for {} shows {} trend with significant {}",
+        content: format!(
+            "Market analysis for {} shows {} trend with significant {}",
             symbol,
-            if sentiment > 0.5 { "positive" } else { "negative" },
-            if relevance > 0.8 { "impact" } else { "movement" }
+            if sentiment > 0.5 {
+                "positive"
+            } else {
+                "negative"
+            },
+            if relevance > 0.8 {
+                "impact"
+            } else {
+                "movement"
+            }
         ),
         source: "integration_news_feed".to_string(),
         symbols: vec![symbol.to_string()],
@@ -115,52 +126,65 @@ async fn test_streaming_to_daa_integration() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Register multiple DAA agents with different strategies
     let agents = vec![
         ("momentum_agent", "MOMENTUM_STRATEGY"),
         ("arbitrage_agent", "ARBITRAGE_STRATEGY"),
         ("sentiment_agent", "SENTIMENT_STRATEGY"),
     ];
-    
+
     for (agent_id, strategy) in &agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Stream market and news data
     let symbols = vec!["BTC/USD", "ETH/USD", "ADA/USD"];
     for (i, symbol) in symbols.iter().enumerate() {
         // Send market data
-        let market_data = create_realistic_market_data(symbol, 1000.0 + (i as f64 * 1000.0), i as u64);
+        let market_data =
+            create_realistic_market_data(symbol, 1000.0 + (i as f64 * 1000.0), i as u64);
         orchestrator.inject_market_data(market_data).await?;
-        
+
         // Send news data
         let news_data = create_realistic_news_data(symbol, i as u64);
         orchestrator.inject_news_data(news_data).await?;
     }
-    
+
     // Allow processing time
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    
+
     // Verify all agents received appropriate events
     for (agent_id, _) in &agents {
         let events = orchestrator.get_agent_events(agent_id).await?;
-        assert!(!events.is_empty(), "Agent {} should have received events", agent_id);
-        
+        assert!(
+            !events.is_empty(),
+            "Agent {} should have received events",
+            agent_id
+        );
+
         // Verify event types
         let has_market_events = events.iter().any(|e| e.event_type == "market_data_update");
         let has_news_events = events.iter().any(|e| e.event_type == "news_update");
-        
-        assert!(has_market_events, "Agent {} should receive market events", agent_id);
-        assert!(has_news_events, "Agent {} should receive news events", agent_id);
+
+        assert!(
+            has_market_events,
+            "Agent {} should receive market events",
+            agent_id
+        );
+        assert!(
+            has_news_events,
+            "Agent {} should receive news events",
+            agent_id
+        );
     }
-    
+
     // Verify system health
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
     assert!(health.streaming_pipeline_healthy);
     assert!(health.data_pipeline_healthy);
-    
+
     Ok(())
 }
 
@@ -170,24 +194,24 @@ async fn test_daa_to_neural_coordination() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Set up scenario with multiple agents making decisions
     let agents_with_decisions = vec![
         ("trend_agent", "TREND_FOLLOWING", "BTC/USD"),
         ("mean_reversion_agent", "MEAN_REVERSION", "ETH/USD"),
         ("momentum_agent", "MOMENTUM_BREAKOUT", "ADA/USD"),
     ];
-    
+
     let mut prediction_results = Vec::new();
-    
+
     for (agent_id, decision_type, symbol) in &agents_with_decisions {
         // Register agent
         orchestrator.register_daa_agent(agent_id).await?;
-        
+
         // Inject market data for the symbol
         let market_data = create_realistic_market_data(symbol, 2000.0, 1);
         orchestrator.inject_market_data(market_data).await?;
-        
+
         // Create decision context for neural prediction
         let decision_context = DecisionContext {
             agent_id: agent_id.to_string(),
@@ -224,31 +248,33 @@ async fn test_daa_to_neural_coordination() -> Result<()> {
             required_confidence: 0.8,
             prediction_horizon: 3600, // 1 hour
         };
-        
+
         // Get neural prediction
         let prediction_result = orchestrator.get_neural_prediction(decision_context).await?;
         prediction_results.push((agent_id, prediction_result));
     }
-    
+
     // Verify all predictions were generated
     assert_eq!(prediction_results.len(), agents_with_decisions.len());
-    
+
     for (agent_id, prediction) in &prediction_results {
         assert!(prediction.confidence >= 0.0 && prediction.confidence <= 1.0);
         assert!(prediction.model_used.is_some());
         assert!(!prediction.prediction_values.is_empty());
         assert!(prediction.execution_recommendations.is_some());
-        
-        println!("Agent {}: Confidence = {:.3}, Model = {:?}", 
-                 agent_id, prediction.confidence, prediction.model_used);
+
+        println!(
+            "Agent {}: Confidence = {:.3}, Model = {:?}",
+            agent_id, prediction.confidence, prediction.model_used
+        );
     }
-    
+
     // Verify prediction metrics
     let prediction_metrics = orchestrator.get_prediction_metrics().await?;
     assert!(prediction_metrics.total_predictions >= agents_with_decisions.len() as u64);
     assert!(prediction_metrics.average_confidence > 0.0);
     assert!(!prediction_metrics.models_used.is_empty());
-    
+
     Ok(())
 }
 
@@ -258,14 +284,14 @@ async fn test_multi_component_failure_recovery() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let agent_id = "recovery_test_agent";
     orchestrator.register_daa_agent(agent_id).await?;
-    
+
     // Phase 1: Normal operation
     let market_data = create_realistic_market_data("RECOVERY/USD", 1500.0, 1);
     orchestrator.inject_market_data(market_data).await?;
-    
+
     let decision_context = DecisionContext {
         agent_id: agent_id.to_string(),
         decision_type: "RECOVERY_TEST".to_string(),
@@ -284,10 +310,12 @@ async fn test_multi_component_failure_recovery() -> Result<()> {
         required_confidence: 0.7,
         prediction_horizon: 1800,
     };
-    
-    let normal_prediction = orchestrator.get_neural_prediction(decision_context.clone()).await;
+
+    let normal_prediction = orchestrator
+        .get_neural_prediction(decision_context.clone())
+        .await;
     assert!(normal_prediction.is_ok(), "Normal operation should succeed");
-    
+
     // Phase 2: Simulate component failures with invalid data
     let invalid_market_data = MarketData {
         symbol: "RECOVERY/USD".to_string(),
@@ -301,30 +329,30 @@ async fn test_multi_component_failure_recovery() -> Result<()> {
         order_book_depth: None,
         metadata: None,
     };
-    
+
     let failure_result = orchestrator.inject_market_data(invalid_market_data).await;
     // Should handle failure gracefully (might succeed with error handling or fail appropriately)
-    
+
     // Phase 3: System recovery - inject valid data again
     let recovery_market_data = create_realistic_market_data("RECOVERY/USD", 1520.0, 3);
     let recovery_inject = orchestrator.inject_market_data(recovery_market_data).await;
-    
+
     // Phase 4: Test prediction recovery
     let recovery_prediction = orchestrator.get_neural_prediction(decision_context).await;
-    
+
     // Verify recovery
     let health = orchestrator.health_check().await?;
-    
+
     // System should either:
     // 1. Handle everything gracefully and remain healthy
     // 2. Track errors appropriately but continue functioning
     if failure_result.is_err() {
         assert!(health.metrics.error_count > 0, "Errors should be tracked");
     }
-    
+
     assert!(recovery_inject.is_ok(), "Should recover from failure");
     assert!(recovery_prediction.is_ok() || health.metrics.error_count > 0);
-    
+
     Ok(())
 }
 
@@ -334,70 +362,77 @@ async fn test_high_frequency_trading_scenario() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Set up HFT agents
     let hft_agents = vec![
         ("hft_arbitrage", "ARBITRAGE"),
         ("hft_market_making", "MARKET_MAKING"),
         ("hft_momentum", "MOMENTUM_SCALPING"),
     ];
-    
+
     for (agent_id, _) in &hft_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Simulate high-frequency market data stream
     let symbols = vec!["BTC/USD", "ETH/USD"];
     let start_time = Instant::now();
     let mut total_operations = 0;
-    
+
     for round in 0..10 {
         let mut round_handles = Vec::new();
-        
+
         for (i, symbol) in symbols.iter().enumerate() {
             let orchestrator_clone = orchestrator.clone();
             let symbol_clone = symbol.to_string();
-            
+
             let handle = tokio::spawn(async move {
                 // Rapid market data updates
                 for tick in 0..20 {
                     let sequence = (round * 100) + (i * 20) + tick;
                     let market_data = create_realistic_market_data(
-                        &symbol_clone, 
-                        3000.0 + (i as f64 * 1000.0), 
-                        sequence as u64
+                        &symbol_clone,
+                        3000.0 + (i as f64 * 1000.0),
+                        sequence as u64,
                     );
-                    
+
                     let _ = orchestrator_clone.inject_market_data(market_data).await;
                 }
                 20 // Return number of operations
             });
-            
+
             round_handles.push(handle);
         }
-        
+
         for handle in round_handles {
             if let Ok(ops) = handle.await {
                 total_operations += ops;
             }
         }
     }
-    
+
     let processing_time = start_time.elapsed();
     let throughput = total_operations as f64 / processing_time.as_secs_f64();
-    
-    println!("HFT Test: {} operations in {:.2}s, throughput: {:.1} ops/sec", 
-             total_operations, processing_time.as_secs_f64(), throughput);
-    
+
+    println!(
+        "HFT Test: {} operations in {:.2}s, throughput: {:.1} ops/sec",
+        total_operations,
+        processing_time.as_secs_f64(),
+        throughput
+    );
+
     // Allow processing to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    
+
     // Verify system performance under HFT load
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
     assert!(health.metrics.total_requests >= total_operations as u64);
-    assert!(throughput > 50.0, "Should handle at least 50 operations per second");
-    
+    assert!(
+        throughput > 50.0,
+        "Should handle at least 50 operations per second"
+    );
+
     // Test predictions under HFT conditions
     for (agent_id, strategy) in &hft_agents {
         let decision_context = DecisionContext {
@@ -428,14 +463,14 @@ async fn test_high_frequency_trading_scenario() -> Result<()> {
                 metadata
             },
             required_confidence: 0.6, // Lower confidence for HFT
-            prediction_horizon: 300, // 5 minutes
+            prediction_horizon: 300,  // 5 minutes
         };
-        
+
         let prediction_result = orchestrator.get_neural_prediction(decision_context).await?;
         assert!(prediction_result.confidence >= 0.0);
         assert!(prediction_result.model_used.is_some());
     }
-    
+
     Ok(())
 }
 
@@ -445,21 +480,21 @@ async fn test_market_volatility_response() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let agent_id = "volatility_agent";
     orchestrator.register_daa_agent(agent_id).await?;
-    
+
     // Phase 1: Normal market conditions
     let base_price = 4000.0;
     let normal_data = create_realistic_market_data("VOL/USD", base_price, 1);
     orchestrator.inject_market_data(normal_data).await?;
-    
+
     // Phase 2: High volatility scenario - simulate flash crash
     let volatile_prices = vec![
         4000.0, 3950.0, 3800.0, 3600.0, 3200.0, // Crash
         3400.0, 3600.0, 3750.0, 3900.0, 3950.0, // Recovery
     ];
-    
+
     for (i, price) in volatile_prices.iter().enumerate() {
         let volatile_data = MarketData {
             symbol: "VOL/USD".to_string(),
@@ -473,19 +508,19 @@ async fn test_market_volatility_response() -> Result<()> {
             order_book_depth: Some(5), // Thin order book
             metadata: Some(json!({
                 "volatility_event": true,
-                "price_change_pct": if i > 0 { 
-                    ((price - volatile_prices[i-1]) / volatile_prices[i-1]) * 100.0 
+                "price_change_pct": if i > 0 {
+                    ((price - volatile_prices[i-1]) / volatile_prices[i-1]) * 100.0
                 } else { 0.0 },
                 "volume_spike": true
             })),
         };
-        
+
         orchestrator.inject_market_data(volatile_data).await?;
-        
+
         // Small delay to simulate real-time feed
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
-    
+
     // Test prediction during high volatility
     let volatile_decision = DecisionContext {
         agent_id: agent_id.to_string(),
@@ -496,7 +531,7 @@ async fn test_market_volatility_response() -> Result<()> {
             timestamp: Utc::now(),
             open: 4000.0,
             high: 4000.0,
-            low: 3200.0,  // Large range indicating high volatility
+            low: 3200.0, // Large range indicating high volatility
             close: 3950.0,
             volume: 500000.0, // High volume
             indicators: {
@@ -516,27 +551,29 @@ async fn test_market_volatility_response() -> Result<()> {
             metadata
         },
         required_confidence: 0.9, // Higher confidence required during volatility
-        prediction_horizon: 900, // 15 minutes
+        prediction_horizon: 900,  // 15 minutes
     };
-    
-    let volatility_prediction = orchestrator.get_neural_prediction(volatile_decision).await?;
-    
+
+    let volatility_prediction = orchestrator
+        .get_neural_prediction(volatile_decision)
+        .await?;
+
     // Verify system handles volatility appropriately
     assert!(volatility_prediction.confidence >= 0.0);
     assert!(volatility_prediction.model_used.is_some());
-    
+
     // Check if system detected volatility in recommendations
     if let Some(recommendations) = &volatility_prediction.execution_recommendations {
         println!("Volatility recommendations: {}", recommendations);
     }
-    
+
     // Verify system health during volatility
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
-    
+
     // Should have processed all volatile data points
     assert!(health.metrics.total_requests >= volatile_prices.len() as u64);
-    
+
     Ok(())
 }
 
@@ -546,7 +583,7 @@ async fn test_multi_agent_consensus() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Set up consensus agents with different strategies
     let consensus_agents = vec![
         ("technical_agent", "TECHNICAL_ANALYSIS", 0.8),
@@ -555,19 +592,19 @@ async fn test_multi_agent_consensus() -> Result<()> {
         ("momentum_agent", "MOMENTUM_ANALYSIS", 0.75),
         ("arbitrage_agent", "ARBITRAGE_ANALYSIS", 0.85),
     ];
-    
+
     for (agent_id, _, _) in &consensus_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Inject market data that all agents will analyze
     let consensus_symbol = "CONSENSUS/USD";
     let market_data = create_realistic_market_data(consensus_symbol, 5000.0, 1);
     orchestrator.inject_market_data(market_data).await?;
-    
+
     // Get predictions from all agents
     let mut agent_predictions = Vec::new();
-    
+
     for (agent_id, strategy, required_confidence) in &consensus_agents {
         let decision_context = DecisionContext {
             agent_id: agent_id.to_string(),
@@ -596,30 +633,38 @@ async fn test_multi_agent_consensus() -> Result<()> {
             context_metadata: {
                 let mut metadata = HashMap::new();
                 metadata.insert("consensus_round".to_string(), json!(1));
-                metadata.insert("agent_weight".to_string(), json!(1.0 / consensus_agents.len() as f64));
+                metadata.insert(
+                    "agent_weight".to_string(),
+                    json!(1.0 / consensus_agents.len() as f64),
+                );
                 metadata.insert("strategy_type".to_string(), json!(strategy));
                 metadata
             },
             required_confidence: *required_confidence,
             prediction_horizon: 1800, // 30 minutes
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
         agent_predictions.push((agent_id, prediction));
     }
-    
+
     // Analyze consensus
     let mut total_confidence = 0.0;
     let mut bullish_signals = 0;
     let mut bearish_signals = 0;
     let mut neutral_signals = 0;
-    
+
     for (agent_id, prediction) in &agent_predictions {
         total_confidence += prediction.confidence;
-        
+
         // Analyze prediction direction (simplified)
         if prediction.confidence > 0.7 {
-            if prediction.prediction_values.get("price_direction").unwrap_or(&0.0) > &0.0 {
+            if prediction
+                .prediction_values
+                .get("price_direction")
+                .unwrap_or(&0.0)
+                > &0.0
+            {
                 bullish_signals += 1;
             } else {
                 bearish_signals += 1;
@@ -627,11 +672,13 @@ async fn test_multi_agent_consensus() -> Result<()> {
         } else {
             neutral_signals += 1;
         }
-        
-        println!("Agent {}: Confidence = {:.3}, Model = {:?}", 
-                 agent_id, prediction.confidence, prediction.model_used);
+
+        println!(
+            "Agent {}: Confidence = {:.3}, Model = {:?}",
+            agent_id, prediction.confidence, prediction.model_used
+        );
     }
-    
+
     let average_confidence = total_confidence / consensus_agents.len() as f64;
     let consensus_strength = if bullish_signals > bearish_signals + neutral_signals {
         "BULLISH"
@@ -640,21 +687,26 @@ async fn test_multi_agent_consensus() -> Result<()> {
     } else {
         "NEUTRAL"
     };
-    
-    println!("Consensus Result: {} (Avg Confidence: {:.3})", consensus_strength, average_confidence);
-    println!("Signals - Bullish: {}, Bearish: {}, Neutral: {}", 
-             bullish_signals, bearish_signals, neutral_signals);
-    
+
+    println!(
+        "Consensus Result: {} (Avg Confidence: {:.3})",
+        consensus_strength, average_confidence
+    );
+    println!(
+        "Signals - Bullish: {}, Bearish: {}, Neutral: {}",
+        bullish_signals, bearish_signals, neutral_signals
+    );
+
     // Verify consensus process
     assert_eq!(agent_predictions.len(), consensus_agents.len());
     assert!(average_confidence >= 0.0 && average_confidence <= 1.0);
-    
+
     // All agents should have made predictions
     for (_, prediction) in &agent_predictions {
         assert!(prediction.model_used.is_some());
         assert!(!prediction.prediction_values.is_empty());
     }
-    
+
     Ok(())
 }
 
@@ -664,17 +716,17 @@ async fn test_model_fallback_and_selection() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let agent_id = "model_selection_agent";
     orchestrator.register_daa_agent(agent_id).await?;
-    
+
     // Test different model requirements
     let model_test_scenarios = vec![
         ("SHORT_TERM", 300, 0.9),   // 5 minutes, high confidence
         ("MEDIUM_TERM", 1800, 0.8), // 30 minutes, medium confidence
         ("LONG_TERM", 7200, 0.7),   // 2 hours, lower confidence
     ];
-    
+
     for (scenario_name, horizon, confidence) in model_test_scenarios {
         let decision_context = DecisionContext {
             agent_id: agent_id.to_string(),
@@ -707,34 +759,40 @@ async fn test_model_fallback_and_selection() -> Result<()> {
             required_confidence: confidence,
             prediction_horizon: horizon,
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
-        
+
         // Verify model selection worked
         assert!(prediction.confidence >= 0.0);
         assert!(prediction.model_used.is_some());
-        
+
         let model_used = prediction.model_used.as_ref().unwrap();
-        println!("Scenario {}: Used model {}, Confidence: {:.3}", 
-                 scenario_name, model_used, prediction.confidence);
-        
+        println!(
+            "Scenario {}: Used model {}, Confidence: {:.3}",
+            scenario_name, model_used, prediction.confidence
+        );
+
         // Verify appropriate model was selected for time horizon
         match scenario_name {
             "SHORT_TERM" => {
                 // Should prefer fast models for short-term predictions
                 assert!(model_used.contains("NHITS") || model_used.contains("TCN"));
-            },
+            }
             "LONG_TERM" => {
                 // Should allow any model for long-term predictions
-                assert!(model_used.contains("DeepAR") || model_used.contains("NHITS") || model_used.contains("TCN"));
-            },
+                assert!(
+                    model_used.contains("DeepAR")
+                        || model_used.contains("NHITS")
+                        || model_used.contains("TCN")
+                );
+            }
             _ => {
                 // Medium term can use any model
                 assert!(!model_used.is_empty());
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -744,24 +802,25 @@ async fn test_cross_component_memory_usage() -> Result<()> {
     let config = create_integration_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Set up multiple agents
     let agents = vec!["memory_agent_1", "memory_agent_2", "memory_agent_3"];
     for agent_id in &agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Generate data across multiple components
     let symbols = vec!["MEM1/USD", "MEM2/USD", "MEM3/USD"];
-    
+
     // Phase 1: Data ingestion and storage
     for (i, symbol) in symbols.iter().enumerate() {
         for sequence in 0..50 {
-            let market_data = create_realistic_market_data(symbol, 7000.0 + (i as f64 * 500.0), sequence);
+            let market_data =
+                create_realistic_market_data(symbol, 7000.0 + (i as f64 * 500.0), sequence);
             orchestrator.inject_market_data(market_data).await?;
         }
     }
-    
+
     // Phase 2: Generate predictions (memory intensive)
     for (agent_idx, agent_id) in agents.iter().enumerate() {
         for (symbol_idx, symbol) in symbols.iter().enumerate() {
@@ -794,30 +853,36 @@ async fn test_cross_component_memory_usage() -> Result<()> {
                 required_confidence: 0.7,
                 prediction_horizon: 1800,
             };
-            
+
             let _ = orchestrator.get_neural_prediction(decision_context).await;
         }
     }
-    
+
     // Phase 3: Check memory usage and system health
     let health = orchestrator.health_check().await?;
-    
+
     // Verify system handled memory usage appropriately
     assert!(health.overall_healthy);
     assert!(health.metrics.total_requests > 0);
-    
+
     // Store results in memory as requested
     let memory_key = "swarm-auto-centralized-1751484080479/integration-testing-final/results";
     orchestrator.store_results_in_memory(memory_key).await?;
-    
+
     // Verify memory storage
     let memory_data = orchestrator.get_memory_data(memory_key).await?;
     assert!(memory_data.contains_key("system_health"));
     assert!(memory_data.contains_key("performance_metrics"));
-    
+
     println!("Cross-component memory test completed successfully");
-    println!("Total requests processed: {}", health.metrics.total_requests);
-    println!("Average processing time: {:.2}ms", health.metrics.processing_latency_ms);
-    
+    println!(
+        "Total requests processed: {}",
+        health.metrics.total_requests
+    );
+    println!(
+        "Average processing time: {:.2}ms",
+        health.metrics.processing_latency_ms
+    );
+
     Ok(())
 }

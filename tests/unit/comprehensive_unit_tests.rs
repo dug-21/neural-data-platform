@@ -1137,6 +1137,7 @@ mod fann_predictor_tests {
                 interval_low: 98.0,
                 interval_high: 101.0,
                 model_name: "MLP".to_string(),
+                metadata: None,
             },
             PredictionResult {
                 timestamp: Utc::now(),
@@ -1145,6 +1146,7 @@ mod fann_predictor_tests {
                 interval_low: 99.5,
                 interval_high: 102.0,
                 model_name: "MLP".to_string(),
+                metadata: None,
             },
             PredictionResult {
                 timestamp: Utc::now(),
@@ -1153,6 +1155,7 @@ mod fann_predictor_tests {
                 interval_low: 100.0,
                 interval_high: 103.0,
                 model_name: "MLP".to_string(),
+                metadata: None,
             },
         ];
         
