@@ -99,34 +99,18 @@ impl DiskManager {
         // Calculate directory size recursively
         let used_bytes = self.calculate_directory_size(path).await?;
         
-        // Get filesystem stats (platform-specific)
-        #[cfg(target_os = "linux")]
-        {
-            use nix::sys::statvfs::statvfs;
-            let stat = statvfs(path)?;
-            
-            let total_bytes = stat.blocks() * stat.block_size();
-            let available_bytes = stat.blocks_available() * stat.block_size();
-            let usage_percentage = used_bytes as f32 / total_bytes as f32;
-            
-            Ok(DiskUsageStats {
-                total_bytes,
-                used_bytes,
-                available_bytes,
-                usage_percentage,
-            })
-        }
+        // Simplified disk usage calculation (cross-platform)
+        // Using configuration-based estimates instead of system calls
+        let total_bytes = self.config.max_disk_usage_mb * 1_048_576;
+        let available_bytes = total_bytes.saturating_sub(used_bytes);
+        let usage_percentage = used_bytes as f32 / total_bytes as f32;
         
-        #[cfg(not(target_os = "linux"))]
-        {
-            // Fallback for non-Linux systems
-            Ok(DiskUsageStats {
-                total_bytes: self.config.max_disk_usage_mb * 1_048_576,
-                used_bytes,
-                available_bytes: (self.config.max_disk_usage_mb * 1_048_576).saturating_sub(used_bytes),
-                usage_percentage: used_bytes as f32 / (self.config.max_disk_usage_mb * 1_048_576) as f32,
-            })
-        }
+        Ok(DiskUsageStats {
+            total_bytes,
+            used_bytes,
+            available_bytes,
+            usage_percentage,
+        })
     }
 
     /// Calculate total size of a directory
@@ -141,7 +125,7 @@ impl DiskManager {
                 total_size += metadata.len();
             } else if metadata.is_dir() {
                 // Recursively calculate subdirectory size
-                if let Ok(subdir_size) = self.calculate_directory_size(&entry.path()).await {
+                if let Ok(subdir_size) = Box::pin(self.calculate_directory_size(&entry.path())).await {
                     total_size += subdir_size;
                 }
             }

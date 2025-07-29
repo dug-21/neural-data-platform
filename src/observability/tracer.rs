@@ -1,5 +1,5 @@
 //! Distributed tracing for request flow analysis
-//! 
+//!
 //! This module provides distributed tracing capabilities for:
 //! - Request flow tracking across services
 //! - Performance bottleneck identification  
@@ -35,7 +35,7 @@ impl DistributedTracer {
     pub async fn start_trace(&self, operation: &str, metadata: TraceMetadata) -> TraceContext {
         let trace_id = Uuid::new_v4().to_string();
         let span_id = Uuid::new_v4().to_string();
-        
+
         let context = TraceContext {
             trace_id: trace_id.clone(),
             span_id,
@@ -59,7 +59,7 @@ impl DistributedTracer {
     /// Start a child span within an existing trace
     pub async fn start_span(&self, parent_context: &TraceContext, operation: &str) -> TraceContext {
         let span_id = Uuid::new_v4().to_string();
-        
+
         let context = TraceContext {
             trace_id: parent_context.trace_id.clone(),
             span_id,
@@ -260,7 +260,7 @@ impl SpanProcessor {
     pub async fn analyze_performance(&self) -> PerformanceAnalysis {
         let spans = self.completed_spans.read().await;
         let total_spans = spans.len();
-        
+
         if total_spans == 0 {
             return PerformanceAnalysis::default();
         }
@@ -271,19 +271,21 @@ impl SpanProcessor {
 
         for span in spans.iter() {
             total_duration += span.duration;
-            
+
             if matches!(span.status, TraceStatus::Error(_)) {
                 error_count += 1;
             }
 
-            let stats = operation_stats.entry(span.operation.clone()).or_insert_with(OperationStats::default);
+            let stats = operation_stats
+                .entry(span.operation.clone())
+                .or_insert_with(OperationStats::default);
             stats.count += 1;
             stats.total_duration += span.duration;
-            
+
             if span.duration > stats.max_duration {
                 stats.max_duration = span.duration;
             }
-            
+
             if stats.min_duration.is_zero() || span.duration < stats.min_duration {
                 stats.min_duration = span.duration;
             }
@@ -366,12 +368,14 @@ impl BusinessOperationTracer {
         };
 
         let mut context = self.tracer.start_trace("model_prediction", metadata).await;
-        context.tags.insert("model_name".to_string(), model_name.to_string());
+        context
+            .tags
+            .insert("model_name".to_string(), model_name.to_string());
 
         let span = context.create_tracing_span();
-        
+
         let result = operation.instrument(span).await;
-        
+
         let status = match &result {
             Ok(_) => TraceStatus::Success,
             Err(e) => TraceStatus::Error(e.to_string()),
@@ -392,13 +396,17 @@ impl BusinessOperationTracer {
         };
 
         let mut context = self.tracer.start_trace("trading_operation", metadata).await;
-        context.tags.insert("symbol".to_string(), symbol.to_string());
-        context.tags.insert("action".to_string(), action.to_string());
+        context
+            .tags
+            .insert("symbol".to_string(), symbol.to_string());
+        context
+            .tags
+            .insert("action".to_string(), action.to_string());
 
         let span = context.create_tracing_span();
-        
+
         let result = operation.instrument(span).await;
-        
+
         let status = match &result {
             Ok(_) => TraceStatus::Success,
             Err(e) => TraceStatus::Error(e.to_string()),
@@ -419,12 +427,14 @@ impl BusinessOperationTracer {
         };
 
         let mut context = self.tracer.start_trace("data_processing", metadata).await;
-        context.tags.insert("data_source".to_string(), source.to_string());
+        context
+            .tags
+            .insert("data_source".to_string(), source.to_string());
 
         let span = context.create_tracing_span();
-        
+
         let result = operation.instrument(span).await;
-        
+
         let status = match &result {
             Ok(_) => TraceStatus::Success,
             Err(e) => TraceStatus::Error(e.to_string()),
@@ -449,26 +459,38 @@ mod tests {
     async fn test_trace_lifecycle() {
         let tracer = DistributedTracer::new(TracingConfig::default()).unwrap();
         let metadata = TraceMetadata::default();
-        
+
         let context = tracer.start_trace("test_operation", metadata).await;
         assert_eq!(context.operation, "test_operation");
         assert_eq!(context.status, TraceStatus::Active);
-        
-        tracer.finish_trace(context, TraceStatus::Success).await.unwrap();
+
+        tracer
+            .finish_trace(context, TraceStatus::Success)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
     async fn test_child_span() {
         let tracer = DistributedTracer::new(TracingConfig::default()).unwrap();
         let metadata = TraceMetadata::default();
-        
+
         let parent_context = tracer.start_trace("parent_operation", metadata).await;
         let child_context = tracer.start_span(&parent_context, "child_operation").await;
-        
+
         assert_eq!(child_context.trace_id, parent_context.trace_id);
-        assert_eq!(child_context.parent_span_id, Some(parent_context.span_id.clone()));
-        
-        tracer.finish_trace(child_context, TraceStatus::Success).await.unwrap();
-        tracer.finish_trace(parent_context, TraceStatus::Success).await.unwrap();
+        assert_eq!(
+            child_context.parent_span_id,
+            Some(parent_context.span_id.clone())
+        );
+
+        tracer
+            .finish_trace(child_context, TraceStatus::Success)
+            .await
+            .unwrap();
+        tracer
+            .finish_trace(parent_context, TraceStatus::Success)
+            .await
+            .unwrap();
     }
 }

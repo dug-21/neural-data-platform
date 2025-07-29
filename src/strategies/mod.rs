@@ -1,5 +1,5 @@
 //! Trading strategies module
-//! 
+//!
 //! This module provides various trading strategies that can be
 //! configured and executed by the autonomous trading agents.
 
@@ -16,13 +16,13 @@ use thiserror::Error;
 pub enum StrategyError {
     #[error("Configuration error: {0}")]
     Configuration(String),
-    
+
     #[error("Execution error: {0}")]
     Execution(String),
-    
+
     #[error("Insufficient data: {0}")]
     InsufficientData(String),
-    
+
     #[error("Risk limit exceeded: {0}")]
     RiskLimitExceeded(String),
 }
@@ -104,26 +104,26 @@ pub struct StrategyConfig {
 pub trait TradingStrategy: Send + Sync {
     /// Get strategy name
     fn name(&self) -> &str;
-    
+
     /// Initialize strategy with configuration
     async fn initialize(&mut self, config: StrategyConfig) -> Result<(), StrategyError>;
-    
+
     /// Generate trading signal based on market context
     async fn generate_signal(
         &self,
         context: &MarketContext,
         position: Option<&Position>,
     ) -> Result<Signal, StrategyError>;
-    
+
     /// Update strategy parameters
     async fn update_parameters(
         &mut self,
         parameters: HashMap<String, serde_json::Value>,
     ) -> Result<(), StrategyError>;
-    
+
     /// Get current strategy metrics
     fn get_metrics(&self) -> HashMap<String, f64>;
-    
+
     /// Validate if strategy can execute in current conditions
     fn can_execute(&self, context: &MarketContext) -> Result<bool, StrategyError>;
 }
@@ -141,7 +141,9 @@ impl StrategyFactory {
             "momentum" => Ok(Box::new(momentum::MomentumStrategy::new())),
             "neural_enhanced" => {
                 if let Some(predictor) = neural_predictor {
-                    Ok(Box::new(neural_enhanced::NeuralEnhancedStrategy::new(predictor)))
+                    Ok(Box::new(neural_enhanced::NeuralEnhancedStrategy::new(
+                        predictor,
+                    )))
                 } else {
                     Err(StrategyError::Configuration(
                         "Neural predictor required for neural_enhanced strategy".to_string(),

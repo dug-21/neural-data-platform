@@ -1,7 +1,7 @@
-use sqlx::{postgres::PgPoolOptions, PgPool};
 use anyhow::Result;
-use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 
 #[derive(Debug, Clone)]
 pub struct TimescaleDBStorage {
@@ -68,19 +68,20 @@ impl TimescaleDBStorage {
             .max_connections(10)
             .connect(database_url)
             .await?;
-        
+
         Ok(Self { pool })
     }
-    
+
     /// Create necessary tables and hypertables
     pub async fn create_tables(&self) -> Result<()> {
         // Create TimescaleDB extension
         sqlx::query("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
             .execute(&self.pool)
             .await?;
-        
+
         // Create time series data table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS time_series_data (
                 timestamp TIMESTAMPTZ NOT NULL,
                 source VARCHAR(100) NOT NULL,
@@ -89,23 +90,27 @@ impl TimescaleDBStorage {
                 metadata JSONB,
                 PRIMARY KEY (timestamp, entity, source)
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await?;
-        
+
         // Convert to hypertable
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             SELECT create_hypertable(
                 'time_series_data', 
                 'timestamp',
                 if_not_exists => TRUE
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await?;
-        
+
         // Create predictions table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS predictions (
                 timestamp TIMESTAMPTZ NOT NULL,
                 entity VARCHAR(100) NOT NULL,
@@ -116,33 +121,36 @@ impl TimescaleDBStorage {
                 features_used JSONB,
                 PRIMARY KEY (timestamp, entity, model_id)
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await?;
-        
+
         // Convert predictions to hypertable
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             SELECT create_hypertable(
                 'predictions', 
                 'timestamp',
                 if_not_exists => TRUE
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await?;
-        
+
         // Create indexes for better query performance
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_time_series_entity_time ON time_series_data (entity, timestamp DESC)")
             .execute(&self.pool)
             .await?;
-        
+
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_predictions_entity_model_time ON predictions (entity, model_id, timestamp DESC)")
             .execute(&self.pool)
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Stores a single time series data point in the database.
     ///
     /// This function inserts a time series data point into the TimescaleDB hypertable,
@@ -171,7 +179,7 @@ impl TimescaleDBStorage {
     ///
     /// # async fn example() -> anyhow::Result<()> {
     /// let storage = TimescaleDBStorage::new("postgres://...").await?;
-    /// 
+    ///
     /// let data = TimeSeriesData {
     ///     timestamp: Utc::now(),
     ///     source: "market_feed".to_string(),
@@ -185,12 +193,14 @@ impl TimescaleDBStorage {
     /// # }
     /// ```
     pub async fn store_time_series(&self, data: &TimeSeriesData) -> Result<()> {
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             INSERT INTO time_series_data (timestamp, source, entity, value, metadata)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (timestamp, entity, source) 
             DO UPDATE SET value = EXCLUDED.value, metadata = EXCLUDED.metadata
-        "#)
+        "#,
+        )
         .bind(data.timestamp)
         .bind(&data.source)
         .bind(&data.entity)
@@ -198,29 +208,36 @@ impl TimescaleDBStorage {
         .bind(&data.metadata)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Query time series data by time range
-    pub async fn query_range(&self, entity: &str, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<TimeSeriesData>> {
-        let results = sqlx::query_as::<_, TimeSeriesData>(r#"
+    pub async fn query_range(
+        &self,
+        entity: &str,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<TimeSeriesData>> {
+        let results = sqlx::query_as::<_, TimeSeriesData>(
+            r#"
             SELECT timestamp, source, entity, value, metadata
             FROM time_series_data
             WHERE entity = $1 
               AND timestamp >= $2 
               AND timestamp <= $3
             ORDER BY timestamp ASC
-        "#)
+        "#,
+        )
         .bind(entity)
         .bind(start)
         .bind(end)
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(results)
     }
-    
+
     /// Store a neural network prediction
     pub async fn store_prediction(&self, prediction: &PredictionData) -> Result<()> {
         sqlx::query(r#"
@@ -242,24 +259,24 @@ impl TimescaleDBStorage {
         .bind(&prediction.features_used)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Batch insert time series data for better performance
     pub async fn batch_insert(&self, data: &[TimeSeriesData]) -> Result<()> {
         if data.is_empty() {
             return Ok(());
         }
-        
+
         // Use COPY for efficient batch insert
         let mut transaction = self.pool.begin().await?;
-        
+
         for chunk in data.chunks(1000) {
             let mut query_builder = sqlx::QueryBuilder::new(
-                "INSERT INTO time_series_data (timestamp, source, entity, value, metadata) "
+                "INSERT INTO time_series_data (timestamp, source, entity, value, metadata) ",
             );
-            
+
             query_builder.push_values(chunk.iter(), |mut b, data| {
                 b.push_bind(data.timestamp)
                     .push_bind(&data.source)
@@ -267,19 +284,23 @@ impl TimescaleDBStorage {
                     .push_bind(data.value)
                     .push_bind(&data.metadata);
             });
-            
+
             query_builder.push(" ON CONFLICT (timestamp, entity, source) DO NOTHING");
-            
+
             let query = query_builder.build();
             query.execute(&mut *transaction).await?;
         }
-        
+
         transaction.commit().await?;
         Ok(())
     }
-    
+
     /// Get the latest prediction for an entity and model
-    pub async fn get_latest_prediction(&self, entity: &str, model_id: &str) -> Result<Option<PredictionData>> {
+    pub async fn get_latest_prediction(
+        &self,
+        entity: &str,
+        model_id: &str,
+    ) -> Result<Option<PredictionData>> {
         let result = sqlx::query_as::<_, PredictionData>(r#"
             SELECT timestamp, entity, model_id, prediction_value, confidence, horizon_minutes, features_used
             FROM predictions
@@ -291,34 +312,37 @@ impl TimescaleDBStorage {
         .bind(model_id)
         .fetch_optional(&self.pool)
         .await?;
-        
+
         Ok(result)
     }
-    
+
     /// Clean up data older than specified days
     pub async fn cleanup_old_data(&self, days_to_keep: i64) -> Result<u64> {
         let cutoff_date = Utc::now() - chrono::Duration::days(days_to_keep);
-        
-        let result = sqlx::query(r#"
+
+        let result = sqlx::query(
+            r#"
             DELETE FROM time_series_data
             WHERE timestamp < $1
-        "#)
+        "#,
+        )
         .bind(cutoff_date)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(result.rows_affected())
     }
-    
+
     /// Get aggregated statistics for an entity
     pub async fn get_statistics(
-        &self, 
-        entity: &str, 
-        start: DateTime<Utc>, 
+        &self,
+        entity: &str,
+        start: DateTime<Utc>,
         end: DateTime<Utc>,
-        interval: &str
+        interval: &str,
     ) -> Result<Vec<AggregatedStats>> {
-        let results = sqlx::query_as::<_, AggregatedStats>(r#"
+        let results = sqlx::query_as::<_, AggregatedStats>(
+            r#"
             SELECT 
                 time_bucket($1::interval, timestamp) as bucket,
                 entity,
@@ -333,14 +357,15 @@ impl TimescaleDBStorage {
               AND timestamp <= $4
             GROUP BY bucket, entity
             ORDER BY bucket ASC
-        "#)
+        "#,
+        )
         .bind(interval)
         .bind(entity)
         .bind(start)
         .bind(end)
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(results)
     }
 }
@@ -359,7 +384,7 @@ pub struct AggregatedStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_time_series_data_serialization() {
         let data = TimeSeriesData {
@@ -369,10 +394,10 @@ mod tests {
             value: 42000.0,
             metadata: Some(serde_json::json!({"exchange": "binance"})),
         };
-        
+
         let json = serde_json::to_string(&data).unwrap();
         let deserialized: TimeSeriesData = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(data.entity, deserialized.entity);
         assert_eq!(data.value, deserialized.value);
     }

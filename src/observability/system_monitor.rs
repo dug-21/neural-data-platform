@@ -1,11 +1,10 @@
 //! System monitoring integration for production observability
-//! 
+//!
 //! This module provides real system metrics collection using sysinfo
 //! and integrates with the observability metrics system.
 
 use anyhow::Result;
-use sysinfo::{System, Networks, Disks};
-
+use sysinfo::{Disks, Networks, System};
 
 /// System monitor that collects real system metrics
 pub struct SystemMonitor {
@@ -15,10 +14,8 @@ pub struct SystemMonitor {
 impl SystemMonitor {
     pub fn new() -> Self {
         let system = System::new_all();
-        
-        Self {
-            system,
-        }
+
+        Self { system }
     }
 
     /// Collect all system metrics and return summary
@@ -190,19 +187,28 @@ pub struct ProcessMetrics {
 impl SystemSummary {
     /// Check if system is under stress
     pub fn is_under_stress(&self) -> bool {
-        self.cpu_usage_percent > 80.0 
-            || self.memory_usage_percent > 85.0 
+        self.cpu_usage_percent > 80.0
+            || self.memory_usage_percent > 85.0
             || self.disk_usage_percent > 90.0
             || self.load_average_1m > 4.0
     }
 
     /// Get health status based on resource usage
     pub fn get_health_status(&self) -> SystemHealthStatus {
-        if self.cpu_usage_percent > 95.0 || self.memory_usage_percent > 95.0 || self.disk_usage_percent > 95.0 {
+        if self.cpu_usage_percent > 95.0
+            || self.memory_usage_percent > 95.0
+            || self.disk_usage_percent > 95.0
+        {
             SystemHealthStatus::Critical
-        } else if self.cpu_usage_percent > 85.0 || self.memory_usage_percent > 85.0 || self.disk_usage_percent > 90.0 {
+        } else if self.cpu_usage_percent > 85.0
+            || self.memory_usage_percent > 85.0
+            || self.disk_usage_percent > 90.0
+        {
             SystemHealthStatus::Warning
-        } else if self.cpu_usage_percent > 70.0 || self.memory_usage_percent > 70.0 || self.disk_usage_percent > 80.0 {
+        } else if self.cpu_usage_percent > 70.0
+            || self.memory_usage_percent > 70.0
+            || self.disk_usage_percent > 80.0
+        {
             SystemHealthStatus::Degraded
         } else {
             SystemHealthStatus::Healthy
@@ -239,11 +245,11 @@ mod tests {
     #[tokio::test]
     async fn test_system_monitor_creation() {
         let mut monitor = SystemMonitor::new();
-        
+
         // Should be able to collect metrics without error
         let result = monitor.collect_metrics().await;
         assert!(result.is_ok());
-        
+
         let summary = result.unwrap();
         assert!(summary.cpu_usage_percent >= 0.0);
         assert!(summary.memory_usage_percent >= 0.0);
@@ -269,7 +275,10 @@ mod tests {
             network_bytes_received: 2_000_000,
         };
 
-        assert_eq!(healthy_summary.get_health_status(), SystemHealthStatus::Healthy);
+        assert_eq!(
+            healthy_summary.get_health_status(),
+            SystemHealthStatus::Healthy
+        );
         assert!(!healthy_summary.is_under_stress());
 
         let critical_summary = SystemSummary {
@@ -289,7 +298,10 @@ mod tests {
             network_bytes_received: 20_000_000,
         };
 
-        assert_eq!(critical_summary.get_health_status(), SystemHealthStatus::Critical);
+        assert_eq!(
+            critical_summary.get_health_status(),
+            SystemHealthStatus::Critical
+        );
         assert!(critical_summary.is_under_stress());
     }
 }

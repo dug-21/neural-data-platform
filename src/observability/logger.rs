@@ -1,5 +1,5 @@
 //! Advanced logging utilities for production environments
-//! 
+//!
 //! This module provides structured logging capabilities with:
 //! - JSON formatting for log aggregation
 //! - Sensitive data filtering
@@ -68,10 +68,11 @@ impl LogEvent {
     /// Filter sensitive data from the log event
     pub fn filter_sensitive_data(mut self) -> Self {
         let sensitive_keys = vec!["password", "token", "secret", "key", "auth"];
-        
+
         for key in sensitive_keys {
             if self.context.contains_key(key) {
-                self.context.insert(key.to_string(), Value::String("[REDACTED]".to_string()));
+                self.context
+                    .insert(key.to_string(), Value::String("[REDACTED]".to_string()));
             }
         }
 
@@ -148,7 +149,7 @@ macro_rules! log_event {
             .filter_sensitive_data()
             .log();
     };
-    
+
     ($level:expr, $module:expr, $message:expr, $($key:expr => $value:expr),+) => {
         {
             let mut event = $crate::observability::logger::LogEvent::new($level, $message.to_string(), $module.to_string());
@@ -232,11 +233,7 @@ impl BusinessLogger {
     }
 
     /// Log data quality events
-    pub fn log_data_quality(
-        source: &str,
-        quality_score: f64,
-        issues: &[String],
-    ) {
+    pub fn log_data_quality(source: &str, quality_score: f64, issues: &[String]) {
         log_event!(
             LogLevel::Info,
             "data_quality",
@@ -297,7 +294,11 @@ mod tests {
 
     #[test]
     fn test_log_event_creation() {
-        let event = LogEvent::new(LogLevel::Info, "Test message".to_string(), "test_module".to_string());
+        let event = LogEvent::new(
+            LogLevel::Info,
+            "Test message".to_string(),
+            "test_module".to_string(),
+        );
         assert_eq!(event.level, LogLevel::Info);
         assert_eq!(event.message, "Test message");
         assert_eq!(event.module, "test_module");

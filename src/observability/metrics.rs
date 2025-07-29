@@ -1,5 +1,5 @@
 //! Production metrics collection and export
-//! 
+//!
 //! This module provides comprehensive metrics collection for:
 //! - Business KPIs (predictions, accuracy, trading performance)
 //! - System metrics (CPU, memory, network, disk)
@@ -62,14 +62,14 @@ pub struct BusinessMetrics {
     pub predictions_total: Counter,
     pub predictions_accuracy: Gauge,
     pub model_inference_duration: Histogram,
-    
+
     // Trading metrics
     pub trades_executed: Counter,
     pub trade_success_rate: Gauge,
     pub portfolio_value: Gauge,
     pub pnl_total: Gauge,
     pub risk_exposure: Gauge,
-    
+
     // Data quality metrics
     pub data_points_processed: Counter,
     pub data_quality_score: Gauge,
@@ -84,14 +84,14 @@ impl BusinessMetrics {
             predictions_total: Counter::noop(),
             predictions_accuracy: Gauge::noop(),
             model_inference_duration: Histogram::noop(),
-            
+
             // Register trading metrics
             trades_executed: Counter::noop(),
             trade_success_rate: Gauge::noop(),
             portfolio_value: Gauge::noop(),
             pnl_total: Gauge::noop(),
             risk_exposure: Gauge::noop(),
-            
+
             // Register data quality metrics
             data_points_processed: Counter::noop(),
             data_quality_score: Gauge::noop(),
@@ -104,8 +104,9 @@ impl BusinessMetrics {
     pub fn record_prediction(&self, model_name: &str, inference_duration: Duration, accuracy: f64) {
         self.predictions_total.increment(1);
         self.predictions_accuracy.set(accuracy);
-        self.model_inference_duration.record(inference_duration.as_secs_f64());
-        
+        self.model_inference_duration
+            .record(inference_duration.as_secs_f64());
+
         // Record prediction by model using labels
         metrics::counter!("neural_trader_predictions_by_model_total", "model" => model_name.to_string()).increment(1);
     }
@@ -141,19 +142,19 @@ pub struct SystemMetrics {
     pub cpu_load_1m: Gauge,
     pub cpu_load_5m: Gauge,
     pub cpu_load_15m: Gauge,
-    
+
     // Memory metrics
     pub memory_usage_bytes: Gauge,
     pub memory_available_bytes: Gauge,
     pub memory_usage_percent: Gauge,
-    
+
     // Disk metrics
     pub disk_usage_bytes: Gauge,
     pub disk_available_bytes: Gauge,
     pub disk_usage_percent: Gauge,
     pub disk_io_read_bytes: Counter,
     pub disk_io_write_bytes: Counter,
-    
+
     // Network metrics
     pub network_bytes_sent: Counter,
     pub network_bytes_received: Counter,
@@ -170,19 +171,19 @@ impl SystemMetrics {
             cpu_load_1m: Gauge::noop(),
             cpu_load_5m: Gauge::noop(),
             cpu_load_15m: Gauge::noop(),
-            
+
             // Memory metrics
             memory_usage_bytes: Gauge::noop(),
             memory_available_bytes: Gauge::noop(),
             memory_usage_percent: Gauge::noop(),
-            
+
             // Disk metrics
             disk_usage_bytes: Gauge::noop(),
             disk_available_bytes: Gauge::noop(),
             disk_usage_percent: Gauge::noop(),
             disk_io_read_bytes: Counter::noop(),
             disk_io_write_bytes: Counter::noop(),
-            
+
             // Network metrics
             network_bytes_sent: Counter::noop(),
             network_bytes_received: Counter::noop(),
@@ -206,20 +207,20 @@ pub struct ApplicationMetrics {
     pub http_requests_total: Counter,
     pub http_request_duration: Histogram,
     pub http_requests_in_flight: Gauge,
-    
+
     // Database metrics
     pub database_connections_active: Gauge,
     pub database_connections_max: Gauge,
     pub database_query_duration: Histogram,
     pub database_queries_total: Counter,
     pub database_errors: Counter,
-    
+
     // Cache metrics
     pub cache_hits: Counter,
     pub cache_misses: Counter,
     pub cache_hit_ratio: Gauge,
     pub cache_size_bytes: Gauge,
-    
+
     // General application metrics
     pub errors_total: Counter,
     pub panics_total: Counter,
@@ -233,20 +234,20 @@ impl ApplicationMetrics {
             http_requests_total: Counter::noop(),
             http_request_duration: Histogram::noop(),
             http_requests_in_flight: Gauge::noop(),
-            
+
             // Database metrics
             database_connections_active: Gauge::noop(),
             database_connections_max: Gauge::noop(),
             database_query_duration: Histogram::noop(),
             database_queries_total: Counter::noop(),
             database_errors: Counter::noop(),
-            
+
             // Cache metrics
             cache_hits: Counter::noop(),
             cache_misses: Counter::noop(),
             cache_hit_ratio: Gauge::noop(),
             cache_size_bytes: Gauge::noop(),
-            
+
             // General metrics
             errors_total: Counter::noop(),
             panics_total: Counter::noop(),
@@ -255,7 +256,13 @@ impl ApplicationMetrics {
     }
 
     /// Record HTTP request metrics
-    pub fn record_http_request(&self, _method: &str, _path: &str, _status_code: u16, duration: Duration) {
+    pub fn record_http_request(
+        &self,
+        _method: &str,
+        _path: &str,
+        _status_code: u16,
+        duration: Duration,
+    ) {
         self.http_requests_total.increment(1);
         self.http_request_duration.record(duration.as_secs_f64());
     }
@@ -264,7 +271,7 @@ impl ApplicationMetrics {
     pub fn record_database_query(&self, duration: Duration, success: bool) {
         self.database_queries_total.increment(1);
         self.database_query_duration.record(duration.as_secs_f64());
-        
+
         if !success {
             self.database_errors.increment(1);
         }
@@ -297,11 +304,11 @@ impl CustomMetric {
     pub fn counter(_name: &str, _description: &str) -> Self {
         Self::Counter(Counter::noop())
     }
-    
+
     pub fn gauge(_name: &str, _description: &str) -> Self {
         Self::Gauge(Gauge::noop())
     }
-    
+
     pub fn histogram(_name: &str, _description: &str) -> Self {
         Self::Histogram(Histogram::noop())
     }
@@ -326,13 +333,22 @@ impl MetricsTimer {
         // Record timing based on operation type
         match self.operation.as_str() {
             op if op.starts_with("http_") => {
-                registry.application().http_request_duration.record(duration.as_secs_f64());
+                registry
+                    .application()
+                    .http_request_duration
+                    .record(duration.as_secs_f64());
             }
             op if op.starts_with("db_") => {
-                registry.application().database_query_duration.record(duration.as_secs_f64());
+                registry
+                    .application()
+                    .database_query_duration
+                    .record(duration.as_secs_f64());
             }
             op if op.starts_with("model_") => {
-                registry.business().model_inference_duration.record(duration.as_secs_f64());
+                registry
+                    .business()
+                    .model_inference_duration
+                    .record(duration.as_secs_f64());
             }
             _ => {
                 // Generic timing metric

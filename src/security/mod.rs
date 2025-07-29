@@ -1,5 +1,5 @@
 //! Production security hardening module
-//! 
+//!
 //! This module provides comprehensive security features for production deployment:
 //! - Input validation and sanitization
 //! - Rate limiting and DDoS protection
@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::config::{SecurityConfig, PlatformConfig};
+use crate::config::{PlatformConfig, SecurityConfig};
 
 // Sub-modules will be implemented separately
 // pub mod rate_limiter;
@@ -38,7 +38,7 @@ impl SecuritySystem {
     /// Initialize the security system with production configuration
     pub async fn new(config: &PlatformConfig) -> Result<Self> {
         let security_config = config.security.clone();
-        
+
         let rate_limiter = Arc::new(RateLimiter::new(&security_config));
         let input_validator = Arc::new(InputValidator::new());
         let audit_logger = Arc::new(AuditLogger::new());
@@ -61,7 +61,11 @@ impl SecuritySystem {
     /// Validate a request for security compliance
     pub async fn validate_request(&self, request: &SecurityRequest) -> Result<SecurityDecision> {
         // Check rate limiting
-        if !self.rate_limiter.allow_request(&request.client_ip, &request.endpoint).await {
+        if !self
+            .rate_limiter
+            .allow_request(&request.client_ip, &request.endpoint)
+            .await
+        {
             return Ok(SecurityDecision::Reject {
                 reason: "Rate limit exceeded".to_string(),
                 retry_after: Some(Duration::from_secs(60)),
@@ -71,12 +75,14 @@ impl SecuritySystem {
         // Validate input data
         if let Some(ref body) = request.body {
             if let Err(e) = self.input_validator.validate_input(body).await {
-                self.audit_logger.log_security_violation(
-                    "input_validation_failed",
-                    &request.client_ip,
-                    &e.to_string(),
-                ).await;
-                
+                self.audit_logger
+                    .log_security_violation(
+                        "input_validation_failed",
+                        &request.client_ip,
+                        &e.to_string(),
+                    )
+                    .await;
+
                 return Ok(SecurityDecision::Reject {
                     reason: "Invalid input data".to_string(),
                     retry_after: None,
@@ -87,12 +93,14 @@ impl SecuritySystem {
         // Check for threat indicators
         let threat_level = self.threat_detector.assess_threat(&request).await;
         if threat_level >= ThreatLevel::High {
-            self.audit_logger.log_security_violation(
-                "high_threat_detected",
-                &request.client_ip,
-                &format!("Threat level: {:?}", threat_level),
-            ).await;
-            
+            self.audit_logger
+                .log_security_violation(
+                    "high_threat_detected",
+                    &request.client_ip,
+                    &format!("Threat level: {:?}", threat_level),
+                )
+                .await;
+
             return Ok(SecurityDecision::Reject {
                 reason: "Security threat detected".to_string(),
                 retry_after: Some(Duration::from_secs(300)),
@@ -212,14 +220,16 @@ impl RateLimiter {
     /// Clean up expired rate limiting entries
     pub async fn cleanup_expired_entries(&self) {
         let now = Instant::now();
-        
+
         // Cleanup client buckets
         let mut client_buckets = self.client_buckets.write().await;
-        client_buckets.retain(|_, bucket| now.duration_since(bucket.last_refill) < Duration::from_secs(3600));
-        
+        client_buckets
+            .retain(|_, bucket| now.duration_since(bucket.last_refill) < Duration::from_secs(3600));
+
         // Cleanup endpoint buckets
         let mut endpoint_buckets = self.endpoint_buckets.write().await;
-        endpoint_buckets.retain(|_, bucket| now.duration_since(bucket.last_refill) < Duration::from_secs(3600));
+        endpoint_buckets
+            .retain(|_, bucket| now.duration_since(bucket.last_refill) < Duration::from_secs(3600));
     }
 
     pub async fn get_violation_count(&self) -> u64 {
@@ -252,7 +262,7 @@ impl TokenBucket {
 
     pub fn try_consume(&mut self) -> bool {
         self.refill();
-        
+
         if self.tokens > 0 {
             self.tokens -= 1;
             true
@@ -265,7 +275,7 @@ impl TokenBucket {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_refill);
         let tokens_to_add = (elapsed.as_secs() * self.refill_rate as u64 / 60) as usize;
-        
+
         if tokens_to_add > 0 {
             self.tokens = (self.tokens + tokens_to_add).min(self.capacity);
             self.last_refill = now;
@@ -309,7 +319,8 @@ impl InputValidator {
         }
 
         // Check input length
-        if input.len() > 1_000_000 { // 1MB limit
+        if input.len() > 1_000_000 {
+            // 1MB limit
             let mut count = self.failure_count.write().await;
             *count += 1;
             anyhow::bail!("Input too large");
@@ -329,7 +340,9 @@ impl InputValidator {
         ];
 
         let input_lower = input.to_lowercase();
-        sql_patterns.iter().any(|pattern| input_lower.contains(&pattern.to_lowercase()))
+        sql_patterns
+            .iter()
+            .any(|pattern| input_lower.contains(&pattern.to_lowercase()))
     }
 
     fn contains_xss(&self, input: &str) -> bool {
@@ -343,7 +356,9 @@ impl InputValidator {
         ];
 
         let input_lower = input.to_lowercase();
-        xss_patterns.iter().any(|pattern| input_lower.contains(pattern))
+        xss_patterns
+            .iter()
+            .any(|pattern| input_lower.contains(pattern))
     }
 
     fn contains_command_injection(&self, input: &str) -> bool {
@@ -377,7 +392,12 @@ impl AuditLogger {
     }
 
     /// Log a security violation
-    pub async fn log_security_violation(&self, violation_type: &str, client_ip: &IpAddr, details: &str) {
+    pub async fn log_security_violation(
+        &self,
+        violation_type: &str,
+        client_ip: &IpAddr,
+        details: &str,
+    ) {
         let event = AuditEvent {
             event_type: AuditEventType::SecurityViolation,
             client_ip: *client_ip,
@@ -475,7 +495,10 @@ impl ThreatDetector {
 
     async fn get_ip_reputation(&self, ip: &IpAddr) -> ReputationScore {
         let reputation_map = self.ip_reputation.read().await;
-        reputation_map.get(ip).copied().unwrap_or(ReputationScore::Unknown)
+        reputation_map
+            .get(ip)
+            .copied()
+            .unwrap_or(ReputationScore::Unknown)
     }
 
     fn is_suspicious_pattern(&self, endpoint: &str) -> bool {
@@ -488,20 +511,18 @@ impl ThreatDetector {
             "/api/v1/debug",
         ];
 
-        suspicious_patterns.iter().any(|pattern| endpoint.contains(pattern))
+        suspicious_patterns
+            .iter()
+            .any(|pattern| endpoint.contains(pattern))
     }
 
     fn is_suspicious_user_agent(&self, user_agent: &str) -> bool {
-        let suspicious_agents = vec![
-            "sqlmap",
-            "nmap",
-            "curl",
-            "wget",
-            "python-requests",
-        ];
+        let suspicious_agents = vec!["sqlmap", "nmap", "curl", "wget", "python-requests"];
 
         let ua_lower = user_agent.to_lowercase();
-        suspicious_agents.iter().any(|agent| ua_lower.contains(agent))
+        suspicious_agents
+            .iter()
+            .any(|agent| ua_lower.contains(agent))
     }
 
     /// Analyze patterns for threat intelligence
@@ -529,8 +550,13 @@ pub struct SecurityRequest {
 
 #[derive(Debug)]
 pub enum SecurityDecision {
-    Allow { security_context: SecurityContext },
-    Reject { reason: String, retry_after: Option<Duration> },
+    Allow {
+        security_context: SecurityContext,
+    },
+    Reject {
+        reason: String,
+        retry_after: Option<Duration>,
+    },
 }
 
 #[derive(Debug)]

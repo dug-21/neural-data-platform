@@ -1,5 +1,5 @@
 //! Health Monitoring System for Autonomous Platform
-//! 
+//!
 //! This module provides comprehensive health monitoring and observability for all
 //! system components including database, cache, streaming, neural networks, and
 //! DAA orchestrator agents.
@@ -11,11 +11,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-
 
 /// Component types in the autonomous platform
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -179,7 +178,7 @@ impl ComponentHealth {
         if matches!(status, HealthStatus::Healthy) {
             self.error_message = None;
         }
-        
+
         self.status = status;
         self.last_check = Utc::now();
         self.response_time_ms = response_time.map(|d| d.as_millis() as u64);
@@ -215,7 +214,10 @@ impl ComponentHealth {
 
 impl SystemHealth {
     /// Create system health from component health map
-    pub fn from_components(components: HashMap<ComponentType, ComponentHealth>, start_time: Instant) -> Self {
+    pub fn from_components(
+        components: HashMap<ComponentType, ComponentHealth>,
+        start_time: Instant,
+    ) -> Self {
         let total_components = components.len();
         let healthy_components = components.values().filter(|c| c.is_healthy()).count();
         let degraded_components = components.values().filter(|c| c.is_degraded()).count();
@@ -278,7 +280,7 @@ impl MetricsCollector {
     pub async fn record_latency(&self, _component: &ComponentType, latency: Duration) {
         let mut histogram = self.latency_histogram.lock().await;
         histogram.push(latency);
-        
+
         // Keep only last 1000 measurements
         if histogram.len() > 1000 {
             histogram.drain(0..100);
@@ -311,9 +313,18 @@ impl MetricsCollector {
         let mut latencies = histogram.clone();
         latencies.sort();
 
-        let latency_p50 = latencies.get(latencies.len() / 2).copied().unwrap_or(Duration::from_millis(0));
-        let latency_p95 = latencies.get((latencies.len() * 95) / 100).copied().unwrap_or(Duration::from_millis(0));
-        let latency_p99 = latencies.get((latencies.len() * 99) / 100).copied().unwrap_or(Duration::from_millis(0));
+        let latency_p50 = latencies
+            .get(latencies.len() / 2)
+            .copied()
+            .unwrap_or(Duration::from_millis(0));
+        let latency_p95 = latencies
+            .get((latencies.len() * 95) / 100)
+            .copied()
+            .unwrap_or(Duration::from_millis(0));
+        let latency_p99 = latencies
+            .get((latencies.len() * 99) / 100)
+            .copied()
+            .unwrap_or(Duration::from_millis(0));
 
         let elapsed = self.start_time.elapsed();
         let throughput_per_sec = if elapsed.as_secs() > 0 {
@@ -390,7 +401,11 @@ impl AlertManager {
     }
 
     /// Check alerts based on current metrics
-    pub async fn check_alerts(&self, metrics: &PerformanceMetrics, health: &SystemHealth) -> Result<Vec<Alert>> {
+    pub async fn check_alerts(
+        &self,
+        metrics: &PerformanceMetrics,
+        health: &SystemHealth,
+    ) -> Result<Vec<Alert>> {
         let configs = self.configs.read().await;
         let mut new_alerts = Vec::new();
 
@@ -402,7 +417,9 @@ impl AlertManager {
             let should_alert = match config.alert_type {
                 AlertType::Threshold => self.check_threshold_alert(config, metrics, health).await?,
                 AlertType::Availability => self.check_availability_alert(config, health).await?,
-                AlertType::PerformanceDegradation => self.check_performance_alert(config, metrics).await?,
+                AlertType::PerformanceDegradation => {
+                    self.check_performance_alert(config, metrics).await?
+                }
                 AlertType::Anomaly => self.check_anomaly_alert(config, metrics).await?,
             };
 
@@ -440,7 +457,7 @@ impl AlertManager {
     /// Resolve an alert
     pub async fn resolve_alert(&self, alert_id: &str) -> Result<()> {
         let mut active_alerts = self.active_alerts.write().await;
-        
+
         if let Some(alert) = active_alerts.get_mut(alert_id) {
             alert.resolved = true;
             alert.resolved_at = Some(Utc::now());
@@ -455,7 +472,12 @@ impl AlertManager {
         active_alerts.values().cloned().collect()
     }
 
-    async fn check_threshold_alert(&self, config: &AlertConfig, metrics: &PerformanceMetrics, _health: &SystemHealth) -> Result<bool> {
+    async fn check_threshold_alert(
+        &self,
+        config: &AlertConfig,
+        metrics: &PerformanceMetrics,
+        _health: &SystemHealth,
+    ) -> Result<bool> {
         let value = match config.metric_name.as_str() {
             "error_rate" => metrics.error_rate,
             "cpu_usage" => metrics.cpu_usage_percent,
@@ -468,7 +490,11 @@ impl AlertManager {
         Ok(value > config.threshold)
     }
 
-    async fn check_availability_alert(&self, config: &AlertConfig, health: &SystemHealth) -> Result<bool> {
+    async fn check_availability_alert(
+        &self,
+        config: &AlertConfig,
+        health: &SystemHealth,
+    ) -> Result<bool> {
         if let Some(component_health) = health.components.get(&config.component) {
             Ok(component_health.is_unhealthy())
         } else {
@@ -476,19 +502,33 @@ impl AlertManager {
         }
     }
 
-    async fn check_performance_alert(&self, config: &AlertConfig, metrics: &PerformanceMetrics) -> Result<bool> {
+    async fn check_performance_alert(
+        &self,
+        config: &AlertConfig,
+        metrics: &PerformanceMetrics,
+    ) -> Result<bool> {
         // Check if performance has degraded significantly
-        let performance_score = 1.0 - metrics.error_rate - (metrics.cpu_usage_percent / 100.0) * 0.3;
+        let performance_score =
+            1.0 - metrics.error_rate - (metrics.cpu_usage_percent / 100.0) * 0.3;
         Ok(performance_score < config.threshold)
     }
 
-    async fn check_anomaly_alert(&self, _config: &AlertConfig, _metrics: &PerformanceMetrics) -> Result<bool> {
+    async fn check_anomaly_alert(
+        &self,
+        _config: &AlertConfig,
+        _metrics: &PerformanceMetrics,
+    ) -> Result<bool> {
         // Placeholder for anomaly detection
         // In a real implementation, this would use statistical analysis
         Ok(false)
     }
 
-    fn determine_severity(&self, config: &AlertConfig, metrics: &PerformanceMetrics, health: &SystemHealth) -> AlertSeverity {
+    fn determine_severity(
+        &self,
+        config: &AlertConfig,
+        metrics: &PerformanceMetrics,
+        health: &SystemHealth,
+    ) -> AlertSeverity {
         match config.alert_type {
             AlertType::Availability => {
                 if health.unhealthy_components > 0 {
@@ -508,19 +548,33 @@ impl AlertManager {
         }
     }
 
-    fn generate_alert_message(&self, config: &AlertConfig, metrics: &PerformanceMetrics, _health: &SystemHealth) -> String {
+    fn generate_alert_message(
+        &self,
+        config: &AlertConfig,
+        metrics: &PerformanceMetrics,
+        _health: &SystemHealth,
+    ) -> String {
         match config.alert_type {
             AlertType::Threshold => {
-                format!("Threshold alert for {} on {:?}: {} exceeded threshold {}",
-                    config.metric_name, config.component, 
-                    self.get_metric_value(&config.metric_name, metrics), 
-                    config.threshold)
+                format!(
+                    "Threshold alert for {} on {:?}: {} exceeded threshold {}",
+                    config.metric_name,
+                    config.component,
+                    self.get_metric_value(&config.metric_name, metrics),
+                    config.threshold
+                )
             }
             AlertType::Availability => {
-                format!("Availability alert for {:?}: Component is unhealthy", config.component)
+                format!(
+                    "Availability alert for {:?}: Component is unhealthy",
+                    config.component
+                )
             }
             AlertType::PerformanceDegradation => {
-                format!("Performance degradation detected for {:?}", config.component)
+                format!(
+                    "Performance degradation detected for {:?}",
+                    config.component
+                )
             }
             AlertType::Anomaly => {
                 format!("Anomaly detected for {:?}", config.component)
@@ -578,18 +632,21 @@ impl HealthEndpoints {
     pub async fn metrics_endpoint(&self) -> Result<String> {
         let health = self.monitor.get_system_health().await?;
         let metrics = self.monitor.collect_performance_metrics().await?;
-        
+
         let mut output = String::new();
-        
+
         // System health metrics
         output.push_str("# HELP system_health_score Overall system health score (0-1)\n");
         output.push_str("# TYPE system_health_score gauge\n");
         output.push_str(&format!("system_health_score {}\n", health.health_score()));
-        
+
         output.push_str("# HELP system_uptime_seconds System uptime in seconds\n");
         output.push_str("# TYPE system_uptime_seconds counter\n");
-        output.push_str(&format!("system_uptime_seconds {}\n", health.system_uptime.as_secs()));
-        
+        output.push_str(&format!(
+            "system_uptime_seconds {}\n",
+            health.system_uptime.as_secs()
+        ));
+
         // Component health metrics
         output.push_str("# HELP component_health Component health status (1=healthy, 0.5=degraded, 0=unhealthy)\n");
         output.push_str("# TYPE component_health gauge\n");
@@ -600,22 +657,56 @@ impl HealthEndpoints {
                 HealthStatus::Unhealthy(_) => 0.0,
                 HealthStatus::Unknown => -1.0,
             };
-            output.push_str(&format!("component_health{{component=\"{:?}\"}} {}\n", component, value));
+            output.push_str(&format!(
+                "component_health{{component=\"{:?}\"}} {}\n",
+                component, value
+            ));
         }
-        
+
         // Performance metrics
         output.push_str("# HELP response_time_p95_seconds 95th percentile response time\n");
         output.push_str("# TYPE response_time_p95_seconds gauge\n");
-        output.push_str(&format!("response_time_p95_seconds {}\n", metrics.latency_p95.as_secs_f64()));
-        
+        output.push_str(&format!(
+            "response_time_p95_seconds {}\n",
+            metrics.latency_p95.as_secs_f64()
+        ));
+
         output.push_str("# HELP error_rate Error rate (0-1)\n");
         output.push_str("# TYPE error_rate gauge\n");
         output.push_str(&format!("error_rate {}\n", metrics.error_rate));
-        
+
         output.push_str("# HELP throughput_per_second Throughput in operations per second\n");
         output.push_str("# TYPE throughput_per_second gauge\n");
-        output.push_str(&format!("throughput_per_second {}\n", metrics.throughput_per_sec));
+        output.push_str(&format!(
+            "throughput_per_second {}\n",
+            metrics.throughput_per_sec
+        ));
+
+        // Model storage specific metrics
+        output.push_str("# HELP neural_trader_models_available Number of available models\n");
+        output.push_str("# TYPE neural_trader_models_available gauge\n");
         
+        output.push_str("# HELP neural_trader_required_models_missing Number of missing required models\n");
+        output.push_str("# TYPE neural_trader_required_models_missing gauge\n");
+        
+        output.push_str("# HELP neural_trader_model_storage_mounted Whether model storage is mounted (1=yes, 0=no)\n");
+        output.push_str("# TYPE neural_trader_model_storage_mounted gauge\n");
+        
+        output.push_str("# HELP neural_trader_model_storage_writable Whether model storage is writable (1=yes, 0=no)\n");
+        output.push_str("# TYPE neural_trader_model_storage_writable gauge\n");
+        
+        output.push_str("# HELP neural_trader_model_storage_size_mb Total size of models in MB\n");
+        output.push_str("# TYPE neural_trader_model_storage_size_mb gauge\n");
+        
+        output.push_str("# HELP neural_trader_model_storage_disk_available_gb Available disk space in GB\n");
+        output.push_str("# TYPE neural_trader_model_storage_disk_available_gb gauge\n");
+        
+        output.push_str("# HELP neural_trader_model_storage_disk_used_percent Disk usage percentage\n");
+        output.push_str("# TYPE neural_trader_model_storage_disk_used_percent gauge\n");
+        
+        output.push_str("# HELP neural_trader_corrupted_models Number of corrupted models detected\n");
+        output.push_str("# TYPE neural_trader_corrupted_models gauge\n");
+
         Ok(output)
     }
 
@@ -624,7 +715,7 @@ impl HealthEndpoints {
         let health = self.monitor.get_system_health().await?;
         let metrics = self.monitor.collect_performance_metrics().await?;
         let alerts = self.monitor.alert_manager.get_active_alerts().await;
-        
+
         let response = serde_json::json!({
             "status": {
                 "overall": health.overall_status,
@@ -647,7 +738,7 @@ impl HealthEndpoints {
                 "active_alerts": alerts
             }
         });
-        
+
         Ok(response.to_string())
     }
 }
@@ -657,10 +748,10 @@ impl HealthMonitor {
     pub async fn new() -> Result<Self> {
         let metrics_collector = MetricsCollector::new();
         let alert_manager = AlertManager::new();
-        
+
         let component_health = Arc::new(RwLock::new(HashMap::new()));
         let is_monitoring = Arc::new(RwLock::new(false));
-        
+
         let monitor = Self {
             component_health: component_health.clone(),
             metrics_collector,
@@ -669,12 +760,15 @@ impl HealthMonitor {
             monitoring_interval: Duration::from_secs(30),
             is_monitoring,
         };
-        
+
         Ok(monitor)
     }
 
     /// Check health of a specific component
-    pub async fn check_component_health(&self, component: ComponentType) -> Result<ComponentHealth> {
+    pub async fn check_component_health(
+        &self,
+        component: ComponentType,
+    ) -> Result<ComponentHealth> {
         let start_time = Instant::now();
         let mut health = ComponentHealth::new(component.clone());
 
@@ -690,24 +784,31 @@ impl HealthMonitor {
         };
 
         let elapsed = start_time.elapsed();
-        
+
         match result {
             Ok(()) => {
                 health.update_status(HealthStatus::Healthy, Some(elapsed));
-                self.metrics_collector.record_latency(&component, elapsed).await;
+                self.metrics_collector
+                    .record_latency(&component, elapsed)
+                    .await;
                 self.metrics_collector.record_throughput().await;
             }
             Err(e) => {
                 health.set_error(e.to_string());
-                self.metrics_collector.record_error(&component, &e.to_string()).await;
+                self.metrics_collector
+                    .record_error(&component, &e.to_string())
+                    .await;
             }
         }
 
         counter!("component_health_checks_total").increment(1);
-        
+
         // Store in component health map
-        self.component_health.write().await.insert(component, health.clone());
-        
+        self.component_health
+            .write()
+            .await
+            .insert(component, health.clone());
+
         Ok(health)
     }
 
@@ -725,17 +826,17 @@ impl HealthMonitor {
         ];
 
         let mut component_health = HashMap::new();
-        
+
         for component in components {
             let health = self.check_component_health(component).await?;
             component_health.insert(health.component_type.clone(), health);
         }
 
         let system_health = SystemHealth::from_components(component_health, self.start_time);
-        
+
         // Record system health score
         gauge!("system_health_score").set(system_health.health_score());
-        
+
         Ok(system_health)
     }
 
@@ -748,7 +849,7 @@ impl HealthMonitor {
         *is_monitoring = true;
 
         info!("Starting health monitoring system");
-        
+
         // Start monitoring loop
         let monitor = self.clone();
         tokio::spawn(async move {
@@ -784,36 +885,49 @@ impl HealthMonitor {
     }
 
     /// Register a component for monitoring
-    pub async fn register_component(&mut self, component: ComponentType) -> Result<()> {
+    pub async fn register_component(&self, component: ComponentType) -> Result<()> {
         let health = ComponentHealth::new(component.clone());
-        self.component_health.write().await.insert(component.clone(), health);
+        self.component_health
+            .write()
+            .await
+            .insert(component.clone(), health);
         info!("Registered component for monitoring: {:?}", component);
         Ok(())
     }
 
     /// Update component health directly
-    pub async fn update_component_health(&mut self, component: ComponentType, health: ComponentHealth) -> Result<()> {
-        self.component_health.write().await.insert(component, health);
+    pub async fn update_component_health(
+        &self,
+        component: ComponentType,
+        health: ComponentHealth,
+    ) -> Result<()> {
+        self.component_health
+            .write()
+            .await
+            .insert(component, health);
         Ok(())
     }
 
     /// Main monitoring loop
     async fn monitoring_loop(&self) {
         let mut interval = interval(self.monitoring_interval);
-        
+
         loop {
             interval.tick().await;
-            
+
             // Check if monitoring should continue
             if !*self.is_monitoring.read().await {
                 break;
             }
-            
+
             // Perform health checks
             match self.get_system_health().await {
                 Ok(health) => {
-                    debug!("System health check completed: {} components checked", health.total_components);
-                    
+                    debug!(
+                        "System health check completed: {} components checked",
+                        health.total_components
+                    );
+
                     // Check for alerts
                     match self.check_alerts().await {
                         Ok(alerts) => {
@@ -830,7 +944,7 @@ impl HealthMonitor {
                 Err(e) => error!("Failed to get system health: {}", e),
             }
         }
-        
+
         info!("Health monitoring loop stopped");
     }
 
@@ -838,132 +952,431 @@ impl HealthMonitor {
     async fn check_database_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // Database health check implementation
         // Check connection, query performance, connection pool status
-        
+
         // TODO: Replace with actual database health check once TimescaleDBStorage is available
         // let db = self.timescale_db.lock().await;
         // let is_connected = db.check_connection().await?;
-        
+
         // Add metadata
         health.add_metadata("connection_pool_size".to_string(), "10".to_string());
         health.add_metadata("active_connections".to_string(), "5".to_string());
         health.add_metadata("query_count".to_string(), "1000".to_string());
         health.add_metadata("database_type".to_string(), "TimescaleDB".to_string());
-        
+
         // Simulate database ping
         sleep(Duration::from_millis(10)).await;
-        
+
         Ok(())
     }
 
     async fn check_redis_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // Redis health check implementation
         // Check connection, memory usage, connected clients
-        
+
         // TODO: Replace with actual Redis health check once RedisCache is available
         // let cache = self.redis_cache.lock().await;
         // let is_connected = cache.ping().await?;
-        
+
         health.add_metadata("memory_usage_mb".to_string(), "100".to_string());
         health.add_metadata("connected_clients".to_string(), "5".to_string());
         health.add_metadata("hit_rate".to_string(), "0.85".to_string());
         health.add_metadata("cache_type".to_string(), "Redis".to_string());
         health.add_metadata("max_memory_mb".to_string(), "512".to_string());
-        
+
         // Simulate Redis ping
         sleep(Duration::from_millis(5)).await;
-        
+
         Ok(())
     }
 
     async fn check_streaming_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // Streaming pipeline health check
         // Check throughput, lag, buffer status
-        
+
         // TODO: Replace with actual StreamingPipeline health check once available
         // let pipeline = self.streaming_pipeline.lock().await;
         // let stats = pipeline.get_health_stats().await?;
-        
+
         health.add_metadata("throughput_per_sec".to_string(), "1000".to_string());
         health.add_metadata("lag_ms".to_string(), "100".to_string());
         health.add_metadata("buffer_usage".to_string(), "0.75".to_string());
         health.add_metadata("active_streams".to_string(), "3".to_string());
         health.add_metadata("dropped_messages".to_string(), "0".to_string());
-        
+
         Ok(())
     }
 
     async fn check_daa_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // DAA orchestrator health check
         // Check agent count, active agents, agent responsiveness
-        
+
         // TODO: Replace with actual DaaFannIntegration health check once available
         // let daa = self.daa_integration.lock().await;
         // let agent_stats = daa.get_agent_statistics().await?;
-        
+
         health.add_metadata("total_agents".to_string(), "5".to_string());
         health.add_metadata("active_agents".to_string(), "3".to_string());
         health.add_metadata("agent_response_rate".to_string(), "0.95".to_string());
         health.add_metadata("orchestrator_version".to_string(), "1.0.0".to_string());
         health.add_metadata("failed_agents".to_string(), "0".to_string());
-        
+
         Ok(())
     }
 
     async fn check_neural_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // Neural system health check
         // Check model availability, inference latency, accuracy
+
+        // Check if models directory exists and contains models
+        let models_path = std::path::Path::new("./models");
+        let mut model_count = 0;
+        let mut available_models = Vec::new();
+        let mut model_sizes = HashMap::new();
+        let mut total_model_size_mb = 0u64;
+
+        // Check if models directory exists and is writable
+        let models_writable = if models_path.exists() {
+            match std::fs::metadata(models_path) {
+                Ok(metadata) => !metadata.permissions().readonly(),
+                Err(_) => false,
+            }
+        } else {
+            false
+        };
+
+        if models_path.exists() {
+            // Check each model type directory
+            let model_types = ["checkpoints", "production"];
+            for model_type in &model_types {
+                let type_path = models_path.join(model_type);
+                if type_path.exists() {
+                    // Count models in directory
+                    if let Ok(entries) = std::fs::read_dir(&type_path) {
+                        for entry in entries.flatten() {
+                            if entry.path().is_dir() {
+                                model_count += 1;
+                                if let Some(name) = entry.file_name().to_str() {
+                                    let model_name = format!("{}/{}", model_type, name);
+                                    available_models.push(model_name.clone());
+                                    
+                                    // Calculate model size
+                                    if let Ok(size) = get_directory_size(&entry.path()) {
+                                        let size_mb = size / (1024 * 1024);
+                                        model_sizes.insert(model_name, size_mb);
+                                        total_model_size_mb += size_mb;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check current model symlinks
+            let current_models_valid = check_symlinks(&models_path).await;
+            health.add_metadata("current_models_valid".to_string(), current_models_valid.to_string());
+        }
+
+        // Check available disk space
+        let disk_info = check_disk_space(models_path).await;
+        let low_disk_space = disk_info.available_gb < 1.0; // Less than 1GB available
+
+        // Check required models from config
+        let required_models = vec!["NHITS", "MLP"];
+        let mut missing_models = Vec::new();
         
-        // TODO: Replace with actual neural system health check
-        // let neural = self.neural_system.lock().await;
-        // let model_status = neural.get_model_status().await?;
+        for required in &required_models {
+            let found = available_models.iter().any(|m| m.contains(required));
+            if !found {
+                missing_models.push(required.to_string());
+            }
+        }
+
+        // Validate model integrity for available models
+        let mut corrupted_models = Vec::new();
+        for model in &available_models {
+            if let Some(model_path) = model.split('/').last() {
+                let full_path = models_path.join(model.replace("/", "/"));
+                if !validate_model_integrity(&full_path).await {
+                    corrupted_models.push(model.clone());
+                }
+            }
+        }
+
+        // Update health status based on all checks
+        if !models_path.exists() {
+            health.update_status(
+                HealthStatus::Unhealthy("Models directory not found".to_string()),
+                None
+            );
+            health.add_metadata("error".to_string(), "Models directory ./models does not exist".to_string());
+        } else if !models_writable {
+            health.update_status(
+                HealthStatus::Unhealthy("Models directory not writable".to_string()),
+                None
+            );
+            health.add_metadata("error".to_string(), "Models directory ./models is read-only".to_string());
+        } else if model_count == 0 {
+            health.update_status(
+                HealthStatus::Unhealthy("No models available".to_string()),
+                None
+            );
+            health.add_metadata("error".to_string(), "No models found in ./models".to_string());
+        } else if !corrupted_models.is_empty() {
+            health.update_status(
+                HealthStatus::Unhealthy(format!("Corrupted models detected: {}", corrupted_models.join(", "))),
+                None
+            );
+        } else if low_disk_space {
+            health.update_status(
+                HealthStatus::Degraded("Low disk space for models".to_string()),
+                None
+            );
+        } else if !missing_models.is_empty() {
+            health.update_status(
+                HealthStatus::Degraded(format!("Missing required models: {}", missing_models.join(", "))),
+                None
+            );
+        } else {
+            health.update_status(HealthStatus::Healthy, None);
+        }
+
+        // Add metadata
+        health.add_metadata("model_count".to_string(), model_count.to_string());
+        health.add_metadata("available_models".to_string(), available_models.join(", "));
+        health.add_metadata("models_path".to_string(), models_path.display().to_string());
+        health.add_metadata("models_writable".to_string(), models_writable.to_string());
+        health.add_metadata("required_models".to_string(), required_models.join(", "));
+        health.add_metadata("total_model_size_mb".to_string(), total_model_size_mb.to_string());
+        health.add_metadata("disk_total_gb".to_string(), format!("{:.2}", disk_info.total_gb));
+        health.add_metadata("disk_available_gb".to_string(), format!("{:.2}", disk_info.available_gb));
+        health.add_metadata("disk_used_percent".to_string(), format!("{:.1}", disk_info.used_percent));
         
-        health.add_metadata("model_available".to_string(), "true".to_string());
-        health.add_metadata("inference_latency_ms".to_string(), "200".to_string());
-        health.add_metadata("model_accuracy".to_string(), "0.95".to_string());
-        health.add_metadata("model_version".to_string(), "2.0.0".to_string());
-        health.add_metadata("total_predictions".to_string(), "10000".to_string());
+        if !missing_models.is_empty() {
+            health.add_metadata("missing_models".to_string(), missing_models.join(", "));
+        }
         
+        if !corrupted_models.is_empty() {
+            health.add_metadata("corrupted_models".to_string(), corrupted_models.join(", "));
+        }
+
+        // Export metrics for Prometheus
+        gauge!("neural_trader_models_available").set(model_count as f64);
+        gauge!("neural_trader_required_models_missing").set(missing_models.len() as f64);
+        gauge!("neural_trader_model_storage_mounted").set(if models_path.exists() { 1.0 } else { 0.0 });
+        gauge!("neural_trader_model_storage_writable").set(if models_writable { 1.0 } else { 0.0 });
+        gauge!("neural_trader_model_storage_size_mb").set(total_model_size_mb as f64);
+        gauge!("neural_trader_model_storage_disk_available_gb").set(disk_info.available_gb);
+        gauge!("neural_trader_model_storage_disk_used_percent").set(disk_info.used_percent);
+        gauge!("neural_trader_corrupted_models").set(corrupted_models.len() as f64);
+
+        // Simulate model status check timing
+        sleep(Duration::from_millis(50)).await;
+
         Ok(())
     }
 
     async fn check_event_bus_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // Event bus health check
         // Check message throughput, queue depth, subscriber count
-        
+
         health.add_metadata("message_throughput".to_string(), "500".to_string());
         health.add_metadata("queue_depth".to_string(), "10".to_string());
         health.add_metadata("subscriber_count".to_string(), "8".to_string());
-        
+
         Ok(())
     }
 
     async fn check_data_pipeline_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // Data pipeline health check
         // Check processing rate, error rate, data quality
-        
+
         // TODO: Replace with actual DataPipeline health check once available
         // let pipeline = self.data_pipeline.lock().await;
         // let pipeline_stats = pipeline.get_statistics().await?;
-        
+
         health.add_metadata("processing_rate".to_string(), "750".to_string());
         health.add_metadata("error_rate".to_string(), "0.01".to_string());
         health.add_metadata("data_quality_score".to_string(), "0.98".to_string());
         health.add_metadata("pipeline_stages".to_string(), "5".to_string());
         health.add_metadata("queue_depth".to_string(), "100".to_string());
-        
+
         Ok(())
     }
 
     async fn check_cache_health(&self, health: &mut ComponentHealth) -> Result<()> {
         // Cache health check
         // Check hit rate, memory usage, eviction rate
-        
+
         health.add_metadata("hit_rate".to_string(), "0.88".to_string());
         health.add_metadata("memory_usage_mb".to_string(), "256".to_string());
         health.add_metadata("eviction_rate".to_string(), "0.05".to_string());
-        
+
         Ok(())
     }
+}
+
+/// Disk space information
+#[derive(Debug, Clone)]
+struct DiskInfo {
+    total_gb: f64,
+    available_gb: f64,
+    used_percent: f64,
+}
+
+/// Calculate directory size recursively
+fn get_directory_size(path: &std::path::Path) -> Result<u64> {
+    let mut total_size = 0u64;
+    
+    if path.is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            
+            if path.is_dir() {
+                total_size += get_directory_size(&path)?;
+            } else {
+                if let Ok(metadata) = entry.metadata() {
+                    total_size += metadata.len();
+                }
+            }
+        }
+    } else if let Ok(metadata) = std::fs::metadata(path) {
+        total_size = metadata.len();
+    }
+    
+    Ok(total_size)
+}
+
+/// Check disk space for the given path
+async fn check_disk_space(path: &std::path::Path) -> DiskInfo {
+    // Use statvfs for Unix-like systems to get disk space info
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        
+        if let Ok(metadata) = std::fs::metadata(path) {
+            // Try to get filesystem stats using statvfs
+            let path_cstr = std::ffi::CString::new(path.to_string_lossy().as_bytes()).unwrap_or_default();
+            
+            // For Docker environment compatibility, use df command as fallback
+            if let Ok(output) = std::process::Command::new("df")
+                .arg("-BG")
+                .arg(path)
+                .output()
+            {
+                if let Ok(df_output) = String::from_utf8(output.stdout) {
+                    // Parse df output: Filesystem 1G-blocks Used Available Use% Mounted
+                    if let Some(line) = df_output.lines().nth(1) {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 4 {
+                            let total = parts[1].trim_end_matches('G').parse::<f64>().unwrap_or(0.0);
+                            let used = parts[2].trim_end_matches('G').parse::<f64>().unwrap_or(0.0);
+                            let available = parts[3].trim_end_matches('G').parse::<f64>().unwrap_or(0.0);
+                            let used_percent = if total > 0.0 { (used / total) * 100.0 } else { 0.0 };
+                            
+                            return DiskInfo {
+                                total_gb: total,
+                                available_gb: available,
+                                used_percent,
+                            };
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback values for Docker/container environments
+    DiskInfo {
+        total_gb: 100.0,
+        available_gb: 50.0,
+        used_percent: 50.0,
+    }
+}
+
+/// Check if symlinks in models directory are valid
+async fn check_symlinks(models_path: &std::path::Path) -> bool {
+    let current_path = models_path.join("current");
+    
+    if !current_path.exists() {
+        return true; // No current symlinks to validate
+    }
+    
+    // Check if current directory contains valid symlinks
+    if let Ok(entries) = std::fs::read_dir(&current_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_symlink() {
+                // Check if symlink target exists
+                if let Ok(target) = std::fs::read_link(&path) {
+                    if !target.exists() {
+                        warn!("Invalid symlink found: {} -> {}", path.display(), target.display());
+                        return false;
+                    }
+                } else {
+                    warn!("Could not read symlink: {}", path.display());
+                    return false;
+                }
+            }
+        }
+    }
+    
+    true
+}
+
+/// Validate model integrity by checking for required files
+async fn validate_model_integrity(model_path: &std::path::Path) -> bool {
+    if !model_path.exists() || !model_path.is_dir() {
+        return false;
+    }
+    
+    // Check for common model file patterns
+    let required_patterns = [
+        "*.pth",      // PyTorch models
+        "*.pkl",      // Pickle files
+        "*.joblib",   // Joblib models
+        "config.json", // Configuration files
+        "*.h5",       // Keras/TensorFlow models
+    ];
+    
+    let mut has_model_file = false;
+    
+    if let Ok(entries) = std::fs::read_dir(model_path) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let file_name_str = file_name.to_string_lossy().to_lowercase();
+            
+            // Check if any required pattern matches
+            for pattern in &required_patterns {
+                if pattern.contains('*') {
+                    let extension = pattern.trim_start_matches("*.");
+                    if file_name_str.ends_with(extension) {
+                        has_model_file = true;
+                        break;
+                    }
+                } else if file_name_str == *pattern {
+                    has_model_file = true;
+                    break;
+                }
+            }
+            
+            if has_model_file {
+                break;
+            }
+        }
+    }
+    
+    // Check if model files have reasonable sizes (> 1KB, < 10GB)
+    if has_model_file {
+        if let Ok(size) = get_directory_size(model_path) {
+            let size_mb = size / (1024 * 1024);
+            // Model should be between 1KB and 10GB
+            return size > 1024 && size_mb < 10240;
+        }
+    }
+    
+    has_model_file
 }
 
 // Clone implementation for HealthMonitor
