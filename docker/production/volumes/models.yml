@@ -1,0 +1,73 @@
+# Model Storage Configuration for Docker Production
+# This configuration ensures persistent model storage across container restarts
+
+model_storage:
+  # Base path for model storage (matches Docker volume mount)
+  base_path: /app/models
+  
+  # Maximum number of checkpoints to retain per model type
+  max_checkpoints_per_model: 10
+  
+  # Archive retention policy
+  archive_retention_days: 90
+  
+  # Enable compression for archived models
+  enable_compression: true
+  
+  # Storage quota per model type (MB)
+  storage_quota_mb: 5000
+
+# Directory structure for model persistence
+directories:
+  checkpoints: /app/models/checkpoints
+  production: /app/models/production
+  archive: /app/models/archive
+
+# Model types and their configurations
+model_types:
+  NHITS:
+    enabled: true
+    max_versions: 5
+    auto_archive_after_days: 30
+    
+  TCN:
+    enabled: true
+    max_versions: 5
+    auto_archive_after_days: 30
+    
+  DeepAR:
+    enabled: true
+    max_versions: 5
+    auto_archive_after_days: 30
+    
+  MLP:
+    enabled: true
+    max_versions: 5
+    auto_archive_after_days: 30
+
+# Health check configuration for model availability
+health_check:
+  enabled: true
+  check_interval_seconds: 60
+  required_models:
+    - type: NHITS
+      min_versions: 1
+    - type: MLP
+      min_versions: 1
+  
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention_days: 30
+  backup_path: /app/models/backups
+  
+# Monitoring configuration
+monitoring:
+  enabled: true
+  metrics:
+    - storage_usage
+    - model_count
+    - model_age
+    - access_frequency
+  export_endpoint: "http://prometheus:9090/metrics"

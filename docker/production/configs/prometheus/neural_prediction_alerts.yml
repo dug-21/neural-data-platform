@@ -30,6 +30,34 @@ groups:
           summary: "Neural model has not been updated recently"
           description: "Neural model last updated {{ $value }} seconds ago (> 1 hour)"
 
+      # Model availability alerts
+      - alert: NeuralModelsNotAvailable
+        expr: neural_trader_models_available == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No neural models available"
+          description: "Neural system reports 0 available models - check /app/models volume"
+
+      - alert: RequiredModelsUnavailable
+        expr: neural_trader_required_models_missing > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Required neural models are missing"
+          description: "{{ $value }} required models are missing (NHITS/MLP)"
+
+      - alert: ModelStorageVolumeNotMounted
+        expr: neural_trader_model_storage_mounted == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model storage volume not mounted"
+          description: "The /app/models volume is not properly mounted"
+
       # DAA coordinator alerts
       - alert: DAACoordinatorInactive
         expr: rate(neural_trader_daa_decisions_total[5m]) == 0

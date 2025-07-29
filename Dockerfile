@@ -97,12 +97,17 @@ WORKDIR /app
 COPY --from=builder /app/target/release/neural-trader /app/neural-trader
 
 # Create necessary directories
-RUN mkdir -p /app/logs /app/config && \
+RUN mkdir -p /app/logs /app/config /app/models && \
     chown -R neuraltrader:neuraltrader /app
 
 # Copy configuration files
 COPY config/*.toml /app/config/
 COPY config/*.yaml /app/config/
+
+# Copy initialization scripts
+COPY docker/production/scripts/init-models.sh /app/scripts/
+COPY docker/production/scripts/docker-entrypoint.sh /app/
+RUN chmod +x /app/scripts/init-models.sh /app/docker-entrypoint.sh
 
 # Switch to non-root user
 USER neuraltrader
@@ -117,6 +122,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # Set environment variables
 ENV RUST_LOG=info \
     RUST_BACKTRACE=1
+
+# Set entrypoint
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Run the application
 CMD ["/app/neural-trader"]

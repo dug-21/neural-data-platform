@@ -11,6 +11,11 @@ services:
       - REDIS_URL=redis://redis:6379
       - LOG_LEVEL=info
       - RUST_LOG=info
+      - MODEL_STORAGE_PATH=/app/models
+    volumes:
+      # Persistent storage for trained neural models (survives container restarts)
+      - neural_trader_models:/app/models
+      - ./docker/production/volumes/models.yml:/app/config/models.yml:ro
     secrets:
       - postgres_password
       - redis_password
@@ -276,6 +281,22 @@ volumes:
   prometheus_prod_data:
   grafana_prod_data:
   backup_prod_data:
+  neural_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./models
+  neural_models_cache:
+    driver: local
+  # Neural trader models volume - persists trained models across container restarts
+  # This volume stores all neural network models to ensure they survive updates
+  neural_trader_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./models/neural_trader
 
 networks:
   neural_trader_frontend:
