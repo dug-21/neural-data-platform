@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
 use super::errors::{AdapterError, CircuitBreakerState, ErrorSeverity};
@@ -20,7 +20,11 @@ use super::health_monitor::{HealthChecker, HealthMonitor, HealthMonitorConfig, H
 use super::neuro_divergent::NeuroDivergentAdapter;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::{FannPredictor, NeuralPredictorTrait, PredictionResult};
+use crate::neural::{
+    FannPredictor, NeuralPredictorTrait, PredictionResult,
+    PerformanceEmitter, PerformanceEvent, PerformanceEventBuilder,
+    PerformanceEventType, PerformanceSource,
+};
 
 /// Enhanced configuration with feature flags and error handling
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,6 +141,7 @@ pub struct EnhancedNeuralAdapter {
     health_monitor: Option<Arc<HealthMonitor>>,
     fallback_manager: Option<Arc<FallbackManager>>,
     performance_stats: Arc<RwLock<PerformanceStats>>,
+    performance_sender: Option<mpsc::UnboundedSender<PerformanceEvent>>,
 }
 
 /// Performance statistics tracking
@@ -249,6 +254,7 @@ impl EnhancedNeuralAdapter {
             health_monitor,
             fallback_manager,
             performance_stats: Arc::new(RwLock::new(PerformanceStats::default())),
+            performance_sender: None,
         })
     }
 

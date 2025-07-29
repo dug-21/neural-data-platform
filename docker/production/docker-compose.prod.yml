@@ -133,7 +133,7 @@ services:
       - "127.0.0.1:9092:9090"  # Data ingestion metrics
     volumes:
       - data_ingestion_logs:/var/log/data-ingestion
-      - /Volumes/OneTouch/trader/polygon_data:/data
+      # - /Volumes/OneTouch/trader/polygon_data:/data
     networks:
       - neural_trader_internal
       - monitoring
@@ -161,6 +161,13 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
+    environment:
+      - TIMESCALE_HOST=timescaledb
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_DATABASE=${POSTGRES_DB}
+      - TIMESCALE_USER=${POSTGRES_USER}
+      - TIMESCALE_PASSWORD=${POSTGRES_PASSWORD}
+ 
     deploy:
       resources:
         limits:

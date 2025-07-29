@@ -45,6 +45,12 @@ pub mod performance_benchmarks;
 // Ensemble types
 pub mod ensemble_types;
 
+// Performance channel for feedback loops
+pub mod performance_channel;
+
+// Performance events aggregation
+pub mod performance_events;
+
 // Test modules
 #[cfg(test)]
 pub mod tests;
@@ -67,6 +73,15 @@ pub use enhanced_predictor::{
 
 // Re-export performance optimization components
 pub use performance_optimizer::{OptimizedFannPredictor, PerformanceMetrics};
+
+// Re-export performance channel components
+pub use performance_channel::{
+    PerformanceChannel, PerformanceEmitter, PerformanceEvent, PerformanceEventBuilder,
+    PerformanceEventType, PerformanceMetrics as ChannelMetrics, PerformanceSource, ComponentType,
+};
+
+// Re-export performance aggregation components
+pub use performance_events::{PerformanceAggregator, AggregatorConfig, PerformanceSnapshot};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionResult {
