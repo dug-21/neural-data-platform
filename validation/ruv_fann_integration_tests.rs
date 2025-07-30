@@ -19,8 +19,7 @@ use tokio::test as tokio_test;
 use crate::neural::{FannPredictor, EnhancedNeuralPredictor, PredictionResult};
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::adapters::neuro_divergent::NeuroDivergentAdapter;
-use crate::adapters::neural::neuro_divergent_adapter::NeuroDivergentAdapter as EnhancedAdapter;
+// Removed: NeuroDivergentAdapter imports (deprecated)
 
 /// Test fixture for generating consistent market data
 struct ValidationDataGenerator {

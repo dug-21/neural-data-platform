@@ -470,6 +470,7 @@ mod dynamic_weighting_tests {
             interval_low: 99.0,
             interval_high: 101.0,
             model_name: "MLP".to_string(),
+            metadata: None,
         }];
 
         let poor_predictions = vec![PredictionResult {
@@ -479,6 +480,7 @@ mod dynamic_weighting_tests {
             interval_low: 140.0,
             interval_high: 160.0,
             model_name: "NHITS".to_string(),
+            metadata: None,
         }];
 
         // Update performance with known results
@@ -715,6 +717,7 @@ mod performance_tracking_tests {
                 interval_low: 98.0,
                 interval_high: 102.0,
                 model_name: "MLP".to_string(),
+                metadata: None,
             },
             PredictionResult {
                 timestamp: Utc::now(),
@@ -723,6 +726,7 @@ mod performance_tracking_tests {
                 interval_low: 99.0,
                 interval_high: 103.0,
                 model_name: "MLP".to_string(),
+                metadata: None,
             },
         ];
 
@@ -916,6 +920,7 @@ async fn test_fann_predictor_coverage_verification() -> Result<()> {
         interval_low: 98.0,
         interval_high: 102.0,
         model_name: "MLP".to_string(),
+        metadata: None,
     }];
     let actual = vec![100.5];
     predictor

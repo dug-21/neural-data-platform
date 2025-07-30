@@ -64,17 +64,74 @@ use tokio::sync::{RwLock, Mutex};
 use tracing::{debug, info, warn};
 
 use super::{PredictionResult, NeuralPredictorTrait};
-use crate::adapters::neural::neuro_divergent_adapter::{
-    NeuralModelConfig, NeuroDivergentAdapter as EnhancedNeuralAdapter,
-};
-use crate::adapters::neuro_divergent::NeuroDivergentAdapter;
+use crate::adapters::enhanced_neural_adapter::EnhancedNeuralAdapter;
 use crate::adapters::DataAdapter;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
 use crate::integration::training_data_service::{TrainingDataService, TrainingDataConfig, ModelType};
+use super::{PerformanceChannel, PerformanceEvent};
 
 // Import FANN neural network components
 use ::ruv_fann::{ActivationFunction, Network, NetworkBuilder, TrainingData};
+use std::time::{Duration, Instant};
+use dashmap::DashMap;
+use tokio::sync::mpsc;
+
+/// Model configuration for network creation
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ModelConfig {
+    pub input_size: usize,
+    pub output_size: usize,
+    pub hidden_layers: Vec<usize>,
+    pub learning_rate: f32,
+    pub horizon: usize,
+}
+
+impl ModelConfig {
+    pub fn default() -> Self {
+        Self {
+            input_size: 24,
+            output_size: 1,
+            hidden_layers: vec![64, 32],
+            learning_rate: 0.001,
+            horizon: 1,
+        }
+    }
+    
+    pub fn with_horizon(mut self, horizon: usize) -> Self {
+        self.horizon = horizon;
+        self
+    }
+}
+
+/// Key for network cache
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct ModelKey {
+    model_type: ModelType,
+    config: ModelConfig,
+}
+
+impl ModelKey {
+    fn new(model_type: ModelType, config: &ModelConfig) -> Self {
+        Self {
+            model_type,
+            config: config.clone(),
+        }
+    }
+}
+
+/// Neural error types
+#[derive(Debug, thiserror::Error)]
+pub enum NeuralError {
+    #[error("Unsupported model type: {0:?}")]
+    UnsupportedModel(ModelType),
+    
+    #[error("Network creation error: {0}")]
+    NetworkCreation(String),
+    
+    #[error("Prediction error: {0}")]
+    Prediction(String),
+}
 
 /// Configuration for FANN models
 #[derive(Debug, Clone)]
@@ -188,12 +245,14 @@ pub enum TrainingAlgorithm {
 pub struct FannPredictor {
     config: NeuralConfig,
     networks: Arc<RwLock<HashMap<String, Arc<Mutex<Network<f32>>>>>>,
+    network_cache: Arc<DashMap<ModelKey, Arc<Network<f32>>>>,
     model_configs: HashMap<String, FannModelConfig>,
     training_cache: Arc<RwLock<HashMap<String, TrainingData<f32>>>>,
     prediction_cache: Arc<RwLock<HashMap<String, (DateTime<Utc>, Vec<PredictionResult>)>>>,
+    performance_tx: mpsc::Sender<PerformanceEvent>,
     recurrent_states: Arc<RwLock<HashMap<String, RecurrentState>>>,
     ensemble_manager: Arc<RwLock<EnsembleManager>>,
-    neuro_divergent_adapter: Option<Arc<NeuroDivergentAdapter>>,
+    enhanced_adapter: Option<Arc<EnhancedNeuralAdapter>>,
     enhanced_neural_adapter: Option<Arc<Mutex<EnhancedNeuralAdapter>>>,
     checkpoint_manager: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     streaming_buffer: Arc<RwLock<VecDeque<TimeSeriesData>>>,
@@ -348,6 +407,9 @@ impl FannPredictor {
             info!("🔧 FannPredictor: Overriding use_real_models from env: {}", config.use_real_models);
         }
         
+        // Create performance channel
+        let (performance_tx, _performance_rx) = mpsc::channel(1000);
+        
         let mut model_configs = HashMap::new();
 
         // Configure each model type with appropriate architecture
@@ -471,37 +533,22 @@ impl FannPredictor {
             streaming_config,
         };
 
-        // Initialize neuro-divergent adapters if real models are enabled
-        let neuro_divergent_adapter = if config.use_real_models {
-            Some(Arc::new(NeuroDivergentAdapter::new()))
-        } else {
-            None
-        };
+        // No longer initializing neuro-divergent adapters
 
-        let enhanced_neural_adapter = if config.use_real_models {
-            let neural_config = NeuralModelConfig {
-                model_type: "TimeMixer".to_string(),
-                lookback_window: 48,
-                forecast_horizon: 24,
-                batch_size: 32,
-                use_gpu: false,
-                model_params: serde_json::json!({}),
-            };
-            let adapter = EnhancedNeuralAdapter::new(neural_config);
-            Some(Arc::new(Mutex::new(adapter)))
-        } else {
-            None
-        };
+        // Enhanced neural adapter is no longer needed for real models
+        let enhanced_neural_adapter = None;
 
         Ok(Self {
             config,
             networks: Arc::new(RwLock::new(HashMap::new())),
+            network_cache: Arc::new(DashMap::new()),
             model_configs,
             training_cache: Arc::new(RwLock::new(HashMap::new())),
             prediction_cache: Arc::new(RwLock::new(HashMap::new())),
+            performance_tx,
             recurrent_states: Arc::new(RwLock::new(HashMap::new())),
             ensemble_manager: Arc::new(RwLock::new(ensemble_manager)),
-            neuro_divergent_adapter,
+            enhanced_adapter: None,
             enhanced_neural_adapter,
             checkpoint_manager: Arc::new(RwLock::new(HashMap::new())),
             streaming_buffer: Arc::new(RwLock::new(VecDeque::with_capacity(10000))),
@@ -1413,46 +1460,7 @@ impl FannPredictor {
                             "⚠️ Enhanced model '{}' failed: {}. Trying legacy adapter.",
                             model_name, e
                         );
-                        if self.neuro_divergent_adapter.is_some() {
-                            match self
-                                .predict_with_real_model(model_name, data, horizon)
-                                .await
-                            {
-                                Ok(predictions) => {
-                                    info!(
-                                        "✅ Legacy real model '{}' prediction successful",
-                                        model_name
-                                    );
-                                    return Ok(predictions);
-                                }
-                                Err(e2) => {
-                                    warn!("⚠️ Legacy real model '{}' also failed: {}. Falling back to FANN.", model_name, e2);
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if self.neuro_divergent_adapter.is_some() {
-                info!(
-                    "🔧 Attempting legacy neuro-divergent model for '{}'",
-                    model_name
-                );
-                match self
-                    .predict_with_real_model(model_name, data, horizon)
-                    .await
-                {
-                    Ok(predictions) => {
-                        info!(
-                            "✅ Legacy real model '{}' prediction successful",
-                            model_name
-                        );
-                        return Ok(predictions);
-                    }
-                    Err(e) => {
-                        warn!(
-                            "⚠️ Legacy real model '{}' failed: {}. Falling back to FANN.",
-                            model_name, e
-                        );
+                        // Real model fallback removed - only using FANN models
                     }
                 }
             } else {
@@ -1571,18 +1579,23 @@ impl FannPredictor {
 
         // Make predictions using the enhanced adapter
         let adapter_guard = adapter.lock().await;
+        // Call predict with all 3 required arguments: data, horizon, and features (None)
         let raw_predictions = adapter_guard
-            .predict(data)
+            .predict(data, horizon, None)
             .await
             .map_err(|e| anyhow::anyhow!("Enhanced model prediction failed: {}", e))?;
 
-        // Convert raw predictions to PredictionResult format
+        // The adapter already returns Vec<PredictionResult>, not Vec<f64>
+        // We need to enhance these predictions with model-specific metadata
         let base_price = data.last().unwrap().close;
         let base_time = data.last().unwrap().timestamp;
         let mut predictions = Vec::new();
 
-        for (i, &predicted_value) in raw_predictions.iter().take(horizon).enumerate() {
-            // Enhanced models return normalized predictions, convert to price
+        for (i, prediction) in raw_predictions.iter().take(horizon).enumerate() {
+            // Use the prediction value from the adapter
+            let predicted_value = prediction.value;
+            
+            // Enhanced models might return normalized predictions, convert to price if needed
             let predicted_price = if predicted_value.abs() < 10.0 {
                 // Assume it's a normalized return
                 base_price * (1.0 + predicted_value)
@@ -1645,112 +1658,16 @@ impl FannPredictor {
     }
 
     /// Generate predictions using real neuro-divergent models (legacy adapter)
+    // DEPRECATED: Real model support has been removed
+    #[allow(dead_code)]
     async fn predict_with_real_model(
         &self,
-        model_name: &str,
-        data: &[TimeSeriesData],
-        horizon: usize,
+        _model_name: &str,
+        _data: &[TimeSeriesData],
+        _horizon: usize,
     ) -> Result<Vec<PredictionResult>> {
-        let adapter = self
-            .neuro_divergent_adapter
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Neuro-divergent adapter not initialized"))?;
-
-        // Convert data to neuro-divergent format
-        let df = NeuroDivergentAdapter::to_neuro_divergent_df(data)?;
-
-        // TODO: This is a placeholder for actual neuro-divergent model integration
-        // In production, this would:
-        // 1. Load the specific model (DeepAR, TCN, or NHITS) from neuro-divergent
-        // 2. Make predictions using the model
-        // 3. Convert results back to our format
-
-        info!(
-            "🔧 Real model integration for '{}' - using legacy adapter",
-            model_name
-        );
-
-        // For now, generate simulated predictions that would come from real models
-        let base_price = data.last().unwrap().close;
-        let base_time = data.last().unwrap().timestamp;
-        let mut predictions = Vec::new();
-
-        // Simulate more sophisticated predictions based on model type
-        for i in 0..horizon {
-            let trend_factor = match model_name {
-                "DeepAR" => {
-                    // DeepAR: probabilistic forecasting with trend detection
-                    let recent_trend = if data.len() > 10 {
-                        let recent_returns: Vec<f64> = data[data.len() - 10..]
-                            .windows(2)
-                            .map(|w| (w[1].close - w[0].close) / w[0].close)
-                            .collect();
-                        recent_returns.iter().sum::<f64>() / recent_returns.len() as f64
-                    } else {
-                        0.0
-                    };
-                    recent_trend * (1.0 - 0.1 * i as f64) // Decay trend over horizon
-                }
-                "TCN" => {
-                    // TCN: temporal patterns with seasonality
-                    let seasonal_factor = (i as f64 * std::f64::consts::PI / 12.0).sin() * 0.01;
-                    seasonal_factor
-                }
-                "NHITS" => {
-                    // NHITS: hierarchical interpolation with multi-scale patterns
-                    let multi_scale =
-                        (i as f64 / 5.0).sin() * 0.005 + (i as f64 / 20.0).cos() * 0.002;
-                    multi_scale
-                }
-                _ => 0.0,
-            };
-
-            let predicted_price = base_price * (1.0 + trend_factor);
-
-            // Model-specific confidence levels
-            let confidence = match model_name {
-                "DeepAR" => 0.92 - (0.03 * i as f64), // High confidence, probabilistic
-                "NHITS" => 0.90 - (0.025 * i as f64), // Very stable predictions
-                "MLP" => 0.89 - (0.03 * i as f64),    // Enhanced MLP with good stability
-                "TCN" => 0.88 - (0.04 * i as f64),    // Good for sequences
-                _ => 0.85 - (0.05 * i as f64),
-            };
-
-            // More sophisticated prediction intervals
-            let volatility = self.calculate_volatility(data);
-            let model_uncertainty = match model_name {
-                "DeepAR" => volatility * 0.8, // Lower uncertainty due to probabilistic nature
-                "NHITS" => volatility * 0.85, // Good at capturing patterns
-                "MLP" => volatility * 0.88,   // Enhanced MLP handles uncertainty well
-                "TCN" => volatility * 0.9,    // Temporal convolutions handle volatility well
-                _ => volatility,
-            };
-
-            let interval_width = model_uncertainty * (1.0 + 0.15 * i as f64);
-
-            predictions.push(PredictionResult {
-                timestamp: base_time + chrono::Duration::minutes((i + 1) as i64),
-                value: predicted_price,
-                confidence,
-                interval_low: predicted_price * (1.0 - interval_width),
-                interval_high: predicted_price * (1.0 + interval_width),
-                model_name: format!("{}_real", model_name),
-                metadata: None,
-            });
-        }
-
-        // Cache the predictions
-        let cache_key = format!(
-            "{}_{}_real",
-            model_name,
-            data.last().map(|d| d.timestamp.timestamp()).unwrap_or(0)
-        );
-        self.prediction_cache
-            .write()
-            .await
-            .insert(cache_key, (Utc::now(), predictions.clone()));
-
-        Ok(predictions)
+        // Real model prediction removed - only using FANN models
+        Err(anyhow::anyhow!("Real models no longer supported - use FANN models"))
     }
 
     /// Calculate historical volatility for prediction intervals
@@ -2231,6 +2148,12 @@ impl FannPredictor {
         Ok(())
     }
 
+    /// Check if neuro divergent adapter is available
+    /// This method checks if the FannPredictor has an enhanced neural adapter
+    pub fn has_neuro_divergent_adapter(&self) -> bool {
+        self.enhanced_adapter.is_some() || self.enhanced_neural_adapter.is_some()
+    }
+
     /// Get current ensemble statistics and performance metrics
     pub async fn get_ensemble_stats(&self) -> Result<HashMap<String, serde_json::Value>> {
         let ensemble_manager = self.ensemble_manager.read().await;
@@ -2314,9 +2237,9 @@ impl FannPredictor {
         &self.config
     }
 
-    /// Check if neuro-divergent adapter is available (for testing)
-    pub fn has_neuro_divergent_adapter(&self) -> bool {
-        self.neuro_divergent_adapter.is_some() || self.enhanced_neural_adapter.is_some()
+    /// Check if enhanced adapter is available (for testing)
+    pub fn has_enhanced_adapter(&self) -> bool {
+        self.enhanced_adapter.is_some() || self.enhanced_neural_adapter.is_some()
     }
 
     /// Initialize enhanced neural adapter for real models
@@ -2330,6 +2253,208 @@ impl FannPredictor {
             info!("✅ Enhanced neural adapter initialized successfully - real models available");
         }
         Ok(())
+    }
+
+    /// Central execution point - ALL models MUST go through here
+    pub async fn execute_model(
+        &self,
+        model_type: ModelType,
+        data: &[TimeSeriesData],
+        config: ModelConfig,
+    ) -> Result<Vec<PredictionResult>> {
+        // Log routing decision
+        info!("Routing {} prediction through FANN", model_type);
+        
+        // Get or create appropriate network
+        let network = self.get_or_create_network(model_type, &config)?;
+        
+        // Convert data to FANN format
+        let input_data = self.prepare_input(data, &config)?;
+        
+        // Execute through ruv-fann
+        let start = Instant::now();
+        let raw_output = network.run(&input_data);
+        let latency = start.elapsed();
+        
+        // Convert output to standard format
+        let predictions = self.format_predictions(raw_output, model_type, data)?;
+        
+        // Emit performance metrics
+        self.emit_performance_metrics(&predictions, latency).await?;
+        
+        Ok(predictions)
+    }
+    
+    // Make network creation private to prevent bypass
+    fn get_or_create_network(
+        &self,
+        model_type: ModelType,
+        config: &ModelConfig,
+    ) -> Result<Arc<Network<f32>>> {
+        let key = ModelKey::new(model_type, config);
+        
+        if let Some(network) = self.network_cache.get(&key) {
+            return Ok(network.clone());
+        }
+        
+        // Create appropriate FANN network
+        let network = match model_type {
+            ModelType::DeepAR => self.create_deepar_network(config)?,
+            ModelType::TCN => self.create_tcn_network(config)?,
+            ModelType::LSTM => self.create_lstm_network(config)?,
+            ModelType::NHITS => self.create_nhits_network(config)?,
+            ModelType::MLP => self.create_standard_mlp(config)?,
+            _ => return Err(anyhow::anyhow!("Unsupported model type: {:?}", model_type)),
+        };
+        
+        let network = Arc::new(network);
+        self.network_cache.insert(key, network.clone());
+        Ok(network)
+    }
+    
+    async fn emit_performance_metrics(
+        &self,
+        predictions: &[PredictionResult],
+        latency: Duration,
+    ) -> Result<()> {
+        if predictions.is_empty() {
+            return Ok(());
+        }
+        
+        // Create performance event
+        let event = PerformanceEvent {
+            timestamp: Utc::now(),
+            event_type: crate::neural::PerformanceEventType::PredictionCompleted,
+            component: crate::neural::ComponentType::NeuralNetwork,
+            source: crate::neural::PerformanceSource::Model(predictions[0].model_name.clone()),
+            metadata: {
+                let mut metadata = HashMap::new();
+                metadata.insert("latency_ms".to_string(), serde_json::json!(latency.as_millis()));
+                metadata.insert("prediction_count".to_string(), serde_json::json!(predictions.len()));
+                metadata
+            },
+        };
+        
+        // Send event without blocking
+        let _ = self.performance_tx.try_send(event);
+        Ok(())
+    }
+    
+    // Helper methods for execute_model
+    fn prepare_input(&self, data: &[TimeSeriesData], config: &ModelConfig) -> Result<Vec<f32>> {
+        if data.is_empty() {
+            return Err(anyhow::anyhow!("No input data provided"));
+        }
+        
+        let mut input = Vec::with_capacity(config.input_size);
+        
+        // Take the last input_size data points
+        let start_idx = data.len().saturating_sub(config.input_size);
+        for i in start_idx..data.len() {
+            input.push(data[i].close as f32);
+        }
+        
+        // Pad with zeros if not enough data
+        while input.len() < config.input_size {
+            input.insert(0, 0.0);
+        }
+        
+        Ok(input)
+    }
+    
+    fn format_predictions(
+        &self,
+        raw_output: Vec<f32>,
+        model_type: ModelType,
+        data: &[TimeSeriesData],
+    ) -> Result<Vec<PredictionResult>> {
+        let mut predictions = Vec::new();
+        let base_timestamp = data.last()
+            .map(|d| d.timestamp)
+            .unwrap_or_else(Utc::now);
+        
+        for (i, &value) in raw_output.iter().enumerate() {
+            predictions.push(PredictionResult {
+                timestamp: base_timestamp + chrono::Duration::hours(i as i64),
+                value: value as f64,
+                confidence: 0.8, // Default confidence
+                interval_low: value as f64 * 0.95,
+                interval_high: value as f64 * 1.05,
+                model_name: format!("{:?}", model_type),
+                metadata: None,
+            });
+        }
+        
+        Ok(predictions)
+    }
+    
+    fn create_standard_mlp(&self, config: &ModelConfig) -> Result<Network<f32>> {
+        let mut builder = NetworkBuilder::new();
+        builder.add_layer(config.input_size);
+        
+        for &hidden_size in &config.hidden_layers {
+            builder.add_layer(hidden_size);
+        }
+        
+        builder.add_layer(config.output_size);
+        builder.set_activation_function(ActivationFunction::SigmoidSymmetric);
+        builder.set_output_activation_function(ActivationFunction::Linear);
+        
+        Ok(builder.build()?)
+    }
+    
+    fn create_deepar_network(&self, config: &ModelConfig) -> Result<Network<f32>> {
+        // DeepAR-style network with larger hidden layers
+        let mut builder = NetworkBuilder::new();
+        builder.add_layer(config.input_size);
+        builder.add_layer(128);
+        builder.add_layer(64);
+        builder.add_layer(32);
+        builder.add_layer(config.output_size);
+        builder.set_activation_function(ActivationFunction::SigmoidSymmetric);
+        builder.set_output_activation_function(ActivationFunction::Linear);
+        
+        Ok(builder.build()?)
+    }
+    
+    fn create_tcn_network(&self, config: &ModelConfig) -> Result<Network<f32>> {
+        // TCN-style network
+        let mut builder = NetworkBuilder::new();
+        builder.add_layer(config.input_size);
+        builder.add_layer(64);
+        builder.add_layer(64);
+        builder.add_layer(config.output_size);
+        builder.set_activation_function(ActivationFunction::SigmoidSymmetric);
+        builder.set_output_activation_function(ActivationFunction::Linear);
+        
+        Ok(builder.build()?)
+    }
+    
+    fn create_lstm_network(&self, config: &ModelConfig) -> Result<Network<f32>> {
+        // LSTM-style recurrent network simulation
+        let mut builder = NetworkBuilder::new();
+        builder.add_layer(config.input_size);
+        builder.add_layer(100);
+        builder.add_layer(50);
+        builder.add_layer(config.output_size);
+        builder.set_activation_function(ActivationFunction::SigmoidSymmetric);
+        builder.set_output_activation_function(ActivationFunction::Linear);
+        
+        Ok(builder.build()?)
+    }
+    
+    fn create_nhits_network(&self, config: &ModelConfig) -> Result<Network<f32>> {
+        // NHITS-style hierarchical network
+        let mut builder = NetworkBuilder::new();
+        builder.add_layer(config.input_size);
+        builder.add_layer(96);
+        builder.add_layer(48);
+        builder.add_layer(24);
+        builder.add_layer(config.output_size);
+        builder.set_activation_function(ActivationFunction::SigmoidSymmetric);
+        builder.set_output_activation_function(ActivationFunction::Linear);
+        
+        Ok(builder.build()?)
     }
 
     /// Public method to test prediction routing (for testing)

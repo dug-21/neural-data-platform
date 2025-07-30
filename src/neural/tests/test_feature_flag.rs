@@ -68,6 +68,7 @@ async fn test_feature_flag_disabled_fann_only() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     let predictor = FannPredictor::new(config)?;
@@ -149,6 +150,7 @@ async fn test_feature_flag_enabled_with_fallback() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     let predictor = FannPredictor::new(config)?;
@@ -233,6 +235,7 @@ async fn test_feature_flag_enhanced_adapter_available() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     let predictor = FannPredictor::new(config)?;
@@ -292,6 +295,7 @@ async fn test_configuration_validation() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     // Should validate successfully
@@ -319,6 +323,7 @@ async fn test_configuration_validation() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     // Configuration should be created but validation would fail if enforced
@@ -350,6 +355,7 @@ async fn test_ensemble_statistics_with_feature_flag() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     let predictor = FannPredictor::new(config)?;
@@ -412,6 +418,7 @@ async fn test_model_routing_logging() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     let predictor = FannPredictor::new(config_real_enabled)?;
@@ -455,6 +462,7 @@ async fn test_adapter_status_reporting() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
 
     let predictor = FannPredictor::new(config)?;

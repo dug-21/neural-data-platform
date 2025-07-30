@@ -10,7 +10,6 @@ use tokio::sync::{mpsc, RwLock};
 
 use super::{
     daa_service::{DAAMessage, DAAServiceAdapter, DAATradingDecision},
-    neuro_divergent::NeuroDivergentAdapter,
     AdapterError,
 };
 use crate::data::TimeSeriesData;
@@ -173,15 +172,10 @@ impl IntegrationBridge {
 
     /// Get neural network prediction
     async fn get_neural_prediction(&self, data: &[TimeSeriesData]) -> Result<NeuralPrediction> {
-        // Convert to neuro-divergent format
-        let _df = NeuroDivergentAdapter::to_neuro_divergent_df(data)?;
-
-        // Prepare model input
-        let (_features, _) = NeuroDivergentAdapter::prepare_model_input(
-            data, 20, // lookback window
-            5,  // forecast horizon
-        )?;
-
+        // NOTE: NeuroDivergentAdapter has been removed as part of tech debt cleanup
+        // This method now returns a placeholder prediction
+        // Future implementation should use FannPredictor directly
+        
         // Here we would call the actual neural model
         // For now, return a placeholder
         Ok(NeuralPrediction {

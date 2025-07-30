@@ -10,7 +10,7 @@ use ndarray::{Array1, Array2, Array3};
 use polars::prelude::*;
 use std::collections::HashMap;
 
-use super::neuro_divergent_adapter::{NeuralAdapterError, NeuralModelConfig};
+use crate::adapters::{AdapterError, enhanced_neural_adapter::EnhancedNeuralConfig};
 use crate::data::TimeSeriesData;
 
 /// Supported conversion formats
@@ -63,8 +63,8 @@ impl DataConverter {
     pub fn to_model_format(
         &self,
         data: &[TimeSeriesData],
-        config: &NeuralModelConfig,
-    ) -> Result<ModelInput, NeuralAdapterError> {
+        config: &EnhancedNeuralConfig,
+    ) -> Result<ModelInput, AdapterError> {
         // Determine format based on model type
         let format = self.get_format_for_model(&config.model_type);
 
@@ -87,11 +87,11 @@ impl DataConverter {
     }
 
     /// Convert to Polars DataFrame format
-    fn to_dataframe(&self, data: &[TimeSeriesData]) -> Result<ModelInput, NeuralAdapterError> {
+    fn to_dataframe(&self, data: &[TimeSeriesData]) -> Result<ModelInput, AdapterError> {
         if data.is_empty() {
-            return Err(NeuralAdapterError::Conversion(
+            return Err(AdapterError::DataSerialization { details: 
                 "Empty data provided".to_string(),
-            ));
+            });
         }
 
         // Extract base columns
@@ -132,7 +132,8 @@ impl DataConverter {
         }
 
         let df = DataFrame::new(columns).map_err(|e| {
-            NeuralAdapterError::Conversion(format!("DataFrame creation failed: {}", e))
+            AdapterError::DataSerialization { details: format!("DataFrame creation failed: {}", e),
+            }
         })?;
 
         Ok(ModelInput::DataFrame(df))
@@ -142,24 +143,25 @@ impl DataConverter {
     fn to_ndarray(
         &self,
         data: &[TimeSeriesData],
-        config: &NeuralModelConfig,
-    ) -> Result<ModelInput, NeuralAdapterError> {
-        if data.len() < config.lookback_window {
-            return Err(NeuralAdapterError::Conversion(format!(
-                "Insufficient data for lookback window: need {}, have {}",
-                config.lookback_window,
-                data.len()
-            )));
+        config: &EnhancedNeuralConfig,
+    ) -> Result<ModelInput, AdapterError> {
+        if data.len() < config.neural.lookback_window {
+            return Err(AdapterError::DataSerialization { details: format!(
+                    "Insufficient data for lookback window: need {}, have {}",
+                    config.neural.lookback_window,
+                    data.len()
+                ),
+            });
         }
 
-        let n_samples = data.len() - config.lookback_window + 1;
+        let n_samples = data.len() - config.neural.lookback_window + 1;
         let n_features =
             self.feature_columns.len() + data.first().map(|d| d.indicators.len()).unwrap_or(0);
 
-        let mut array = Array2::<f64>::zeros((n_samples, config.lookback_window * n_features));
+        let mut array = Array2::<f64>::zeros((n_samples, config.neural.lookback_window * n_features));
 
         for i in 0..n_samples {
-            for j in 0..config.lookback_window {
+            for j in 0..config.neural.lookback_window {
                 let idx = i + j;
                 let point = &data[idx];
 
@@ -194,24 +196,25 @@ impl DataConverter {
     fn to_tensor(
         &self,
         data: &[TimeSeriesData],
-        config: &NeuralModelConfig,
-    ) -> Result<ModelInput, NeuralAdapterError> {
-        if data.len() < config.lookback_window {
-            return Err(NeuralAdapterError::Conversion(format!(
-                "Insufficient data for lookback window: need {}, have {}",
-                config.lookback_window,
-                data.len()
-            )));
+        config: &EnhancedNeuralConfig,
+    ) -> Result<ModelInput, AdapterError> {
+        if data.len() < config.neural.lookback_window {
+            return Err(AdapterError::DataSerialization { details: format!(
+                    "Insufficient data for lookback window: need {}, have {}",
+                    config.neural.lookback_window,
+                    data.len()
+                ),
+            });
         }
 
-        let n_samples = data.len() - config.lookback_window + 1;
+        let n_samples = data.len() - config.neural.lookback_window + 1;
         let n_features =
             self.feature_columns.len() + data.first().map(|d| d.indicators.len()).unwrap_or(0);
 
-        let mut tensor = Array3::<f64>::zeros((n_samples, config.lookback_window, n_features));
+        let mut tensor = Array3::<f64>::zeros((n_samples, config.neural.lookback_window, n_features));
 
         for i in 0..n_samples {
-            for j in 0..config.lookback_window {
+            for j in 0..config.neural.lookback_window {
                 let idx = i + j;
                 let point = &data[idx];
 
@@ -241,11 +244,11 @@ impl DataConverter {
     }
 
     /// Convert to dictionary of arrays format
-    fn to_dict_array(&self, data: &[TimeSeriesData]) -> Result<ModelInput, NeuralAdapterError> {
+    fn to_dict_array(&self, data: &[TimeSeriesData]) -> Result<ModelInput, AdapterError> {
         if data.is_empty() {
-            return Err(NeuralAdapterError::Conversion(
+            return Err(AdapterError::DataSerialization { details: 
                 "Empty data provided".to_string(),
-            ));
+            });
         }
 
         let mut dict = HashMap::new();
@@ -366,7 +369,7 @@ mod tests {
     fn test_dataframe_conversion() {
         let converter = DataConverter::new();
         let data = create_test_data(10);
-        let config = NeuralModelConfig::default();
+        let config = EnhancedNeuralConfig::default();
 
         let result = converter.to_model_format(&data, &config).unwrap();
 
@@ -387,7 +390,7 @@ mod tests {
     fn test_ndarray_conversion() {
         let converter = DataConverter::new();
         let data = create_test_data(30);
-        let mut config = NeuralModelConfig::default();
+        let mut config = EnhancedNeuralConfig::default();
         config.model_type = "Generic".to_string();
 
         let result = converter.to_model_format(&data, &config).unwrap();
@@ -407,7 +410,7 @@ mod tests {
     fn test_tensor_conversion() {
         let converter = DataConverter::new();
         let data = create_test_data(30);
-        let mut config = NeuralModelConfig::default();
+        let mut config = EnhancedNeuralConfig::default();
         config.model_type = "TimeMixer".to_string();
 
         let result = converter.to_model_format(&data, &config).unwrap();
@@ -426,7 +429,7 @@ mod tests {
     fn test_dict_array_conversion() {
         let converter = DataConverter::new();
         let data = create_test_data(10);
-        let mut config = NeuralModelConfig::default();
+        let mut config = EnhancedNeuralConfig::default();
         config.model_type = "Prophet".to_string();
 
         let result = converter.to_model_format(&data, &config).unwrap();

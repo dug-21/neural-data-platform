@@ -13,7 +13,10 @@ pub mod integration_bridge;
 pub mod model_rollback;
 pub mod model_storage;
 pub mod neural;
-pub mod neuro_divergent;
+
+// neuro_divergent module has been removed
+// Use enhanced_neural_adapter with FANN predictor instead
+
 pub mod redis;
 pub mod timescale;
 pub mod vendor_bridge;
@@ -39,12 +42,8 @@ pub use fallback_manager::{
     UltimateFallbackStrategy,
 };
 
-// Re-export enhanced neural adapter
-pub use enhanced_neural_adapter::{
-    EnhancedNeuralAdapter, EnhancedNeuralConfig, EnhancedPredictionResult,
-    PerformanceStatsSnapshot, PerformanceThresholds, PredictionRequirements, RetryConfig,
-    SystemHealthStatus,
-};
+// Enhanced neural adapter is internal - access must go through neural::NeuralPredictor
+// DO NOT EXPORT: EnhancedNeuralAdapter to prevent bypassing central routing
 
 // Re-export model storage
 pub use model_storage::{

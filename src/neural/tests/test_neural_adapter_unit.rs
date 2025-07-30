@@ -8,12 +8,12 @@
 
 use super::super::fann_predictor::*;
 use crate::config::NeuralConfig;
-use crate::adapters::neural::neuro_divergent_adapter::{
-    NeuroDivergentAdapter as EnhancedNeuralAdapter,
-    NeuralModelConfig,
-    NeuralAdapterError,
+use crate::adapters::enhanced_neural_adapter::{
+    EnhancedNeuralAdapter,
+    EnhancedNeuralConfig,
 };
-use crate::adapters::DataAdapter;
+use crate::adapters::{DataAdapter, AdapterError};
+use std::sync::Arc;
 use anyhow::Result;
 use tokio;
 
@@ -38,18 +38,23 @@ fn create_test_neural_config(use_real_models: bool) -> NeuralConfig {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     }
 }
 
-/// Helper function to create model config
-fn create_model_config(model_type: &str) -> NeuralModelConfig {
-    NeuralModelConfig {
-        model_type: model_type.to_string(),
-        lookback_window: 48,
-        forecast_horizon: 24,
-        batch_size: 32,
-        use_gpu: false,
-        model_params: serde_json::json!({}),
+/// Helper function to create enhanced neural config
+fn create_model_config(model_type: &str) -> EnhancedNeuralConfig {
+    let mut neural_config = create_test_neural_config(false);
+    neural_config.models = vec![model_type.to_string()];
+    
+    EnhancedNeuralConfig {
+        neural: neural_config,
+        use_real_models: false,
+        enable_health_monitoring: false,
+        enable_fallback: false,
+        enable_caching: false,
+        enable_circuit_breakers: false,
+        ..Default::default()
     }
 }
 
@@ -59,11 +64,11 @@ mod adapter_initialization_tests {
     #[tokio::test]
     async fn test_enhanced_adapter_creation() -> Result<()> {
         let config = create_model_config("TimeMixer");
-        let adapter = EnhancedNeuralAdapter::new(config.clone());
+        let adapter = EnhancedNeuralAdapter::new(config.clone()).await?;
         
         // Verify adapter is created with correct configuration
-        assert_eq!(adapter.name(), "NeuroDivergentAdapter");
-        assert!(!adapter.is_connected());
+        assert_eq!(adapter.name(), "EnhancedNeuralAdapter");
+        assert!(adapter.is_connected());
         
         Ok(())
     }
@@ -71,22 +76,22 @@ mod adapter_initialization_tests {
     #[tokio::test]
     async fn test_adapter_connection_lifecycle() -> Result<()> {
         let config = create_model_config("NeuralForecast");
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         
-        // Test initial state
+        // Test initial state (EnhancedNeuralAdapter starts connected)
+        assert!(adapter.is_connected());
+        
+        // Test disconnection  
+        adapter.disconnect().await?;
         assert!(!adapter.is_connected());
         
-        // Test connection
+        // Test reconnection
         adapter.connect().await?;
         assert!(adapter.is_connected());
         
         // Test repeated connection (should be idempotent)
         adapter.connect().await?;
         assert!(adapter.is_connected());
-        
-        // Test disconnection
-        adapter.disconnect().await?;
-        assert!(!adapter.is_connected());
         
         Ok(())
     }
@@ -97,7 +102,7 @@ mod adapter_initialization_tests {
         let mut config = create_model_config("TimesFM");
         config.lookback_window = 0;
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         let result = adapter.connect().await;
         
         assert!(result.is_err());
@@ -107,7 +112,7 @@ mod adapter_initialization_tests {
         let mut config = create_model_config("TimesFM");
         config.forecast_horizon = 0;
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         let result = adapter.connect().await;
         
         assert!(result.is_err());
@@ -122,7 +127,7 @@ mod adapter_initialization_tests {
         let mut config = create_model_config("DeepAR");
         config.lookback_window = 0;
         
-        let mut adapter = EnhancedNeuralAdapter::new(config.clone());
+        let mut adapter = EnhancedNeuralAdapter::new(config.clone()).await?;
         
         // First connection should fail
         let result = adapter.connect().await;
@@ -175,17 +180,17 @@ mod adapter_initialization_tests {
     async fn test_model_specific_configurations() -> Result<()> {
         // Test TimeMixer configuration
         let timemixer_config = create_model_config("TimeMixer");
-        let adapter = EnhancedNeuralAdapter::new(timemixer_config);
+        let adapter = EnhancedNeuralAdapter::new(timemixer_config).await?;
         assert_eq!(adapter.name(), "NeuroDivergentAdapter");
         
         // Test NeuralForecast configuration
         let neural_forecast_config = create_model_config("NeuralForecast");
-        let adapter = EnhancedNeuralAdapter::new(neural_forecast_config);
+        let adapter = EnhancedNeuralAdapter::new(neural_forecast_config).await?;
         assert_eq!(adapter.name(), "NeuroDivergentAdapter");
         
         // Test TimesFM configuration
         let timesfm_config = create_model_config("TimesFM");
-        let adapter = EnhancedNeuralAdapter::new(timesfm_config);
+        let adapter = EnhancedNeuralAdapter::new(timesfm_config).await?;
         assert_eq!(adapter.name(), "NeuroDivergentAdapter");
         
         Ok(())
@@ -194,7 +199,7 @@ mod adapter_initialization_tests {
     #[tokio::test]
     async fn test_concurrent_adapter_operations() -> Result<()> {
         let config = create_model_config("TimeMixer");
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         
         // Connect adapter
         adapter.connect().await?;
@@ -218,7 +223,7 @@ mod adapter_initialization_tests {
     #[tokio::test]
     async fn test_adapter_state_transitions() -> Result<()> {
         let config = create_model_config("DeepAR");
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         
         // Track state transitions
         assert!(!adapter.is_connected()); // Uninitialized
@@ -296,7 +301,7 @@ mod configuration_update_tests {
         let mut config = create_model_config("TimeMixer");
         config.use_gpu = true;
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         // GPU configuration should be accepted (actual GPU usage depends on hardware)
@@ -313,7 +318,7 @@ mod configuration_update_tests {
             let mut config = create_model_config("NeuralForecast");
             config.batch_size = batch_size;
             
-            let mut adapter = EnhancedNeuralAdapter::new(config);
+            let mut adapter = EnhancedNeuralAdapter::new(config).await?;
             adapter.connect().await?;
             
             assert!(adapter.is_connected());
@@ -334,7 +339,7 @@ mod configuration_update_tests {
             "use_layer_norm": true,
         });
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         assert!(adapter.is_connected());
@@ -351,7 +356,7 @@ mod edge_case_tests {
         let mut config = create_model_config("TimeMixer");
         config.lookback_window = 10_000; // Very large lookback
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         assert!(adapter.is_connected());
@@ -364,7 +369,7 @@ mod edge_case_tests {
         let mut config = create_model_config("NeuralForecast");
         config.forecast_horizon = 1_000; // Very large horizon
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         assert!(adapter.is_connected());
@@ -379,7 +384,7 @@ mod edge_case_tests {
         config.forecast_horizon = 1;
         config.batch_size = 1;
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         assert!(adapter.is_connected());
@@ -396,7 +401,7 @@ mod edge_case_tests {
             "tags": ["تجربة", "テスト"],
         });
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         assert!(adapter.is_connected());
@@ -409,7 +414,7 @@ mod edge_case_tests {
         let mut config = create_model_config("NeuralForecast");
         config.model_params = serde_json::json!({});
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         assert!(adapter.is_connected());
@@ -422,7 +427,7 @@ mod edge_case_tests {
         let mut config = create_model_config("TimesFM");
         config.model_params = serde_json::json!(null);
         
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         adapter.connect().await?;
         
         assert!(adapter.is_connected());
@@ -448,7 +453,7 @@ async fn test_neural_adapter_initialization_coverage() -> Result<()> {
     
     for model_type in model_types {
         let config = create_model_config(model_type);
-        let mut adapter = EnhancedNeuralAdapter::new(config);
+        let mut adapter = EnhancedNeuralAdapter::new(config).await?;
         
         // Test connection
         adapter.connect().await?;

@@ -128,6 +128,7 @@ mod tests {
                 environment: "development".to_string(),
                 log_level: "info".to_string(),
             },
+            feature_flags: crate::config::FeatureFlags::default(),
             database: DatabaseConfig {
                 url: "postgres://user:pass@localhost:5432/testdb".to_string(),
                 max_connections: 20,
@@ -164,6 +165,7 @@ mod tests {
                 model_timeout_seconds: 300,
                 max_retries: 3,
                 error_threshold: 0.05,
+                lookback_window: 24,
             },
             monitoring: MonitoringConfig {
                 metrics_interval_secs: 30,

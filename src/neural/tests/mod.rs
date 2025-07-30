@@ -14,7 +14,9 @@ pub mod test_enhanced_predictor;
 pub mod test_fann_predictor;
 pub mod test_feature_flag;
 pub mod test_performance_benchmarks;
+pub mod test_performance_channel;
 pub mod test_performance_regression;
+pub mod test_predict_enhanced_fix;
 pub mod test_real_models_integration;
 
 // Re-export test utilities for other test modules

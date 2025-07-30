@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
-use super::neuro_divergent_adapter::NeuralAdapterError;
+use crate::adapters::AdapterError;
 use crate::data::TimeSeriesData;
 
 /// Temporary implementation of RuvSwarmTimeSeriesData for vendor integration
@@ -29,11 +29,11 @@ pub struct NeuralDataPoint {
 
 /// Safe conversion from f64 to f32 with overflow/underflow handling
 pub trait SafeF32Convert {
-    fn to_f32_safe(&self) -> Result<f32, NeuralAdapterError>;
+    fn to_f32_safe(&self) -> Result<f32, AdapterError>;
 }
 
 impl SafeF32Convert for f64 {
-    fn to_f32_safe(&self) -> Result<f32, NeuralAdapterError> {
+    fn to_f32_safe(&self) -> Result<f32, AdapterError> {
         // Handle special values
         if self.is_nan() {
             return Ok(f32::NAN);
@@ -66,14 +66,14 @@ impl SafeF32Convert for f64 {
 }
 
 /// Convert vector of f64 to f32 with error handling
-pub fn convert_f64_vec_to_f32(values: &[f64]) -> Result<Vec<f32>, NeuralAdapterError> {
+pub fn convert_f64_vec_to_f32(values: &[f64]) -> Result<Vec<f32>, AdapterError> {
     values.iter().map(|&v| v.to_f32_safe()).collect()
 }
 
 /// Convert HashMap of indicators from f64 to f32
 pub fn convert_indicators_to_f32(
     indicators: &HashMap<String, f64>,
-) -> Result<HashMap<String, f32>, NeuralAdapterError> {
+) -> Result<HashMap<String, f32>, AdapterError> {
     indicators
         .iter()
         .map(|(key, &value)| value.to_f32_safe().map(|v| (key.clone(), v)))
@@ -110,7 +110,7 @@ impl VendorDataConverter {
         &self,
         original: f64,
         converted: f64,
-    ) -> Result<(), NeuralAdapterError> {
+    ) -> Result<(), AdapterError> {
         if original == 0.0 && converted == 0.0 {
             return Ok(());
         }
@@ -118,20 +118,24 @@ impl VendorDataConverter {
         if original == 0.0 {
             // Original is zero but converted is not
             if converted.abs() > f64::EPSILON {
-                return Err(NeuralAdapterError::Conversion(format!(
+                return Err(AdapterError::DataSerialization {
+                details: format!(
                     "Non-zero conversion from zero: {}",
                     converted
-                )));
+                ),
+            });
             }
             return Ok(());
         }
 
         let precision_loss = (original - converted).abs() / original.abs();
         if precision_loss > self.max_precision_loss {
-            return Err(NeuralAdapterError::Conversion(format!(
-                "Precision loss {:.4} exceeds maximum {:.4} (original: {}, converted: {})",
-                precision_loss, self.max_precision_loss, original, converted
-            )));
+            return Err(AdapterError::DataSerialization {
+                details: format!(
+                    "Precision loss {:.4} exceeds maximum {:.4} (original: {}, converted: {})",
+                    precision_loss, self.max_precision_loss, original, converted
+                ),
+            });
         }
 
         Ok(())
@@ -142,11 +146,11 @@ impl VendorDataConverter {
         &self,
         data: &[TimeSeriesData],
         symbol: &str,
-    ) -> Result<RuvSwarmTimeSeriesData, NeuralAdapterError> {
+    ) -> Result<RuvSwarmTimeSeriesData, AdapterError> {
         if data.is_empty() {
-            return Err(NeuralAdapterError::Conversion(
-                "Empty data provided".to_string(),
-            ));
+            return Err(AdapterError::DataSerialization {
+                details: "Empty data provided".to_string(),
+            });
         }
 
         // Convert close prices to f32 values
@@ -178,7 +182,7 @@ impl VendorDataConverter {
     pub fn to_neuro_divergent_datapoints(
         &self,
         data: &[TimeSeriesData],
-    ) -> Result<Vec<NeuralDataPoint>, NeuralAdapterError> {
+    ) -> Result<Vec<NeuralDataPoint>, AdapterError> {
         data.iter()
             .map(|point| {
                 let value = point.close.to_f32_safe()?;
@@ -266,7 +270,7 @@ impl VendorDataConverter {
         &self,
         original: f64,
         converted: f32,
-    ) -> Result<(), NeuralAdapterError> {
+    ) -> Result<(), AdapterError> {
         if !self.preserve_precision {
             return Ok(());
         }
@@ -275,11 +279,13 @@ impl VendorDataConverter {
         let precision_loss = ((original - reconverted).abs() / original.abs()).abs();
 
         if precision_loss > self.max_precision_loss {
-            return Err(NeuralAdapterError::Conversion(format!(
-                "Precision loss too high: {:.4}% (max allowed: {:.2}%)",
-                precision_loss * 100.0,
-                self.max_precision_loss * 100.0
-            )));
+            return Err(AdapterError::DataSerialization {
+                details: format!(
+                    "Precision loss too high: {:.4}% (max allowed: {:.2}%)",
+                    precision_loss * 100.0,
+                    self.max_precision_loss * 100.0
+                ),
+            });
         }
 
         Ok(())
@@ -302,7 +308,7 @@ impl BatchConverter {
     pub fn convert_multi_symbol(
         data_by_symbol: &HashMap<String, Vec<TimeSeriesData>>,
         converter: &VendorDataConverter,
-    ) -> Result<HashMap<String, RuvSwarmTimeSeriesData>, NeuralAdapterError> {
+    ) -> Result<HashMap<String, RuvSwarmTimeSeriesData>, AdapterError> {
         data_by_symbol
             .iter()
             .map(|(symbol, data)| {
@@ -317,19 +323,23 @@ impl BatchConverter {
     pub fn verify_conversions(
         original: &HashMap<String, Vec<TimeSeriesData>>,
         converted: &HashMap<String, RuvSwarmTimeSeriesData>,
-    ) -> Result<(), NeuralAdapterError> {
+    ) -> Result<(), AdapterError> {
         for (symbol, orig_data) in original {
             let conv_data = converted.get(symbol).ok_or_else(|| {
-                NeuralAdapterError::Conversion(format!("Missing conversion for symbol: {}", symbol))
+                AdapterError::DataSerialization {
+                    details: format!("Missing conversion for symbol: {}", symbol),
+                }
             })?;
 
             if orig_data.len() != conv_data.values.len() {
-                return Err(NeuralAdapterError::Conversion(format!(
-                    "Length mismatch for {}: {} != {}",
-                    symbol,
-                    orig_data.len(),
-                    conv_data.values.len()
-                )));
+                return Err(AdapterError::DataSerialization {
+                    details: format!(
+                        "Length mismatch for {}: {} != {}",
+                        symbol,
+                        orig_data.len(),
+                        conv_data.values.len()
+                    ),
+                });
             }
         }
         Ok(())
@@ -355,7 +365,7 @@ impl StreamingConverter {
         &self,
         data: &[TimeSeriesData],
         symbol: &str,
-    ) -> Result<RuvSwarmTimeSeriesData, NeuralAdapterError> {
+    ) -> Result<RuvSwarmTimeSeriesData, AdapterError> {
         if data.len() <= self.chunk_size {
             return self.converter.to_ruv_swarm_format(data, symbol);
         }

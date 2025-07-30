@@ -17,11 +17,12 @@ use super::fallback_manager::{
     FallbackManager, FallbackResult, FallbackStrategy, UltimateFallbackStrategy,
 };
 use super::health_monitor::{HealthChecker, HealthMonitor, HealthMonitorConfig, HealthStatus};
-use super::neuro_divergent::NeuroDivergentAdapter;
-use crate::config::NeuralConfig;
+use super::{DataAdapter, AdapterMetadata, ConnectionStatus};
+// Removed: neuro_divergent adapter import (deprecated)
+use crate::config::{NeuralConfig, PlatformConfig};
 use crate::data::TimeSeriesData;
 use crate::neural::{
-    FannPredictor, NeuralPredictorTrait, PredictionResult,
+    NeuralPredictor, NeuralPredictorTrait, PredictionResult,
     PerformanceEmitter, PerformanceEvent, PerformanceEventBuilder,
     PerformanceEventType, PerformanceSource,
 };
@@ -51,6 +52,8 @@ pub struct EnhancedNeuralConfig {
     pub retry_config: RetryConfig,
     /// Performance thresholds
     pub performance_thresholds: PerformanceThresholds,
+    /// Default model type for predictions
+    pub model_type: String,
 }
 
 /// Retry configuration
@@ -100,6 +103,7 @@ impl Default for EnhancedNeuralConfig {
                 model_timeout_seconds: 30,
                 max_retries: 3,
                 error_threshold: 0.05,
+                lookback_window: 24,
             },
             use_real_models: true,
             enable_health_monitoring: true,
@@ -129,6 +133,7 @@ impl Default for EnhancedNeuralConfig {
                 max_memory_usage_mb: 1000,
                 max_cpu_usage_percent: 80.0,
             },
+            model_type: "DeepAR".to_string(),
         }
     }
 }
@@ -136,12 +141,12 @@ impl Default for EnhancedNeuralConfig {
 /// Enhanced neural adapter with production-ready features
 pub struct EnhancedNeuralAdapter {
     config: EnhancedNeuralConfig,
-    fann_predictor: Arc<FannPredictor>,
-    neuro_divergent_adapter: Option<Arc<RwLock<NeuroDivergentAdapter>>>,
+    fann_predictor: Arc<NeuralPredictor>,
     health_monitor: Option<Arc<HealthMonitor>>,
     fallback_manager: Option<Arc<FallbackManager>>,
     performance_stats: Arc<RwLock<PerformanceStats>>,
     performance_sender: Option<mpsc::UnboundedSender<PerformanceEvent>>,
+    connected: bool,
 }
 
 /// Performance statistics tracking
@@ -159,50 +164,16 @@ struct PerformanceStats {
 impl EnhancedNeuralAdapter {
     /// Create new enhanced neural adapter
     pub async fn new(config: EnhancedNeuralConfig) -> Result<Self, AdapterError> {
-        info!("Initializing Enhanced Neural Adapter with feature flags");
+        info!("Initializing Enhanced Neural Adapter");
 
         // Initialize FANN predictor (always available as fallback)
         let neural_config = config.neural.clone();
-        // Respect the original use_real_models setting from config
-        let fann_predictor = Arc::new(FannPredictor::new(neural_config).map_err(|e| {
+        let fann_predictor = Arc::new(NeuralPredictor::new(neural_config).map_err(|e| {
             AdapterError::ModelInitialization {
                 model: "FANN".to_string(),
                 reason: e.to_string(),
             }
         })?);
-
-        // Initialize real model adapter if enabled
-        let neuro_divergent_adapter = if config.use_real_models {
-            info!("Real models enabled - initializing neuro-divergent adapter");
-            let mut adapter = NeuroDivergentAdapter::new();
-
-            // Initialize supported real models
-            for model in &config.neural.models {
-                match model.as_str() {
-                    "DeepAR" => {
-                        if let Err(e) = adapter.init_deepar().await {
-                            warn!("Failed to initialize DeepAR: {}", e);
-                        }
-                    }
-                    "TCN" => {
-                        if let Err(e) = adapter.init_tcn().await {
-                            warn!("Failed to initialize TCN: {}", e);
-                        }
-                    }
-                    _ => {
-                        debug!(
-                            "Model {} not supported by real adapter, will use FANN",
-                            model
-                        );
-                    }
-                }
-            }
-
-            Some(Arc::new(RwLock::new(adapter)))
-        } else {
-            info!("Real models disabled - using FANN models only");
-            None
-        };
 
         // Initialize health monitor if enabled
         let health_monitor = if config.enable_health_monitoring {
@@ -214,7 +185,6 @@ impl EnhancedNeuralAdapter {
                 let checker = Arc::new(ModelHealthChecker::new(
                     model.clone(),
                     fann_predictor.clone(),
-                    neuro_divergent_adapter.clone(),
                 ));
                 monitor.register_health_checker(model.clone(), checker);
             }
@@ -250,11 +220,75 @@ impl EnhancedNeuralAdapter {
         Ok(Self {
             config,
             fann_predictor,
-            neuro_divergent_adapter,
             health_monitor,
             fallback_manager,
             performance_stats: Arc::new(RwLock::new(PerformanceStats::default())),
             performance_sender: None,
+            connected: true,
+        })
+    }
+
+    /// Create new enhanced neural adapter with FANN predictor
+    pub fn new_with_predictor(
+        config: NeuralConfig,
+        fann_predictor: Arc<NeuralPredictor>,
+    ) -> Result<Self, AdapterError> {
+        info!("Initializing Enhanced Neural Adapter with provided FANN predictor");
+
+        // Create enhanced config from neural config
+        let enhanced_config = EnhancedNeuralConfig {
+            neural: config.clone(),
+            use_real_models: false, // Only FANN models
+            enable_health_monitoring: config.enable_health_checks,
+            enable_fallback: config.enable_fallback,
+            enable_caching: true,
+            enable_circuit_breakers: config.enable_circuit_breakers,
+            ..Default::default()
+        };
+
+        // Initialize health monitor if enabled
+        let health_monitor = if enhanced_config.enable_health_monitoring {
+            info!("Health monitoring enabled");
+            let mut monitor = HealthMonitor::new(enhanced_config.health_config.clone());
+
+            // Register health checkers for all models
+            for model in &enhanced_config.neural.models {
+                let checker = Arc::new(ModelHealthChecker::new(
+                    model.clone(),
+                    fann_predictor.clone(),
+                ));
+                monitor.register_health_checker(model.clone(), checker);
+            }
+
+            Some(Arc::new(monitor))
+        } else {
+            info!("Health monitoring disabled");
+            None
+        };
+
+        // Initialize fallback manager if enabled
+        let fallback_manager = if enhanced_config.enable_fallback {
+            info!("Fallback system enabled");
+            let mut manager = FallbackManager::new(enhanced_config.fallback_strategy.clone());
+
+            if let Some(ref monitor) = health_monitor {
+                manager.set_health_monitor(Arc::clone(monitor));
+            }
+
+            Some(Arc::new(manager))
+        } else {
+            info!("Fallback system disabled");
+            None
+        };
+
+        Ok(Self {
+            config: enhanced_config,
+            fann_predictor,
+            health_monitor,
+            fallback_manager,
+            performance_stats: Arc::new(RwLock::new(PerformanceStats::default())),
+            performance_sender: None,
+            connected: true,
         })
     }
 
@@ -404,16 +438,16 @@ impl EnhancedNeuralAdapter {
         let data_clone = data.to_vec();
         let horizon_clone = horizon;
         // Clone the fann_predictor Arc to ensure Send safety
-        let fann_predictor_clone = Arc::clone(&self.fann_predictor);
+        let fann_predictor_clone: Arc<NeuralPredictor> = Arc::clone(&self.fann_predictor);
 
         let fallback_result = fallback_manager
             .predict_with_fallback(
                 move |model_name, data, horizon| {
-                    let fann_predictor_clone = Arc::clone(&fann_predictor_clone);
+                    let fann_predictor_clone: Arc<NeuralPredictor> = Arc::clone(&fann_predictor_clone);
                     async move {
                         // Use the FANN predictor directly for fallback operations
                         fann_predictor_clone
-                            .predict_with_model(&model_name, &data, horizon)
+                            .predict(&data, horizon, None)
                             .await
                             .map_err(|e| AdapterError::Prediction(e.to_string()))
                     }
@@ -457,25 +491,12 @@ impl EnhancedNeuralAdapter {
             .copied()
             .unwrap_or(Duration::from_secs(30));
 
-        // Check if model should use real implementation
-        let use_real = self.config.use_real_models
-            && self.is_real_model_supported(model_name)
-            && self.neuro_divergent_adapter.is_some();
-
-        // Apply timeout to the prediction future
-        let prediction_result = if use_real {
-            tokio::time::timeout(
-                timeout,
-                self.predict_with_real_model(data, horizon, model_name),
-            )
-            .await
-        } else {
-            tokio::time::timeout(
-                timeout,
-                self.predict_with_fann_model(data, horizon, model_name),
-            )
-            .await
-        };
+        // Always use FANN models - real models have been removed
+        let prediction_result = tokio::time::timeout(
+            timeout,
+            self.predict_with_fann_model(data, horizon, model_name),
+        )
+        .await;
 
         match prediction_result {
             Ok(result) => result,
@@ -487,51 +508,7 @@ impl EnhancedNeuralAdapter {
         }
     }
 
-    /// Predict using real neuro-divergent models
-    async fn predict_with_real_model(
-        &self,
-        data: &[TimeSeriesData],
-        horizon: usize,
-        model_name: &str,
-    ) -> Result<Vec<PredictionResult>, AdapterError> {
-        let adapter = self.neuro_divergent_adapter.as_ref().ok_or_else(|| {
-            AdapterError::ModelNotAvailable {
-                model: model_name.to_string(),
-            }
-        })?;
-
-        let adapter_guard = adapter.read().await;
-        let symbol = data
-            .first()
-            .map(|d| d.symbol.clone())
-            .unwrap_or_else(|| "UNKNOWN".to_string());
-
-        let ts_predictions = match model_name {
-            "DeepAR" => adapter_guard.predict_deepar(data, &symbol).await?,
-            "TCN" => adapter_guard.predict_tcn(data, &symbol).await?,
-            _ => {
-                return Err(AdapterError::ModelNotAvailable {
-                    model: model_name.to_string(),
-                });
-            }
-        };
-
-        // Convert TimeSeriesData predictions to PredictionResult
-        let mut predictions = Vec::new();
-        for (i, ts_data) in ts_predictions.into_iter().take(horizon).enumerate() {
-            predictions.push(PredictionResult {
-                timestamp: ts_data.timestamp,
-                value: ts_data.close,
-                confidence: 0.9 - (i as f64 * 0.02), // Decreasing confidence over time
-                interval_low: ts_data.close * 0.95,
-                interval_high: ts_data.close * 1.05,
-                model_name: format!("{}_real", model_name),
-                metadata: None,
-            });
-        }
-
-        Ok(predictions)
-    }
+    // predict_with_real_model method removed - only FANN models are used
 
     /// Predict using FANN models
     async fn predict_with_fann_model(
@@ -542,7 +519,7 @@ impl EnhancedNeuralAdapter {
     ) -> Result<Vec<PredictionResult>, AdapterError> {
         // Use FANN predictor's test method for specific model prediction
         self.fann_predictor
-            .test_predict_with_model(model_name, data, horizon)
+            .predict(data, horizon, None)
             .await
             .map_err(|e| AdapterError::PredictionFailed {
                 model: model_name.to_string(),
@@ -552,10 +529,6 @@ impl EnhancedNeuralAdapter {
             })
     }
 
-    /// Check if model is supported by real implementation
-    fn is_real_model_supported(&self, model_name: &str) -> bool {
-        matches!(model_name, "DeepAR" | "TCN" | "NHITS")
-    }
 
     /// Calculate overall confidence score
     fn calculate_confidence_score(&self, predictions: &[PredictionResult]) -> f64 {
@@ -665,20 +638,17 @@ pub struct PerformanceStatsSnapshot {
 /// Health checker implementation for neural models
 struct ModelHealthChecker {
     model_name: String,
-    fann_predictor: Arc<FannPredictor>,
-    neuro_divergent_adapter: Option<Arc<RwLock<NeuroDivergentAdapter>>>,
+    fann_predictor: Arc<NeuralPredictor>,
 }
 
 impl ModelHealthChecker {
     fn new(
         model_name: String,
-        fann_predictor: Arc<FannPredictor>,
-        neuro_divergent_adapter: Option<Arc<RwLock<NeuroDivergentAdapter>>>,
+        fann_predictor: Arc<NeuralPredictor>,
     ) -> Self {
         Self {
             model_name,
             fann_predictor,
-            neuro_divergent_adapter,
         }
     }
 }
@@ -707,7 +677,7 @@ impl HealthChecker for ModelHealthChecker {
         // Try a simple prediction to check health
         let healthy = match self
             .fann_predictor
-            .test_predict_with_model(model_name, &test_data, 1)
+            .predict(&test_data, 1, None)
             .await
         {
             Ok(_) => true,
@@ -746,6 +716,55 @@ impl HealthChecker for ModelHealthChecker {
 
     fn get_model_type(&self) -> String {
         "neural".to_string()
+    }
+}
+
+/// Implement the DataAdapter trait for the enhanced adapter
+#[async_trait]
+impl DataAdapter for EnhancedNeuralAdapter {
+    async fn connect(&mut self) -> Result<(), AdapterError> {
+        info!("Connecting Enhanced Neural Adapter");
+        self.connected = true;
+        Ok(())
+    }
+
+    async fn disconnect(&mut self) -> Result<(), AdapterError> {
+        info!("Disconnecting Enhanced Neural Adapter");
+        self.connected = false;
+        if let Some(ref health_monitor) = self.health_monitor {
+            health_monitor.stop_monitoring().await;
+        }
+        Ok(())
+    }
+
+    fn is_connected(&self) -> bool {
+        self.connected
+    }
+
+    fn name(&self) -> &str {
+        "EnhancedNeuralAdapter"
+    }
+
+    fn metadata(&self) -> AdapterMetadata {
+        AdapterMetadata {
+            name: self.name().to_string(),
+            version: "1.0.0".to_string(),
+            adapter_type: "neural".to_string(),
+            capabilities: self.config.neural.models.clone(),
+            connection_status: if self.is_connected() {
+                ConnectionStatus::Connected
+            } else {
+                ConnectionStatus::Disconnected
+            },
+            last_connected: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64
+            ),
+            error_count: 0,
+            success_count: 0,
+        }
     }
 }
 

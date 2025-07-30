@@ -15,7 +15,7 @@ use tracing::{debug, error, info, warn};
 use rand;
 
 use crate::data::TimeSeriesData;
-use super::FannPredictor;
+use super::fann_predictor::FannPredictor;
 
 /// Configuration for streaming data connection
 #[derive(Debug, Clone, Serialize, Deserialize)]

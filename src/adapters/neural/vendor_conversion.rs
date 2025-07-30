@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 
-use super::neuro_divergent_adapter::NeuralAdapterError;
+use crate::adapters::AdapterError;
 use super::type_converter::{SafeF32Convert, VendorDataConverter};
 use crate::data::TimeSeriesData;
 
@@ -53,11 +53,11 @@ impl VendorFormatConverter {
         &self,
         data: &[TimeSeriesData],
         _symbol: &str,
-    ) -> Result<VendorTimeSeriesData, NeuralAdapterError> {
+    ) -> Result<VendorTimeSeriesData, AdapterError> {
         if data.is_empty() {
-            return Err(NeuralAdapterError::Conversion(
+            return Err(AdapterError::DataSerialization { details: 
                 "Empty data provided".to_string(),
-            ));
+            });
         }
 
         // Create DataPoint<f32> vector
@@ -92,9 +92,9 @@ impl VendorFormatConverter {
         if let Some(first_point) = data_points.first() {
             Ok(first_point.clone())
         } else {
-            Err(NeuralAdapterError::Conversion(
+            Err(AdapterError::DataSerialization { details: 
                 "No data points provided".to_string(),
-            ))
+            })
         }
     }
 
@@ -104,11 +104,11 @@ impl VendorFormatConverter {
         predictions: &[f32],
         base_data: &TimeSeriesData,
         forecast_horizon: usize,
-    ) -> Result<Vec<TimeSeriesData>, NeuralAdapterError> {
+    ) -> Result<Vec<TimeSeriesData>, AdapterError> {
         if predictions.is_empty() {
-            return Err(NeuralAdapterError::Conversion(
-                "Empty predictions provided".to_string(),
-            ));
+            return Err(AdapterError::DataSerialization { 
+                details: "Empty predictions provided".to_string(),
+            });
         }
 
         let mut results = Vec::with_capacity(predictions.len());
@@ -117,10 +117,11 @@ impl VendorFormatConverter {
         for (i, &pred) in predictions.iter().enumerate() {
             // Validate prediction value
             if !pred.is_finite() {
-                return Err(NeuralAdapterError::Conversion(format!(
+                return Err(AdapterError::DataSerialization { details: format!(
                     "Invalid prediction value at index {}: {}",
                     i, pred
-                )));
+                ),
+            });
             }
 
             let timestamp =
@@ -160,13 +161,14 @@ impl VendorFormatConverter {
         data: &[TimeSeriesData],
         lookback_window: usize,
         _feature_names: &[String],
-    ) -> Result<(Array2<f32>, Vec<String>), NeuralAdapterError> {
+    ) -> Result<(Array2<f32>, Vec<String>), AdapterError> {
         if data.len() < lookback_window {
-            return Err(NeuralAdapterError::Conversion(format!(
+            return Err(AdapterError::DataSerialization { details: format!(
                 "Insufficient data for lookback window: need {}, have {}",
                 lookback_window,
                 data.len()
-            )));
+            ),
+        });
         }
 
         let n_samples = data.len() - lookback_window + 1;
@@ -226,7 +228,7 @@ impl VendorFormatConverter {
     pub fn convert_batch(
         &self,
         data_batch: &HashMap<String, Vec<TimeSeriesData>>,
-    ) -> Result<HashMap<String, VendorTimeSeriesData>, NeuralAdapterError> {
+    ) -> Result<HashMap<String, VendorTimeSeriesData>, AdapterError> {
         let mut results = HashMap::with_capacity(data_batch.len());
 
         for (symbol, data) in data_batch {
@@ -242,29 +244,31 @@ impl VendorFormatConverter {
         &self,
         original: &[TimeSeriesData],
         converted: &VendorTimeSeriesData,
-    ) -> Result<(), NeuralAdapterError> {
+    ) -> Result<(), AdapterError> {
         // Check length consistency - converted is a single item representing the first point
         if original.is_empty() {
-            return Err(NeuralAdapterError::Conversion(
+            return Err(AdapterError::DataSerialization { details: 
                 "Original data is empty".to_string(),
-            ));
+            });
         }
 
         // Check timestamp consistency with first item
         if let Some(first_original) = original.first() {
             if first_original.timestamp != converted.timestamp {
-                return Err(NeuralAdapterError::Conversion(format!(
+                return Err(AdapterError::DataSerialization { details: format!(
                     "Timestamp mismatch: {} vs {}",
                     first_original.timestamp.to_rfc3339(),
                     converted.timestamp.to_rfc3339()
-                )));
+                ),
+            });
             }
 
             // Check value precision within acceptable range
             self.type_converter
                 .validate_precision(first_original.close, converted.close)
                 .map_err(|e| {
-                    NeuralAdapterError::Conversion(format!("Precision validation failed: {}", e))
+                    AdapterError::DataSerialization { details: format!("Precision validation failed: {}", e),
+                    }
                 })?;
         }
 
@@ -277,7 +281,7 @@ impl VendorFormatConverter {
         data_iter: I,
         _symbol: &str,
         chunk_size: usize,
-    ) -> Result<VendorTimeSeriesData, NeuralAdapterError>
+    ) -> Result<VendorTimeSeriesData, AdapterError>
     where
         I: Iterator<Item = TimeSeriesData>,
     {
@@ -286,9 +290,9 @@ impl VendorFormatConverter {
         let mut vendor_data = if let Some(first_point) = data_iter.next() {
             first_point
         } else {
-            return Err(NeuralAdapterError::Conversion(
+            return Err(AdapterError::DataSerialization { details: 
                 "No data points provided".to_string(),
-            ));
+            });
         };
         let mut chunk = Vec::with_capacity(chunk_size);
 
@@ -314,7 +318,7 @@ impl VendorFormatConverter {
         &self,
         _vendor_data: &mut VendorTimeSeriesData,
         _chunk: &[TimeSeriesData],
-    ) -> Result<(), NeuralAdapterError> {
+    ) -> Result<(), AdapterError> {
         // Simplified implementation for now
         // In production, this would properly add points to vendor data
         Ok(())
@@ -335,7 +339,7 @@ impl ConversionErrorRecovery {
     pub fn recover_precision_loss(
         original_value: f64,
         failed_conversion: f32,
-    ) -> Result<f32, NeuralAdapterError> {
+    ) -> Result<f32, AdapterError> {
         // Try scaling approaches for very small or large numbers
         if original_value.abs() < 1e-6 {
             // Very small numbers - use scientific notation approach

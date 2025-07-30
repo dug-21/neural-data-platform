@@ -814,6 +814,7 @@ impl Default for EnhancedNeuralPredictor {
             model_timeout_seconds: 300,
             max_retries: 3,
             error_threshold: 0.1,
+            lookback_window: 24,
         };
         Self::new(config).expect("Failed to create default enhanced predictor")
     }
@@ -891,6 +892,7 @@ mod tests {
             model_timeout_seconds: 60,
             max_retries: 3,
             error_threshold: 0.1,
+            lookback_window: 24,
         };
 
         let predictor = EnhancedNeuralPredictor::new(config).unwrap();

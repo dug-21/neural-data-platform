@@ -11,32 +11,16 @@ use std::collections::HashMap;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
 
-// Module for FANN-based predictions
-pub mod fann_predictor;
-
-// FANN Model Adapter with persistence integration
-pub mod fann_model_adapter;
-
-// Module for MLP adapter (if needed)
-pub mod mlp_adapter;
-
-// Streaming data connector for real-time processing
-pub mod streaming_connector;
-
-// Online validation system
-pub mod online_validator;
-
-// Online learning manager - unified API
-pub mod online_learning_manager;
-
-// Module for enhanced predictor with Phase 6 features
-pub mod enhanced_predictor;
-
-// Performance optimization module
-pub mod performance_optimizer;
-
-// Batch processing optimization
-pub mod batch_optimizer;
+// Internal modules - not exposed publicly to enforce central routing
+mod fann_predictor;
+mod fann_model_adapter;
+mod mlp_adapter;
+mod streaming_connector;
+mod online_validator;
+mod online_learning_manager;
+mod enhanced_predictor;
+mod performance_optimizer;
+mod batch_optimizer;
 
 // Performance benchmarking module
 #[cfg(test)]
@@ -59,29 +43,25 @@ pub mod tests;
 #[cfg(test)]
 pub mod online_learning_tests;
 
-// Re-export the FANN predictor
-pub use fann_predictor::{FannModelConfig, FannPredictor};
+// CENTRAL ROUTING ENFORCEMENT: Only export the main NeuralPredictor
+// All neural network access must go through this central predictor
+// Direct access to implementations is forbidden to prevent bypass
 
-// Re-export the FANN model adapter
-pub use fann_model_adapter::{FannModelAdapter, FannModelConfig as FannAdapterConfig, TrainingRecord, PerformanceTracker as FannPerformanceTracker};
-
-// Re-export the enhanced predictor
-pub use enhanced_predictor::{
-    ConfidenceBreakdown, EnhancedNeuralPredictor, EnhancedPredictionResult, PerformanceTracker,
-    RetrainingMetrics,
-};
-
-// Re-export performance optimization components
-pub use performance_optimizer::{OptimizedFannPredictor, PerformanceMetrics};
-
-// Re-export performance channel components
+// Re-export ONLY the performance monitoring components (safe for external use)
 pub use performance_channel::{
     PerformanceChannel, PerformanceEmitter, PerformanceEvent, PerformanceEventBuilder,
     PerformanceEventType, PerformanceMetrics as ChannelMetrics, PerformanceSource, ComponentType,
 };
 
-// Re-export performance aggregation components
+// Re-export performance aggregation components (safe for external use)
 pub use performance_events::{PerformanceAggregator, AggregatorConfig, PerformanceSnapshot};
+
+// Internal implementations - DO NOT EXPORT
+// - FannPredictor: Internal implementation detail
+// - FannModelAdapter: Internal implementation detail
+// - EnhancedNeuralPredictor: Internal implementation detail
+// - OptimizedFannPredictor: Internal implementation detail
+// Access to these must go through NeuralPredictor only
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionResult {
@@ -117,12 +97,12 @@ pub trait NeuralPredictorTrait: Send + Sync {
 
 /// Main neural predictor that uses FANN for real predictions
 pub struct NeuralPredictor {
-    fann_predictor: FannPredictor,
+    fann_predictor: fann_predictor::FannPredictor,
 }
 
 impl NeuralPredictor {
     pub fn new(config: NeuralConfig) -> Result<Self> {
-        let fann_predictor = FannPredictor::new(config)?;
+        let fann_predictor = fann_predictor::FannPredictor::new(config)?;
         Ok(Self { fann_predictor })
     }
 
@@ -171,6 +151,7 @@ impl Default for NeuralPredictor {
             use_real_models: false,
             enable_health_checks: true,
             enable_fallback: true,
+            lookback_window: 24,
             enable_circuit_breakers: true,
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,
@@ -201,6 +182,7 @@ mod integration_tests {
             use_real_models: false,
             enable_health_checks: true,
             enable_fallback: true,
+            lookback_window: 24,
             enable_circuit_breakers: true,
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,

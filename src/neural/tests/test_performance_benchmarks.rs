@@ -49,6 +49,7 @@ fn create_performance_config() -> NeuralConfig {
         model_timeout_seconds: 120,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     }
 }
 

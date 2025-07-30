@@ -13,9 +13,8 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{error, info, warn};
 
-use crate::neural::EnhancedNeuralPredictor;
+use crate::neural::NeuralPredictor;
 use crate::integration::training_data_service::{TrainingDataService, TrainingDataConfig, ModelType};
-use crate::neural::fann_predictor::FannPredictor;
 use crate::data::TimeSeriesData;
 use ruv_fann::TrainingData;
 
@@ -200,11 +199,11 @@ enum PerformanceTrend {
 pub struct DAATrainingIntegration {
     decision_engine: Arc<AutonomousTrainingEngine>,
     daa_receiver: mpsc::UnboundedReceiver<TrainingDecision>,
-    neural_client: Option<Arc<EnhancedNeuralPredictor>>,
+    neural_client: Option<Arc<NeuralPredictor>>,
     /// Training data service for real data loading
     training_data_service: Option<Arc<TrainingDataService>>,
     /// FANN predictor for real neural network training
-    fann_predictor: Option<Arc<FannPredictor>>,
+    fann_predictor: Option<Arc<NeuralPredictor>>,
     /// Model storage for persisting trained models
     model_storage: Option<Arc<ModelStorage>>,
 }
@@ -972,7 +971,7 @@ impl DAATrainingIntegration {
     }
 
     /// Set neural client for training execution
-    pub fn with_neural_client(mut self, client: Arc<EnhancedNeuralPredictor>) -> Self {
+    pub fn with_neural_client(mut self, client: Arc<NeuralPredictor>) -> Self {
         self.neural_client = Some(client);
         self
     }
@@ -984,7 +983,7 @@ impl DAATrainingIntegration {
     }
 
     /// Set FANN predictor for real neural network training
-    pub fn with_fann_predictor(mut self, predictor: Arc<FannPredictor>) -> Self {
+    pub fn with_fann_predictor(mut self, predictor: Arc<NeuralPredictor>) -> Self {
         self.fann_predictor = Some(predictor);
         self
     }
@@ -1403,7 +1402,7 @@ impl DAATrainingIntegration {
         &self,
         model_name: &str,
         training_service: &TrainingDataService,
-        fann_predictor: &FannPredictor,
+        fann_predictor: &NeuralPredictor,
     ) -> Result<(f64, f64)> {
         info!("🚨 Starting emergency training for model: {}", model_name);
         
@@ -1451,7 +1450,7 @@ impl DAATrainingIntegration {
         &self,
         model_name: &str,
         training_service: &TrainingDataService,
-        fann_predictor: &FannPredictor,
+        fann_predictor: &NeuralPredictor,
     ) -> Result<(f64, f64)> {
         info!("🔄 Starting full retraining for model: {}", model_name);
         
@@ -1499,7 +1498,7 @@ impl DAATrainingIntegration {
         &self,
         model_name: &str,
         training_service: &TrainingDataService,
-        fann_predictor: &FannPredictor,
+        fann_predictor: &NeuralPredictor,
     ) -> Result<(f64, f64)> {
         info!("⚙️ Starting incremental training for model: {}", model_name);
         
@@ -1553,7 +1552,7 @@ impl DAATrainingIntegration {
         model_name: &str,
         target_regime: &str,
         training_service: &TrainingDataService,
-        fann_predictor: &FannPredictor,
+        fann_predictor: &NeuralPredictor,
     ) -> Result<(f64, f64)> {
         info!("🎯 Starting fine-tuning for model: {} targeting regime: {}", model_name, target_regime);
         
@@ -1664,7 +1663,7 @@ impl DAATrainingIntegration {
         training_data: &TrainingData<f32>,
         learning_rate: f32,
         epochs: usize,
-        fann_predictor: &FannPredictor,
+        fann_predictor: &NeuralPredictor,
     ) -> Result<f64> {
         info!("🦾 Training FANN model '{}' with {} samples, LR: {}, epochs: {}", 
               model_name, training_data.inputs.len(), learning_rate, epochs);

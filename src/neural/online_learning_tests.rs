@@ -61,6 +61,7 @@ mod tests {
             use_real_models: false,
             enable_health_checks: true,
             enable_fallback: true,
+            lookback_window: 24,
             enable_circuit_breakers: true,
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,

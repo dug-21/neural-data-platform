@@ -76,7 +76,15 @@ async fn main() -> Result<()> {
     };
 
     // Create enhanced neural adapter
-    let enhanced_config = EnhancedNeuralConfig::from_neural_config(&neural_config);
+    let enhanced_config = EnhancedNeuralConfig {
+        neural: neural_config.clone(),
+        use_real_models: neural_config.use_real_models,
+        enable_health_monitoring: neural_config.enable_health_checks,
+        enable_fallback: neural_config.enable_fallback,
+        enable_caching: true,
+        enable_circuit_breakers: neural_config.enable_circuit_breakers,
+        ..Default::default()
+    };
     let neural_adapter = Arc::new(EnhancedNeuralAdapter::new(enhanced_config).await?);
 
     // Register health checker

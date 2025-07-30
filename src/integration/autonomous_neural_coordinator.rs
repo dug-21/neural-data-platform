@@ -15,7 +15,7 @@ use crate::daa::autonomous_training::{
 };
 use crate::data::TimeSeriesData;
 use crate::integration::daa_coordinator::{AutonomousDecision, DaaCoordinator, TradingAction};
-use crate::neural::EnhancedNeuralPredictor;
+use crate::neural::NeuralPredictor;
 use crate::strategies::{MarketContext, Position};
 
 /// Enhanced DAA coordinator with autonomous neural training capabilities
@@ -27,7 +27,7 @@ pub struct AutonomousNeuralCoordinator {
     /// Training integration handler
     training_integration: Arc<RwLock<DAATrainingIntegration>>,
     /// Enhanced neural predictor
-    enhanced_predictor: Arc<RwLock<EnhancedNeuralPredictor>>,
+    neural_predictor: Arc<NeuralPredictor>,
     /// Performance tracking
     performance_tracker: Arc<RwLock<PerformanceTracker>>,
     /// Training configuration
@@ -61,7 +61,7 @@ impl AutonomousNeuralCoordinator {
     /// Create new autonomous neural coordinator
     pub async fn new(
         daa_coordinator: Arc<DaaCoordinator>,
-        enhanced_predictor: Arc<RwLock<EnhancedNeuralPredictor>>,
+        neural_predictor: Arc<NeuralPredictor>,
         training_config: TrainingTriggerConfig,
     ) -> Result<Self> {
         // Create autonomous training engine
@@ -84,7 +84,7 @@ impl AutonomousNeuralCoordinator {
             daa_coordinator,
             training_engine,
             training_integration: Arc::new(RwLock::new(training_integration)),
-            enhanced_predictor,
+            neural_predictor,
             performance_tracker: Arc::new(RwLock::new(performance_tracker)),
             training_config,
         })
@@ -206,17 +206,15 @@ impl AutonomousNeuralCoordinator {
             0.7 // Default neutral accuracy
         };
 
-        // Calculate model agreement from enhanced predictor
+        // Calculate model agreement from neural predictor
         let model_agreement = match self
-            .enhanced_predictor
-            .read()
-            .await
-            .predict_with_confidence(historical_data, 1)
+            .neural_predictor
+            .predict(historical_data, 1, None)
             .await
         {
             Ok(predictions) => {
                 if let Some(pred) = predictions.first() {
-                    pred.model_agreement_score
+                    pred.confidence // Use confidence as proxy for model agreement
                 } else {
                     0.8 // Default good agreement
                 }
@@ -457,8 +455,8 @@ impl AutonomousNeuralCoordinator {
     }
 
     /// Get enhanced neural predictor for direct access
-    pub fn get_enhanced_predictor(&self) -> Arc<RwLock<EnhancedNeuralPredictor>> {
-        self.enhanced_predictor.clone()
+    pub fn get_neural_predictor(&self) -> Arc<NeuralPredictor> {
+        self.neural_predictor.clone()
     }
 
     /// Get base DAA coordinator for direct access
@@ -513,15 +511,15 @@ mod tests {
         let daa_coordinator =
             Arc::new(DaaCoordinator::new(daa_config, neural_predictor.clone(), tx).unwrap());
 
-        // Create enhanced predictor
-        let enhanced_predictor = Arc::new(RwLock::new(
-            EnhancedNeuralPredictor::new(neural_config).unwrap(),
-        ));
+        // Create neural predictor
+        let neural_predictor = Arc::new(
+            NeuralPredictor::new(neural_config).unwrap(),
+        );
 
         // Create training config
         let training_config = TrainingTriggerConfig::default();
 
-        AutonomousNeuralCoordinator::new(daa_coordinator, enhanced_predictor, training_config)
+        AutonomousNeuralCoordinator::new(daa_coordinator, neural_predictor, training_config)
             .await
             .unwrap()
     }

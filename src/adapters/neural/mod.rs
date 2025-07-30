@@ -4,12 +4,12 @@
 //! neural network models, handling data format conversions and model interactions.
 
 pub mod data_converter;
-pub mod neuro_divergent_adapter;
+// neuro_divergent_adapter module removed - use enhanced_neural_adapter with FANN predictor
 pub mod type_converter;
 pub mod vendor_conversion;
 
 pub use data_converter::{ConversionFormat, DataConverter};
-pub use neuro_divergent_adapter::{NeuralAdapterError, NeuroDivergentAdapter};
+// NeuroDivergentAdapter exports removed - use enhanced_neural_adapter with FANN predictor
 pub use type_converter::*;
 pub use vendor_conversion::*;
 

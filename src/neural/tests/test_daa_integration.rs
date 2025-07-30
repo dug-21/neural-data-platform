@@ -122,6 +122,7 @@ mod daa_neural_integration_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = Arc::new(EnhancedNeuralPredictor::new(neural_config)?);
 
@@ -189,6 +190,7 @@ mod daa_neural_integration_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -241,6 +243,7 @@ mod daa_neural_integration_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -341,6 +344,7 @@ mod daa_neural_integration_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -437,6 +441,7 @@ mod performance_feedback_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -573,6 +578,7 @@ mod performance_feedback_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -683,6 +689,7 @@ mod edge_case_integration_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -734,6 +741,7 @@ mod edge_case_integration_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -802,6 +810,7 @@ mod edge_case_integration_tests {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            lookback_window: 24,
         };
         let enhanced_predictor = Arc::new(EnhancedNeuralPredictor::new(neural_config)?);
 
@@ -871,6 +880,7 @@ async fn test_comprehensive_daa_neural_integration() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     };
     let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 

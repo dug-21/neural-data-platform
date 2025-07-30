@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
-use super::{FannModelConfig, FannPredictor};
+use super::fann_predictor::{FannModelConfig, FannPredictor};
 use crate::data::TimeSeriesData;
 use crate::neural::NeuralPredictorTrait;
 use ::ruv_fann::{Network, NetworkBuilder};

@@ -27,6 +27,7 @@ fn create_test_config(models: Vec<String>, use_real_models: bool) -> NeuralConfi
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.05,
+        lookback_window: 24,
     }
 }
 

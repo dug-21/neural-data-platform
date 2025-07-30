@@ -34,6 +34,8 @@ pub struct PlatformConfig {
     pub graceful_shutdown: GracefulShutdownConfig,
     #[serde(default)]
     pub development: DevelopmentConfig,
+    #[serde(default)]
+    pub feature_flags: FeatureFlags,
 }
 
 /// Platform metadata
@@ -113,6 +115,8 @@ pub struct NeuralConfig {
     pub max_retries: u32,
     #[serde(default = "default_error_threshold")]
     pub error_threshold: f64,
+    #[serde(default = "default_lookback_window")]
+    pub lookback_window: usize,
 }
 
 impl Default for NeuralConfig {
@@ -136,6 +140,7 @@ impl Default for NeuralConfig {
             model_timeout_seconds: default_model_timeout_seconds(),
             max_retries: default_max_retries(),
             error_threshold: default_error_threshold(),
+            lookback_window: default_lookback_window(),
         }
     }
 }
@@ -522,6 +527,10 @@ fn default_max_retries() -> u32 {
 }
 fn default_error_threshold() -> f64 {
     0.05
+}
+
+fn default_lookback_window() -> usize {
+    24
 }
 
 // Security-related default functions
@@ -1373,6 +1382,62 @@ impl Default for DevelopmentConfig {
             seed_test_data: default_false(),
             reset_database_on_startup: default_false(),
         }
+    }
+}
+
+/// Feature flags for controlling system behavior during gradual rollout
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeatureFlags {
+    /// Block mock adapters from being used (default: true)
+    #[serde(default = "default_true")]
+    pub block_mock_adapters: bool,
+    /// Enforce all predictions through FANN routing (default: false)
+    #[serde(default = "default_false")]
+    pub enforce_fann_routing: bool,
+    /// Enable DAA orchestration for autonomous operations (default: false)
+    #[serde(default = "default_false")]
+    pub enable_daa_orchestration: bool,
+}
+
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        Self {
+            block_mock_adapters: default_true(),
+            enforce_fann_routing: default_false(),
+            enable_daa_orchestration: default_false(),
+        }
+    }
+}
+
+impl FeatureFlags {
+    /// Create feature flags from environment variables
+    pub fn from_env() -> Self {
+        Self {
+            block_mock_adapters: env::var("BLOCK_MOCK_ADAPTERS")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            enforce_fann_routing: env::var("ENFORCE_FANN_ROUTING")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
+            enable_daa_orchestration: env::var("ENABLE_DAA_ORCHESTRATION")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
+        }
+    }
+
+    /// Check if mock adapters should be blocked
+    pub fn should_block_mocks(&self) -> bool {
+        self.block_mock_adapters
+    }
+
+    /// Check if FANN routing should be enforced
+    pub fn should_enforce_fann(&self) -> bool {
+        self.enforce_fann_routing
+    }
+
+    /// Check if DAA orchestration is enabled
+    pub fn is_daa_enabled(&self) -> bool {
+        self.enable_daa_orchestration
     }
 }
 

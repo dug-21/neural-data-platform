@@ -41,6 +41,12 @@ async fn main() -> Result<()> {
     info!("   Redis: {}", config.redis.url);
     info!("   Neural Memory: {}GB", config.neural.memory_gb);
     info!("   Models: {:?}", config.neural.models);
+    
+    // Log feature flags
+    info!("Feature Flags:");
+    info!("   Block Mock Adapters: {}", config.feature_flags.block_mock_adapters);
+    info!("   Enforce FANN Routing: {}", config.feature_flags.enforce_fann_routing);
+    info!("   Enable DAA Orchestration: {}", config.feature_flags.enable_daa_orchestration);
 
     // Initialize DAA components
     info!("Initializing neural predictor...");

@@ -1,13 +1,16 @@
 //! Performance Channel Module
 //!
-//! Provides a multi-producer, single-consumer channel that bridges performance monitoring
-//! to training decisions, enabling real-time feedback loops for autonomous training.
+//! Provides a broadcast channel that bridges performance monitoring to training decisions,
+//! enabling real-time feedback loops for autonomous training with bounded buffer.
 
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use tokio::sync::{broadcast, mpsc};
+use tracing::{debug, info, warn};
 
 /// Performance event emitted by various system components
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,9 +35,11 @@ pub enum PerformanceSource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PerformanceEventType {
     PredictionCompleted {
+        model: String,
         accuracy: f64,
         confidence: f64,
         latency_ms: u64,
+        timestamp: DateTime<Utc>,
     },
     TradingSignal {
         profit_loss: f64,
@@ -76,43 +81,95 @@ pub enum ComponentType {
     Custom(String),
 }
 
-/// Channel for performance events with multi-producer, single-consumer pattern
+/// Channel for performance events with broadcast distribution and bounded buffer
 pub struct PerformanceChannel {
-    sender: mpsc::UnboundedSender<PerformanceEvent>,
-    receiver: Option<mpsc::UnboundedReceiver<PerformanceEvent>>,
+    tx: broadcast::Sender<PerformanceEvent>,
+    metrics_buffer: Arc<Mutex<VecDeque<PerformanceEvent>>>,
+    max_buffer_size: usize,
 }
 
 impl PerformanceChannel {
-    /// Create a new performance channel
-    pub fn new() -> Self {
-        let (sender, receiver) = mpsc::unbounded_channel();
-        Self {
-            sender,
-            receiver: Some(receiver),
+    /// Create a new performance channel with broadcast and receiver
+    pub fn new(buffer_size: usize) -> (Self, broadcast::Receiver<PerformanceEvent>) {
+        let (tx, rx) = broadcast::channel(buffer_size);
+        
+        let channel = Self {
+            tx,
+            metrics_buffer: Arc::new(Mutex::new(VecDeque::with_capacity(buffer_size))),
+            max_buffer_size: buffer_size,
+        };
+        
+        info!("Created PerformanceChannel with buffer size: {}", buffer_size);
+        (channel, rx)
+    }
+    
+    /// Emit a performance event to subscribers and buffer it
+    pub async fn emit(&self, event: PerformanceEvent) -> Result<()> {
+        debug!("Emitting performance event: {:?}", event.event_type);
+        
+        // Send to subscribers (ignore if no active receivers)
+        let _ = self.tx.send(event.clone());
+        
+        // Buffer for analysis with thread-safe access
+        {
+            let mut buffer = self.metrics_buffer.lock()
+                .map_err(|e| anyhow::anyhow!("Failed to lock metrics buffer: {}", e))?;
+            
+            // Enforce max buffer size to prevent memory issues
+            if buffer.len() >= self.max_buffer_size {
+                let removed = buffer.pop_front();
+                if let Some(old_event) = removed {
+                    debug!("Removed old event from buffer: {:?}", old_event.timestamp);
+                }
+            }
+            
+            buffer.push_back(event);
+            debug!("Buffer size after emit: {}/{}", buffer.len(), self.max_buffer_size);
+        }
+        
+        Ok(())
+    }
+    
+    /// Get recent metrics from the buffer
+    pub fn get_recent_metrics(&self, count: usize) -> Vec<PerformanceEvent> {
+        let buffer = match self.metrics_buffer.lock() {
+            Ok(buffer) => buffer,
+            Err(e) => {
+                warn!("Failed to lock metrics buffer: {}", e);
+                return Vec::new();
+            }
+        };
+        
+        let metrics: Vec<PerformanceEvent> = buffer.iter()
+            .rev()
+            .take(count)
+            .cloned()
+            .collect();
+        
+        info!("Retrieved {} recent metrics (requested: {})", metrics.len(), count);
+        metrics
+    }
+    
+    /// Get a new receiver for the broadcast channel
+    pub fn subscribe(&self) -> broadcast::Receiver<PerformanceEvent> {
+        self.tx.subscribe()
+    }
+    
+    /// Get the current buffer size
+    pub fn buffer_size(&self) -> usize {
+        match self.metrics_buffer.lock() {
+            Ok(buffer) => buffer.len(),
+            Err(_) => 0,
         }
     }
-
-    /// Get a sender clone for emitting events
-    pub fn get_sender(&self) -> mpsc::UnboundedSender<PerformanceEvent> {
-        self.sender.clone()
-    }
-
-    /// Take the receiver (can only be called once)
-    pub fn take_receiver(&mut self) -> Option<mpsc::UnboundedReceiver<PerformanceEvent>> {
-        self.receiver.take()
-    }
-
-    /// Send a performance event
-    pub fn send(&self, event: PerformanceEvent) -> Result<()> {
-        self.sender
-            .send(event)
-            .map_err(|e| anyhow::anyhow!("Failed to send performance event: {}", e))
-    }
-}
-
-impl Default for PerformanceChannel {
-    fn default() -> Self {
-        Self::new()
+    
+    /// Clear the metrics buffer
+    pub fn clear_buffer(&self) -> Result<()> {
+        let mut buffer = self.metrics_buffer.lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock metrics buffer: {}", e))?;
+        buffer.clear();
+        info!("Cleared performance metrics buffer");
+        Ok(())
     }
 }
 
@@ -207,8 +264,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_performance_channel_creation() {
-        let channel = PerformanceChannel::new();
-        assert!(channel.sender.send(create_test_event()).is_ok());
+        let (channel, mut receiver) = PerformanceChannel::new(100);
+        
+        // Test emit functionality
+        let event = create_test_event();
+        assert!(channel.emit(event.clone()).await.is_ok());
+        
+        // Test that receiver gets the event
+        match receiver.try_recv() {
+            Ok(received) => assert_eq!(received.timestamp, event.timestamp),
+            Err(_) => panic!("Should have received event"),
+        }
     }
 
     #[tokio::test]
@@ -218,9 +284,11 @@ mod tests {
                 model_name: "test".to_string(),
             })
             .event_type(PerformanceEventType::PredictionCompleted {
+                model: "test".to_string(),
                 accuracy: 0.95,
                 confidence: 0.9,
                 latency_ms: 100,
+                timestamp: Utc::now(),
             })
             .custom_metric("test_metric".to_string(), 42.0)
             .build();
@@ -232,16 +300,61 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_channel_send_receive() {
-        let mut channel = PerformanceChannel::new();
-        let sender = channel.get_sender();
-        let mut receiver = channel.take_receiver().unwrap();
+    async fn test_channel_broadcast_multiple_receivers() {
+        let (channel, mut receiver1) = PerformanceChannel::new(100);
+        let mut receiver2 = channel.subscribe();
 
         let event = create_test_event();
-        sender.send(event.clone()).unwrap();
+        channel.emit(event.clone()).await.unwrap();
 
-        let received = receiver.recv().await.unwrap();
-        assert_eq!(received.timestamp, event.timestamp);
+        // Both receivers should get the event
+        let received1 = receiver1.try_recv().unwrap();
+        let received2 = receiver2.try_recv().unwrap();
+        
+        assert_eq!(received1.timestamp, event.timestamp);
+        assert_eq!(received2.timestamp, event.timestamp);
+    }
+    
+    #[tokio::test]
+    async fn test_metrics_buffer() {
+        let (channel, _receiver) = PerformanceChannel::new(5);
+        
+        // Emit multiple events
+        for i in 0..10 {
+            let mut event = create_test_event();
+            if let PerformanceEventType::PredictionCompleted { ref mut accuracy, .. } = event.event_type {
+                *accuracy = i as f64 / 10.0;
+            }
+            channel.emit(event).await.unwrap();
+        }
+        
+        // Buffer should have max 5 events (oldest were removed)
+        assert_eq!(channel.buffer_size(), 5);
+        
+        // Get recent metrics
+        let recent = channel.get_recent_metrics(3);
+        assert_eq!(recent.len(), 3);
+        
+        // Should get the most recent events (reversed order)
+        if let PerformanceEventType::PredictionCompleted { accuracy, .. } = &recent[0].event_type {
+            assert_eq!(*accuracy, 0.9); // 9th event (most recent)
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_clear_buffer() {
+        let (channel, _receiver) = PerformanceChannel::new(10);
+        
+        // Add some events
+        for _ in 0..5 {
+            channel.emit(create_test_event()).await.unwrap();
+        }
+        
+        assert_eq!(channel.buffer_size(), 5);
+        
+        // Clear buffer
+        channel.clear_buffer().unwrap();
+        assert_eq!(channel.buffer_size(), 0);
     }
 
     fn create_test_event() -> PerformanceEvent {
@@ -251,9 +364,11 @@ mod tests {
                 model_name: "test".to_string(),
             },
             event_type: PerformanceEventType::PredictionCompleted {
+                model: "test".to_string(),
                 accuracy: 0.95,
                 confidence: 0.9,
                 latency_ms: 100,
+                timestamp: Utc::now(),
             },
             metrics: PerformanceMetrics::default(),
         }

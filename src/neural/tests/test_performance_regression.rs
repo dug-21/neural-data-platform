@@ -307,7 +307,7 @@ fn get_process_memory_mb() -> f64 {
 
     let pid = std::process::id();
     system
-        .process(pid.into())
+        .process((pid as usize).into())
         .map(|p| p.memory() as f64 / 1024.0 / 1024.0)
         .unwrap_or(0.0)
 }
