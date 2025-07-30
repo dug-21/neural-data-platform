@@ -32,10 +32,10 @@ if ! command -v claude &> /dev/null; then
 fi
 
 # Install claude-flow
-echo "🐝 Installing ruv-swarm..."
-if ! command -v claude-flow &> /dev/null; then
-    npm install -g claude-flow@alpha
-fi
+# echo "🐝 Installing ruv-swarm..."
+# if ! command -v claude-flow &> /dev/null; then
+#     npm install -g claude-flow@alpha
+# fi
 
 # Wait for Claude to be fully installed
 echo "⏳ Waiting for Claude CLI to be available..."

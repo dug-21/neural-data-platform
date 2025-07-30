@@ -16,7 +16,6 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "rust-lang.rust-analyzer",
         "ms-python.python",
         "ms-azuretools.vscode-docker",
         "ms-vscode.makefile-tools",
@@ -25,8 +24,6 @@
         "bierner.markdown-mermaid"
       ],
       "settings": {
-        "rust-analyzer.cargo.buildScripts.enable": true,
-        "rust-analyzer.checkOnSave.command": "clippy",
         "terminal.integrated.defaultProfile.linux": "bash"
       }
     }

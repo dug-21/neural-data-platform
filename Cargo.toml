@@ -148,6 +148,23 @@ path = "examples/adapter_integration.rs"
 name = "autonomous_trading_demo"
 path = "examples/autonomous_trading_demo.rs"
 
+# Phase 2 Test Configurations
+[[test]]
+name = "phase2_tdd_tests"
+path = "tests/unit/phase2_tdd_tests.rs"
+
+[[test]]
+name = "phase2_central_routing_tests"
+path = "tests/unit/phase2_central_routing_tests.rs"
+
+[[test]]
+name = "phase2_performance_monitoring_tests"
+path = "tests/unit/phase2_performance_monitoring_tests.rs"
+
+[[test]]
+name = "phase2_test_runner"
+path = "tests/unit/phase2_test_runner.rs"
+
 [[bin]]
 name = "mcp_server"
 path = "src/bin/mcp_server.rs"
