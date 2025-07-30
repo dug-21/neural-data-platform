@@ -8,7 +8,7 @@
 //! - Memory management and resource cleanup
 //! - Integration between components
 
-use autonomous_platform::adapters::neuro_divergent::{NeuroDivergentAdapter, AdapterConfig};
+// Removed: NeuroDivergentAdapter import (deprecated)
 use autonomous_platform::adapters::AdapterError;
 use autonomous_platform::neural::fann_predictor::{FannPredictor, FannModelConfig};
 use autonomous_platform::neural::{PredictionResult, NeuralPredictorTrait};

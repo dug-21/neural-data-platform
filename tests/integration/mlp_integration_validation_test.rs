@@ -6,7 +6,7 @@
 use autonomous_platform::neural::{FannPredictor, NeuralPredictorTrait};
 use autonomous_platform::config::NeuralConfig;
 use autonomous_platform::data::TimeSeriesData;
-use autonomous_platform::adapters::neuro_divergent::NeuroDivergentAdapter;
+// Removed: NeuroDivergentAdapter import (deprecated)
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;

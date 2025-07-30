@@ -12,9 +12,8 @@ use autonomous_platform::adapters::neural::data_converter::{
 };
 use autonomous_platform::adapters::neural::type_converter::TypeConverter;
 use autonomous_platform::adapters::neural::vendor_conversion::VendorConversion;
-use autonomous_platform::adapters::neural::neuro_divergent_adapter::{
-    NeuralModelConfig, NeuralAdapterError
-};
+use autonomous_platform::adapters::enhanced_neural_adapter::EnhancedNeuralConfig;
+use autonomous_platform::adapters::AdapterError;
 use autonomous_platform::data::TimeSeriesData;
 use chrono::{DateTime, Utc, TimeZone, Duration};
 use std::collections::HashMap;

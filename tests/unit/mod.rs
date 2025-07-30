@@ -40,3 +40,6 @@ pub mod model_storage_test;
 // Training scheduler tests
 pub mod training_scheduler_test;
 pub mod market_hours_test;
+
+// Module encapsulation tests
+pub mod test_module_encapsulation;
