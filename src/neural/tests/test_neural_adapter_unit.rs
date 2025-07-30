@@ -6,7 +6,7 @@
 //! - Connection lifecycle management
 //! - State transitions and validation
 
-use super::super::fann_predictor::*;
+use super::super::fann::{FannPredictor, FannModelConfig};
 use crate::config::NeuralConfig;
 use crate::adapters::enhanced_neural_adapter::{
     EnhancedNeuralAdapter,

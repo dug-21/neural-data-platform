@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
-use super::fann_predictor::FannPredictor;
+use crate::neural::FannPredictor;
 use super::online_validator::{OnlineValidator, OnlineValidationConfig, ValidationMetrics};
 use super::streaming_connector::{StreamingConnector, StreamingConfig};
 use super::PredictionResult;

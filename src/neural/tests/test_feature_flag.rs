@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::fann_predictor::FannPredictor;
+use crate::neural::FannPredictor;
 use crate::neural::NeuralPredictorTrait;
 
 /// Create test time series data for predictions

@@ -18,7 +18,7 @@ use tracing::{debug, info, warn};
 use super::PredictionResult;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::fann_predictor::FannPredictor;
+use crate::neural::FannPredictor;
 use crate::neural::NeuralPredictorTrait;
 
 /// Enhanced prediction result with confidence breakdown

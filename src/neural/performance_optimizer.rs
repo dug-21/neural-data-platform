@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
-use super::fann_predictor::{FannModelConfig, FannPredictor};
+use super::fann::{FannModelConfig, FannPredictor};
 use crate::data::TimeSeriesData;
 use crate::neural::NeuralPredictorTrait;
 use ::ruv_fann::{Network, NetworkBuilder};
@@ -95,16 +95,13 @@ impl OptimizedFannPredictor {
     /// Get default model configuration as static method
     fn get_default_model_config(_model_name: &str) -> Option<FannModelConfig> {
         Some(FannModelConfig {
-            input_size: 60, // Default: 20 timesteps * 3 features
-            hidden_layers: vec![128, 64, 32],
-            output_size: 1,
-            hidden_activation: ruv_fann::ActivationFunction::Sigmoid,
-            output_activation: ruv_fann::ActivationFunction::Linear,
+            layers: vec![60, 128, 64, 32, 1], // input + hidden + output
+            activation: ruv_fann::ActivationFunction::Sigmoid,
             learning_rate: 0.001,
+            epochs: 1000,
+            desired_error: 0.01,
             max_epochs: 1000,
-            momentum: 0.9,
-            target_error: 0.01,
-            use_cascade: false,
+            epochs_between_reports: 100,
         })
     }
 
@@ -138,16 +135,13 @@ impl OptimizedFannPredictor {
     /// Get default model configuration
     fn default_model_config(&self, _model_name: &str) -> Option<FannModelConfig> {
         Some(FannModelConfig {
-            input_size: 60, // Default: 20 timesteps * 3 features
-            hidden_layers: vec![128, 64, 32],
-            output_size: 1,
-            hidden_activation: ruv_fann::ActivationFunction::Sigmoid,
-            output_activation: ruv_fann::ActivationFunction::Linear,
+            layers: vec![60, 128, 64, 32, 1], // input + hidden + output
+            activation: ruv_fann::ActivationFunction::Sigmoid,
             learning_rate: 0.001,
+            epochs: 1000,
+            desired_error: 0.01,
             max_epochs: 1000,
-            momentum: 0.9,
-            target_error: 0.01,
-            use_cascade: false,
+            epochs_between_reports: 100,
         })
     }
 
@@ -189,7 +183,7 @@ impl OptimizedFannPredictor {
     async fn load_and_cache_model(
         model_name: &str,
         cache: Arc<DashMap<String, CachedModel>>,
-        predictor: Arc<FannPredictor>,
+        _predictor: Arc<FannPredictor>,
     ) -> Result<()> {
         let start = Instant::now();
 
@@ -199,12 +193,7 @@ impl OptimizedFannPredictor {
 
         // Build network
         let network = NetworkBuilder::new()
-            .layers_from_sizes(&{
-                let mut sizes = vec![config.input_size];
-                sizes.extend(&config.hidden_layers);
-                sizes.push(config.output_size);
-                sizes
-            })
+            .layers_from_sizes(&config.layers)
             .build();
 
         let load_time_ms = start.elapsed().as_millis() as f64;
@@ -306,9 +295,9 @@ impl OptimizedFannPredictor {
         buffer: &mut Vec<f32>,
     ) -> Result<()> {
         buffer.clear();
-        buffer.reserve(config.input_size);
+        buffer.reserve(config.layers[0]);
 
-        let window_size = config.input_size / 5; // 5 features per timestep
+        let window_size = config.layers[0] / 5; // 5 features per timestep
         let start_idx = data.len().saturating_sub(window_size);
 
         for i in start_idx..data.len() {
@@ -324,10 +313,10 @@ impl OptimizedFannPredictor {
         }
 
         // Pad if necessary
-        while buffer.len() < config.input_size {
+        while buffer.len() < config.layers[0] {
             buffer.push(0.0);
         }
-        buffer.truncate(config.input_size);
+        buffer.truncate(config.layers[0]);
 
         Ok(())
     }
@@ -493,9 +482,9 @@ impl OptimizedFannPredictor {
         data: Vec<TimeSeriesData>,
     ) -> Result<Vec<OptimizedPredictionResult>> {
         let mut results = Vec::with_capacity(data.len());
-        let horizon = config.output_size;
+        let horizon = *config.layers.last().unwrap_or(&1);
 
-        for window in data.windows(config.input_size / 5) {
+        for window in data.windows(config.layers[0] / 5) {
             let result = self.predict_single_optimized(network, config, window, horizon)?;
             results.push(result);
         }

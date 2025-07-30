@@ -23,6 +23,14 @@ use crate::adapters::model_rollback::{
 };
 // Internal neural types are no longer exposed - functionality handled by NeuralPredictor
 // Creating stub types for compilation until full refactoring
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PerformanceMetrics {
+    pub accuracy: f64,
+    pub loss: f64,
+    pub training_time_ms: u64,
+    pub memory_usage_mb: u64,
+}
+
 #[derive(Debug, Clone, Default)]
 struct FannModelConfig {
     pub input_size: usize,
@@ -52,6 +60,8 @@ impl FannModelAdapter {
         _checkpoint_freq: usize,
     ) -> Result<TrainingRecord> {
         Ok(TrainingRecord {
+            model_name: "FannPredictor".to_string(),
+            timestamp: chrono::Utc::now(),
             epochs: 100,
             final_error: 0.001,
         })
@@ -59,11 +69,10 @@ impl FannModelAdapter {
     
     fn get_performance_metrics(&self) -> PerformanceMetrics {
         PerformanceMetrics {
-            mse: 0.001,
-            rmse: 0.03,
-            mae: 0.02,
-            r_squared: 0.95,
-            mape: 2.5,
+            accuracy: 0.95,
+            loss: 0.001,
+            training_time_ms: 1000,
+            memory_usage_mb: 100,
         }
     }
     
@@ -72,19 +81,48 @@ impl FannModelAdapter {
     }
     
     fn get_metadata(&self) -> ModelMetadata {
+        use chrono::Utc;
+        use crate::adapters::model_storage::{TrainingParams, PerformanceMetrics, DataInfo};
+        
         ModelMetadata {
+            model_type: "FANN".to_string(),
             version: SemanticVersion {
                 major: 1,
                 minor: 0,
                 patch: 0,
             },
-            name: "FannModel".to_string(),
-            description: "FANN Neural Network Model".to_string(),
-            model_type: "FANN".to_string(),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-            tags: vec!["neural".to_string(), "fann".to_string()],
-            custom_metadata: std::collections::HashMap::new(),
+            timestamp: Utc::now(),
+            accuracy: 0.95,
+            loss: 0.05,
+            training_params: TrainingParams {
+                learning_rate: 0.001,
+                batch_size: 32,
+                epochs: 100,
+                optimizer: "backprop".to_string(),
+                loss_function: "mse".to_string(),
+                early_stopping_patience: Some(10),
+                validation_split: 0.2,
+            },
+            performance_metrics: PerformanceMetrics {
+                mae: 0.02,
+                mse: 0.001,
+                rmse: 0.03,
+                mape: 2.5,
+                r_squared: 0.98,
+                validation_loss: 0.05,
+                training_loss: 0.04,
+            },
+            checksum: "sha256:placeholder".to_string(),
+            training_duration_secs: 3600,
+            data_info: DataInfo {
+                num_samples: 10000,
+                num_features: 2,
+                symbol: "BTCUSD".to_string(),
+                time_range: (
+                    Utc::now() - chrono::Duration::days(30),
+                    Utc::now(),
+                ),
+            },
         }
     }
     
@@ -308,9 +346,9 @@ impl ModelPersistenceService {
         // Update performance metrics for rollback monitoring
         let performance_metrics = adapter_guard.get_performance_metrics();
         let model_metrics = ModelMetrics {
-            accuracy: performance_metrics.r_squared,
+            accuracy: performance_metrics.accuracy,
             latency_ms: 50.0, // Default latency
-            error_rate: performance_metrics.mse,
+            error_rate: performance_metrics.loss,
             memory_mb: 100, // Default memory usage
             cpu_percent: 25.0, // Default CPU usage
             throughput: 1.0 / 0.05, // predictions per second
@@ -338,7 +376,7 @@ impl ModelPersistenceService {
             },
             success: true,
             message: format!("Training completed: {} epochs, MSE: {:.6}", 
-                           record.epochs_completed, record.final_mse),
+                           record.epochs, record.final_error),
             timestamp: Utc::now(),
             metadata: None,
             version: None,
@@ -533,7 +571,7 @@ impl ModelPersistenceService {
                 drop(adapter_guard);
 
                 // Check for performance degradation
-                let accuracy_pct = metrics.r_squared * 100.0;
+                let accuracy_pct = metrics.accuracy * 100.0;
                 let degradation = 100.0 - accuracy_pct;
 
                 if degradation > threshold as f64 {

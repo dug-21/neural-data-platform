@@ -10,10 +10,25 @@ use anyhow::Result;
 
 pub mod autonomous_decisions;
 pub mod autonomous_neural_coordinator;
+// Original monolithic module (Phase 3B will use this)
 pub mod daa_coordinator;
+
+// Refactored modular version (available for Phase 3C migration)
+pub mod daa_coordinator_modular {
+    pub mod config;
+    pub mod core; 
+    pub mod decisions;
+    pub mod strategies;
+    pub mod agents;
+}
 pub mod data_access;
 pub mod training_data_service;
 pub mod model_persistence_service;
+
+// New integration architecture components
+pub mod event_bus;
+pub mod integration_hub;
+pub mod coordinators;
 
 // Re-export commonly used types
 pub use autonomous_decisions::{DaaDecisionMaker, MarketTrend};
@@ -23,6 +38,14 @@ pub use training_data_service::{
 };
 pub use model_persistence_service::{
     ModelPersistenceService, ModelPersistenceConfig, ModelOperation, ModelOperationResult,
+};
+
+// Re-export new integration components
+pub use event_bus::{EventBus, EventBusMetrics, SubscriberInfo};
+pub use integration_hub::{IntegrationHub, IntegrationState, IntegrationConfig};
+pub use coordinators::{
+    PerformanceCoordinator, MarketTimingCoordinator, TrainingCoordinator,
+    CoordinationError, CoordinationResult,
 };
 
 /// Trait for market data providers

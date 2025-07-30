@@ -73,7 +73,7 @@
 
 pub mod adapters;
 pub mod agents;
-pub mod config;
+pub mod config; // Modular configuration system
 pub mod daa;
 pub mod data;
 pub mod integration;

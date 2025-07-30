@@ -10,8 +10,6 @@ use std::env;
 /// Feature flags for controlling system behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFlags {
-    /// Block mock adapters from being used (technical debt cleanup)
-    pub block_mock_adapters: bool,
     
     /// Enforce all neural predictions to route through FANN predictor
     pub enforce_fann_routing: bool,
@@ -23,7 +21,6 @@ pub struct FeatureFlags {
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
-            block_mock_adapters: true,     // Start with blocking mock adapters
             enforce_fann_routing: false,    // Enable in Phase 2
             enable_daa_orchestration: false, // Enable in Phase 3
         }
@@ -34,9 +31,6 @@ impl FeatureFlags {
     /// Create feature flags from environment variables
     pub fn from_env() -> Result<Self> {
         let flags = Self {
-            block_mock_adapters: env::var("BLOCK_MOCK_ADAPTERS")
-                .map(|v| v.to_lowercase() == "true")
-                .unwrap_or(true), // Default to true for tech debt cleanup
             
             enforce_fann_routing: env::var("ENFORCE_FANN_ROUTING")
                 .map(|v| v.to_lowercase() == "true")
@@ -55,10 +49,6 @@ impl FeatureFlags {
         Self::from_env().unwrap_or_default()
     }
 
-    /// Check if mock adapters should be blocked
-    pub fn should_block_mock_adapters(&self) -> bool {
-        self.block_mock_adapters
-    }
 
     /// Check if FANN routing should be enforced
     pub fn should_enforce_fann_routing(&self) -> bool {
@@ -74,7 +64,6 @@ impl FeatureFlags {
     #[cfg(test)]
     pub fn test() -> Self {
         Self {
-            block_mock_adapters: false,
             enforce_fann_routing: true,
             enable_daa_orchestration: true,
         }
@@ -89,16 +78,11 @@ impl FeatureFlags {
 /// Builder pattern for feature flags
 #[derive(Default)]
 pub struct FeatureFlagsBuilder {
-    block_mock_adapters: Option<bool>,
     enforce_fann_routing: Option<bool>,
     enable_daa_orchestration: Option<bool>,
 }
 
 impl FeatureFlagsBuilder {
-    pub fn block_mock_adapters(mut self, value: bool) -> Self {
-        self.block_mock_adapters = Some(value);
-        self
-    }
 
     pub fn enforce_fann_routing(mut self, value: bool) -> Self {
         self.enforce_fann_routing = Some(value);
@@ -113,7 +97,6 @@ impl FeatureFlagsBuilder {
     pub fn build(self) -> FeatureFlags {
         let defaults = FeatureFlags::default();
         FeatureFlags {
-            block_mock_adapters: self.block_mock_adapters.unwrap_or(defaults.block_mock_adapters),
             enforce_fann_routing: self.enforce_fann_routing.unwrap_or(defaults.enforce_fann_routing),
             enable_daa_orchestration: self.enable_daa_orchestration.unwrap_or(defaults.enable_daa_orchestration),
         }
@@ -153,7 +136,6 @@ mod tests {
     #[test]
     fn test_default_feature_flags() {
         let flags = FeatureFlags::default();
-        assert!(flags.block_mock_adapters);
         assert!(!flags.enforce_fann_routing);
         assert!(!flags.enable_daa_orchestration);
     }
@@ -161,11 +143,9 @@ mod tests {
     #[test]
     fn test_feature_flags_builder() {
         let flags = FeatureFlags::builder()
-            .block_mock_adapters(false)
             .enforce_fann_routing(true)
             .build();
         
-        assert!(!flags.block_mock_adapters);
         assert!(flags.enforce_fann_routing);
         assert!(!flags.enable_daa_orchestration);
     }

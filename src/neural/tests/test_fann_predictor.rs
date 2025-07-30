@@ -8,7 +8,7 @@
 //! - Performance tracking and adaptation
 //! - Error handling and edge cases
 
-use super::super::fann_predictor::*;
+use super::super::fann::{FannPredictor, FannModelConfig, ModelPerformance, MarketRegime, NeuralError, EnsembleManager, StreamingConfig};
 use super::super::{NeuralPredictorTrait, PredictionResult};
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;

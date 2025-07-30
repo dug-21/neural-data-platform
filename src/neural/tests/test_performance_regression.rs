@@ -8,7 +8,8 @@ use tokio::time::{Duration, Instant};
 
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::{FannPredictor, OptimizedFannPredictor};
+use crate::neural::FannPredictor;
+// Note: OptimizedFannPredictor functionality is now integrated into FannPredictor
 
 /// Maximum acceptable latency for single predictions (ms)
 const MAX_SINGLE_PREDICTION_LATENCY_MS: u64 = 50;

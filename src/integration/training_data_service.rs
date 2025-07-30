@@ -43,13 +43,16 @@ impl Default for TrainingDataConfig {
 }
 
 /// Model type for data preparation
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModelType {
     MLP,      // Multi-Layer Perceptron (flat features)
     LSTM,     // Long Short-Term Memory (sequences)
     GRU,      // Gated Recurrent Unit (sequences)
     CNN,      // Convolutional Neural Network (2D features)
     Ensemble, // Multiple models combined
+    DeepAR,   // DeepAR-style network
+    TCN,      // Temporal Convolutional Network
+    NHITS,    // N-HiTS network
 }
 
 /// Prepared training data ready for neural models
@@ -172,6 +175,21 @@ impl TrainingDataService {
             ModelType::CNN => self.prepare_cnn_data(symbol, raw_data, &config).await?,
             ModelType::Ensemble => {
                 self.prepare_ensemble_data(symbol, raw_data, &config)
+                    .await?
+            }
+            ModelType::DeepAR => {
+                // DeepAR requires sequence data with probabilistic features
+                self.prepare_sequence_data(symbol, raw_data, &config, model_type.clone())
+                    .await?
+            }
+            ModelType::TCN => {
+                // TCN uses sequence data with convolutional approach
+                self.prepare_sequence_data(symbol, raw_data, &config, model_type.clone())
+                    .await?
+            }
+            ModelType::NHITS => {
+                // NHITS requires hierarchical sequence data
+                self.prepare_sequence_data(symbol, raw_data, &config, model_type.clone())
                     .await?
             }
         };

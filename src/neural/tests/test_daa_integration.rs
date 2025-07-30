@@ -8,7 +8,7 @@
 //! - Confidence-based consensus mechanisms
 
 use super::super::enhanced_predictor::*;
-use super::super::fann_predictor::*;
+use super::super::fann::{FannPredictor, FannModelConfig, ModelPerformance, MarketRegime, NeuralError};
 use super::super::{NeuralPredictorTrait, PredictionResult};
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;

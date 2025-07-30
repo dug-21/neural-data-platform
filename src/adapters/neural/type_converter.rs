@@ -178,8 +178,8 @@ impl VendorDataConverter {
         })
     }
 
-    /// Convert to neuro-divergent DataPoint format
-    pub fn to_neuro_divergent_datapoints(
+    /// Convert to enhanced DataPoint format
+    pub fn to_enhanced_datapoints(
         &self,
         data: &[TimeSeriesData],
     ) -> Result<Vec<NeuralDataPoint>, AdapterError> {

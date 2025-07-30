@@ -12,7 +12,7 @@ use tokio::sync::Semaphore;
 use tracing::{debug, info};
 
 use super::ensemble_types::EnsemblePrediction;
-use super::fann_predictor::FannPredictor;
+use crate::neural::FannPredictor;
 use crate::data::TimeSeriesData;
 use crate::neural::{NeuralPredictorTrait, PredictionResult};
 

@@ -14,7 +14,7 @@ use super::type_converter::{SafeF32Convert, VendorDataConverter};
 use crate::data::TimeSeriesData;
 
 // Import vendor types - using our local implementations for now
-// In production, these would come from neuro_divergent_core
+// In production, these would come from enhanced neural core
 use crate::data::TimeSeriesData as VendorTimeSeriesData;
 
 /// Temporary local implementation of vendor data point
@@ -48,8 +48,8 @@ impl VendorFormatConverter {
         }
     }
 
-    /// Convert to neuro-divergent-data TimeSeriesData<f32> format
-    pub fn to_neuro_divergent_f32(
+    /// Convert to enhanced TimeSeriesData<f32> format
+    pub fn to_enhanced_f32(
         &self,
         data: &[TimeSeriesData],
         _symbol: &str,
@@ -141,7 +141,7 @@ impl VendorFormatConverter {
                 value: Some(pred as f64),
                 metadata: Some(serde_json::json!({
                     "type": "neural_forecast",
-                    "model": "neuro_divergent_f32",
+                    "model": "enhanced_f32",
                     "forecast_step": i + 1,
                     "forecast_horizon": forecast_horizon,
                     "base_timestamp": base_data.timestamp.to_rfc3339(),
@@ -232,7 +232,7 @@ impl VendorFormatConverter {
         let mut results = HashMap::with_capacity(data_batch.len());
 
         for (symbol, data) in data_batch {
-            let converted = self.to_neuro_divergent_f32(data, symbol)?;
+            let converted = self.to_enhanced_f32(data, symbol)?;
             results.insert(symbol.clone(), converted);
         }
 
@@ -406,11 +406,11 @@ mod tests {
     }
 
     #[test]
-    fn test_neuro_divergent_conversion() {
+    fn test_enhanced_conversion() {
         let data = create_test_timeseries();
         let converter = VendorFormatConverter::new();
 
-        let converted = converter.to_neuro_divergent_f32(&data, "BTC/USD").unwrap();
+        let converted = converter.to_enhanced_f32(&data, "BTC/USD").unwrap();
 
         // Since we return the first point, check basic properties
         assert_eq!(converted.symbol, "BTC/USD");
@@ -464,7 +464,7 @@ mod tests {
         let data = create_test_timeseries();
         let converter = VendorFormatConverter::new();
 
-        let converted = converter.to_neuro_divergent_f32(&data, "BTC/USD").unwrap();
+        let converted = converter.to_enhanced_f32(&data, "BTC/USD").unwrap();
         let validation_result = converter.validate_conversion(&data, &converted);
 
         assert!(validation_result.is_ok());

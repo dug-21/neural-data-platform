@@ -13,6 +13,7 @@ pub mod integration_bridge;
 pub mod model_rollback;
 pub mod model_storage;
 pub mod neural;
+// DELETED: pub mod data_converter; - removed deprecated 590-line file
 
 // neuro_divergent module has been removed
 // Use enhanced_neural_adapter with FANN predictor instead
