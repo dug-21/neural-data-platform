@@ -51,56 +51,6 @@ async fn test_prometheus_metrics() {
     }
 }
 
-#[tokio::test]
-async fn test_disk_space_check() {
-    use super::health::check_disk_space;
-    use std::path::Path;
-    
-    let models_path = Path::new("./models");
-    let disk_info = check_disk_space(models_path).await;
-    
-    println!("Disk Info: {:?}", disk_info);
-    
-    // Basic sanity checks
-    assert!(disk_info.total_gb > 0.0);
-    assert!(disk_info.available_gb >= 0.0);
-    assert!(disk_info.used_percent >= 0.0 && disk_info.used_percent <= 100.0);
-}
-
-#[tokio::test]
-async fn test_symlink_validation() {
-    use super::health::check_symlinks;
-    use std::path::Path;
-    
-    let models_path = Path::new("./models");
-    let symlinks_valid = check_symlinks(models_path).await;
-    
-    println!("Symlinks valid: {}", symlinks_valid);
-    
-    // Should return true since no current directory exists or symlinks are valid
-    assert!(symlinks_valid);
-}
-
-#[tokio::test]
-async fn test_model_integrity() {
-    use super::health::validate_model_integrity;
-    use std::path::Path;
-    
-    let models_path = Path::new("./models");
-    
-    if models_path.exists() {
-        // Test some existing model directories
-        let production_path = models_path.join("production");
-        let checkpoints_path = models_path.join("checkpoints");
-        
-        if production_path.exists() {
-            let integrity_result = validate_model_integrity(&production_path).await;
-            println!("Production models integrity: {}", integrity_result);
-        }
-        
-        if checkpoints_path.exists() {
-            let integrity_result = validate_model_integrity(&checkpoints_path).await;
-            println!("Checkpoints models integrity: {}", integrity_result);
-        }
-    }
-}
+// Removed test_disk_space_check, test_symlink_validation and test_model_integrity 
+// - The underlying functions (check_disk_space, check_symlinks, validate_model_integrity) 
+// - were removed from the health module during architectural simplification

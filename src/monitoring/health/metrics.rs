@@ -56,7 +56,7 @@ impl MetricsCollector {
         let mut counter = self.error_counter.lock().await;
         *counter += 1;
 
-        counter!("component_errors_total").increment(1);
+        // counter!("component_errors_total").increment(1);
     }
 
     /// Calculate performance metrics

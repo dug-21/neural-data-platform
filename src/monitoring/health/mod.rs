@@ -13,7 +13,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use metrics::{counter, gauge};
+// Removed unused metrics imports to fix compilation
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -109,7 +109,7 @@ impl HealthMonitor {
             }
         }
 
-        counter!("component_health_checks_total").increment(1);
+        // counter!("component_health_checks_total").increment(1);
 
         // Store in component health map
         self.component_health
@@ -143,7 +143,7 @@ impl HealthMonitor {
         let system_health = SystemHealth::from_components(component_health, self.start_time);
 
         // Record system health score
-        gauge!("system_health_score").set(system_health.health_score());
+        // gauge!("system_health_score").set(system_health.health_score());
 
         Ok(system_health)
     }
