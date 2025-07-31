@@ -22,7 +22,7 @@ pub use monitoring::{MonitoringConfig, ObservabilityConfig, LoggingConfig, Alert
 pub use security::{SecurityConfig, CircuitBreakerConfig, GracefulShutdownConfig, AuthConfig, EncryptionConfig};
 
 // Re-export types defined in this module
-pub use {PlatformInfo, DevelopmentConfig, FeatureFlags, ModularPlatformConfig};
+// Structs are already defined as pub in this module, no need for use statement
 
 // Re-export modular types as primary API - legacy aliases below for backward compatibility
 pub use ModularPlatformConfig as PlatformConfig;
@@ -375,5 +375,4 @@ mod tests {
     }
 }
 
-// Re-export the load functions at the end of the module
-pub use {load_default_config, load_production_config, load_development_config, load_config_for_environment};
+// Functions are already pub, no need for re-export

@@ -71,7 +71,7 @@ impl TradingMcpTools {
         Ok(Self {
             storage,
             cache,
-            predictor: Arc::new(NeuralPredictor::default()),
+            predictor: Arc::new(NeuralPredictor::default().await.map_err(|e| anyhow::anyhow!("Failed to create neural predictor: {}", e))?),
             agent: Arc::new(RwLock::new(AutonomousAgent::default())),
             monitor: Some(monitor),
         })

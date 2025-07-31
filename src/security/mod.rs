@@ -200,7 +200,7 @@ impl RateLimiter {
         let bucket = buckets.entry(*client_ip).or_insert_with(|| {
             TokenBucket::new(
                 self.config.rate_limit_per_minute as usize,
-                self.config.rate_limit_burst as usize,
+                self.config.rate_limit_per_minute as usize, // Use per_minute as burst limit
             )
         });
         bucket.try_consume()
@@ -211,7 +211,7 @@ impl RateLimiter {
         let bucket = buckets.entry(endpoint.to_string()).or_insert_with(|| {
             TokenBucket::new(
                 (self.config.rate_limit_per_minute * 10) as usize, // Higher limit for endpoints
-                (self.config.rate_limit_burst * 5) as usize,
+                (self.config.rate_limit_per_minute * 5) as usize, // Use per_minute for burst calculation
             )
         });
         bucket.try_consume()

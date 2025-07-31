@@ -3,7 +3,7 @@
 //! Provides timezone conversion functionality for market hours calculations
 //! without external dependencies on chrono-tz.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Utc, Datelike, Timelike};
 use std::collections::HashMap;
 
 use crate::utils::market_hours::exchanges::Exchange;

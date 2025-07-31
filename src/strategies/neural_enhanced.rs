@@ -654,7 +654,7 @@ mod tests {
             ..Default::default()
         };
 
-        let neural_predictor = match NeuralPredictor::new(neural_config) {
+        let neural_predictor = match NeuralPredictor::new(neural_config).await {
             Ok(predictor) => Arc::new(predictor),
             Err(_) => {
                 // If we can't create a real predictor, skip test
