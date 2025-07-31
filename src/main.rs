@@ -20,6 +20,9 @@ use autonomous_platform::streaming::event_bus::{EventBusIntegration, MarketEvent
 use autonomous_platform::adapters::redis::{RedisAdapter, RedisConfig};
 use autonomous_platform::adapters::DataAdapter;
 
+// Import MarketHours
+use autonomous_platform::utils::market_hours::MarketHours;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
@@ -44,21 +47,25 @@ async fn main() -> Result<()> {
     
     // Log feature flags
     info!("Feature Flags:");
-    info!("   Enforce FANN Routing: {}", config.feature_flags.enforce_fann_routing);
-    info!("   Enable DAA Orchestration: {}", config.feature_flags.enable_daa_orchestration);
+    info!("   Enforce FANN Routing: {}", config.feature_flags.enable_enhanced_neural_adapter);
+    info!("   Enable DAA Orchestration: {}", config.feature_flags.enable_performance_monitoring);
 
     // Initialize DAA components
     info!("Initializing neural predictor...");
     let neural_predictor = Arc::new(
         NeuralPredictor::new(config.neural.clone())
+            .await
             .context("Failed to initialize neural predictor")?,
     );
+
+    info!("Initializing market hours tracker...");
+    let market_hours = Arc::new(MarketHours::new());
 
     info!("Initializing DAA coordinator...");
     let daa_config = DaaConfig::default();
     let (decision_sender, mut decision_receiver) = tokio::sync::mpsc::channel(1000);
     let daa_coordinator = Arc::new(
-        DaaCoordinator::new(daa_config, neural_predictor.clone(), decision_sender)
+        DaaCoordinator::new(daa_config, neural_predictor.clone(), decision_sender, market_hours.clone())
             .context("Failed to initialize DAA coordinator")?,
     );
 

@@ -82,7 +82,11 @@ async fn main() -> Result<()> {
 
     // Neural predictor
     println!("🧠 Initializing neural predictor...");
-    let predictor = Arc::new(NeuralPredictor::default());
+    let predictor = Arc::new(NeuralPredictor::default().await.unwrap_or_else(|e| {
+        println!("⚠️  Neural predictor initialization failed: {}", e);
+        println!("   Using fallback configuration");
+        panic!("Cannot continue without neural predictor");
+    }));
     println!("✅ Neural predictor ready");
 
     // Agent

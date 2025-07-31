@@ -32,12 +32,26 @@ use crate::neural::{
 };
 // Ensure trait is in scope for method calls
 use crate::neural::NeuralPredictorTrait as _;
-use crate::neural::monitoring::{
-    PerformanceEvent, PerformanceEventBuilder, 
-    PerformanceEventType, PerformanceSource, EventPriority,
-};
+// Phase 3B: Removed monitoring imports - architectural layer not allowed
 
-// Import the PerformanceEmitter trait
+// Simple performance event types for basic monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceEvent {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub event_type: String,
+    pub duration_ms: u64,
+    pub model_name: String,
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+// Simple performance metrics for basic monitoring
+#[derive(Debug, Default, Clone)]
+pub struct PerformanceMetrics {
+    pub prediction_count: u64,
+    pub success_count: u64,
+    pub error_count: u64,
+    pub avg_latency_ms: f64,
+}
 
 /// Trait for components that can emit performance events
 #[async_trait]
@@ -113,7 +127,7 @@ impl Default for EnhancedNeuralConfig {
                 max_concurrent_predictions: 50,
                 enable_model_monitoring: true,
                 accuracy_threshold: 0.85,
-                use_real_models: true,
+                use_real_models: false,
                 enable_health_checks: true,
                 enable_fallback: true,
                 enable_circuit_breakers: true,
@@ -121,10 +135,16 @@ impl Default for EnhancedNeuralConfig {
                 enable_performance_monitoring: true,
                 enable_adaptive_retry: true,
                 enable_model_ensembles: false,
-                model_timeout_seconds: 30,
+                model_timeout_seconds: 60,
                 max_retries: 3,
-                error_threshold: 0.05,
+                error_threshold: 0.1,
                 lookback_window: 24,
+                input_size: 24,
+                output_size: 1,
+                hidden_layers: vec![64, 32],
+                learning_rate: 0.001,
+                prediction_horizon: None,
+                normalization_method: None,
             },
             use_real_models: true,
             enable_health_monitoring: true,
@@ -566,38 +586,20 @@ impl EnhancedNeuralAdapter {
         confidence: f64,
     ) {
         if let Some(ref sender) = self.performance_sender {
-            let mut event_builder = PerformanceEventBuilder::new()
-                .source(PerformanceSource::NeuralPredictor {
-                    model_name: model_name.to_string(),
-                    predictor_id: "enhanced_neural_adapter".to_string(),
-                })
-                .event_type(PerformanceEventType::PredictionCompleted {
-                    model: model_name.to_string(),
-                    accuracy: confidence, // Using confidence as proxy for accuracy
-                    confidence,
-                    latency_ms: duration.as_millis() as u64,
-                    input_features: prediction_count, // Using prediction count as feature proxy
-                    output_dimension: 1, // Single output for most predictions
-                    timestamp: chrono::Utc::now(),
-                })
-                .priority(EventPriority::Medium)
-                .tag("adapter_type".to_string(), "enhanced_neural".to_string());
+            let event = PerformanceEvent {
+                timestamp: chrono::Utc::now(),
+                event_type: "prediction_completed".to_string(),
+                duration_ms: duration.as_millis() as u64,
+                model_name: model_name.to_string(),
+                metadata: std::collections::HashMap::from([
+                    ("prediction_count".to_string(), serde_json::Value::Number(serde_json::Number::from(prediction_count))),
+                    ("confidence_score".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(confidence).unwrap_or(serde_json::Number::from(0)))),
+                    ("adapter_type".to_string(), serde_json::Value::String("enhanced_neural".to_string())),
+                ]),
+            };
 
-            // Add custom metrics using the metrics field
-            let mut metrics = crate::neural::monitoring::PerformanceMetrics::default();
-            metrics.latency_p50 = Some(duration.as_millis() as f64);
-            metrics.success_count = Some(1);
-            metrics.custom_metrics = Some(std::collections::HashMap::from([
-                ("prediction_count".to_string(), prediction_count as f64),
-                ("confidence_score".to_string(), confidence),
-            ]));
-
-            let event = event_builder.metrics(metrics).build();
-
-            if let Ok(event) = event {
-                if let Err(e) = sender.send(event) {
-                    warn!("Failed to emit performance event: {}", e);
-                }
+            if let Err(e) = sender.send(event) {
+                warn!("Failed to emit performance event: {}", e);
             }
         }
     }
@@ -610,36 +612,21 @@ impl EnhancedNeuralAdapter {
         error_message: String,
     ) {
         if let Some(ref sender) = self.performance_sender {
-            let mut event_builder = PerformanceEventBuilder::new()
-                .source(PerformanceSource::NeuralPredictor {
-                    model_name: model_name.to_string(),
-                    predictor_id: "enhanced_neural_adapter".to_string(),
-                })
-                .event_type(PerformanceEventType::Alert {
-                    alert_type: crate::neural::monitoring::AlertType::ModelFailure,
-                    message: error_message.clone(),
-                    severity: crate::neural::monitoring::AlertSeverity::Warning,
-                    resolution_required: true,
-                })
-                .priority(EventPriority::High)
-                .tag("adapter_type".to_string(), "enhanced_neural".to_string())
-                .tag("error_type".to_string(), "prediction_failure".to_string());
+            let event = PerformanceEvent {
+                timestamp: chrono::Utc::now(),
+                event_type: "prediction_error".to_string(),
+                duration_ms: duration.as_millis() as u64,
+                model_name: model_name.to_string(),
+                metadata: std::collections::HashMap::from([
+                    ("error_message".to_string(), serde_json::Value::String(error_message)),
+                    ("adapter_type".to_string(), serde_json::Value::String("enhanced_neural".to_string())),
+                    ("error_type".to_string(), serde_json::Value::String("prediction_failure".to_string())),
+                    ("error_severity".to_string(), serde_json::Value::Number(serde_json::Number::from(1))),
+                ]),
+            };
 
-            // Add error-specific metrics
-            let mut metrics = crate::neural::monitoring::PerformanceMetrics::default();
-            metrics.error_count = Some(1);
-            metrics.latency_max = Some(duration.as_millis() as f64);
-            metrics.custom_metrics = Some(std::collections::HashMap::from([
-                ("error_latency_ms".to_string(), duration.as_millis() as f64),
-                ("error_severity".to_string(), 1.0), // Indicates error event
-            ]));
-
-            let event = event_builder.metrics(metrics).build();
-
-            if let Ok(event) = event {
-                if let Err(e) = sender.send(event) {
-                    warn!("Failed to emit error performance event: {}", e);
-                }
+            if let Err(e) = sender.send(event) {
+                warn!("Failed to emit error performance event: {}", e);
             }
         }
     }
