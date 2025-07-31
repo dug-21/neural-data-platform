@@ -1,0 +1,96 @@
+{
+  "model_id": "{{ uuid }}",
+  "symbol": "{{ symbol }}",
+  "model_type": "{{ model_type }}",
+  "version": "{{ version }}",
+  "created_at": "{{ timestamp }}",
+  "trained_by": "{{ trainer_id }}",
+  "training_duration_seconds": {{ duration }},
+  "architecture": {
+    "model_format": "ruv-fann",
+    "input_size": {{ input_size }},
+    "hidden_layers": {{ hidden_layers }},
+    "output_size": {{ output_size }},
+    "activation_hidden": "{{ activation_hidden }}",
+    "activation_output": "{{ activation_output }}",
+    "optimizer": "{{ optimizer }}",
+    "total_parameters": {{ total_parameters }}
+  },
+  "training_data": {
+    "start_date": "{{ start_date }}",
+    "end_date": "{{ end_date }}",
+    "total_samples": {{ total_samples }},
+    "train_samples": {{ train_samples }},
+    "validation_samples": {{ validation_samples }},
+    "test_samples": {{ test_samples }},
+    "features": {{ features }},
+    "target": "{{ target }}",
+    "data_sources": {{ data_sources }}
+  },
+  "hyperparameters": {
+    "batch_size": {{ batch_size }},
+    "learning_rate": {{ learning_rate }},
+    "epochs": {{ epochs }},
+    "early_stopping": {
+      "enabled": {{ early_stopping_enabled }},
+      "patience": {{ patience }},
+      "min_delta": {{ min_delta }},
+      "monitor": "{{ monitor_metric }}"
+    },
+    "regularization": {
+      "dropout": {{ dropout }},
+      "l1": {{ l1 }},
+      "l2": {{ l2 }}
+    }
+  },
+  "performance": {
+    "final_epoch": {{ final_epoch }},
+    "training_metrics": {
+      "loss": {{ train_loss }},
+      "mse": {{ train_mse }},
+      "mae": {{ train_mae }},
+      "r2": {{ train_r2 }}
+    },
+    "validation_metrics": {
+      "loss": {{ val_loss }},
+      "mse": {{ val_mse }},
+      "mae": {{ val_mae }},
+      "r2": {{ val_r2 }}
+    },
+    "test_metrics": {
+      "mse": {{ test_mse }},
+      "mae": {{ test_mae }},
+      "r2": {{ test_r2 }},
+      "sharpe_ratio": {{ sharpe_ratio }},
+      "max_drawdown": {{ max_drawdown }}
+    },
+    "inference_benchmarks": {
+      "avg_latency_ms": {{ avg_latency }},
+      "p95_latency_ms": {{ p95_latency }},
+      "p99_latency_ms": {{ p99_latency }},
+      "throughput_samples_per_sec": {{ throughput }}
+    }
+  },
+  "feature_importance": {{ feature_importance }},
+  "deployment": {
+    "status": "{{ status }}",
+    "environment": "{{ environment }}",
+    "deployed_at": "{{ deployed_at }}",
+    "served_requests": {{ served_requests }},
+    "last_prediction_at": "{{ last_prediction_at }}"
+  },
+  "dependencies": {
+    "ruv_fann_version": "{{ ruv_fann_version }}",
+    "neural_trader_version": "{{ neural_trader_version }}",
+    "feature_extractor": "{{ feature_extractor_version }}",
+    "preprocessor": "{{ preprocessor_version }}"
+  },
+  "integrity": {
+    "model_checksum": "{{ model_checksum }}",
+    "metadata_checksum": "{{ metadata_checksum }}",
+    "signed_by": "{{ signer_id }}",
+    "signature": "{{ signature }}"
+  },
+  "notes": "{{ notes }}",
+  "tags": {{ tags }}
+}

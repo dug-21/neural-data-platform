@@ -15,6 +15,7 @@ default_ttl_seconds = 3600
 [neural]
 memory_gb = 1.0
 models = ["NHITS", "DeepAR", "TCN", "MLP"]
+use_real_models = true
 prediction_cache_ttl = 300
 
 [monitoring]

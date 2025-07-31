@@ -11,6 +11,7 @@ from .nasdaq import NASDAQProvider
 from .newsapi import NewsAPIProvider, NewsArticle
 from .alpaca import AlpacaProvider
 from .binance import BinanceProvider
+from .file_provider import FileProvider
 
 # Provider registry
 PROVIDERS = {
@@ -24,7 +25,8 @@ PROVIDERS = {
     "nasdaq": NASDAQProvider,
     "newsapi": NewsAPIProvider,
     "alpaca": AlpacaProvider,
-    "binance": BinanceProvider
+    "binance": BinanceProvider,
+    "file_provider": FileProvider
 }
 
 __all__ = [
@@ -45,5 +47,6 @@ __all__ = [
     "NewsArticle",
     "AlpacaProvider",
     "BinanceProvider",
+    "FileProvider",
     "PROVIDERS"
 ]

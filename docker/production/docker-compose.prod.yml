@@ -1,11 +1,21 @@
 # Production Docker Compose - ports adjusted to avoid VSCode conflicts
-
+#
+# IMPORTANT: This compose file uses pre-built images. Build them first with:
+#   ./build.sh
+#
+# The build.sh script creates these images:
+# - neural-trader:prod
+# - neural-trader/timescaledb:prod
+# - neural-trader/prometheus:prod
+# - neural-trader/grafana:prod
+# - neural-trader/data-ingestion:prod
+#
 # Production Docker Compose with only named volumes (no bind mounts)
 services:
   timescaledb:
-    build:
-      context: .
-      dockerfile: images/timescaledb.dockerfile
+    image: neural-trader/timescaledb:prod
+    container_name: neural_trader_timescaledb
+    hostname: timescaledb
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -26,6 +36,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: neural_trader_redis
+    hostname: redis
     restart: unless-stopped
     command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
     volumes:
@@ -40,9 +52,9 @@ services:
           memory: 256M
 
   neural-trader:
-    build:
-      context: ../..
-      dockerfile: docker/production/images/neural-trader.dockerfile
+    image: neural-trader:prod
+    container_name: neural_trader_app
+    hostname: neural-trader
     restart: unless-stopped
     depends_on:
       - timescaledb
@@ -52,6 +64,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - LOG_LEVEL=${LOG_LEVEL}
       - MCP_PORT=8080
+      - NEURAL_USE_REAL_MODELS=${NEURAL_USE_REAL_MODELS}
     volumes:
       - neural_trader_data:/var/lib/neural-trader
       - neural_trader_logs:/var/log/neural-trader
@@ -74,9 +87,9 @@ services:
       retries: 3
 
   data-ingestion:
-    build:
-      context: ../..
-      dockerfile: docker/production/images/data-ingestion.dockerfile
+    image: neural-trader/data-ingestion:prod
+    container_name: neural_trader_data_ingestion
+    hostname: data-ingestion
     restart: unless-stopped
     depends_on:
       - timescaledb
@@ -120,6 +133,7 @@ services:
       - "127.0.0.1:9092:9090"  # Data ingestion metrics
     volumes:
       - data_ingestion_logs:/var/log/data-ingestion
+      # - /Volumes/OneTouch/trader/polygon_data:/data
     networks:
       - neural_trader_internal
       - monitoring
@@ -132,9 +146,9 @@ services:
           memory: 1G
 
   prometheus:
-    build:
-      context: .
-      dockerfile: images/prometheus.dockerfile
+    image: neural-trader/prometheus:prod
+    container_name: neural_trader_prometheus
+    hostname: prometheus
     restart: unless-stopped
     volumes:
       - prometheus_data:/prometheus
@@ -147,6 +161,13 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
+    environment:
+      - TIMESCALE_HOST=timescaledb
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_DATABASE=${POSTGRES_DB}
+      - TIMESCALE_USER=${POSTGRES_USER}
+      - TIMESCALE_PASSWORD=${POSTGRES_PASSWORD}
+ 
     deploy:
       resources:
         limits:
@@ -155,9 +176,9 @@ services:
           memory: 512M
 
   grafana:
-    build:
-      context: .
-      dockerfile: images/grafana.dockerfile
+    image: neural-trader/grafana:prod
+    container_name: neural_trader_grafana
+    hostname: grafana
     restart: unless-stopped
     depends_on:
       - prometheus

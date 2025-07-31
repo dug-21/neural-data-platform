@@ -5,14 +5,14 @@
 //! real-time dashboards, alerting, and performance optimization techniques.
 
 use autonomous_platform::{
-    PlatformConfig, load_default_config, Result,
-    data::{QualityMetrics, PlatformMetrics, TimeSeriesData},
+    data::{PlatformMetrics, QualityMetrics, TimeSeriesData},
+    load_default_config, PlatformConfig, Result,
 };
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-use tracing::{info, warn, error, debug};
 use tokio::time::{interval, Duration as TokioDuration};
+use tracing::{debug, error, info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -27,30 +27,23 @@ async fn main() -> Result<()> {
     // Step 1: Initialize monitoring system
     let config = load_default_config()?;
     let monitor = Arc::new(PerformanceMonitor::new(config).await?);
-    
+
     info!("✓ Performance monitor initialized");
 
     // Step 2: Start background monitoring tasks
     let monitor_clone = Arc::clone(&monitor);
-    let metrics_task = tokio::spawn(async move {
-        monitor_clone.start_metrics_collection().await
-    });
+    let metrics_task = tokio::spawn(async move { monitor_clone.start_metrics_collection().await });
 
     let monitor_clone = Arc::clone(&monitor);
-    let alert_task = tokio::spawn(async move {
-        monitor_clone.start_alert_system().await
-    });
+    let alert_task = tokio::spawn(async move { monitor_clone.start_alert_system().await });
 
     let monitor_clone = Arc::clone(&monitor);
-    let dashboard_task = tokio::spawn(async move {
-        monitor_clone.start_dashboard().await
-    });
+    let dashboard_task = tokio::spawn(async move { monitor_clone.start_dashboard().await });
 
     // Step 3: Simulate platform operations
     let monitor_clone = Arc::clone(&monitor);
-    let simulation_task = tokio::spawn(async move {
-        simulate_platform_operations(monitor_clone).await
-    });
+    let simulation_task =
+        tokio::spawn(async move { simulate_platform_operations(monitor_clone).await });
 
     // Step 4: Run monitoring for a specified duration
     info!("Running monitoring simulation for 60 seconds...");
@@ -92,11 +85,13 @@ impl PerformanceMonitor {
     }
 
     async fn start_metrics_collection(&self) -> Result<()> {
-        let mut interval = interval(TokioDuration::from_secs(self.config.monitoring.metrics_interval_secs));
-        
+        let mut interval = interval(TokioDuration::from_secs(
+            self.config.monitoring.metrics_interval_secs,
+        ));
+
         loop {
             interval.tick().await;
-            
+
             // Collect platform metrics
             let platform_metrics = self.collect_platform_metrics().await?;
             {
@@ -117,15 +112,17 @@ impl PerformanceMonitor {
                 }
             }
 
-            debug!("Metrics collected - Platform: {:.1}% cache hit rate, Quality: {:.1}% overall",
-                   platform_metrics.cache_hit_rate * 100.0,
-                   quality_metrics.overall_quality * 100.0);
+            debug!(
+                "Metrics collected - Platform: {:.1}% cache hit rate, Quality: {:.1}% overall",
+                platform_metrics.cache_hit_rate * 100.0,
+                quality_metrics.overall_quality * 100.0
+            );
         }
     }
 
     async fn start_alert_system(&self) -> Result<()> {
         let mut interval = interval(TokioDuration::from_secs(5));
-        
+
         loop {
             interval.tick().await;
             self.check_alert_conditions().await?;
@@ -134,7 +131,7 @@ impl PerformanceMonitor {
 
     async fn start_dashboard(&self) -> Result<()> {
         let mut interval = interval(TokioDuration::from_secs(10));
-        
+
         loop {
             interval.tick().await;
             self.display_dashboard().await?;
@@ -144,14 +141,14 @@ impl PerformanceMonitor {
     async fn collect_platform_metrics(&self) -> Result<PlatformMetrics> {
         // Simulate metrics collection from various system components
         let mut stats = self.system_stats.lock().unwrap();
-        
+
         // Update simulated stats
         stats.total_records += rand::random::<u64>() % 1000 + 100;
         stats.cache_hit_rate = 0.7 + (rand::random::<f64>() * 0.3); // 70-100%
         stats.processing_throughput = 1000.0 + (rand::random::<f64>() * 4000.0); // 1000-5000 rec/sec
         stats.storage_usage_gb += (rand::random::<f64>() - 0.5) * 0.1; // Slowly growing
         stats.active_connections = 10 + (rand::random::<u32>() % 20); // 10-30 connections
-        
+
         Ok(PlatformMetrics::new(
             stats.total_records,
             stats.cache_hit_rate,
@@ -166,8 +163,12 @@ impl PerformanceMonitor {
         let data_completeness = 0.85 + (rand::random::<f64>() * 0.15); // 85-100%
         let latency_ms = 50.0 + (rand::random::<f64>() * 200.0); // 50-250ms
         let error_rate = rand::random::<f64>() * 0.05; // 0-5%
-        
-        Ok(QualityMetrics::new(data_completeness, latency_ms, error_rate))
+
+        Ok(QualityMetrics::new(
+            data_completeness,
+            latency_ms,
+            error_rate,
+        ))
     }
 
     async fn check_alert_conditions(&self) -> Result<()> {
@@ -183,14 +184,16 @@ impl PerformanceMonitor {
 
         if let (Some(quality), Some(platform)) = (latest_quality, latest_platform) {
             let mut alerts = self.alerts.lock().unwrap();
-            
+
             // Check quality threshold
             if quality.overall_quality < self.config.monitoring.quality_threshold {
                 let alert = Alert::new(
                     AlertLevel::Warning,
-                    format!("Quality below threshold: {:.2}% < {:.2}%", 
-                           quality.overall_quality * 100.0,
-                           self.config.monitoring.quality_threshold * 100.0),
+                    format!(
+                        "Quality below threshold: {:.2}% < {:.2}%",
+                        quality.overall_quality * 100.0,
+                        self.config.monitoring.quality_threshold * 100.0
+                    ),
                 );
                 alerts.push(alert.clone());
                 warn!("🚨 {}", alert.message);
@@ -210,7 +213,10 @@ impl PerformanceMonitor {
             if platform.cache_hit_rate < 0.5 {
                 let alert = Alert::new(
                     AlertLevel::Warning,
-                    format!("Low cache hit rate: {:.1}%", platform.cache_hit_rate * 100.0),
+                    format!(
+                        "Low cache hit rate: {:.1}%",
+                        platform.cache_hit_rate * 100.0
+                    ),
                 );
                 alerts.push(alert.clone());
                 warn!("🚨 {}", alert.message);
@@ -239,7 +245,10 @@ impl PerformanceMonitor {
         let (latest_quality, latest_platform) = {
             let quality_history = self.quality_history.lock().unwrap();
             let platform_history = self.metrics_history.lock().unwrap();
-            (quality_history.back().cloned(), platform_history.back().cloned())
+            (
+                quality_history.back().cloned(),
+                platform_history.back().cloned(),
+            )
         };
 
         if let (Some(quality), Some(platform)) = (latest_quality, latest_platform) {
@@ -252,22 +261,27 @@ impl PerformanceMonitor {
             info!("📊 PERFORMANCE DASHBOARD");
             info!("========================");
             info!("⏱️  Uptime: {} minutes", uptime.num_minutes());
-            info!("📈 Processing: {:.0} records/sec", platform.processing_throughput);
+            info!(
+                "📈 Processing: {:.0} records/sec",
+                platform.processing_throughput
+            );
             info!("💾 Storage: {:.1} GB", platform.storage_usage_gb);
             info!("🔗 Connections: {}", platform.active_connections);
             info!("⚡ Cache Hit Rate: {:.1}%", platform.cache_hit_rate * 100.0);
             info!("📊 Data Quality: {:.1}%", quality.overall_quality * 100.0);
             info!("⏰ Latency: {:.0}ms", quality.latency_ms);
             info!("❌ Error Rate: {:.2}%", quality.error_rate * 100.0);
-            
+
             if !recent_alerts.is_empty() {
                 info!("🚨 Recent Alerts:");
                 for alert in recent_alerts {
                     let age = Utc::now() - alert.timestamp;
-                    info!("   {} - {} ({}m ago)", 
-                          alert.level.emoji(), 
-                          alert.message,
-                          age.num_minutes());
+                    info!(
+                        "   {} - {} ({}m ago)",
+                        alert.level.emoji(),
+                        alert.message,
+                        age.num_minutes()
+                    );
                 }
             }
             info!("========================");
@@ -278,27 +292,48 @@ impl PerformanceMonitor {
 
     async fn generate_performance_report(&self) -> Result<()> {
         let uptime = Utc::now() - self.start_time;
-        
+
         let (avg_quality, avg_latency, avg_throughput, avg_cache_hit) = {
             let quality_history = self.quality_history.lock().unwrap();
             let platform_history = self.metrics_history.lock().unwrap();
-            
+
             let quality_avg = if !quality_history.is_empty() {
-                quality_history.iter().map(|q| q.overall_quality).sum::<f64>() / quality_history.len() as f64
-            } else { 0.0 };
-            
+                quality_history
+                    .iter()
+                    .map(|q| q.overall_quality)
+                    .sum::<f64>()
+                    / quality_history.len() as f64
+            } else {
+                0.0
+            };
+
             let latency_avg = if !quality_history.is_empty() {
-                quality_history.iter().map(|q| q.latency_ms).sum::<f64>() / quality_history.len() as f64
-            } else { 0.0 };
-            
+                quality_history.iter().map(|q| q.latency_ms).sum::<f64>()
+                    / quality_history.len() as f64
+            } else {
+                0.0
+            };
+
             let throughput_avg = if !platform_history.is_empty() {
-                platform_history.iter().map(|p| p.processing_throughput).sum::<f64>() / platform_history.len() as f64
-            } else { 0.0 };
-            
+                platform_history
+                    .iter()
+                    .map(|p| p.processing_throughput)
+                    .sum::<f64>()
+                    / platform_history.len() as f64
+            } else {
+                0.0
+            };
+
             let cache_avg = if !platform_history.is_empty() {
-                platform_history.iter().map(|p| p.cache_hit_rate).sum::<f64>() / platform_history.len() as f64
-            } else { 0.0 };
-            
+                platform_history
+                    .iter()
+                    .map(|p| p.cache_hit_rate)
+                    .sum::<f64>()
+                    / platform_history.len() as f64
+            } else {
+                0.0
+            };
+
             (quality_avg, latency_avg, throughput_avg, cache_avg)
         };
 
@@ -324,7 +359,7 @@ impl PerformanceMonitor {
             info!("   {} {}: {}", level.emoji(), level, count);
         }
         info!("");
-        
+
         // Performance recommendations
         info!("💡 Performance Recommendations:");
         if avg_cache_hit < 0.8 {
@@ -348,17 +383,18 @@ impl PerformanceMonitor {
 /// Simulate platform operations that generate metrics
 async fn simulate_platform_operations(monitor: Arc<PerformanceMonitor>) -> Result<()> {
     let mut interval = interval(TokioDuration::from_millis(500));
-    
+
     loop {
         interval.tick().await;
-        
+
         // Simulate various operations that affect performance
         simulate_data_processing().await?;
         simulate_cache_operations().await?;
         simulate_database_operations().await?;
-        
+
         // Occasionally simulate performance issues
-        if rand::random::<f64>() < 0.05 { // 5% chance
+        if rand::random::<f64>() < 0.05 {
+            // 5% chance
             simulate_performance_issue().await?;
         }
     }

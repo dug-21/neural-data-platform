@@ -5,7 +5,8 @@
 
 use std::collections::HashMap;
 use num_traits::Float;
-use ruv_fann::{Network, NetworkBuilder, ActivationFunction, TrainingData, TrainingAlgorithm};
+use ruv_fann::{Network, NetworkBuilder, ActivationFunction, TrainingData};
+use ruv_fann::training::{TrainingAlgorithm, IncrementalBackprop};
 use crate::errors::{NeuroDivergentError, NeuroDivergentResult};
 use crate::foundation::{
     BaseModel, ModelConfig, NetworkAdapter, TimeSeriesInput, ForecastOutput,
@@ -20,7 +21,7 @@ use crate::recurrent::layers::{
 use crate::utils::{math, preprocessing::StandardScaler, validation};
 
 /// Basic RNN model for time series forecasting
-pub struct RNN<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> {
+pub struct RNN<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + Default + 'static> {
     /// Model configuration
     config: RNNConfig<T>,
     
@@ -45,7 +46,7 @@ pub struct RNN<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'stat
     model_metrics: HashMap<String, f64>,
 }
 
-impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> RNN<T> {
+impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + Default + 'static> RNN<T> {
     /// Create a new RNN model
     pub fn new(config: RNNConfig<T>) -> NeuroDivergentResult<Self> {
         config.validate()?;
@@ -223,7 +224,7 @@ impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> RNN<T>
     }
 }
 
-impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> BaseModel<T> for RNN<T> {
+impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + Default + 'static> BaseModel<T> for RNN<T> {
     fn name(&self) -> &str {
         "RNN"
     }
@@ -267,7 +268,7 @@ impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> BaseMo
             // Train output layer using ruv-FANN
             let output_loss = if let Some(output_layer) = &mut self.output_layer {
                 // Use a simple training algorithm (this is simplified)
-                let mut trainer = ruv_fann::training::IncrementalBackprop::new(
+                let mut trainer = IncrementalBackprop::new(
                     self.config.learning_rate
                 );
                 trainer.train_epoch(output_layer, &training_data)?
@@ -456,7 +457,7 @@ impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> BaseMo
     }
 }
 
-impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> NetworkAdapter<T> for RNN<T> {
+impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + Default + 'static> NetworkAdapter<T> for RNN<T> {
     fn prepare_input(&self, ts_input: &TimeSeriesInput<T>) -> NeuroDivergentResult<Vec<T>> {
         // For RNN, we need to process the sequence and return the final hidden state
         let sequence = self.prepare_sequence(ts_input)?;
@@ -488,7 +489,7 @@ impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> Networ
     }
 }
 
-impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> RecurrentState<T> for RNN<T> {
+impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + Default + 'static> RecurrentState<T> for RNN<T> {
     fn reset(&mut self) {
         if let Some(recurrent_layers) = &mut self.recurrent_layers {
             recurrent_layers.reset_states();
@@ -534,7 +535,7 @@ impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> Recurr
 }
 
 /// Helper trait for RNN-specific operations
-impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static> RNN<T> {
+impl<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + Default + 'static> RNN<T> {
     /// Enable bidirectional processing
     pub fn enable_bidirectional(&mut self, merge_mode: BidirectionalMergeMode) -> NeuroDivergentResult<()> {
         if self.recurrent_layers.is_none() {

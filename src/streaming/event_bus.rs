@@ -1,5 +1,5 @@
 //! Event Bus Integration for Streaming Pipeline to DAA Agent Communication
-//! 
+//!
 //! This module provides the event bus that connects the streaming pipeline to DAA agents,
 //! enabling real-time event processing and agent coordination.
 
@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
-use tracing::{info, warn, debug};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Main event bus integration for connecting streaming pipeline to DAA agents
@@ -200,31 +200,33 @@ impl EventBusIntegration {
     pub async fn daa_integration_health(&self) -> Result<bool> {
         // Verify DAA access layer is working
         let health = self.daa_access.health_check().await?;
-        
+
         // Check if we can get performance metrics (indicates DAA is responsive)
         let _metrics = self.daa_access.get_performance_metrics().await?;
-        
+
         Ok(health)
     }
 
     /// Publish a market event
     pub async fn publish_market_event(&self, event: MarketEvent) -> Result<()> {
         let start_time = std::time::Instant::now();
-        
+
         // Convert to DAA format
         let daa_event = self.convert_market_to_daa(&event).await?;
-        
+
         // Store published event
         {
             let mut published = self.published_events.write().await;
-            published.entry("market".to_string())
+            published
+                .entry("market".to_string())
                 .or_insert_with(Vec::new)
                 .push(daa_event.clone());
         }
-        
+
         // Update performance metrics
-        self.update_performance_metrics("market", start_time.elapsed().as_millis() as f64).await;
-        
+        self.update_performance_metrics("market", start_time.elapsed().as_millis() as f64)
+            .await;
+
         info!("Published market event for symbol: {}", event.symbol);
         Ok(())
     }
@@ -232,21 +234,23 @@ impl EventBusIntegration {
     /// Publish a news event
     pub async fn publish_news_event(&self, event: NewsEvent) -> Result<()> {
         let start_time = std::time::Instant::now();
-        
+
         // Convert to DAA format
         let daa_event = self.convert_news_to_daa(&event).await?;
-        
+
         // Store published event
         {
             let mut published = self.published_events.write().await;
-            published.entry("news".to_string())
+            published
+                .entry("news".to_string())
                 .or_insert_with(Vec::new)
                 .push(daa_event.clone());
         }
-        
+
         // Update performance metrics
-        self.update_performance_metrics("news", start_time.elapsed().as_millis() as f64).await;
-        
+        self.update_performance_metrics("news", start_time.elapsed().as_millis() as f64)
+            .await;
+
         info!("Published news event: {}", event.title);
         Ok(())
     }
@@ -254,45 +258,54 @@ impl EventBusIntegration {
     /// Publish a quality event
     pub async fn publish_quality_event(&self, event: QualityEvent) -> Result<()> {
         let start_time = std::time::Instant::now();
-        
+
         // Convert to DAA format
         let daa_event = self.convert_quality_to_daa(&event).await?;
-        
+
         // Store published event
         {
             let mut published = self.published_events.write().await;
-            published.entry("quality".to_string())
+            published
+                .entry("quality".to_string())
                 .or_insert_with(Vec::new)
                 .push(daa_event.clone());
         }
-        
+
         // Update performance metrics
-        self.update_performance_metrics("quality", start_time.elapsed().as_millis() as f64).await;
-        
-        warn!("Published quality event: {} - {}", event.severity, event.description);
+        self.update_performance_metrics("quality", start_time.elapsed().as_millis() as f64)
+            .await;
+
+        warn!(
+            "Published quality event: {} - {}",
+            event.severity, event.description
+        );
         Ok(())
     }
 
     /// Publish a system event
     pub async fn publish_system_event(&self, event: SystemEvent) -> Result<()> {
         let start_time = std::time::Instant::now();
-        
+
         // Convert to DAA format
         let daa_event = self.convert_system_to_daa(&event).await?;
-        
+
         // Store published event
         {
             let mut published = self.published_events.write().await;
-            published.entry("system".to_string())
+            published
+                .entry("system".to_string())
                 .or_insert_with(Vec::new)
                 .push(daa_event.clone());
         }
-        
+
         // Update performance metrics
-        self.update_performance_metrics("system", start_time.elapsed().as_millis() as f64).await;
-        
-        info!("Published system event for component: {} (health: {})", 
-              event.component, event.health_score);
+        self.update_performance_metrics("system", start_time.elapsed().as_millis() as f64)
+            .await;
+
+        info!(
+            "Published system event for component: {} (health: {})",
+            event.component, event.health_score
+        );
         Ok(())
     }
 
@@ -301,7 +314,7 @@ impl EventBusIntegration {
         let published_events = self.published_events.read().await;
         let daa_agents = self.daa_agents.read().await;
         let router = self.event_router.read().await;
-        
+
         for (event_type, events) in published_events.iter() {
             for event in events {
                 // Apply routing filters
@@ -317,12 +330,16 @@ impl EventBusIntegration {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Register a DAA agent for event routing
-    pub async fn register_daa_agent(&self, agent_id: String, sender: mpsc::Sender<DaaEvent>) -> Result<()> {
+    pub async fn register_daa_agent(
+        &self,
+        agent_id: String,
+        sender: mpsc::Sender<DaaEvent>,
+    ) -> Result<()> {
         let mut agents = self.daa_agents.write().await;
         agents.insert(agent_id.clone(), sender);
         info!("Registered DAA agent: {}", agent_id);
@@ -340,7 +357,7 @@ impl EventBusIntegration {
         let published_events = self.published_events.read().await;
         let router = self.event_router.read().await;
         let mut routed_events = Vec::new();
-        
+
         for events in published_events.values() {
             for event in events {
                 if router.should_route_event(event).await? {
@@ -348,7 +365,7 @@ impl EventBusIntegration {
                 }
             }
         }
-        
+
         Ok(routed_events)
     }
 
@@ -360,7 +377,11 @@ impl EventBusIntegration {
     }
 
     /// Configure batch processing
-    pub async fn configure_batch_processing(&self, batch_size: usize, timeout_ms: u64) -> Result<()> {
+    pub async fn configure_batch_processing(
+        &self,
+        batch_size: usize,
+        timeout_ms: u64,
+    ) -> Result<()> {
         let mut config = self.batch_config.write().await;
         config.batch_size = batch_size;
         config.timeout_ms = timeout_ms;
@@ -374,13 +395,13 @@ impl EventBusIntegration {
             let config = self.batch_config.read().await;
             config.batch_size
         };
-        
+
         for chunk in events.chunks(batch_size) {
             for event in chunk {
                 self.publish_market_event(event.clone()).await?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -429,12 +450,12 @@ impl EventBusIntegration {
     pub async fn store_results_in_memory(&self, memory_key: &str) -> Result<()> {
         let metrics = self.get_performance_metrics().await?;
         let published_events = self.published_events.read().await;
-        
+
         let mut event_counts = HashMap::new();
         for (event_type, events) in published_events.iter() {
             event_counts.insert(event_type.clone(), events.len());
         }
-        
+
         let memory_data = json!({
             "total_events_published": metrics.total_events_published,
             "event_types_processed": event_counts,
@@ -454,10 +475,10 @@ impl EventBusIntegration {
             "timestamp": Utc::now(),
             "integration_version": "1.0.0"
         });
-        
+
         let mut storage = self.memory_storage.write().await;
         storage.insert(memory_key.to_string(), memory_data);
-        
+
         info!("Stored event bus results in memory at key: {}", memory_key);
         Ok(())
     }
@@ -479,7 +500,7 @@ impl EventBusIntegration {
     }
 
     // Private helper methods
-    
+
     async fn convert_market_to_daa(&self, event: &MarketEvent) -> Result<DaaEvent> {
         let mut payload = HashMap::new();
         payload.insert("symbol".to_string(), json!(event.symbol));
@@ -491,7 +512,7 @@ impl EventBusIntegration {
         payload.insert("timestamp".to_string(), json!(event.timestamp));
         payload.insert("quality_score".to_string(), json!(event.quality_score));
         payload.insert("sequence_number".to_string(), json!(event.sequence_number));
-        
+
         if let Some(metadata) = &event.metadata {
             payload.insert("metadata".to_string(), metadata.clone());
             // Also extract OHLC data from metadata if available
@@ -508,11 +529,11 @@ impl EventBusIntegration {
                 payload.insert("close".to_string(), close.clone());
             }
         }
-        
+
         let mut metadata = HashMap::new();
         metadata.insert("source".to_string(), event.source.clone());
         metadata.insert("original_event_type".to_string(), event.event_type.clone());
-        
+
         Ok(DaaEvent {
             id: Uuid::new_v4().to_string(),
             timestamp: event.timestamp,
@@ -523,7 +544,7 @@ impl EventBusIntegration {
             metadata,
         })
     }
-    
+
     async fn convert_news_to_daa(&self, event: &NewsEvent) -> Result<DaaEvent> {
         let mut payload = HashMap::new();
         payload.insert("title".to_string(), json!(event.title));
@@ -534,49 +555,60 @@ impl EventBusIntegration {
         payload.insert("category".to_string(), json!(event.category));
         payload.insert("tags".to_string(), json!(event.tags));
         payload.insert("timestamp".to_string(), json!(event.timestamp));
-        
+
         if let Some(author) = &event.author {
             payload.insert("author".to_string(), json!(author));
         }
-        
+
         if let Some(metadata) = &event.metadata {
             payload.insert("metadata".to_string(), metadata.clone());
         }
-        
+
         let mut metadata = HashMap::new();
         metadata.insert("source".to_string(), event.source.clone());
         metadata.insert("language".to_string(), event.language.clone());
         metadata.insert("news_id".to_string(), event.id.clone());
-        
+
         Ok(DaaEvent {
             id: Uuid::new_v4().to_string(),
             timestamp: event.timestamp,
             event_type: "news_event".to_string(),
             source: "streaming_pipeline".to_string(),
-            priority: if event.relevance_score > 0.8 { "high" } else { "normal" }.to_string(),
+            priority: if event.relevance_score > 0.8 {
+                "high"
+            } else {
+                "normal"
+            }
+            .to_string(),
             payload,
             metadata,
         })
     }
-    
+
     async fn convert_quality_to_daa(&self, event: &QualityEvent) -> Result<DaaEvent> {
         let mut payload = HashMap::new();
         payload.insert("quality_metric".to_string(), json!(event.quality_metric));
         payload.insert("current_value".to_string(), json!(event.current_value));
         payload.insert("threshold_value".to_string(), json!(event.threshold_value));
-        payload.insert("affected_symbols".to_string(), json!(event.affected_symbols));
+        payload.insert(
+            "affected_symbols".to_string(),
+            json!(event.affected_symbols),
+        );
         payload.insert("description".to_string(), json!(event.description));
-        payload.insert("remediation_actions".to_string(), json!(event.remediation_actions));
+        payload.insert(
+            "remediation_actions".to_string(),
+            json!(event.remediation_actions),
+        );
         payload.insert("timestamp".to_string(), json!(event.timestamp));
-        
+
         if let Some(metadata) = &event.metadata {
             payload.insert("metadata".to_string(), metadata.clone());
         }
-        
+
         let mut metadata = HashMap::new();
         metadata.insert("source".to_string(), event.source.clone());
         metadata.insert("severity".to_string(), event.severity.clone());
-        
+
         Ok(DaaEvent {
             id: Uuid::new_v4().to_string(),
             timestamp: event.timestamp,
@@ -585,13 +617,14 @@ impl EventBusIntegration {
             priority: match event.severity.as_str() {
                 "critical" => "critical",
                 "warning" => "high",
-                _ => "normal"
-            }.to_string(),
+                _ => "normal",
+            }
+            .to_string(),
             payload,
             metadata,
         })
     }
-    
+
     async fn convert_system_to_daa(&self, event: &SystemEvent) -> Result<DaaEvent> {
         let mut payload = HashMap::new();
         payload.insert("component".to_string(), json!(event.component));
@@ -602,43 +635,51 @@ impl EventBusIntegration {
         payload.insert("uptime_seconds".to_string(), json!(event.uptime_seconds));
         payload.insert("error_rate".to_string(), json!(event.error_rate));
         payload.insert("timestamp".to_string(), json!(event.timestamp));
-        
+
         if let Some(metadata) = &event.metadata {
             payload.insert("metadata".to_string(), metadata.clone());
         }
-        
+
         let mut metadata = HashMap::new();
         metadata.insert("component".to_string(), event.component.clone());
-        
+
         Ok(DaaEvent {
             id: Uuid::new_v4().to_string(),
             timestamp: event.timestamp,
             event_type: "system_health".to_string(),
             source: "streaming_pipeline".to_string(),
-            priority: if event.health_score < 0.8 { "high" } else { "normal" }.to_string(),
+            priority: if event.health_score < 0.8 {
+                "high"
+            } else {
+                "normal"
+            }
+            .to_string(),
             payload,
             metadata,
         })
     }
-    
+
     async fn update_performance_metrics(&self, event_type: &str, latency_ms: f64) {
         if *self.is_monitoring_enabled.read().await {
             let mut metrics = self.performance_metrics.write().await;
             metrics.total_events_published += 1;
-            
+
             // Update events by type
-            *metrics.events_by_type.entry(event_type.to_string()).or_insert(0) += 1;
-            
+            *metrics
+                .events_by_type
+                .entry(event_type.to_string())
+                .or_insert(0) += 1;
+
             // Update latency (simple average)
-            metrics.average_publish_latency_ms = 
+            metrics.average_publish_latency_ms =
                 (metrics.average_publish_latency_ms + latency_ms) / 2.0;
-            
+
             // Update success rate (assuming success for now)
             metrics.success_rate = 0.98; // High success rate
-            
+
             // Simple events per second calculation
             metrics.events_per_second = metrics.total_events_published as f64 / 60.0;
-            
+
             metrics.last_updated = Utc::now();
         }
     }
@@ -651,35 +692,29 @@ impl EventSerializer {
             compression_enabled: false,
         }
     }
-    
+
     /// Serialize market event
     pub fn serialize_market_event(&self, event: &MarketEvent) -> Result<Vec<u8>> {
-        let json_str = serde_json::to_string(event)
-            .context("Failed to serialize market event")?;
+        let json_str = serde_json::to_string(event).context("Failed to serialize market event")?;
         Ok(json_str.into_bytes())
     }
-    
+
     /// Deserialize market event
     pub fn deserialize_market_event(&self, data: &[u8]) -> Result<MarketEvent> {
-        let json_str = std::str::from_utf8(data)
-            .context("Invalid UTF-8 in market event data")?;
-        serde_json::from_str(json_str)
-            .context("Failed to deserialize market event")
+        let json_str = std::str::from_utf8(data).context("Invalid UTF-8 in market event data")?;
+        serde_json::from_str(json_str).context("Failed to deserialize market event")
     }
-    
+
     /// Serialize news event
     pub fn serialize_news_event(&self, event: &NewsEvent) -> Result<Vec<u8>> {
-        let json_str = serde_json::to_string(event)
-            .context("Failed to serialize news event")?;
+        let json_str = serde_json::to_string(event).context("Failed to serialize news event")?;
         Ok(json_str.into_bytes())
     }
-    
+
     /// Deserialize news event
     pub fn deserialize_news_event(&self, data: &[u8]) -> Result<NewsEvent> {
-        let json_str = std::str::from_utf8(data)
-            .context("Invalid UTF-8 in news event data")?;
-        serde_json::from_str(json_str)
-            .context("Failed to deserialize news event")
+        let json_str = std::str::from_utf8(data).context("Invalid UTF-8 in news event data")?;
+        serde_json::from_str(json_str).context("Failed to deserialize news event")
     }
 }
 
@@ -691,13 +726,13 @@ impl EventRouter {
             routing_rules: HashMap::new(),
         }
     }
-    
+
     /// Add a filter rule
     pub fn add_filter_rule(&mut self, name: &str, rule: &str) -> Result<()> {
         self.filter_rules.insert(name.to_string(), rule.to_string());
         Ok(())
     }
-    
+
     /// Check if event should be routed based on filter rules
     pub async fn should_route_event(&self, event: &DaaEvent) -> Result<bool> {
         // Simple rule evaluation - in production would use a proper rule engine
@@ -724,7 +759,7 @@ impl EventRouter {
                 _ => {}
             }
         }
-        
+
         Ok(true)
     }
 }

@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use chrono::{DateTime, Utc};
 use num_traits::Float;
 use ruv_fann::{Network, TrainingData};
-use crate::errors::{NeuroDivergentError, NeuroDivergentResult};
+use crate::errors::{NeuroDivergentResult, NeuroDivergentError};
 
 /// Core trait that all neural forecasting models must implement
 pub trait BaseModel<T: Float + Send + Sync + std::fmt::Debug + std::iter::Sum + 'static>: Send + Sync {

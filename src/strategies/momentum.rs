@@ -1,5 +1,5 @@
 //! Momentum trading strategy
-//! 
+//!
 //! Implements a momentum-based trading strategy that identifies trends
 //! and generates signals based on price momentum indicators.
 
@@ -66,12 +66,7 @@ impl MomentumStrategy {
             return None;
         }
 
-        let sum: f64 = self
-            .price_history
-            .iter()
-            .rev()
-            .take(period)
-            .sum();
+        let sum: f64 = self.price_history.iter().rev().take(period).sum();
 
         Some(sum / period as f64)
     }
@@ -127,7 +122,7 @@ impl MomentumStrategy {
     /// Evaluate stop loss condition
     fn check_stop_loss(&self, position: &Position) -> bool {
         let pnl_pct = (position.current_price - position.entry_price) / position.entry_price;
-        
+
         match position.side {
             super::PositionSide::Long => pnl_pct <= -self.config.stop_loss_pct,
             super::PositionSide::Short => pnl_pct >= self.config.stop_loss_pct,
@@ -137,7 +132,7 @@ impl MomentumStrategy {
     /// Evaluate take profit condition
     fn check_take_profit(&self, position: &Position) -> bool {
         let pnl_pct = (position.current_price - position.entry_price) / position.entry_price;
-        
+
         match position.side {
             super::PositionSide::Long => pnl_pct >= self.config.take_profit_pct,
             super::PositionSide::Short => pnl_pct <= -self.config.take_profit_pct,
@@ -175,9 +170,9 @@ impl TradingStrategy for MomentumStrategy {
         }
 
         if let Some(momentum_threshold) = config.parameters.get("momentum_threshold") {
-            self.config.momentum_threshold = momentum_threshold
-                .as_f64()
-                .ok_or_else(|| StrategyError::Configuration("Invalid momentum_threshold".to_string()))?;
+            self.config.momentum_threshold = momentum_threshold.as_f64().ok_or_else(|| {
+                StrategyError::Configuration("Invalid momentum_threshold".to_string())
+            })?;
         }
 
         // Validate configuration
@@ -235,10 +230,10 @@ impl TradingStrategy for MomentumStrategy {
         let momentum = momentum.unwrap();
 
         // Generate signal based on momentum indicators
-        if fast_sma > slow_sma 
-            && rsi < self.config.rsi_overbought 
+        if fast_sma > slow_sma
+            && rsi < self.config.rsi_overbought
             && momentum > self.config.momentum_threshold
-            && position.is_none() 
+            && position.is_none()
         {
             return Ok(Signal::Buy {
                 confidence: (momentum / self.config.momentum_threshold).min(1.0),
@@ -251,8 +246,8 @@ impl TradingStrategy for MomentumStrategy {
             });
         }
 
-        if fast_sma < slow_sma 
-            && rsi > self.config.rsi_oversold 
+        if fast_sma < slow_sma
+            && rsi > self.config.rsi_oversold
             && momentum < -self.config.momentum_threshold
             && position.is_some()
         {
@@ -286,21 +281,19 @@ impl TradingStrategy for MomentumStrategy {
         for (key, value) in parameters {
             match key.as_str() {
                 "fast_period" => {
-                    temp_config.fast_period = value
-                        .as_u64()
-                        .ok_or_else(|| StrategyError::Configuration("Invalid fast_period".to_string()))?
-                        as usize;
+                    temp_config.fast_period = value.as_u64().ok_or_else(|| {
+                        StrategyError::Configuration("Invalid fast_period".to_string())
+                    })? as usize;
                 }
                 "slow_period" => {
-                    temp_config.slow_period = value
-                        .as_u64()
-                        .ok_or_else(|| StrategyError::Configuration("Invalid slow_period".to_string()))?
-                        as usize;
+                    temp_config.slow_period = value.as_u64().ok_or_else(|| {
+                        StrategyError::Configuration("Invalid slow_period".to_string())
+                    })? as usize;
                 }
                 "momentum_threshold" => {
-                    temp_config.momentum_threshold = value
-                        .as_f64()
-                        .ok_or_else(|| StrategyError::Configuration("Invalid momentum_threshold".to_string()))?;
+                    temp_config.momentum_threshold = value.as_f64().ok_or_else(|| {
+                        StrategyError::Configuration("Invalid momentum_threshold".to_string())
+                    })?;
                 }
                 _ => {
                     return Err(StrategyError::Configuration(format!(

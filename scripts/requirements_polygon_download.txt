@@ -1,0 +1,5 @@
+# Requirements for Polygon S3 Download Script
+# Install with: pip install -r requirements_polygon_download.txt
+
+boto3>=1.34.0
+tqdm>=4.66.0

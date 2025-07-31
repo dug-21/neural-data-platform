@@ -16,7 +16,7 @@ mod tests {
         parameters.insert("slow_period".to_string(), serde_json::json!(20));
         parameters.insert("rsi_period".to_string(), serde_json::json!(14));
         parameters.insert("momentum_threshold".to_string(), serde_json::json!(0.02));
-        
+
         StrategyConfig {
             name: "test_momentum".to_string(),
             strategy_type: "momentum".to_string(),
@@ -80,7 +80,7 @@ mod tests {
     async fn test_initialize_valid_config() {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
-        
+
         let result = strategy.initialize(config).await;
         assert!(result.is_ok());
     }
@@ -89,12 +89,16 @@ mod tests {
     async fn test_initialize_invalid_fast_slow_period() {
         let mut strategy = MomentumStrategy::new();
         let mut config = create_test_config();
-        config.parameters.insert("fast_period".to_string(), serde_json::json!(30));
-        config.parameters.insert("slow_period".to_string(), serde_json::json!(20));
-        
+        config
+            .parameters
+            .insert("fast_period".to_string(), serde_json::json!(30));
+        config
+            .parameters
+            .insert("slow_period".to_string(), serde_json::json!(20));
+
         let result = strategy.initialize(config).await;
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             StrategyError::Configuration(msg) => {
                 assert_eq!(msg, "Fast period must be less than slow period");
@@ -107,11 +111,13 @@ mod tests {
     async fn test_initialize_invalid_parameter_type() {
         let mut strategy = MomentumStrategy::new();
         let mut config = create_test_config();
-        config.parameters.insert("fast_period".to_string(), serde_json::json!("invalid"));
-        
+        config
+            .parameters
+            .insert("fast_period".to_string(), serde_json::json!("invalid"));
+
         let result = strategy.initialize(config).await;
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             StrategyError::Configuration(msg) => {
                 assert_eq!(msg, "Invalid fast_period");
@@ -125,12 +131,12 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         let mut new_params = HashMap::new();
         new_params.insert("fast_period".to_string(), serde_json::json!(15));
         new_params.insert("slow_period".to_string(), serde_json::json!(30));
         new_params.insert("momentum_threshold".to_string(), serde_json::json!(0.03));
-        
+
         let result = strategy.update_parameters(new_params).await;
         assert!(result.is_ok());
     }
@@ -140,14 +146,14 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         let mut new_params = HashMap::new();
         new_params.insert("fast_period".to_string(), serde_json::json!(40));
         new_params.insert("slow_period".to_string(), serde_json::json!(30));
-        
+
         let result = strategy.update_parameters(new_params).await;
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             StrategyError::Configuration(msg) => {
                 assert_eq!(msg, "Fast period must be less than slow period");
@@ -161,13 +167,13 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         let mut new_params = HashMap::new();
         new_params.insert("unknown_param".to_string(), serde_json::json!(123));
-        
+
         let result = strategy.update_parameters(new_params).await;
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             StrategyError::Configuration(msg) => {
                 assert!(msg.contains("Unknown parameter"));
@@ -180,7 +186,7 @@ mod tests {
     fn test_can_execute_valid_market() {
         let strategy = MomentumStrategy::new();
         let context = create_market_context(48000.0, 48100.0, 1000000.0, 0.2);
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(result.unwrap());
@@ -190,7 +196,7 @@ mod tests {
     fn test_can_execute_zero_volume() {
         let strategy = MomentumStrategy::new();
         let context = create_market_context(48000.0, 48100.0, 0.0, 0.2);
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -200,7 +206,7 @@ mod tests {
     fn test_can_execute_high_spread() {
         let strategy = MomentumStrategy::new();
         let context = create_market_context(48000.0, 49000.0, 1000000.0, 0.2);
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -210,7 +216,7 @@ mod tests {
     fn test_can_execute_high_volatility() {
         let strategy = MomentumStrategy::new();
         let context = create_market_context(48000.0, 48100.0, 1000000.0, 0.6);
-        
+
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -220,10 +226,10 @@ mod tests {
     async fn test_generate_signal_insufficient_data() {
         let strategy = MomentumStrategy::new();
         let context = create_market_context(48000.0, 48100.0, 1000000.0, 0.2);
-        
+
         let result = strategy.generate_signal(&context, None).await;
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
             Signal::Hold { reason } => {
                 assert_eq!(reason, "Insufficient data for analysis");
@@ -237,15 +243,19 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         let context = create_market_context(47000.0, 47100.0, 1000000.0, 0.2);
         let position = create_position(48000.0, 47000.0, PositionSide::Long);
-        
+
         let result = strategy.generate_signal(&context, Some(&position)).await;
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert_eq!(reason, "Stop loss triggered");
@@ -259,15 +269,19 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         let context = create_market_context(49000.0, 49100.0, 1000000.0, 0.2);
         let position = create_position(48000.0, 49000.0, PositionSide::Short);
-        
+
         let result = strategy.generate_signal(&context, Some(&position)).await;
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert_eq!(reason, "Stop loss triggered");
@@ -281,15 +295,19 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         let context = create_market_context(50500.0, 50600.0, 1000000.0, 0.2);
         let position = create_position(48000.0, 50500.0, PositionSide::Long);
-        
+
         let result = strategy.generate_signal(&context, Some(&position)).await;
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert_eq!(reason, "Take profit reached");
@@ -303,15 +321,19 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         let context = create_market_context(45500.0, 45600.0, 1000000.0, 0.2);
         let position = create_position(48000.0, 45500.0, PositionSide::Short);
-        
+
         let result = strategy.generate_signal(&context, Some(&position)).await;
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
-            Signal::Sell { confidence, size, reason } => {
+            Signal::Sell {
+                confidence,
+                size,
+                reason,
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(size, 1.0);
                 assert_eq!(reason, "Take profit reached");
@@ -339,7 +361,7 @@ mod tests {
             stop_loss_pct: 0.02,
             take_profit_pct: 0.05,
         };
-        
+
         // Validate config values
         assert!(config.fast_period < config.slow_period);
         assert!(config.rsi_overbought > config.rsi_oversold);
@@ -353,19 +375,19 @@ mod tests {
         let mut strategy = MomentumStrategy::new();
         let config = create_test_config();
         strategy.initialize(config).await.unwrap();
-        
+
         // First update
         let mut params1 = HashMap::new();
         params1.insert("fast_period".to_string(), serde_json::json!(8));
         let result = strategy.update_parameters(params1).await;
         assert!(result.is_ok());
-        
+
         // Second update
         let mut params2 = HashMap::new();
         params2.insert("slow_period".to_string(), serde_json::json!(30));
         let result = strategy.update_parameters(params2).await;
         assert!(result.is_ok());
-        
+
         // Third update
         let mut params3 = HashMap::new();
         params3.insert("momentum_threshold".to_string(), serde_json::json!(0.025));
@@ -376,13 +398,13 @@ mod tests {
     #[test]
     fn test_edge_case_spread_calculation() {
         let strategy = MomentumStrategy::new();
-        
+
         // Test exact 1% spread (boundary)
         let context = create_market_context(48000.0, 48480.0, 1000000.0, 0.2);
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(result.unwrap());
-        
+
         // Test just over 1% spread
         let context = create_market_context(48000.0, 48481.0, 1000000.0, 0.2);
         let result = strategy.can_execute(&context);
@@ -393,13 +415,13 @@ mod tests {
     #[test]
     fn test_edge_case_volatility() {
         let strategy = MomentumStrategy::new();
-        
+
         // Test exact 0.5 volatility (boundary)
         let context = create_market_context(48000.0, 48100.0, 1000000.0, 0.5);
         let result = strategy.can_execute(&context);
         assert!(result.is_ok());
         assert!(result.unwrap());
-        
+
         // Test just over 0.5 volatility
         let context = create_market_context(48000.0, 48100.0, 1000000.0, 0.50001);
         let result = strategy.can_execute(&context);

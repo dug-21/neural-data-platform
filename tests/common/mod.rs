@@ -1,8 +1,8 @@
 //! Common test utilities and shared fixtures
-//! 
+//!
 //! This module provides reusable test data generators, mock objects,
 //! and utility functions for integration testing.
-//! 
+//!
 //! SPARC Architecture:
 //! - Specification: Shared test utilities for unit and integration tests
 //! - Pseudocode: Helper functions and mock data generators
@@ -10,15 +10,15 @@
 //! - Refinement: Extensible for new test scenarios
 //! - Completion: Ready-to-use test helpers
 
+use autonomous_platform::adapters::{MarketData, OrderBook, OrderBookEntry};
 use autonomous_platform::config::{
-    PlatformConfig, PlatformInfo, DatabaseConfig, RedisConfig, NeuralConfig, MonitoringConfig,
-    ObservabilityConfig, SecurityConfig, PerformanceConfig, LoggingConfig, AlertsConfig,
-    BackupConfig, CircuitBreakerConfig, GracefulShutdownConfig, DevelopmentConfig
+    AlertsConfig, BackupConfig, CircuitBreakerConfig, DatabaseConfig, DevelopmentConfig,
+    GracefulShutdownConfig, LoggingConfig, MonitoringConfig, NeuralConfig, ObservabilityConfig,
+    PerformanceConfig, PlatformConfig, PlatformInfo, RedisConfig, SecurityConfig,
 };
 use autonomous_platform::data::TimeSeriesData;
-use autonomous_platform::adapters::{MarketData, OrderBook, OrderBookEntry};
 use autonomous_platform::strategies::{MarketContext, Position, PositionSide};
-use chrono::{DateTime, Utc, TimeZone};
+use chrono::{DateTime, TimeZone, Utc};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -52,7 +52,12 @@ pub fn create_test_config() -> PlatformConfig {
         },
         neural: NeuralConfig {
             memory_gb: 4.0,
-            models: vec!["NHITS".to_string(), "DeepAR".to_string(), "TCN".to_string(), "MLP".to_string()],
+            models: vec![
+                "NHITS".to_string(),
+                "DeepAR".to_string(),
+                "TCN".to_string(),
+                "MLP".to_string(),
+            ],
             prediction_cache_ttl: 600,
             model_load_timeout: 300,
             max_concurrent_predictions: 50,
@@ -92,11 +97,15 @@ pub fn create_test_config() -> PlatformConfig {
 }
 
 /// Create realistic market data for testing
-pub fn create_realistic_market_data(symbol: &str, base_price: f64, volatility: f64) -> TimeSeriesData {
+pub fn create_realistic_market_data(
+    symbol: &str,
+    base_price: f64,
+    volatility: f64,
+) -> TimeSeriesData {
     let timestamp = Utc::now();
     let price_variation = base_price * volatility * (rand::random::<f64>() - 0.5);
     let current_price = base_price + price_variation;
-    
+
     TimeSeriesData {
         symbol: symbol.to_string(),
         timestamp,
@@ -112,27 +121,27 @@ pub fn create_realistic_market_data(symbol: &str, base_price: f64, volatility: f
 /// Create realistic technical indicators
 pub fn create_realistic_indicators(current_price: f64, base_price: f64) -> HashMap<String, f64> {
     let mut indicators = HashMap::new();
-    
+
     // RSI (0-100, realistic range 20-80)
     indicators.insert("RSI".to_string(), 30.0 + (rand::random::<f64>() * 40.0));
-    
-    // MACD 
+
+    // MACD
     indicators.insert("MACD".to_string(), (current_price - base_price) * 0.1);
-    
+
     // Bollinger Bands
     indicators.insert("BB_UPPER".to_string(), current_price * 1.02);
     indicators.insert("BB_LOWER".to_string(), current_price * 0.98);
     indicators.insert("BB_MIDDLE".to_string(), current_price);
-    
+
     // Moving Averages
     indicators.insert("SMA_20".to_string(), base_price);
     indicators.insert("EMA_12".to_string(), current_price * 0.99);
     indicators.insert("EMA_26".to_string(), current_price * 1.01);
-    
+
     // Volume indicators
     indicators.insert("VOLUME_SMA".to_string(), 800000.0);
     indicators.insert("OBV".to_string(), 50000000.0);
-    
+
     indicators
 }
 
@@ -147,7 +156,10 @@ pub fn create_low_volatility_market_data(symbol: &str, base_price: f64) -> TimeS
 }
 
 /// Create context metadata for agent decisions
-pub fn create_decision_metadata(strategy: &str, risk_level: f64) -> HashMap<String, serde_json::Value> {
+pub fn create_decision_metadata(
+    strategy: &str,
+    risk_level: f64,
+) -> HashMap<String, serde_json::Value> {
     let mut metadata = HashMap::new();
     metadata.insert("strategy".to_string(), json!(strategy));
     metadata.insert("risk_level".to_string(), json!(risk_level));
@@ -161,17 +173,25 @@ pub fn create_decision_metadata(strategy: &str, risk_level: f64) -> HashMap<Stri
 
 /// Create a batch of market data for multiple symbols
 pub fn create_market_data_batch(symbols: &[&str], base_prices: &[f64]) -> Vec<TimeSeriesData> {
-    symbols.iter().zip(base_prices.iter())
+    symbols
+        .iter()
+        .zip(base_prices.iter())
         .map(|(symbol, price)| create_realistic_market_data(symbol, *price, 0.05))
         .collect()
 }
 
 /// Create streaming market data with sequence numbers
-pub fn create_streaming_market_data(symbol: &str, base_price: f64, sequence: u64) -> TimeSeriesData {
+pub fn create_streaming_market_data(
+    symbol: &str,
+    base_price: f64,
+    sequence: u64,
+) -> TimeSeriesData {
     let mut data = create_realistic_market_data(symbol, base_price, 0.03);
     // Add streaming-specific metadata
-    data.indicators.insert("SEQUENCE".to_string(), sequence as f64);
-    data.indicators.insert("LATENCY_MS".to_string(), rand::random::<f64>() * 10.0);
+    data.indicators
+        .insert("SEQUENCE".to_string(), sequence as f64);
+    data.indicators
+        .insert("LATENCY_MS".to_string(), rand::random::<f64>() * 10.0);
     data
 }
 
@@ -190,53 +210,55 @@ impl MarketScenario {
     pub fn generate_data(&self, symbol: &str, base_price: f64) -> TimeSeriesData {
         match self {
             MarketScenario::Normal => create_realistic_market_data(symbol, base_price, 0.05),
-            MarketScenario::HighVolatility => create_high_volatility_market_data(symbol, base_price),
+            MarketScenario::HighVolatility => {
+                create_high_volatility_market_data(symbol, base_price)
+            }
             MarketScenario::FlashCrashRecovery => {
                 let mut data = create_realistic_market_data(symbol, base_price, 0.20);
-                data.low = base_price * 0.85;  // 15% crash
+                data.low = base_price * 0.85; // 15% crash
                 data.close = base_price * 0.95; // 5% recovery
                 data
-            },
+            }
             MarketScenario::TrendingUp => {
                 let mut data = create_realistic_market_data(symbol, base_price, 0.03);
                 data.close = base_price * 1.02; // 2% up
                 data.high = data.close * 1.01;
                 data
-            },
+            }
             MarketScenario::TrendingDown => {
                 let mut data = create_realistic_market_data(symbol, base_price, 0.03);
                 data.close = base_price * 0.98; // 2% down
                 data.low = data.close * 0.99;
                 data
-            },
+            }
             MarketScenario::Sideways => {
                 let mut data = create_realistic_market_data(symbol, base_price, 0.01);
                 data.close = base_price; // No change
                 data
-            },
+            }
         }
     }
 }
 
 /// Generate time series for backtesting
 pub fn generate_time_series(
-    symbol: &str, 
-    base_price: f64, 
+    symbol: &str,
+    base_price: f64,
     duration_hours: u32,
-    scenario: MarketScenario
+    scenario: MarketScenario,
 ) -> Vec<TimeSeriesData> {
     let mut series = Vec::new();
     let mut current_price = base_price;
-    
+
     for i in 0..duration_hours {
         let timestamp = Utc::now() - chrono::Duration::hours((duration_hours - i) as i64);
         let mut data = scenario.generate_data(symbol, current_price);
         data.timestamp = timestamp;
-        
+
         current_price = data.close; // Price continuity
         series.push(data);
     }
-    
+
     series
 }
 
@@ -359,7 +381,7 @@ pub fn generate_price_series(symbol: &str, start_price: f64, count: usize) -> Ve
         // Generate random price movement
         let change = (rand::random::<f64>() - 0.5) * 2.0; // -1% to +1%
         price *= 1.0 + change / 100.0;
-        
+
         let high = price * 1.01;
         let low = price * 0.99;
         let open = price * (1.0 + (rand::random::<f64>() - 0.5) * 0.01);
@@ -393,58 +415,81 @@ pub fn setup_test_logging() {
 /// Assertion helpers for test validation
 pub mod assertions {
     use super::*;
-    
+
     /// Assert that prediction confidence is within expected range
     pub fn assert_confidence_range(confidence: f64, min: f64, max: f64) {
-        assert!(confidence >= min && confidence <= max, 
-            "Confidence {} is not within range [{}, {}]", confidence, min, max);
+        assert!(
+            confidence >= min && confidence <= max,
+            "Confidence {} is not within range [{}, {}]",
+            confidence,
+            min,
+            max
+        );
     }
-    
+
     /// Assert that latency is within acceptable limits
     pub fn assert_latency_acceptable(latency_ms: f64, max_ms: f64) {
-        assert!(latency_ms <= max_ms, 
-            "Latency {}ms exceeds maximum acceptable {}ms", latency_ms, max_ms);
+        assert!(
+            latency_ms <= max_ms,
+            "Latency {}ms exceeds maximum acceptable {}ms",
+            latency_ms,
+            max_ms
+        );
     }
-    
+
     /// Assert that market data is valid
     pub fn assert_market_data_valid(data: &TimeSeriesData) {
         assert!(!data.symbol.is_empty(), "Symbol cannot be empty");
         assert!(data.volume >= 0.0, "Volume cannot be negative");
         assert!(data.high >= data.low, "High must be >= low");
-        assert!(data.high >= data.open && data.high >= data.close, "High must be >= open and close");
-        assert!(data.low <= data.open && data.low <= data.close, "Low must be <= open and close");
+        assert!(
+            data.high >= data.open && data.high >= data.close,
+            "High must be >= open and close"
+        );
+        assert!(
+            data.low <= data.open && data.low <= data.close,
+            "Low must be <= open and close"
+        );
     }
-    
+
     /// Assert system health metrics
     pub fn assert_system_healthy(
         total_requests: u64,
         error_rate: f64,
         avg_latency: f64,
         max_error_rate: f64,
-        max_latency: f64
+        max_latency: f64,
     ) {
         assert!(total_requests > 0, "No requests processed");
-        assert!(error_rate <= max_error_rate, 
-            "Error rate {} exceeds maximum {}", error_rate, max_error_rate);
-        assert!(avg_latency <= max_latency,
-            "Average latency {}ms exceeds maximum {}ms", avg_latency, max_latency);
+        assert!(
+            error_rate <= max_error_rate,
+            "Error rate {} exceeds maximum {}",
+            error_rate,
+            max_error_rate
+        );
+        assert!(
+            avg_latency <= max_latency,
+            "Average latency {}ms exceeds maximum {}ms",
+            avg_latency,
+            max_latency
+        );
     }
 }
 
 /// Memory storage helpers for swarm coordination
 pub mod memory {
     use super::*;
-    
+
     /// Standard memory key for integration test results
     pub fn integration_test_results_key() -> String {
         "swarm-auto-centralized-1751484080479/integration-testing/results".to_string()
     }
-    
+
     /// Store test results in standardized format
     pub fn store_test_results(
         test_name: &str,
         success: bool,
-        metrics: HashMap<String, serde_json::Value>
+        metrics: HashMap<String, serde_json::Value>,
     ) -> HashMap<String, serde_json::Value> {
         let mut results = HashMap::new();
         results.insert("test_name".to_string(), json!(test_name));
@@ -453,13 +498,13 @@ pub mod memory {
         results.insert("metrics".to_string(), json!(metrics));
         results
     }
-    
+
     /// Create performance benchmark results
     pub fn create_performance_results(
         throughput: f64,
         latency_p95: f64,
         error_rate: f64,
-        memory_usage_mb: f64
+        memory_usage_mb: f64,
     ) -> HashMap<String, serde_json::Value> {
         let mut metrics = HashMap::new();
         metrics.insert("throughput_per_second".to_string(), json!(throughput));
@@ -474,7 +519,7 @@ pub mod memory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_create_test_config() {
         let config = create_test_config();
@@ -482,7 +527,7 @@ mod tests {
         assert!(config.neural.memory_gb > 0.0);
         assert!(!config.neural.models.is_empty());
     }
-    
+
     #[test]
     fn test_realistic_market_data() {
         let data = create_realistic_market_data("BTC/USD", 45000.0, 0.05);
@@ -490,7 +535,7 @@ mod tests {
         assert_eq!(data.symbol, "BTC/USD");
         assert!(data.close > 40000.0 && data.close < 50000.0); // Within reasonable range
     }
-    
+
     #[test]
     fn test_market_scenarios() {
         let scenarios = vec![
@@ -501,21 +546,21 @@ mod tests {
             MarketScenario::TrendingDown,
             MarketScenario::Sideways,
         ];
-        
+
         for scenario in scenarios {
             let data = scenario.generate_data("ETH/USD", 3000.0);
             assertions::assert_market_data_valid(&data);
         }
     }
-    
+
     #[test]
     fn test_time_series_generation() {
         let series = generate_time_series("ADA/USD", 1.0, 24, MarketScenario::Normal);
         assert_eq!(series.len(), 24);
-        
+
         // Verify chronological order
         for i in 1..series.len() {
-            assert!(series[i].timestamp > series[i-1].timestamp);
+            assert!(series[i].timestamp > series[i - 1].timestamp);
         }
     }
 }

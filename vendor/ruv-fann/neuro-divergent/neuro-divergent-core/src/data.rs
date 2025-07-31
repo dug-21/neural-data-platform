@@ -8,12 +8,11 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
-use ndarray::{Array1, Array2};
+use ndarray::Array2;
 use num_traits::Float;
 use polars::prelude::*;
-use serde::{Deserialize, Serialize};
 
-use crate::{data_error, error::{ErrorBuilder, NeuroDivergentError, NeuroDivergentResult}};
+use crate::{data_error, error::{ErrorBuilder, NeuroDivergentResult}};
 
 /// Main data structure for time series data, equivalent to pandas DataFrame
 #[derive(Debug, Clone)]

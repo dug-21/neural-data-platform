@@ -1,5 +1,5 @@
 //! Integration tests for the complete system
-//! 
+//!
 //! SPARC Architecture:
 //! - Specification: Test full system initialization and data flow
 //! - Pseudocode: End-to-end testing from adapters to strategies
@@ -8,9 +8,9 @@
 //! - Completion: Verify system works as a cohesive unit
 
 use neural_trader::{
-    adapters::{DataAdapter, MarketData, redis::RedisAdapter, timescale::TimescaleAdapter},
+    adapters::{redis::RedisAdapter, timescale::TimescaleAdapter, DataAdapter, MarketData},
     config::PlatformConfig,
-    integration::{PlatformOrchestrator, streaming::StreamingPipeline},
+    integration::{streaming::StreamingPipeline, PlatformOrchestrator},
     strategies::{StrategyFactory, TradingStrategy},
 };
 use std::sync::Arc;
@@ -39,14 +39,17 @@ mod system_initialization_tests {
 
         // THEN: System should initialize (or fail predictably in test env)
         // This test will fail initially as expected in TDD
-        assert!(init_result.is_err(), "Expected initialization to fail in test environment");
+        assert!(
+            init_result.is_err(),
+            "Expected initialization to fail in test environment"
+        );
     }
 
     #[tokio::test]
     async fn test_component_initialization_order() {
         // GIVEN: Individual components
         let config = create_test_config();
-        
+
         // Test initialization order dependencies
         // 1. Database connections should be established first
         let timescale_config = neural_trader::adapters::timescale::TimescaleConfig {
@@ -57,10 +60,13 @@ mod system_initialization_tests {
             password: "postgres".to_string(),
             max_connections: 5,
         };
-        
+
         let mut timescale = TimescaleAdapter::new(timescale_config);
         let db_result = timescale.connect().await;
-        assert!(db_result.is_err(), "Expected DB connection to fail in test env");
+        assert!(
+            db_result.is_err(),
+            "Expected DB connection to fail in test env"
+        );
 
         // 2. Cache layer should be next
         let redis_config = neural_trader::adapters::redis::RedisConfig {
@@ -70,10 +76,13 @@ mod system_initialization_tests {
             db: 15,
             pool_size: 5,
         };
-        
+
         let mut redis = RedisAdapter::new(redis_config);
         let cache_result = redis.connect().await;
-        assert!(cache_result.is_err(), "Expected cache connection to fail in test env");
+        assert!(
+            cache_result.is_err(),
+            "Expected cache connection to fail in test env"
+        );
 
         // 3. Strategies can be initialized after data sources
         let strategy_config = neural_trader::strategies::StrategyConfig {
@@ -83,9 +92,12 @@ mod system_initialization_tests {
             position_size: 1.0,
             parameters: std::collections::HashMap::new(),
         };
-        
+
         let strategy_result = StrategyFactory::create_strategy(&strategy_config);
-        assert!(strategy_result.is_ok(), "Strategy creation should not depend on external services");
+        assert!(
+            strategy_result.is_ok(),
+            "Strategy creation should not depend on external services"
+        );
     }
 }
 
@@ -98,7 +110,7 @@ mod data_flow_integration_tests {
     async fn test_data_flow_from_adapters_to_strategies() {
         // GIVEN: Mock data pipeline components
         setup_test_logging();
-        
+
         // Create test market data
         let test_data = vec![
             MarketDataBuilder::new("BTC/USD")
@@ -120,7 +132,7 @@ mod data_flow_integration_tests {
 
         // WHEN: Data flows through the pipeline
         // This simulates the data flow without actual connections
-        
+
         // 1. Data would be fetched from TimescaleDB
         let historical_data = test_data.clone();
         assert_eq!(historical_data.len(), 3);
@@ -146,7 +158,7 @@ mod data_flow_integration_tests {
     async fn test_streaming_pipeline_integration() {
         // GIVEN: A streaming pipeline setup
         setup_test_logging();
-        
+
         // Simulate streaming data
         let stream_data = generate_price_series("ETH/USD", 3000.0, 10);
         assert_eq!(stream_data.len(), 10);
@@ -155,9 +167,9 @@ mod data_flow_integration_tests {
         for (i, data) in stream_data.iter().enumerate() {
             // Verify data ordering
             if i > 0 {
-                assert!(data.timestamp > stream_data[i-1].timestamp);
+                assert!(data.timestamp > stream_data[i - 1].timestamp);
             }
-            
+
             // Verify data validity
             assert!(data.high >= data.low);
             assert!(data.high >= data.open);
@@ -180,7 +192,7 @@ mod agent_coordination_tests {
     async fn test_multi_agent_coordination() {
         // GIVEN: Multiple agent types with different roles
         setup_test_logging();
-        
+
         // Simulate agent coordination
         let agent_roles = vec![
             ("data_collector", "Fetches market data"),
@@ -191,7 +203,10 @@ mod agent_coordination_tests {
 
         // WHEN: Agents coordinate on a task
         let task_metadata = std::collections::HashMap::from([
-            ("task_type".to_string(), serde_json::json!("market_analysis")),
+            (
+                "task_type".to_string(),
+                serde_json::json!("market_analysis"),
+            ),
             ("symbol".to_string(), serde_json::json!("BTC/USD")),
             ("timeframe".to_string(), serde_json::json!("1h")),
         ]);
@@ -201,7 +216,7 @@ mod agent_coordination_tests {
             // Verify agent can be assigned
             assert!(!role.is_empty());
             assert!(!description.is_empty());
-            
+
             // In a real system, each agent would process the task
             match role {
                 "data_collector" => {
@@ -233,7 +248,7 @@ mod agent_coordination_tests {
     async fn test_agent_failure_recovery() {
         // GIVEN: An agent that might fail
         setup_test_logging();
-        
+
         let max_retries = 3;
         let mut attempt = 0;
         let mut success = false;
@@ -241,7 +256,7 @@ mod agent_coordination_tests {
         // WHEN: Agent encounters failure
         while attempt < max_retries && !success {
             attempt += 1;
-            
+
             // Simulate operation that might fail
             if attempt == max_retries {
                 success = true; // Succeed on last attempt
@@ -262,7 +277,7 @@ mod error_handling_tests {
     async fn test_adapter_connection_failure_handling() {
         // GIVEN: Adapters that fail to connect
         let config = create_test_config();
-        
+
         // Create adapters with invalid configs
         let bad_timescale_config = neural_trader::adapters::timescale::TimescaleConfig {
             host: "invalid_host".to_string(),
@@ -274,7 +289,7 @@ mod error_handling_tests {
         };
 
         let mut timescale = TimescaleAdapter::new(bad_timescale_config);
-        
+
         // WHEN: Connection attempt fails
         let result = timescale.connect().await;
 
@@ -294,7 +309,7 @@ mod error_handling_tests {
         let invalid_config = neural_trader::strategies::StrategyConfig {
             name: "momentum".to_string(),
             enabled: true,
-            risk_limit: -0.01, // Invalid negative risk limit
+            risk_limit: -0.01,  // Invalid negative risk limit
             position_size: 0.0, // Invalid zero position size
             parameters: std::collections::HashMap::new(),
         };
@@ -323,7 +338,7 @@ mod error_handling_tests {
         // WHEN: Errors exceed threshold
         for _ in 0..10 {
             error_count += 1;
-            
+
             if error_count >= error_threshold && !circuit_open {
                 circuit_open = true;
                 break;
@@ -345,22 +360,26 @@ mod performance_tests {
     async fn test_data_processing_latency() {
         // GIVEN: A batch of market data
         let data_batch = generate_price_series("BTC/USD", 50000.0, 1000);
-        
+
         // WHEN: Processing the batch
         let start = Instant::now();
-        
+
         // Simulate processing
         for data in &data_batch {
             // Validate each data point
             assert!(data.volume >= 0.0);
             assert!(data.high >= data.low);
         }
-        
+
         let elapsed = start.elapsed();
 
         // THEN: Processing should complete within acceptable time
-        assert!(elapsed < Duration::from_millis(100), 
-            "Processing {} items took {:?}", data_batch.len(), elapsed);
+        assert!(
+            elapsed < Duration::from_millis(100),
+            "Processing {} items took {:?}",
+            data_batch.len(),
+            elapsed
+        );
     }
 
     #[tokio::test]
@@ -374,7 +393,7 @@ mod performance_tests {
 
         // WHEN: Executing strategies in parallel
         let mut handles = vec![];
-        
+
         for (symbol, strategy_type) in strategy_configs {
             let handle = tokio::spawn(async move {
                 // Simulate strategy execution
@@ -403,7 +422,7 @@ mod integration_scenario_tests {
     async fn test_complete_trading_scenario() {
         // GIVEN: A complete trading scenario setup
         setup_test_logging();
-        
+
         // 1. Initialize components (mocked)
         let system_ready = true;
         assert!(system_ready);
@@ -450,7 +469,7 @@ mod integration_scenario_tests {
         // WHEN: System encounters each scenario
         for scenario in scenarios {
             let market_data = scenario.generate_data("BTC/USD", 50000.0);
-            
+
             // THEN: System should handle appropriately
             match scenario {
                 MarketScenario::FlashCrashRecovery => {
@@ -465,7 +484,8 @@ mod integration_scenario_tests {
                 }
                 MarketScenario::Sideways => {
                     // Should detect low volatility
-                    let price_change = ((market_data.close - market_data.open) / market_data.open).abs();
+                    let price_change =
+                        ((market_data.close - market_data.open) / market_data.open).abs();
                     assert!(price_change < 0.02); // Less than 2% change
                 }
                 _ => {}

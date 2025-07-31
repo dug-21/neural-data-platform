@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config_error,
-    error::{ErrorBuilder, NeuroDivergentError, NeuroDivergentResult},
+    error::{ErrorBuilder, NeuroDivergentResult},
     traits::{ConfigBuilder, ConfigParameter, ExogenousConfig, ModelConfig},
 };
 

@@ -1,5 +1,5 @@
 //! Neural Trader Autonomous Platform Library
-//! 
+//!
 //! This library provides the core functionality for an autonomous trading platform that
 //! integrates real-time data acquisition, machine learning models, and swarm intelligence
 //! for intelligent trading decisions.
@@ -71,25 +71,27 @@
 //! - `trading_scenario.rs` - End-to-end trading workflow
 //! - `performance_monitoring.rs` - Metrics collection and monitoring
 
-pub mod config;
+pub mod adapters;
+pub mod agents;
+pub mod config; // Modular configuration system
+pub mod daa;
 pub mod data;
 pub mod integration;
-pub mod adapters;
-pub mod strategies;
-pub mod observability;
-pub mod security;
-pub mod monitoring;
-pub mod streaming;
 pub mod mcp;
+pub mod monitoring;
 pub mod neural;
-pub mod agents;
+pub mod observability;
 pub mod orchestration;
+pub mod security;
+pub mod strategies;
+pub mod streaming;
+pub mod utils;
 
 // Re-export commonly used types
 pub use anyhow::Result;
-pub use config::{PlatformConfig, load_default_config};
+pub use config::{load_default_config, PlatformConfig};
 pub use monitoring::{
-    HealthMonitor, ComponentType, ComponentHealth, SystemHealth, HealthStatus,
-    PerformanceMetrics, AlertConfig, Alert, AlertSeverity
+    Alert, AlertConfig, AlertSeverity, ComponentHealth, ComponentType, HealthMonitor, HealthStatus,
+    PerformanceMetrics, SystemHealth,
 };
 pub use orchestration::PlatformOrchestrator;

@@ -1,5 +1,5 @@
 //! Failure Scenarios Integration Tests
-//! 
+//!
 //! This module tests edge cases, failure conditions, and error recovery:
 //! - Invalid data handling and validation
 //! - Resource exhaustion scenarios
@@ -10,21 +10,23 @@
 //! - Model prediction failures
 //! - System component failures
 
-use autonomous_platform::data::{DataPipeline, TimescaleDBStorage, RedisCache, TimeSeriesData};
-use autonomous_platform::integration::{
-    platform_orchestrator::{PlatformOrchestrator, SystemHealth},
-    streaming::{StreamingPipeline, MarketData, NewsData, StreamConfig},
-    data_access::{DataAccessLayer, DataRequest, Timeframe},
-    neural_predictions::{NeuralPredictionSystem, DecisionContext, ModelType}
-};
-use autonomous_platform::config::{PlatformConfig, DatabaseConfig, RedisConfig, NeuralConfig, MonitoringConfig, PlatformInfo};
-use std::sync::Arc;
-use chrono::{DateTime, Utc, Duration};
-use tokio::sync::mpsc;
 use anyhow::Result;
+use autonomous_platform::config::{
+    DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
+};
+use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::integration::{
+    data_access::{DataAccessLayer, DataRequest, Timeframe},
+    neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
+    platform_orchestrator::{PlatformOrchestrator, SystemHealth},
+    streaming::{MarketData, NewsData, StreamConfig, StreamingPipeline},
+};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::mpsc;
 
 /// Create a test configuration with limited resources
 fn create_constrained_config() -> PlatformConfig {
@@ -40,17 +42,17 @@ fn create_constrained_config() -> PlatformConfig {
         },
         redis: RedisConfig {
             url: "redis://localhost:6379".to_string(),
-            max_connections: 2, // Very limited
+            max_connections: 2,      // Very limited
             default_ttl_seconds: 10, // Short TTL
         },
         neural: NeuralConfig {
-            memory_gb: 0.5, // Very limited memory
+            memory_gb: 0.5,                    // Very limited memory
             models: vec!["NHITS".to_string()], // Single model
             prediction_cache_ttl: 5,
         },
         monitoring: MonitoringConfig {
             metrics_interval_secs: 1, // High frequency
-            quality_threshold: 0.99, // Very strict
+            quality_threshold: 0.99,  // Very strict
         },
     }
 }
@@ -60,9 +62,9 @@ fn create_invalid_market_data() -> MarketData {
     MarketData {
         symbol: "".to_string(), // Invalid empty symbol
         timestamp: Utc::now(),
-        price: -100.0, // Invalid negative price
-        volume: -50.0, // Invalid negative volume
-        bid: f64::NAN, // Invalid NaN values
+        price: -100.0,      // Invalid negative price
+        volume: -50.0,      // Invalid negative volume
+        bid: f64::NAN,      // Invalid NaN values
         ask: f64::INFINITY, // Invalid infinity
         source: "error_test".to_string(),
         sequence_number: 0,
@@ -78,12 +80,12 @@ fn create_invalid_market_data() -> MarketData {
 async fn test_database_connection_failure() -> Result<()> {
     let mut config = create_constrained_config();
     config.database.url = "postgres://invalid:invalid@nonexistent:5432/nonexistent".to_string();
-    
+
     let result = PlatformOrchestrator::new(config).await;
-    
+
     // Should handle connection failure gracefully
     assert!(result.is_err());
-    
+
     Ok(())
 }
 
@@ -92,12 +94,12 @@ async fn test_database_connection_failure() -> Result<()> {
 async fn test_redis_connection_failure() -> Result<()> {
     let mut config = create_constrained_config();
     config.redis.url = "redis://nonexistent:6379".to_string();
-    
+
     let result = PlatformOrchestrator::new(config).await;
-    
+
     // Should handle Redis failure gracefully
     assert!(result.is_err());
-    
+
     Ok(())
 }
 
@@ -107,7 +109,7 @@ async fn test_invalid_data_validation() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Test various invalid data scenarios
     let invalid_scenarios = vec![
         create_invalid_market_data(),
@@ -136,7 +138,7 @@ async fn test_invalid_data_validation() -> Result<()> {
             metadata: Some(json!({"extreme": true})),
         },
     ];
-    
+
     let mut error_count = 0;
     for invalid_data in invalid_scenarios {
         let result = orchestrator.inject_market_data(invalid_data).await;
@@ -144,14 +146,14 @@ async fn test_invalid_data_validation() -> Result<()> {
             error_count += 1;
         }
     }
-    
+
     // Should reject or handle invalid data appropriately
     assert!(error_count > 0, "Should detect and handle invalid data");
-    
+
     // System should remain healthy despite errors
     let health = orchestrator.health_check().await?;
     assert!(health.metrics.error_count > 0);
-    
+
     Ok(())
 }
 
@@ -161,13 +163,15 @@ async fn test_memory_exhaustion() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Try to overwhelm the system with high-frequency data
-    let symbols = (0..1000).map(|i| format!("MEM{}/USD", i)).collect::<Vec<_>>();
-    
+    let symbols = (0..1000)
+        .map(|i| format!("MEM{}/USD", i))
+        .collect::<Vec<_>>();
+
     let mut success_count = 0;
     let mut error_count = 0;
-    
+
     for symbol in &symbols {
         let market_data = MarketData {
             symbol: symbol.clone(),
@@ -183,26 +187,26 @@ async fn test_memory_exhaustion() -> Result<()> {
                 "large_data": "x".repeat(10000) // Large metadata
             })),
         };
-        
+
         match orchestrator.inject_market_data(market_data).await {
             Ok(_) => success_count += 1,
             Err(_) => error_count += 1,
         }
-        
+
         // Break if too many errors (system protecting itself)
         if error_count > 100 {
             break;
         }
     }
-    
+
     // System should either handle the load or gracefully degrade
     let health = orchestrator.health_check().await?;
-    
+
     // If errors occurred, they should be tracked
     if error_count > 0 {
         assert!(health.metrics.error_count > 0);
     }
-    
+
     Ok(())
 }
 
@@ -212,19 +216,19 @@ async fn test_concurrent_access_conflicts() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let num_concurrent_operations = 50;
     let mut handles = Vec::new();
-    
+
     // Spawn many concurrent operations accessing the same resource
     for i in 0..num_concurrent_operations {
         let orchestrator_clone = orchestrator.clone();
         let handle = tokio::spawn(async move {
             let agent_id = format!("conflict_agent_{}", i);
-            
+
             // Register agent
             let _ = orchestrator_clone.register_daa_agent(&agent_id).await;
-            
+
             // Try to access shared resources simultaneously
             let market_data = MarketData {
                 symbol: "CONFLICT/USD".to_string(), // Same symbol for all
@@ -238,16 +242,16 @@ async fn test_concurrent_access_conflicts() -> Result<()> {
                 order_book_depth: Some(10),
                 metadata: None,
             };
-            
+
             orchestrator_clone.inject_market_data(market_data).await
         });
-        
+
         handles.push(handle);
     }
-    
+
     let mut success_count = 0;
     let mut error_count = 0;
-    
+
     for handle in handles {
         match handle.await {
             Ok(Ok(_)) => success_count += 1,
@@ -255,11 +259,11 @@ async fn test_concurrent_access_conflicts() -> Result<()> {
             Err(_) => error_count += 1,
         }
     }
-    
+
     // Should handle concurrent access without crashing
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy || health.metrics.error_count > 0);
-    
+
     Ok(())
 }
 
@@ -269,10 +273,10 @@ async fn test_neural_model_failures() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let agent_id = "failure_test_agent";
     orchestrator.register_daa_agent(agent_id).await?;
-    
+
     // Test various failure scenarios for neural predictions
     let failure_scenarios = vec![
         DecisionContext {
@@ -291,7 +295,7 @@ async fn test_neural_model_failures() -> Result<()> {
             },
             context_metadata: HashMap::new(),
             required_confidence: 2.0, // Invalid confidence > 1.0
-            prediction_horizon: 0, // Invalid horizon
+            prediction_horizon: 0,    // Invalid horizon
         },
         DecisionContext {
             agent_id: agent_id.to_string(),
@@ -317,7 +321,7 @@ async fn test_neural_model_failures() -> Result<()> {
             prediction_horizon: u32::MAX as i32, // Extreme horizon
         },
     ];
-    
+
     let mut handled_errors = 0;
     for scenario in failure_scenarios {
         let result = orchestrator.get_neural_prediction(scenario).await;
@@ -325,14 +329,17 @@ async fn test_neural_model_failures() -> Result<()> {
             handled_errors += 1;
         }
     }
-    
+
     // Should handle prediction failures gracefully
-    assert!(handled_errors > 0, "Should detect and handle prediction failures");
-    
+    assert!(
+        handled_errors > 0,
+        "Should detect and handle prediction failures"
+    );
+
     let health = orchestrator.health_check().await?;
     // System should remain healthy or track errors appropriately
     assert!(health.overall_healthy || health.metrics.error_count > 0);
-    
+
     Ok(())
 }
 
@@ -342,11 +349,11 @@ async fn test_cascade_failure_resilience() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Simulate multiple component failures in sequence
     let agent_id = "cascade_test_agent";
     orchestrator.register_daa_agent(agent_id).await?;
-    
+
     // First, overload the system with data
     for i in 0..20 {
         let market_data = MarketData {
@@ -363,10 +370,10 @@ async fn test_cascade_failure_resilience() -> Result<()> {
                 "large_payload": "x".repeat(50000) // Very large payload
             })),
         };
-        
+
         let _ = orchestrator.inject_market_data(market_data).await;
     }
-    
+
     // Then try predictions under stress
     let decision_context = DecisionContext {
         agent_id: agent_id.to_string(),
@@ -386,20 +393,20 @@ async fn test_cascade_failure_resilience() -> Result<()> {
         required_confidence: 0.8,
         prediction_horizon: 60,
     };
-    
+
     let prediction_result = orchestrator.get_neural_prediction(decision_context).await;
-    
+
     // System should either succeed or fail gracefully
     let health = orchestrator.health_check().await?;
-    
+
     // Either system handles load or reports errors appropriately
     if prediction_result.is_err() {
         assert!(health.metrics.error_count > 0);
     }
-    
+
     // Critical: system should not crash completely
     assert!(health.streaming_pipeline_healthy || health.data_pipeline_healthy);
-    
+
     Ok(())
 }
 
@@ -409,14 +416,14 @@ async fn test_network_timeout_resilience() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Simulate slow network by injecting data rapidly
     let mut success_count = 0;
     let mut timeout_count = 0;
-    
+
     for i in 0..10 {
         let start_time = Instant::now();
-        
+
         let market_data = MarketData {
             symbol: format!("TIMEOUT{}/USD", i),
             timestamp: Utc::now(),
@@ -432,28 +439,30 @@ async fn test_network_timeout_resilience() -> Result<()> {
                 "payload": "x".repeat(100000) // Large payload to simulate slow network
             })),
         };
-        
+
         match tokio::time::timeout(
             tokio::time::Duration::from_millis(100), // Short timeout
-            orchestrator.inject_market_data(market_data)
-        ).await {
+            orchestrator.inject_market_data(market_data),
+        )
+        .await
+        {
             Ok(Ok(_)) => success_count += 1,
             Ok(Err(_)) => timeout_count += 1,
             Err(_) => timeout_count += 1, // Timeout occurred
         }
     }
-    
+
     // System should handle timeouts gracefully
     let health = orchestrator.health_check().await?;
-    
+
     if timeout_count > 0 {
         // Should track timeout errors
         assert!(health.metrics.error_count >= 0);
     }
-    
+
     // System should remain operational
     assert!(health.streaming_pipeline_healthy || health.data_pipeline_healthy);
-    
+
     Ok(())
 }
 
@@ -461,16 +470,16 @@ async fn test_network_timeout_resilience() -> Result<()> {
 #[tokio::test]
 async fn test_resource_cleanup() -> Result<()> {
     let config = create_constrained_config();
-    
+
     // Create and destroy multiple orchestrators to test cleanup
     for iteration in 0..5 {
         {
             let orchestrator = PlatformOrchestrator::new(config.clone()).await?;
             orchestrator.start_platform().await?;
-            
+
             let agent_id = format!("cleanup_agent_{}", iteration);
             orchestrator.register_daa_agent(&agent_id).await?;
-            
+
             // Use some resources
             for i in 0..10 {
                 let market_data = MarketData {
@@ -485,18 +494,18 @@ async fn test_resource_cleanup() -> Result<()> {
                     order_book_depth: Some(10),
                     metadata: Some(json!({"iteration": iteration})),
                 };
-                
+
                 let _ = orchestrator.inject_market_data(market_data).await;
             }
         } // orchestrator should be dropped and cleaned up here
-        
+
         // Small delay to allow cleanup
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
-    
+
     // If we reach here without crashing, cleanup is working
     assert!(true, "Resource cleanup test completed without crashes");
-    
+
     Ok(())
 }
 
@@ -506,39 +515,37 @@ async fn test_data_corruption_recovery() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Send corrupted data with various corruption types
-    let corrupted_scenarios = vec![
-        MarketData {
-            symbol: "CORRUPT/USD".to_string(),
-            timestamp: Utc::now(),
-            price: 1000.0,
-            volume: 1000.0,
-            bid: 995.0,
-            ask: 1005.0,
-            source: "corruption_test".to_string(),
-            sequence_number: 1,
-            order_book_depth: Some(10),
-            metadata: Some(json!({
-                "corrupted_json": "{invalid json}",
-                "null_bytes": "\0\0\0",
-                "unicode_issues": "invalid \\xFF bytes"
-            })),
-        },
-    ];
-    
+    let corrupted_scenarios = vec![MarketData {
+        symbol: "CORRUPT/USD".to_string(),
+        timestamp: Utc::now(),
+        price: 1000.0,
+        volume: 1000.0,
+        bid: 995.0,
+        ask: 1005.0,
+        source: "corruption_test".to_string(),
+        sequence_number: 1,
+        order_book_depth: Some(10),
+        metadata: Some(json!({
+            "corrupted_json": "{invalid json}",
+            "null_bytes": "\0\0\0",
+            "unicode_issues": "invalid \\xFF bytes"
+        })),
+    }];
+
     let mut handled_corrupted = 0;
     for corrupted_data in corrupted_scenarios {
         match orchestrator.inject_market_data(corrupted_data).await {
             Ok(_) => {
                 // System handled corruption gracefully
-            },
+            }
             Err(_) => {
                 handled_corrupted += 1;
             }
         }
     }
-    
+
     // Then send valid data to test recovery
     let valid_data = MarketData {
         symbol: "VALID/USD".to_string(),
@@ -552,15 +559,18 @@ async fn test_data_corruption_recovery() -> Result<()> {
         order_book_depth: Some(10),
         metadata: Some(json!({"valid": true})),
     };
-    
+
     let recovery_result = orchestrator.inject_market_data(valid_data).await;
-    
+
     // System should recover and process valid data
-    assert!(recovery_result.is_ok(), "System should recover from corruption");
-    
+    assert!(
+        recovery_result.is_ok(),
+        "System should recover from corruption"
+    );
+
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy || health.metrics.error_count > 0);
-    
+
     Ok(())
 }
 
@@ -570,10 +580,10 @@ async fn test_multi_component_stress() -> Result<()> {
     let config = create_constrained_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Stress multiple components simultaneously
     let mut handles = Vec::new();
-    
+
     // Data ingestion stress
     for i in 0..10 {
         let orchestrator_clone = orchestrator.clone();
@@ -591,13 +601,13 @@ async fn test_multi_component_stress() -> Result<()> {
                     order_book_depth: Some(10),
                     metadata: Some(json!({"thread": i, "iteration": j})),
                 };
-                
+
                 let _ = orchestrator_clone.inject_market_data(market_data).await;
             }
         });
         handles.push(handle);
     }
-    
+
     // Agent registration stress
     for i in 0..5 {
         let orchestrator_clone = orchestrator.clone();
@@ -607,24 +617,24 @@ async fn test_multi_component_stress() -> Result<()> {
         });
         handles.push(handle);
     }
-    
+
     // Wait for all stress operations
     for handle in handles {
         let _ = handle.await;
     }
-    
+
     // Allow system to process
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    
+
     // Check system health after stress
     let health = orchestrator.health_check().await?;
-    
+
     // System should either handle the stress or gracefully degrade
     assert!(
-        health.overall_healthy || 
-        health.metrics.error_count > 0 ||
-        health.metrics.total_requests > 0
+        health.overall_healthy
+            || health.metrics.error_count > 0
+            || health.metrics.total_requests > 0
     );
-    
+
     Ok(())
 }

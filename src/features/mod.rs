@@ -10,6 +10,7 @@ pub mod regime_detection;
 pub mod feature_store;
 pub mod realtime_pipeline;
 pub mod feature_selection;
+pub mod training_features;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};

@@ -4,6 +4,7 @@ FROM prom/prometheus:latest
 # Copy configuration
 COPY configs/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
 COPY configs/prometheus/alerts.yml /etc/prometheus/alerts.yml
+COPY configs/prometheus/neural_prediction_alerts.yml /etc/prometheus/neural_prediction_alerts.yml
 
 # Validate configuration
 RUN promtool check config /etc/prometheus/prometheus.yml

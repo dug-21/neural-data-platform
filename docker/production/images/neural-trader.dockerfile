@@ -44,11 +44,22 @@ COPY --from=builder /app/target/release/neural-trader /usr/local/bin/neural-trad
 # Copy configuration files
 COPY --chown=trader:trader config/ /var/lib/neural-trader/config/
 
+# Switch to root to create symlink
+USER root
+
+# Remove existing platform.toml and create symlink to production config
+RUN rm -f /var/lib/neural-trader/config/platform.toml && \
+    ln -s /var/lib/neural-trader/config/production.toml /var/lib/neural-trader/config/platform.toml && \
+    chown -h trader:trader /var/lib/neural-trader/config/platform.toml
+
 # Switch to non-root user
 USER trader
 
 # Set working directory
 WORKDIR /var/lib/neural-trader
+
+# Set environment variables
+ENV NEURAL_USE_REAL_MODELS=true
 
 # Expose MCP server port
 EXPOSE 8080

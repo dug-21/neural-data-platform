@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  neural-trader:
+    build:
+      context: ../..
+      dockerfile: docker/production/images/neural-trader.dockerfile
+    image: neural-trader:prod
+
+  timescaledb:
+    build:
+      context: .
+      dockerfile: images/timescaledb.dockerfile
+    image: neural-trader/timescaledb:prod
+
+  prometheus:
+    build:
+      context: .
+      dockerfile: images/prometheus.dockerfile
+    image: neural-trader/prometheus:prod
+
+  grafana:
+    build:
+      context: .
+      dockerfile: images/grafana.dockerfile
+    image: neural-trader/grafana:prod
+
+  data-ingestion:
+    build:
+      context: ../..
+      dockerfile: docker/production/images/data-ingestion.dockerfile
+      no_cache: true
+    image: neural-trader/data-ingestion:prod
