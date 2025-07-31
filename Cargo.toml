@@ -140,6 +140,14 @@ harness = false
 name = "neural_trader_bench"
 harness = false
 
+[[bench]]
+name = "performance_benchmarks"
+harness = false
+
+[[bench]]
+name = "phase3b_performance_benchmarks"
+harness = false
+
 [[example]]
 name = "adapter_integration"
 path = "examples/adapter_integration.rs"

@@ -2,7 +2,7 @@
 # Week 3 Implementation: Optimized for production deployment
 
 # Build stage
-FROM rust:1.70-bullseye as builder
+FROM rust:latest as builder
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,6 +21,12 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY benches/ ./benches/
 COPY examples/ ./examples/
+COPY vendor/ ./vendor/
+
+# Create dummy workspace member to satisfy cargo workspace
+RUN mkdir -p mcp-trading-server/src && \
+    echo '[package]\nname = "mcp-trading-server"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]' > mcp-trading-server/Cargo.toml && \
+    echo "fn main() {}" > mcp-trading-server/src/main.rs
 
 # Create dummy main to build dependencies
 RUN mkdir src && echo "fn main() {}" > src/main.rs
@@ -59,7 +65,7 @@ RUN mkdir -p /opt/neural-trader/{models,backup,exports,logs,config} \
 COPY --from=builder /app/target/release/neural-trader /usr/local/bin/neural-trader
 
 # Copy configuration files
-COPY docker/production/config/ /opt/neural-trader/config/
+COPY docker/production/configs/ /opt/neural-trader/config/
 
 # Set ownership and permissions
 RUN chown neural:neural /usr/local/bin/neural-trader \
