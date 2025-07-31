@@ -290,6 +290,8 @@ prometheus_export = false
 simple_dashboards = false
 ```
 
+These flags should respect the envirnment if they are set, otherwise have defaults.
+
 ### Deployment Strategy
 
 #### 1. Development Environment Validation
