@@ -1,0 +1,28 @@
+# Simple Dockerfile for testing async fix
+FROM rust:latest as builder
+
+WORKDIR /app
+
+# Copy everything
+COPY . .
+
+# Build
+RUN cargo build --release --bin neural-trader
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libpq5 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/neural-trader /usr/local/bin/neural-trader
+
+ENV RUST_LOG=info
+ENV RUST_BACKTRACE=1
+
+EXPOSE 8080
+
+CMD ["neural-trader"]
