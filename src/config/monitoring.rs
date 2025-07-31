@@ -171,7 +171,7 @@ impl Default for PerformanceConfig {
 }
 
 // Default value functions
-fn default_prometheus_port() -> Option<u16> { Some(9090) }
+fn default_prometheus_port() -> Option<u16> { Some(9092) }
 fn default_prometheus_path() -> String { "/metrics".to_string() }
 fn default_true() -> bool { true }
 fn default_false() -> bool { false }

@@ -65,8 +65,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - MCP_PORT=8080
       - NEURAL_USE_REAL_MODELS=${NEURAL_USE_REAL_MODELS}
-      - PROMETHEUS_METRICS_ENABLED=true
-      - METRICS_PORT=9092
     volumes:
       - neural_trader_data:/var/lib/neural-trader
       - neural_trader_logs:/var/log/neural-trader
@@ -75,7 +73,6 @@ services:
       - monitoring
     ports:
       - "127.0.0.1:8080:8080"  # Neural Trader API
-      # Metrics port not exposed - accessible only via Docker network when implemented
     deploy:
       resources:
         limits:
@@ -133,6 +130,7 @@ services:
       - UPDATE_INTERVAL=${UPDATE_INTERVAL:-60s}
     ports:
       - "127.0.0.1:8002:8001"  # Data ingestion API
+      - "127.0.0.1:9092:9090"  # Data ingestion metrics
     volumes:
       - data_ingestion_logs:/var/log/data-ingestion
       # - /Volumes/OneTouch/trader/polygon_data:/data
@@ -203,47 +201,10 @@ services:
         reservations:
           memory: 256M
 
-  # Postgres Exporter for database metrics
-  postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:latest
-    container_name: postgres-exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB}?sslmode=disable"
-    networks:
-      - neural_trader_internal
-      - monitoring
-    # No ports exposed - only accessible via Docker network
-    depends_on:
-      - timescaledb
-
-  # Redis Exporter for cache metrics
-  redis-exporter:
-    image: oliver006/redis_exporter:latest
-    container_name: redis-exporter
-    environment:
-      REDIS_ADDR: "redis:6379"
-    networks:
-      - neural_trader_internal
-      - monitoring
-    # No ports exposed - only accessible via Docker network
-    depends_on:
-      - redis
-
-  # Node Exporter for system metrics
-  node-exporter:
-    image: prom/node-exporter:latest
-    container_name: node-exporter
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--path.rootfs=/rootfs'
-    networks:
-      - monitoring
-    # No ports exposed - only accessible via Docker network
+# Optional exporters removed for cleaner production setup
+# Add back if you need detailed system/Redis metrics:
+# - node-exporter: system metrics (CPU, memory, disk)
+# - redis-exporter: Redis performance metrics
 
 networks:
   neural_trader_internal:

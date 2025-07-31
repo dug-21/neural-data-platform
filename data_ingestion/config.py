@@ -1,7 +1,8 @@
 """Configuration management for Neural Trader."""
 import os
 from typing import Optional, List
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):

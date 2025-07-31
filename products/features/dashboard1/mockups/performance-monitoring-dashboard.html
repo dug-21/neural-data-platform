@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Trader - Performance Monitoring Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #0b0c0e;
+            color: #d8d9da;
+            padding: 20px;
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #1f1f23;
+        }
+
+        .dashboard-title {
+            font-size: 24px;
+            font-weight: 500;
+            color: #f5f5f5;
+        }
+
+        .time-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .time-button {
+            padding: 6px 12px;
+            background: #1f1f23;
+            border: 1px solid #333;
+            color: #d8d9da;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .time-button.active {
+            background: #3b82f6;
+            border-color: #3b82f6;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel {
+            background: #1f1f23;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .panel-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .panel-full {
+            grid-column: 1 / -1;
+        }
+
+        .latency-chart {
+            position: relative;
+            height: 250px;
+            background: #0b0c0e;
+            border-radius: 4px;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .chart-grid {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 40px;
+            border-left: 1px solid #333;
+            border-bottom: 1px solid #333;
+        }
+
+        .y-axis-label {
+            position: absolute;
+            left: -5px;
+            font-size: 11px;
+            color: #707070;
+            transform: translateX(-100%);
+        }
+
+        .x-axis-label {
+            position: absolute;
+            bottom: -20px;
+            font-size: 11px;
+            color: #707070;
+            transform: translateX(-50%);
+        }
+
+        .latency-line {
+            stroke-width: 2;
+            fill: none;
+        }
+
+        .line-p50 {
+            stroke: #10b981;
+        }
+
+        .line-p95 {
+            stroke: #f59e0b;
+        }
+
+        .line-p99 {
+            stroke: #ef4444;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 3px;
+            border-radius: 1px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .metric-card {
+            background: #0b0c0e;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .metric-name {
+            font-size: 12px;
+            color: #707070;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 300;
+        }
+
+        .metric-unit {
+            font-size: 14px;
+            color: #707070;
+            margin-left: 2px;
+        }
+
+        .heatmap {
+            display: grid;
+            grid-template-columns: repeat(20, 1fr);
+            gap: 2px;
+            margin-top: 10px;
+        }
+
+        .heatmap-cell {
+            aspect-ratio: 1;
+            border-radius: 2px;
+            transition: transform 0.2s;
+        }
+
+        .heatmap-cell:hover {
+            transform: scale(1.5);
+        }
+
+        .heat-low { background: #064e3b; }
+        .heat-medium { background: #047857; }
+        .heat-high { background: #10b981; }
+        .heat-very-high { background: #34d399; }
+
+        .error-table {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .error-table th {
+            text-align: left;
+            font-size: 12px;
+            color: #707070;
+            padding: 10px;
+            border-bottom: 1px solid #333;
+        }
+
+        .error-table td {
+            padding: 10px;
+            font-size: 14px;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        .error-rate {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .rate-low {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+        }
+
+        .rate-medium {
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+
+        .rate-high {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .throughput-bar {
+            height: 6px;
+            background: #0b0c0e;
+            border-radius: 3px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .throughput-fill {
+            height: 100%;
+            background: #3b82f6;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .spark-chart {
+            height: 40px;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .metric-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <h1 class="dashboard-title">Neural Trader - Performance Monitoring</h1>
+        <div class="time-selector">
+            <button class="time-button">5m</button>
+            <button class="time-button active">15m</button>
+            <button class="time-button">1h</button>
+            <button class="time-button">6h</button>
+            <button class="time-button">24h</button>
+        </div>
+    </div>
+
+    <!-- API Response Times -->
+    <div class="panel panel-full">
+        <div class="panel-header">
+            <span class="panel-title">API Response Time Distribution</span>
+            <span style="font-size: 12px; color: #707070;">Last 15 minutes</span>
+        </div>
+        
+        <div class="latency-chart">
+            <div class="chart-grid">
+                <!-- Y-axis labels -->
+                <span class="y-axis-label" style="top: 0;">1000ms</span>
+                <span class="y-axis-label" style="top: 25%;">750ms</span>
+                <span class="y-axis-label" style="top: 50%;">500ms</span>
+                <span class="y-axis-label" style="top: 75%;">250ms</span>
+                <span class="y-axis-label" style="bottom: 0;">0ms</span>
+                
+                <!-- X-axis labels -->
+                <span class="x-axis-label" style="left: 0;">15m ago</span>
+                <span class="x-axis-label" style="left: 25%;">10m</span>
+                <span class="x-axis-label" style="left: 50%;">5m</span>
+                <span class="x-axis-label" style="left: 75%;">2m</span>
+                <span class="x-axis-label" style="right: 0;">Now</span>
+                
+                <!-- Chart lines -->
+                <svg width="100%" height="100%" style="position: absolute; top: 0; left: 0;">
+                    <path class="latency-line line-p50" d="M 20,180 L 80,175 L 140,178 L 200,172 L 260,170 L 320,168 L 380,165 L 440,163 L 500,160 L 560,158"/>
+                    <path class="latency-line line-p95" d="M 20,150 L 80,145 L 140,148 L 200,140 L 260,138 L 320,135 L 380,130 L 440,128 L 500,125 L 560,120"/>
+                    <path class="latency-line line-p99" d="M 20,100 L 80,95 L 140,105 L 200,90 L 260,88 L 320,85 L 380,80 L 440,78 L 500,75 L 560,70"/>
+                </svg>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #10b981;"></div>
+                <span>p50 (median)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f59e0b;"></div>
+                <span>p95</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ef4444;"></div>
+                <span>p99</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Throughput Metrics -->
+    <div class="dashboard-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Throughput Metrics</span>
+            </div>
+            
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-name">Requests/sec</div>
+                    <div class="metric-value">1,247</div>
+                    <div class="throughput-bar">
+                        <div class="throughput-fill" style="width: 62%;"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-name">Predictions/sec</div>
+                    <div class="metric-value">342</div>
+                    <div class="throughput-bar">
+                        <div class="throughput-fill" style="width: 85%;"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-name">Trades/sec</div>
+                    <div class="metric-value">18.4</div>
+                    <div class="throughput-bar">
+                        <div class="throughput-fill" style="width: 45%;"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-name">DB Queries/sec</div>
+                    <div class="metric-value">3,842</div>
+                    <div class="throughput-bar">
+                        <div class="throughput-fill" style="width: 75%;"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-name">Cache Hits/sec</div>
+                    <div class="metric-value">8,923</div>
+                    <div class="throughput-bar">
+                        <div class="throughput-fill" style="width: 92%;"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-name">Events/sec</div>
+                    <div class="metric-value">523</div>
+                    <div class="throughput-bar">
+                        <div class="throughput-fill" style="width: 55%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Resource Utilization Heatmap</span>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 12px; color: #707070; margin-bottom: 5px;">CPU Usage by Service (last hour)</div>
+                <div class="heatmap">
+                    <!-- Generate heatmap cells -->
+                    <div class="heatmap-cell heat-low" title="5%"></div>
+                    <div class="heatmap-cell heat-low" title="8%"></div>
+                    <div class="heatmap-cell heat-medium" title="45%"></div>
+                    <div class="heatmap-cell heat-high" title="65%"></div>
+                    <div class="heatmap-cell heat-very-high" title="78%"></div>
+                    <div class="heatmap-cell heat-high" title="72%"></div>
+                    <div class="heatmap-cell heat-medium" title="55%"></div>
+                    <div class="heatmap-cell heat-medium" title="48%"></div>
+                    <div class="heatmap-cell heat-low" title="22%"></div>
+                    <div class="heatmap-cell heat-low" title="15%"></div>
+                    <div class="heatmap-cell heat-medium" title="38%"></div>
+                    <div class="heatmap-cell heat-high" title="68%"></div>
+                    <div class="heatmap-cell heat-very-high" title="82%"></div>
+                    <div class="heatmap-cell heat-very-high" title="88%"></div>
+                    <div class="heatmap-cell heat-high" title="75%"></div>
+                    <div class="heatmap-cell heat-medium" title="52%"></div>
+                    <div class="heatmap-cell heat-medium" title="45%"></div>
+                    <div class="heatmap-cell heat-low" title="25%"></div>
+                    <div class="heatmap-cell heat-low" title="18%"></div>
+                    <div class="heatmap-cell heat-low" title="12%"></div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 12px; color: #707070; margin-bottom: 5px;">Memory Usage by Service (last hour)</div>
+                <div class="heatmap">
+                    <div class="heatmap-cell heat-medium" title="35%"></div>
+                    <div class="heatmap-cell heat-medium" title="42%"></div>
+                    <div class="heatmap-cell heat-high" title="58%"></div>
+                    <div class="heatmap-cell heat-high" title="65%"></div>
+                    <div class="heatmap-cell heat-very-high" title="78%"></div>
+                    <div class="heatmap-cell heat-very-high" title="82%"></div>
+                    <div class="heatmap-cell heat-very-high" title="85%"></div>
+                    <div class="heatmap-cell heat-high" title="75%"></div>
+                    <div class="heatmap-cell heat-high" title="68%"></div>
+                    <div class="heatmap-cell heat-medium" title="55%"></div>
+                    <div class="heatmap-cell heat-medium" title="48%"></div>
+                    <div class="heatmap-cell heat-medium" title="45%"></div>
+                    <div class="heatmap-cell heat-high" title="62%"></div>
+                    <div class="heatmap-cell heat-high" title="70%"></div>
+                    <div class="heatmap-cell heat-very-high" title="88%"></div>
+                    <div class="heatmap-cell heat-very-high" title="92%"></div>
+                    <div class="heatmap-cell heat-very-high" title="90%"></div>
+                    <div class="heatmap-cell heat-high" title="78%"></div>
+                    <div class="heatmap-cell heat-medium" title="52%"></div>
+                    <div class="heatmap-cell heat-medium" title="45%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Rates and Circuit Breakers -->
+    <div class="dashboard-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Error Rates by Service</span>
+            </div>
+            
+            <table class="error-table">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Error Rate</th>
+                        <th>Total Errors</th>
+                        <th>Trend</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>API Gateway</td>
+                        <td><span class="error-rate rate-low">0.01%</span></td>
+                        <td>12</td>
+                        <td style="color: #10b981;">↓</td>
+                    </tr>
+                    <tr>
+                        <td>Neural Predictor</td>
+                        <td><span class="error-rate rate-low">0.02%</span></td>
+                        <td>8</td>
+                        <td style="color: #10b981;">→</td>
+                    </tr>
+                    <tr>
+                        <td>Database</td>
+                        <td><span class="error-rate rate-low">0.00%</span></td>
+                        <td>0</td>
+                        <td style="color: #10b981;">→</td>
+                    </tr>
+                    <tr>
+                        <td>Data Ingestion</td>
+                        <td><span class="error-rate rate-medium">0.15%</span></td>
+                        <td>45</td>
+                        <td style="color: #ef4444;">↑</td>
+                    </tr>
+                    <tr>
+                        <td>Cache Layer</td>
+                        <td><span class="error-rate rate-low">0.03%</span></td>
+                        <td>23</td>
+                        <td style="color: #10b981;">↓</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Circuit Breaker Status</span>
+            </div>
+            
+            <div style="display: grid; gap: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #0b0c0e; border-radius: 6px;">
+                    <div>
+                        <div style="font-weight: 500;">Exchange API - Binance</div>
+                        <div style="font-size: 12px; color: #707070;">Success rate: 99.8%</div>
+                    </div>
+                    <div style="padding: 4px 12px; background: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                        CLOSED
+                    </div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #0b0c0e; border-radius: 6px;">
+                    <div>
+                        <div style="font-weight: 500;">Exchange API - Coinbase</div>
+                        <div style="font-size: 12px; color: #707070;">Success rate: 99.5%</div>
+                    </div>
+                    <div style="padding: 4px 12px; background: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                        CLOSED
+                    </div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #0b0c0e; border-radius: 6px;">
+                    <div>
+                        <div style="font-weight: 500;">External Data Provider</div>
+                        <div style="font-size: 12px; color: #707070;">Success rate: 94.2%</div>
+                    </div>
+                    <div style="padding: 4px 12px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                        HALF OPEN
+                    </div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #0b0c0e; border-radius: 6px;">
+                    <div>
+                        <div style="font-weight: 500;">Neural Model Service</div>
+                        <div style="font-size: 12px; color: #707070;">Success rate: 99.9%</div>
+                    </div>
+                    <div style="padding: 4px 12px; background: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                        CLOSED
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cache Performance -->
+    <div class="panel panel-full">
+        <div class="panel-header">
+            <span class="panel-title">Cache Performance Metrics</span>
+        </div>
+        
+        <div class="metric-grid" style="grid-template-columns: repeat(4, 1fr);">
+            <div class="metric-card">
+                <div class="metric-name">Hit Rate</div>
+                <div class="metric-value">94.2<span class="metric-unit">%</span></div>
+                <div class="spark-chart">
+                    <svg width="100%" height="40" viewBox="0 0 100 40">
+                        <path d="M 0,35 L 10,30 L 20,28 L 30,25 L 40,22 L 50,20 L 60,18 L 70,15 L 80,12 L 90,10 L 100,8" 
+                              stroke="#10b981" stroke-width="2" fill="none"/>
+                    </svg>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-name">Memory Usage</div>
+                <div class="metric-value">2.1<span class="metric-unit">GB</span></div>
+                <div style="font-size: 12px; color: #707070; margin-top: 5px;">of 4GB</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-name">Evictions/hour</div>
+                <div class="metric-value">12</div>
+                <div style="font-size: 12px; color: #10b981; margin-top: 5px;">↓ 25% from avg</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-name">Avg Latency</div>
+                <div class="metric-value">0.8<span class="metric-unit">ms</span></div>
+                <div style="font-size: 12px; color: #707070; margin-top: 5px;">p95: 1.2ms</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

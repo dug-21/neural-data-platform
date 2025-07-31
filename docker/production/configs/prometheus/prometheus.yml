@@ -17,7 +17,7 @@ scrape_configs:
   # Neural Trader metrics with Phase 6 neural prediction enhancements
   - job_name: 'neural-trader'
     static_configs:
-      - targets: ['neural-trader:8080']
+      - targets: ['neural_trader_app:9092']  # Using actual container name
     metrics_path: '/metrics'
     scrape_interval: 10s
     metric_relabel_configs:
@@ -33,7 +33,7 @@ scrape_configs:
   # Data Ingestion metrics with neural prediction tracking
   - job_name: 'data-ingestion'
     static_configs:
-      - targets: ['data-ingestion:8001']
+      - targets: ['neural_trader_data_ingestion:8001']  # Using actual container name
     metrics_path: '/metrics'
     scrape_interval: 10s
     metric_relabel_configs:
@@ -50,20 +50,20 @@ scrape_configs:
         regex: 'python_.*'
         action: keep
     
-  # TimescaleDB metrics - requires postgres_exporter
-  - job_name: 'timescaledb'
+  # TimescaleDB metrics - postgres_exporter enabled
+  - job_name: 'postgres'
     static_configs:
-      - targets: ['timescaledb:9187']
+      - targets: ['postgres-exporter:9187']
       
-  # Redis metrics - requires redis_exporter
-  # - job_name: 'redis'
-  #   static_configs:
-  #     - targets: ['redis-exporter:9121']
+  # Redis metrics - redis_exporter enabled
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
       
-  # Node exporter for system metrics - requires node_exporter
-  # - job_name: 'node'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
+  # Node exporter for system metrics - node_exporter enabled
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
       
   # Prometheus self-monitoring
   - job_name: 'prometheus'
