@@ -815,6 +815,12 @@ impl Default for EnhancedNeuralPredictor {
             max_retries: 3,
             error_threshold: 0.1,
             lookback_window: 24,
+            input_size: 24,
+            output_size: 1,
+            hidden_layers: vec![64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: None,
+            normalization_method: None,
         };
         Self::new(config).expect("Failed to create default enhanced predictor")
     }

@@ -50,7 +50,7 @@ fn generate_test_data(size: usize) -> Vec<TimeSeriesData> {
 async fn test_single_prediction_latency() -> Result<()> {
     let config = NeuralConfig::default();
     let base_predictor = Arc::new(FannPredictor::new(config)?);
-    let optimized = OptimizedFannPredictor::new(base_predictor).await?;
+    let optimized = base_predictor; // OptimizedFannPredictor functionality now integrated
 
     let data = generate_test_data(100);
 
@@ -99,7 +99,7 @@ async fn test_single_prediction_latency() -> Result<()> {
 async fn test_batch_throughput() -> Result<()> {
     let config = NeuralConfig::default();
     let base_predictor = Arc::new(FannPredictor::new(config)?);
-    let optimized = OptimizedFannPredictor::new(base_predictor).await?;
+    let optimized = base_predictor; // OptimizedFannPredictor functionality now integrated
 
     let data = generate_test_data(100);
     let batch_size = 64;
@@ -138,7 +138,7 @@ async fn test_batch_throughput() -> Result<()> {
 async fn test_memory_efficiency() -> Result<()> {
     let config = NeuralConfig::default();
     let base_predictor = Arc::new(FannPredictor::new(config)?);
-    let optimized = OptimizedFannPredictor::new(base_predictor).await?;
+    let optimized = base_predictor; // OptimizedFannPredictor functionality now integrated
 
     let data = generate_test_data(1000);
 
@@ -174,7 +174,7 @@ async fn test_memory_efficiency() -> Result<()> {
 async fn test_parallel_scaling() -> Result<()> {
     let config = NeuralConfig::default();
     let base_predictor = Arc::new(FannPredictor::new(config)?);
-    let optimized = OptimizedFannPredictor::new(base_predictor).await?;
+    let optimized = base_predictor; // OptimizedFannPredictor functionality now integrated
 
     let data = generate_test_data(100);
 
@@ -224,7 +224,7 @@ async fn test_parallel_scaling() -> Result<()> {
 async fn test_cache_effectiveness() -> Result<()> {
     let config = NeuralConfig::default();
     let base_predictor = Arc::new(FannPredictor::new(config)?);
-    let optimized = OptimizedFannPredictor::new(base_predictor).await?;
+    let optimized = base_predictor; // OptimizedFannPredictor functionality now integrated
 
     let data = generate_test_data(100);
 
@@ -275,7 +275,7 @@ async fn test_model_preloading() -> Result<()> {
     // Measure time with preloading
     let start_preload = Instant::now();
     let base_predictor = Arc::new(FannPredictor::new(config.clone())?);
-    let optimized = OptimizedFannPredictor::new(base_predictor).await?;
+    let optimized = base_predictor; // OptimizedFannPredictor functionality now integrated
     let preload_time = start_preload.elapsed();
 
     // Measure first prediction time
@@ -317,7 +317,7 @@ fn get_process_memory_mb() -> f64 {
 async fn test_concurrent_predictions() -> Result<()> {
     let config = NeuralConfig::default();
     let base_predictor = Arc::new(FannPredictor::new(config)?);
-    let optimized = Arc::new(OptimizedFannPredictor::new(base_predictor).await?);
+    let optimized = Arc::new(base_predictor); // OptimizedFannPredictor functionality now integrated
 
     let data = Arc::new(generate_test_data(100));
     let concurrent_tasks = 16;

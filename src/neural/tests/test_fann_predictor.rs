@@ -9,6 +9,7 @@
 //! - Error handling and edge cases
 
 use super::super::fann::{FannPredictor, FannModelConfig, ModelPerformance, MarketRegime, NeuralError, EnsembleManager, StreamingConfig};
+use ruv_fann::ActivationFunction;
 use super::super::{NeuralPredictorTrait, PredictionResult};
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;

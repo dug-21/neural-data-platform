@@ -157,10 +157,10 @@ impl OutputConverter {
 
         // Create metadata
         let mut metadata = HashMap::new();
-        metadata.insert("model".to_string(), model_name.to_string());
-        metadata.insert("step_ahead".to_string(), step_ahead.to_string());
-        metadata.insert("output_format".to_string(), format!("{:?}", self.output_config.output_format));
-        metadata.insert("raw_output".to_string(), output.to_string());
+        metadata.insert("model".to_string(), serde_json::Value::String(model_name.to_string()));
+        metadata.insert("step_ahead".to_string(), serde_json::Value::Number(serde_json::Number::from(step_ahead)));
+        metadata.insert("output_format".to_string(), serde_json::Value::String(format!("{:?}", self.output_config.output_format)));
+        metadata.insert("raw_output".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(output as f64).unwrap_or(serde_json::Number::from(0))));
 
         Ok(PredictionResult {
             timestamp: prediction_time,
@@ -236,10 +236,10 @@ impl OutputConverter {
             let interval_width = z_score * std_dev * predicted_value;
             
             let mut metadata = HashMap::new();
-            metadata.insert("model".to_string(), model_name.to_string());
-            metadata.insert("mean_output".to_string(), mean_output.to_string());
-            metadata.insert("variance_output".to_string(), var_output.to_string());
-            metadata.insert("std_dev".to_string(), std_dev.to_string());
+            metadata.insert("model".to_string(), serde_json::Value::String(model_name.to_string()));
+            metadata.insert("mean_output".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(mean_output as f64).unwrap_or(serde_json::Number::from(0))));
+            metadata.insert("variance_output".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(var_output as f64).unwrap_or(serde_json::Number::from(0))));
+            metadata.insert("std_dev".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(std_dev).unwrap_or(serde_json::Number::from(0))));
 
             predictions.push(PredictionResult {
                 timestamp: prediction_time,
@@ -301,10 +301,10 @@ impl OutputConverter {
         };
 
         let mut metadata = HashMap::new();
-        metadata.insert("predicted_class".to_string(), predicted_class.clone());
-        metadata.insert("class_probability".to_string(), max_prob.to_string());
+        metadata.insert("predicted_class".to_string(), serde_json::Value::String(predicted_class.clone()));
+        metadata.insert("class_probability".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(*max_prob as f64).unwrap_or(serde_json::Number::from(0))));
         metadata.insert("all_probabilities".to_string(), 
-                       outputs.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(","));
+                       serde_json::Value::String(outputs.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")));
 
         Ok(vec![PredictionResult {
             timestamp: prediction_time,

@@ -15,7 +15,7 @@ use tokio::runtime::Runtime;
 
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::{FannPredictor, OptimizedFannPredictor};
+use crate::neural::FannPredictor;
 
 /// Generate synthetic time series data for benchmarking
 fn generate_benchmark_data(size: usize) -> Vec<TimeSeriesData> {

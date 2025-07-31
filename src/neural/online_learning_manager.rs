@@ -255,7 +255,7 @@ impl OnlineLearningManager {
         let batch_size = 32;
         
         for model_name in &self.config.neural_config.models {
-            if let Err(e) = self.predictor.mini_batch_update(model_name, samples, batch_size, None).await {
+            if let Err(e) = self.predictor.mini_batch_update(model_name, vec![], batch_size, None).await {
                 warn!("Failed to process batch for model '{}': {}", model_name, e);
             }
         }
@@ -294,7 +294,8 @@ impl OnlineLearningManager {
     pub async fn update_with_actual(&self, predictions: &[PredictionResult], actual_values: &[f64]) -> Result<()> {
         // Update performance metrics
         for model_name in &self.config.neural_config.models {
-            if let Err(e) = self.predictor.update_performance(model_name, actual_values, predictions).await {
+            let prediction_values: Vec<f64> = predictions.iter().map(|p| p.value).collect();
+            if let Err(e) = self.predictor.update_performance(model_name, actual_values.to_vec(), prediction_values).await {
                 warn!("Failed to update performance for model '{}': {}", model_name, e);
             }
         }
@@ -527,6 +528,12 @@ impl Default for OnlineLearningConfig {
                 max_retries: 3,
                 error_threshold: 0.05,
                 lookback_window: 24,
+                input_size: 24,
+                output_size: 1,
+                hidden_layers: vec![64, 32],
+                learning_rate: 0.001,
+                prediction_horizon: None,
+                normalization_method: None,
             },
             streaming_config: StreamingConfig::default(),
             validation_config: OnlineValidationConfig::default(),

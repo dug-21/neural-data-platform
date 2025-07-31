@@ -32,8 +32,7 @@ pub mod performance_benchmarks;
 // Ensemble types
 pub mod ensemble_types;
 
-// Performance monitoring system
-pub mod monitoring;
+// Phase 3B: Removed monitoring module - architectural layer not allowed
 
 // Test modules
 #[cfg(test)]
@@ -47,14 +46,7 @@ pub mod online_learning_tests;
 // NeuralPredictor → EnhancedNeuralAdapter → FannPredictor
 // All production features preserved while eliminating routing complexity
 
-// Re-export ONLY the performance monitoring components (safe for external use)
-pub use monitoring::{
-    PerformanceChannel, PerformanceEvent, PerformanceEventBuilder,
-    PerformanceEventType, PerformanceMetrics as ChannelMetrics, PerformanceSource, ComponentType,
-};
-
-// Re-export PerformanceEmitter from the correct module
-pub use monitoring::performance_channel::PerformanceEmitter;
+// Phase 3B: Removed monitoring re-exports - these were architectural layers
 
 // Re-export the main neural predictor (clean wrapper)
 pub use predictor::{NeuralPredictor as CleanNeuralPredictor};
@@ -126,15 +118,7 @@ pub use fann::{
 // Re-export HealthStatus from adapters module
 pub use crate::adapters::HealthStatus;
 
-// Re-export monitoring system components (additional ones not already exported above)
-pub use monitoring::{
-    PerformanceMonitoringSystem, MonitoringConfig, MonitoringStatistics,
-    PerformanceMetrics,
-    EventPriority, AlertType, AlertSeverity,
-    TrainingNotification, TrainingTriggerReason, TrainingPriority, 
-    TrainingAction, TrainingThresholds,
-    MetricsPipeline, MetricsCollector, MetricsAggregator, MetricsExporter,
-};
+// Phase 3B: Removed additional monitoring re-exports - architectural layers not allowed
 
 // Integration tests are now in src/neural/predictor.rs
 // This ensures tests are co-located with the implementation

@@ -9,7 +9,7 @@ mod tests {
     use super::super::*;
     use crate::config::NeuralConfig;
     use crate::data::TimeSeriesData;
-    use crate::neural::fann_predictor::FannPredictor;
+    use crate::neural::fann::FannPredictor;
     use crate::neural::online_validator::{OnlineValidator, OnlineValidationConfig};
     use crate::neural::streaming_connector::{StreamingConnector, StreamingConfig};
     use chrono::{DateTime, Utc};

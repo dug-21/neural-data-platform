@@ -64,12 +64,12 @@ impl NeuralPredictor {
         for model_name in &self.config.models {
             configs.insert(model_name.clone(), crate::neural::fann::ModelConfig {
                 input_size: 60,
-                hidden_layers: vec![128, 64, 32],
                 output_size: 1,
+                hidden_layers: vec![128, 64, 32],
                 learning_rate: 0.001,
-                epochs: 1000,
-                activation_function: "sigmoid".to_string(),
-                training_algorithm: "rprop".to_string(),
+                horizon: 1,
+                hidden_activation: ::ruv_fann::ActivationFunction::SigmoidSymmetric,
+                output_activation: ::ruv_fann::ActivationFunction::Linear,
             });
         }
         
@@ -77,7 +77,7 @@ impl NeuralPredictor {
     }
 
     /// Create a new neural predictor (simplified constructor)
-    pub fn new(config: NeuralConfig) -> Result<Self> {
+    pub async fn new(config: NeuralConfig) -> Result<Self> {
         info!("Initializing simplified NeuralPredictor");
         
         // Create enhanced config with sensible defaults (no complex conditionals)
@@ -85,7 +85,7 @@ impl NeuralPredictor {
             neural: config.clone(),
             // Simplified: always use these settings (no feature flags)
             use_real_models: false,  // Always use FANN for consistency
-            enable_health_monitoring: true,
+            enable_health_monitoring: false,
             enable_fallback: true,
             enable_caching: true,
             enable_circuit_breakers: true,
@@ -93,8 +93,8 @@ impl NeuralPredictor {
         };
 
         // Create enhanced adapter (all complexity lives here)
-        let enhanced_adapter = tokio::runtime::Handle::current()
-            .block_on(EnhancedNeuralAdapter::new(enhanced_config))
+        let enhanced_adapter = EnhancedNeuralAdapter::new(enhanced_config)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to create enhanced adapter: {}", e))?;
 
         debug!("Successfully created enhanced neural adapter");
@@ -243,9 +243,10 @@ impl NeuralPredictorTrait for NeuralPredictor {
     }
 }
 
-/// Simple default implementation
-impl Default for NeuralPredictor {
-    fn default() -> Self {
+/// Create a NeuralPredictor with default configuration
+/// Note: This is async because neural predictor initialization is async
+impl NeuralPredictor {
+    pub async fn default() -> Result<Self> {
         let config = NeuralConfig {
             memory_gb: 1.0,
             models: vec!["MLP".to_string(), "LSTM".to_string()],
@@ -266,9 +267,15 @@ impl Default for NeuralPredictor {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.05,
+            input_size: 24,
+            output_size: 1,
+            hidden_layers: vec![64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: None,
+            normalization_method: None,
         };
         
-        Self::new(config).expect("Failed to create default neural predictor")
+        Self::new(config).await
     }
 }
 
@@ -300,7 +307,7 @@ mod tests {
             error_threshold: 0.1,
         };
 
-        let predictor = NeuralPredictor::new(config);
+        let predictor = NeuralPredictor::new(config).await;
         assert!(predictor.is_ok());
         
         let predictor = predictor.unwrap();
@@ -310,7 +317,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_simplified_prediction_flow() {
-        let predictor = NeuralPredictor::default();
+        let predictor = NeuralPredictor::default().await.unwrap();
         
         // Test data
         let test_data = vec![TimeSeriesData {

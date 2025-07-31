@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use ::ruv_fann::ActivationFunction;
 
 /// Model configuration for network creation
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ModelConfig {
     pub input_size: usize,
     pub output_size: usize,
@@ -46,8 +46,8 @@ impl ModelConfig {
             hidden_layers: vec![64, 32],
             learning_rate: 0.001,
             horizon: 1,
-            hidden_activation: ActivationFunction::SIGMOID_SYMMETRIC,
-            output_activation: ActivationFunction::LINEAR,
+            hidden_activation: ActivationFunction::SigmoidSymmetric,
+            output_activation: ActivationFunction::Linear,
         }
     }
 }
@@ -80,6 +80,8 @@ impl ModelKey {
             hidden_layers: vec![64, 32],
             learning_rate: 0.001,
             horizon: 1,
+            hidden_activation: ActivationFunction::SigmoidSymmetric,
+            output_activation: ActivationFunction::Linear,
         };
         Self::new(model_type, &config)
     }
@@ -108,7 +110,7 @@ impl Default for FannModelConfig {
     fn default() -> Self {
         Self {
             layers: vec![24, 64, 32, 1],
-            activation: ActivationFunction::SigmoidStepwise,
+            activation: ActivationFunction::SigmoidSymmetric,
             learning_rate: 0.001,
             epochs: 1000,
             desired_error: 0.001,
@@ -177,7 +179,7 @@ impl NetworkArchitecture {
         match self {
             NetworkArchitecture::MLP => FannModelConfig {
                 layers: vec![input_size, 64, 32, output_size],
-                activation: ActivationFunction::SigmoidStepwise,
+                activation: ActivationFunction::SigmoidSymmetric,
                 learning_rate: 0.001,
                 epochs: 1000,
                 desired_error: 0.001,
@@ -186,7 +188,7 @@ impl NetworkArchitecture {
             },
             NetworkArchitecture::LSTM => FannModelConfig {
                 layers: vec![input_size, 128, 64, output_size],
-                activation: ActivationFunction::SigmoidStepwise,
+                activation: ActivationFunction::SigmoidSymmetric,
                 learning_rate: 0.001,
                 epochs: 1500,
                 desired_error: 0.001,
@@ -195,7 +197,7 @@ impl NetworkArchitecture {
             },
             NetworkArchitecture::GRU => FannModelConfig {
                 layers: vec![input_size, 96, 48, output_size],
-                activation: ActivationFunction::SigmoidStepwise,
+                activation: ActivationFunction::SigmoidSymmetric,
                 learning_rate: 0.001,
                 epochs: 1200,
                 desired_error: 0.001,
@@ -204,7 +206,7 @@ impl NetworkArchitecture {
             },
             NetworkArchitecture::DeepAR => FannModelConfig {
                 layers: vec![input_size, 128, 96, 64, output_size * 2], // *2 for mean and variance
-                activation: ActivationFunction::SigmoidStepwise,
+                activation: ActivationFunction::SigmoidSymmetric,
                 learning_rate: 0.0005,
                 epochs: 2000,
                 desired_error: 0.0005,
@@ -213,7 +215,7 @@ impl NetworkArchitecture {
             },
             NetworkArchitecture::TCN => FannModelConfig {
                 layers: vec![input_size, 128, 96, 64, 32, output_size],
-                activation: ActivationFunction::SigmoidStepwise,
+                activation: ActivationFunction::SigmoidSymmetric,
                 learning_rate: 0.001,
                 epochs: 1800,
                 desired_error: 0.001,
@@ -222,7 +224,7 @@ impl NetworkArchitecture {
             },
             NetworkArchitecture::NHITS => FannModelConfig {
                 layers: vec![input_size, 256, 128, 64, output_size],
-                activation: ActivationFunction::SigmoidStepwise,
+                activation: ActivationFunction::SigmoidSymmetric,
                 learning_rate: 0.0008,
                 epochs: 1600,
                 desired_error: 0.0008,
@@ -231,7 +233,7 @@ impl NetworkArchitecture {
             },
             NetworkArchitecture::Transformer => FannModelConfig {
                 layers: vec![input_size, 256, 128, 64, 32, output_size],
-                activation: ActivationFunction::SigmoidStepwise,
+                activation: ActivationFunction::SigmoidSymmetric,
                 learning_rate: 0.0005,
                 epochs: 2500,
                 desired_error: 0.0005,

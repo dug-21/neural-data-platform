@@ -19,7 +19,7 @@ impl NetworkFactory {
     /// Create a new network factory
     pub fn new() -> Self {
         Self {
-            default_activation: ActivationFunction::SigmoidStepwise,
+            default_activation: ActivationFunction::SigmoidSymmetric,
         }
     }
 
@@ -52,23 +52,10 @@ impl NetworkFactory {
     fn create_mlp_network(&self, config: &FannModelConfig) -> Result<Network<f32>> {
         debug!("Creating MLP network with layers: {:?}", config.layers);
 
-        let mut builder = NetworkBuilder::new();
-        
-        // Add layers
-        for (i, &size) in config.layers.iter().enumerate() {
-            if i == 0 {
-                // Input layer
-                continue;
-            } else {
-                builder = builder.hidden_layer(size);
-            }
-        }
-
-        let network = builder
-            .activation_function(config.activation)
-            .learning_rate(config.learning_rate)
-            .create(config.layers[0], *config.layers.last().unwrap())
-            .context("Failed to create MLP network")?;
+        // Build network using layers_from_sizes - much simpler
+        let network = NetworkBuilder::new()
+            .layers_from_sizes(&config.layers)
+            .build();
 
         Ok(network)
     }
@@ -81,23 +68,15 @@ impl NetworkFactory {
         let mut enhanced_layers = config.layers.clone();
         
         // Enhance hidden layers for LSTM simulation
-        for layer in enhanced_layers.iter_mut().skip(1).take(enhanced_layers.len() - 2) {
+        let layers_len = enhanced_layers.len();
+        for layer in enhanced_layers.iter_mut().skip(1).take(layers_len - 2) {
             *layer = (*layer * 3) / 2; // 1.5x the original size for memory simulation
         }
 
-        let mut builder = NetworkBuilder::new();
-        
-        for (i, &size) in enhanced_layers.iter().enumerate() {
-            if i > 0 && i < enhanced_layers.len() - 1 {
-                builder = builder.hidden_layer(size);
-            }
-        }
-
-        let network = builder
-            .activation_function(ActivationFunction::Sigmoid) // Better for LSTM simulation
-            .learning_rate(config.learning_rate)
-            .create(enhanced_layers[0], *enhanced_layers.last().unwrap())
-            .context("Failed to create LSTM network")?;
+        // Build network using layers_from_sizes for LSTM simulation
+        let network = NetworkBuilder::new()
+            .layers_from_sizes(&enhanced_layers)
+            .build();
 
         Ok(network)
     }
@@ -110,23 +89,15 @@ impl NetworkFactory {
         let mut enhanced_layers = config.layers.clone();
         
         // Enhance hidden layers for GRU simulation (less than LSTM)
-        for layer in enhanced_layers.iter_mut().skip(1).take(enhanced_layers.len() - 2) {
+        let layers_len = enhanced_layers.len();
+        for layer in enhanced_layers.iter_mut().skip(1).take(layers_len - 2) {
             *layer = (*layer * 5) / 4; // 1.25x the original size
         }
 
-        let mut builder = NetworkBuilder::new();
-        
-        for (i, &size) in enhanced_layers.iter().enumerate() {
-            if i > 0 && i < enhanced_layers.len() - 1 {
-                builder = builder.hidden_layer(size);
-            }
-        }
-
-        let network = builder
-            .activation_function(ActivationFunction::Sigmoid)
-            .learning_rate(config.learning_rate)
-            .create(enhanced_layers[0], *enhanced_layers.last().unwrap())
-            .context("Failed to create GRU network")?;
+        // Build network using layers_from_sizes for GRU simulation
+        let network = NetworkBuilder::new()
+            .layers_from_sizes(&enhanced_layers)
+            .build();
 
         Ok(network)
     }
@@ -138,21 +109,17 @@ impl NetworkFactory {
         // DeepAR needs to output both mean and variance for probabilistic predictions
         let output_size = config.layers.last().unwrap() * 2; // Double output for mean + variance
         
-        let mut builder = NetworkBuilder::new();
-        
-        // Add hidden layers with enhanced capacity for probabilistic modeling
-        for (i, &size) in config.layers.iter().enumerate() {
-            if i > 0 && i < config.layers.len() - 1 {
-                // Larger hidden layers for probabilistic modeling
-                builder = builder.hidden_layer(size + size / 4);
-            }
+        // Build layers for DeepAR with enhanced capacity for probabilistic modeling
+        let mut deepar_layers = Vec::new();
+        deepar_layers.push(config.layers[0]); // Input layer
+        for &size in config.layers.iter().skip(1).take(config.layers.len() - 2) {
+            deepar_layers.push(size + size / 4); // Enhanced hidden layers
         }
-
-        let network = builder
-            .activation_function(ActivationFunction::Linear) // Linear output for probabilistic predictions
-            .learning_rate(config.learning_rate * 0.8) // Slightly lower learning rate
-            .create(config.layers[0], output_size)
-            .context("Failed to create DeepAR network")?;
+        deepar_layers.push(output_size); // Double output for mean + variance
+        
+        let network = NetworkBuilder::new()
+            .layers_from_sizes(&deepar_layers)
+            .build();
 
         Ok(network)
     }
@@ -173,19 +140,10 @@ impl NetworkFactory {
         }
         tcn_layers.push(*config.layers.last().unwrap()); // Output layer
 
-        let mut builder = NetworkBuilder::new();
-        
-        for (i, &size) in tcn_layers.iter().enumerate() {
-            if i > 0 && i < tcn_layers.len() - 1 {
-                builder = builder.hidden_layer(size);
-            }
-        }
-
-        let network = builder
-            .activation_function(ActivationFunction::SigmoidStepwise)
-            .learning_rate(config.learning_rate)
-            .create(tcn_layers[0], *tcn_layers.last().unwrap())
-            .context("Failed to create TCN network")?;
+        // Build network using layers_from_sizes for TCN simulation
+        let network = NetworkBuilder::new()
+            .layers_from_sizes(&tcn_layers)
+            .build();
 
         Ok(network)
     }
@@ -206,19 +164,10 @@ impl NetworkFactory {
         nhits_layers.push(base_size / 2);      // Compressed representation
         nhits_layers.push(*config.layers.last().unwrap()); // Output
 
-        let mut builder = NetworkBuilder::new();
-        
-        for (i, &size) in nhits_layers.iter().enumerate() {
-            if i > 0 && i < nhits_layers.len() - 1 {
-                builder = builder.hidden_layer(size);
-            }
-        }
-
-        let network = builder
-            .activation_function(ActivationFunction::SigmoidStepwise)
-            .learning_rate(config.learning_rate * 0.9) // Slightly lower for stability
-            .create(nhits_layers[0], *nhits_layers.last().unwrap())
-            .context("Failed to create NHITS network")?;
+        // Build network using layers_from_sizes for NHITS simulation
+        let network = NetworkBuilder::new()
+            .layers_from_sizes(&nhits_layers)
+            .build();
 
         Ok(network)
     }
@@ -239,19 +188,10 @@ impl NetworkFactory {
         transformer_layers.push(attention_size / 4);
         transformer_layers.push(*config.layers.last().unwrap()); // Output
 
-        let mut builder = NetworkBuilder::new();
-        
-        for (i, &size) in transformer_layers.iter().enumerate() {
-            if i > 0 && i < transformer_layers.len() - 1 {
-                builder = builder.hidden_layer(size);
-            }
-        }
-
-        let network = builder
-            .activation_function(ActivationFunction::Sigmoid) // Better for attention simulation
-            .learning_rate(config.learning_rate * 0.7) // Lower learning rate for stability
-            .create(transformer_layers[0], *transformer_layers.last().unwrap())
-            .context("Failed to create Transformer network")?;
+        // Build network using layers_from_sizes for Transformer simulation
+        let network = NetworkBuilder::new()
+            .layers_from_sizes(&transformer_layers)
+            .build();
 
         Ok(network)
     }
@@ -332,7 +272,7 @@ mod tests {
         let factory = NetworkFactory::new();
         let config = FannModelConfig {
             layers: vec![10, 20, 5, 1],
-            activation: ActivationFunction::SigmoidStepwise,
+            activation: ActivationFunction::SigmoidSymmetric,
             learning_rate: 0.01,
             epochs: 100,
             desired_error: 0.01,
