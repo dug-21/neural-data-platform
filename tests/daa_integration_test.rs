@@ -324,7 +324,7 @@ mod integration_tests {
         let daa_config = DaaConfig::default();
         let (tx, mut rx) = mpsc::channel(100);
 
-        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx));
+        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx, create_test_market_hours()));
 
         // Create market context
         let market_context = MarketContext {
@@ -535,7 +535,7 @@ mod integration_tests {
         let config = create_test_config();
         let neural_predictor = Arc::new(NeuralPredictor::new(config.neural).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         let invalid_market = MarketContext {
             symbol: "INVALID".to_string(),
@@ -735,7 +735,7 @@ mod integration_tests {
         daa_config.enable_adaptation = true;
 
         let (tx, mut rx) = mpsc::channel(100);
-        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx));
+        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx, create_test_market_hours()));
 
         // Simulate market conditions that should trigger adaptation
         let volatile_market = MarketContext {
@@ -785,7 +785,7 @@ mod integration_tests {
         let config = create_test_config();
         let neural_predictor = Arc::new(NeuralPredictor::new(config.neural).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         // Test with extreme market conditions
         let extreme_cases = vec![

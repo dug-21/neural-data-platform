@@ -130,7 +130,7 @@ mod daa_unit_tests {
         assert_eq!(config.max_risk_per_trade, 0.02);
         assert_eq!(config.max_positions, 5);
 
-        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx, create_test_market_hours());
 
         // Coordinator is ready to use
     }
@@ -150,7 +150,7 @@ mod daa_unit_tests {
 
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         // Test different market conditions
         let test_cases = vec![
@@ -234,7 +234,7 @@ mod daa_unit_tests {
 
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
         let (tx, mut rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         // Register multiple strategies with different signals
         let strategies = vec![
@@ -327,7 +327,7 @@ mod daa_unit_tests {
 
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
         let (tx, mut rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         // Test different position scenarios
         let positions = vec![
@@ -413,7 +413,7 @@ mod daa_unit_tests {
 
         let mut config = DaaConfig::default();
         config.enable_adaptation = true;
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
 
         let market = MarketContext {
             symbol: "BTC/USDT".to_string(),
@@ -530,7 +530,7 @@ mod daa_unit_tests {
 
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         // Register a failing strategy
         let failing_strategy = Box::new(MockStrategy {
@@ -606,7 +606,7 @@ mod daa_unit_tests {
         config.model_weights.insert("MLP".to_string(), 1.0);
         config.model_weights.insert("TCN".to_string(), 1.5);
 
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
 
         let market = MarketContext {
             symbol: "BTC/USDT".to_string(),
@@ -652,7 +652,7 @@ mod daa_unit_tests {
 
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         // Register strategies for comprehensive reasoning
         let buy_strategy = Box::new(MockStrategy {
@@ -736,7 +736,7 @@ mod daa_unit_tests {
 
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
         let market = MarketContext {
             symbol: "BTC/USDT".to_string(),

@@ -43,3 +43,7 @@ pub mod market_hours_test;
 
 // Module encapsulation tests
 pub mod test_module_encapsulation;
+
+// Phase 3B tests
+pub mod phase3b_mock_tests;
+pub mod event_subscription_tests;

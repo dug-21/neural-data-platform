@@ -527,7 +527,7 @@ mod daa_coordinator_tests {
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx, create_test_market_hours());
 
         // Verify initial metrics
         let metrics = coordinator.get_metrics().await;
@@ -548,7 +548,7 @@ mod daa_coordinator_tests {
             min_confidence: 0.7,
             ..Default::default()
         };
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
 
         // Register a bullish strategy
         let strategy = Box::new(MockStrategy {
@@ -602,7 +602,7 @@ mod daa_coordinator_tests {
             enabled: false, // Disabled
             ..Default::default()
         };
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
 
         let market_context = MarketContext {
             symbol: "TEST/USD".to_string(),
@@ -639,7 +639,7 @@ mod daa_coordinator_tests {
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
 
         // High volatility context
         let volatile_context = MarketContext {
@@ -672,7 +672,7 @@ mod daa_coordinator_tests {
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
 
         let market_context = MarketContext {
             symbol: "TEST/USD".to_string(),

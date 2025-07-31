@@ -4,6 +4,7 @@ use autonomous_platform::integration::daa_coordinator::*;
 use autonomous_platform::config::NeuralConfig;
 use autonomous_platform::neural::{NeuralPredictor, PredictionResult};
 use autonomous_platform::strategies::{TradingStrategy, Signal, MarketContext, Position, PositionSide, StrategyConfig, StrategyError};
+use neural_trader::utils::market_hours::MarketHours;
 use autonomous_platform::data::TimeSeriesData;
 
 use std::sync::Arc;
@@ -134,6 +135,10 @@ fn create_test_time_series_data() -> Vec<TimeSeriesData> {
     ]
 }
 
+// Helper function to create test MarketHours
+fn create_test_market_hours() -> Arc<MarketHours> {
+    Arc::new(MarketHours::default())
+}
 #[tokio::test]
 async fn test_daa_coordinator_creation() {
     let neural_config = NeuralConfig {
@@ -149,7 +154,7 @@ async fn test_daa_coordinator_creation() {
     let (tx, _rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let _coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx);
+    let _coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx, create_test_market_hours());
     
     // Verify config has expected default values
     assert_eq!(config.enabled, true);
@@ -175,7 +180,7 @@ async fn test_component_initialization_with_strategies() {
     let (tx, _rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+    let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
     
     // Register multiple strategies
     let strategy1 = Box::new(MockTradingStrategy {
@@ -215,7 +220,7 @@ async fn test_event_loop_processing_with_position() {
     let (tx, mut rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+    let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
     
     // Register a strategy that signals sell
     let strategy = Box::new(MockTradingStrategy {
@@ -264,7 +269,7 @@ async fn test_error_handling_strategy_failure() {
     let (tx, _rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+    let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
     
     // Register failing strategies
     let failing_strategy = Box::new(MockTradingStrategy {
@@ -318,7 +323,7 @@ async fn test_graceful_shutdown() {
     let (tx, mut rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let coordinator = Arc::new(DaaCoordinator::new(config, neural_predictor, tx));
+    let coordinator = Arc::new(DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours()));
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     
     // Spawn background task to simulate event loop
@@ -371,7 +376,7 @@ async fn test_decision_with_high_volatility() {
     let (tx, _rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx);
+    let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx, create_test_market_hours());
     
     // Test with high volatility market
     let mut market_context = create_test_market_context();
@@ -405,7 +410,7 @@ async fn test_performance_metrics_update() {
     let (tx, _rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
+    let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
     
     // Initial metrics should be default
     let initial_metrics = coordinator.get_metrics().await;
@@ -443,7 +448,7 @@ async fn test_concurrent_decision_making() {
     let (tx, mut rx) = mpsc::channel(100);
     
     let config = DaaConfig::default();
-    let coordinator = Arc::new(DaaCoordinator::new(config, neural_predictor, tx));
+    let coordinator = Arc::new(DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours()));
     
     // Spawn multiple concurrent decision tasks
     let mut handles = vec![];
