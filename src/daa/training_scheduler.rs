@@ -731,7 +731,7 @@ impl DAATrainingScheduler {
 
         // Complete the job
         let outcome = TrainingOutcome::Success {
-            improvement_percentage: 15.0, // Simulated improvement
+            improvement: 15.0, // Simulated improvement
             new_accuracy: 0.85,
         };
 

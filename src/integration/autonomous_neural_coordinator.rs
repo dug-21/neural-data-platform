@@ -65,13 +65,12 @@ impl AutonomousNeuralCoordinator {
         training_config: TrainingTriggerConfig,
     ) -> Result<Self> {
         // Create autonomous training engine
-        let (training_engine, training_receiver) =
-            AutonomousTrainingEngine::new(training_config.clone())?;
+        let training_engine = AutonomousTrainingEngine::new(training_config.clone())?;
         let training_engine = Arc::new(training_engine);
 
         // Create training integration
         let training_integration =
-            DAATrainingIntegration::new(training_engine.clone(), training_receiver);
+            DAATrainingIntegration::new(training_engine.as_ref().clone());
 
         let performance_tracker = PerformanceTracker {
             recent_decisions: Vec::new(),
@@ -248,13 +247,16 @@ impl AutonomousNeuralCoordinator {
         Ok(PerformanceSnapshot {
             timestamp: Utc::now(),
             accuracy: prediction_accuracy,
+            latency_ms: 100,
+            error_rate: 1.0 - prediction_accuracy,
+            recent_predictions: 50,
             confidence: trading_perf.avg_confidence,
             price_error: 1.0 - prediction_accuracy, // Convert accuracy to error
             sharpe_ratio: trading_perf.sharpe_ratio,
             max_drawdown: trading_perf.max_drawdown,
             volatility,
             model_agreement,
-            consecutive_failures,
+            consecutive_failures: consecutive_failures as u32,
             trading_volume: market_context.volume_24h,
             profit_loss: trading_perf.total_pnl,
         })
@@ -299,7 +301,7 @@ impl AutonomousNeuralCoordinator {
 
         // Check if recent training has occurred
         let recent_training = training_history
-            .values()
+            .iter()
             .filter(|record| record.decision.timestamp > Utc::now() - chrono::Duration::hours(24))
             .any(|record| {
                 matches!(
@@ -317,7 +319,7 @@ impl AutonomousNeuralCoordinator {
         }
 
         // Check for ongoing training that might affect decision reliability
-        let ongoing_training = training_history.values().any(|record| {
+        let ongoing_training = training_history.iter().any(|record| {
             matches!(
                 record.outcome,
                 Some(crate::daa::autonomous_training::TrainingOutcome::InProgress { .. })
@@ -418,7 +420,7 @@ impl AutonomousNeuralCoordinator {
 
         // Find most recent training decision
         let recent_training = training_history
-            .values()
+            .iter()
             .max_by_key(|record| record.decision.timestamp);
 
         // Calculate performance summary
@@ -506,10 +508,11 @@ mod tests {
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config.clone()).unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
-        // Create DAA coordinator
+        // Create DAA coordinator with MarketHours
         let daa_config = crate::integration::daa_coordinator::DaaConfig::default();
+        let market_hours = Arc::new(crate::utils::market_hours::MarketHours::default());
         let daa_coordinator =
-            Arc::new(DaaCoordinator::new(daa_config, neural_predictor.clone(), tx).unwrap());
+            Arc::new(DaaCoordinator::new(daa_config, neural_predictor.clone(), tx, market_hours).unwrap());
 
         // Create neural predictor
         let neural_predictor = Arc::new(

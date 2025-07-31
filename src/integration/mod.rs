@@ -25,10 +25,8 @@ pub mod data_access;
 pub mod training_data_service;
 pub mod model_persistence_service;
 
-// New integration architecture components
-pub mod event_bus;
-pub mod integration_hub;
-pub mod coordinators;
+// Phase 3B: Removed architectural layers - these should NOT exist
+// Only simple field additions allowed, no new patterns!
 
 // Re-export commonly used types
 pub use autonomous_decisions::{DaaDecisionMaker, MarketTrend};
@@ -40,13 +38,8 @@ pub use model_persistence_service::{
     ModelPersistenceService, ModelPersistenceConfig, ModelOperation, ModelOperationResult,
 };
 
-// Re-export new integration components
-pub use event_bus::{EventBus, EventBusMetrics, SubscriberInfo};
-pub use integration_hub::{IntegrationHub, IntegrationState, IntegrationConfig};
-pub use coordinators::{
-    PerformanceCoordinator, MarketTimingCoordinator, TrainingCoordinator,
-    CoordinationError, CoordinationResult,
-};
+// Phase 3B: Removed re-exports of architectural components
+// These were mistakenly added and violate Phase 3B requirements
 
 /// Trait for market data providers
 pub trait MarketDataProvider: Send + Sync {

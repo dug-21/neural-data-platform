@@ -160,13 +160,16 @@ impl AgentManager {
             let performance_snapshot = PerformanceSnapshot {
                 timestamp: Utc::now(),
                 accuracy: metrics.avg_confidence, // Use average confidence as proxy for accuracy
+                latency_ms: 100, // Default latency value
+                error_rate: 1.0 - metrics.avg_confidence, // Convert confidence to error
+                recent_predictions: 50, // Default recent predictions count
                 confidence: metrics.avg_confidence,
                 price_error: 1.0 - metrics.avg_confidence, // Convert confidence to error
                 sharpe_ratio: metrics.sharpe_ratio,
                 max_drawdown: metrics.max_drawdown,
                 volatility: market_context.volatility,
                 model_agreement: 0.8, // Default value - would be calculated from ensemble
-                consecutive_failures: 0, // Would be tracked separately
+                consecutive_failures: 0, // Would be tracked separately 
                 trading_volume: market_context.volume_24h,
                 profit_loss: metrics.total_pnl,
             };

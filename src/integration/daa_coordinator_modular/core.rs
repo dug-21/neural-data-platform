@@ -38,27 +38,7 @@ impl DaaCoordinator {
         decision_sender: mpsc::Sender<AutonomousDecision>,
     ) -> Result<Self> {
         // Create enhanced predictor with same configuration
-        let _neural_config = crate::config::NeuralConfig {
-            memory_gb: 1.0,
-            models: vec!["MLP".to_string(), "DeepAR".to_string(), "TCN".to_string()],
-            prediction_cache_ttl: 300,
-            model_load_timeout: 60,
-            max_concurrent_predictions: 10,
-            enable_model_monitoring: true,
-            accuracy_threshold: 0.8,
-            use_real_models: false,
-            enable_health_checks: true,
-            enable_fallback: true,
-            enable_circuit_breakers: true,
-            enable_graceful_degradation: false,
-            enable_performance_monitoring: true,
-            enable_adaptive_retry: true,
-            enable_model_ensembles: false,
-            model_timeout_seconds: 60,
-            max_retries: 3,
-            error_threshold: 0.05,
-            lookback_window: 24,
-        };
+        let _neural_config = crate::config::NeuralConfig::default(); // Simplified to avoid missing fields
 
         Ok(Self {
             config,
