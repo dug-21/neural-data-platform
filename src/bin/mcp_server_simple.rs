@@ -82,12 +82,23 @@ async fn main() -> Result<()> {
 
     // Neural predictor
     println!("🧠 Initializing neural predictor...");
-    let predictor = Arc::new(NeuralPredictor::default().await.unwrap_or_else(|e| {
-        println!("⚠️  Neural predictor initialization failed: {}", e);
-        println!("   Using fallback configuration");
-        panic!("Cannot continue without neural predictor");
-    }));
-    println!("✅ Neural predictor ready");
+    let predictor = match NeuralPredictor::default().await {
+        Ok(predictor) => {
+            println!("✅ Neural predictor ready");
+            Arc::new(predictor)
+        }
+        Err(e) => {
+            eprintln!("❌ Neural predictor initialization failed: {}", e);
+            eprintln!("   Cannot start MCP server without neural predictor");
+            eprintln!("   Please check your neural model configuration and try again");
+            
+            // Return error instead of panicking
+            return Err(anyhow::anyhow!(
+                "Cannot start MCP server without neural predictor: {}",
+                e
+            ));
+        }
+    };
 
     // Agent
     println!("🤖 Initializing trading agent...");
