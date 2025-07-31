@@ -1,0 +1,59 @@
+groups:
+  - name: data_ingestion_metrics
+    interval: 30s
+    rules:
+      # API call rate per provider
+      - record: data_ingestion:api_calls_rate_1m
+        expr: rate(data_ingestion_api_calls_total[1m])
+      
+      # API error rate per provider
+      - record: data_ingestion:api_errors_rate_1m
+        expr: rate(data_ingestion_api_errors_total[1m])
+      
+      # Data processing rate
+      - record: data_ingestion:processed_records_rate_1m
+        expr: rate(data_ingestion_records_processed_total[1m])
+      
+      # Average processing time per provider
+      - record: data_ingestion:processing_time_avg_1m
+        expr: rate(data_ingestion_processing_duration_seconds_sum[1m]) / rate(data_ingestion_processing_duration_seconds_count[1m])
+      
+      # Queue depth per provider
+      - record: data_ingestion:queue_depth
+        expr: data_ingestion_queue_size
+      
+      # Memory usage by component
+      - record: data_ingestion:memory_usage_bytes
+        expr: process_resident_memory_bytes{job="data-ingestion"}
+
+  - name: data_ingestion_alerts
+    rules:
+      # Alert on high error rate
+      - alert: DataIngestionHighErrorRate
+        expr: data_ingestion:api_errors_rate_1m > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in data ingestion ({{ $labels.provider }})"
+          description: "Error rate is {{ $value }} errors/sec for provider {{ $labels.provider }}"
+      
+      # Alert on processing lag
+      - alert: DataIngestionProcessingLag
+        expr: data_ingestion:queue_depth > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High queue depth in data ingestion"
+          description: "Queue depth is {{ $value }} for provider {{ $labels.provider }}"
+      
+      # Alert on service down
+      - alert: DataIngestionDown
+        expr: up{job="data-ingestion"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Data ingestion service is down"
+          description: "Data ingestion service has been down for more than 2 minutes"

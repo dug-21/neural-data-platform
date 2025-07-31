@@ -7,7 +7,7 @@ use autonomous_platform::integration::daa_coordinator::*;
 use autonomous_platform::config::{NeuralConfig, Config};
 use autonomous_platform::neural::NeuralPredictor;
 use autonomous_platform::strategies::{
-    TradingStrategy, Signal, MarketContext, Position, PositionSide, 
+use neural_trader::utils::market_hours::MarketHours;    TradingStrategy, Signal, MarketContext, Position, PositionSide, 
     StrategyConfig, StrategyError, StrategyFactory
 };
 use autonomous_platform::data::TimeSeriesData;
@@ -56,7 +56,7 @@ mod daa_init_fix_tests {
 
         // WHEN: We create a DAA coordinator with the fixed initialization
         let daa_config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx);
+        let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx, create_test_market_hours());
 
         // Register strategies using the fixed approach
         for (i, strategy_config) in config.strategies.iter().enumerate() {
@@ -166,7 +166,7 @@ mod daa_init_fix_tests {
         );
         let (tx, _rx) = mpsc::channel(100);
 
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
 
         // WHEN: We try to register all strategies
         let mut successful_registrations = 0;
@@ -217,7 +217,7 @@ mod daa_init_fix_tests {
         );
         let (tx, _rx) = mpsc::channel(100);
 
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
 
         // Register an UNINITIALIZED strategy (simulating the bug)
         let config = StrategyConfig {
@@ -269,7 +269,7 @@ mod daa_init_fix_tests {
         );
         let (tx, mut rx) = mpsc::channel(100);
 
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx);
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
 
         // Create strategies with different initialization times
         let strategies = vec![

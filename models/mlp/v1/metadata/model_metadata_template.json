@@ -1,0 +1,60 @@
+{
+  "model_info": {
+    "name": "mlp_predictor_v1",
+    "version": "1.0.0",
+    "architecture": "mlp",
+    "created_at": "2025-01-28T00:00:00Z",
+    "created_by": "neural-trader-system",
+    "description": "Multi-layer perceptron for price prediction"
+  },
+  "architecture_details": {
+    "input_size": 10,
+    "hidden_layers": [64, 32, 16],
+    "output_size": 1,
+    "activation": "relu",
+    "dropout_rate": 0.2
+  },
+  "training_config": {
+    "optimizer": "adam",
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 100,
+    "early_stopping": {
+      "patience": 10,
+      "min_delta": 0.0001
+    }
+  },
+  "dataset_info": {
+    "train_samples": 10000,
+    "validation_samples": 2000,
+    "test_samples": 2000,
+    "features": ["open", "high", "low", "close", "volume", "sma_20", "rsi", "macd", "bb_upper", "bb_lower"],
+    "target": "next_close_price"
+  },
+  "performance_metrics": {
+    "train_loss": 0.0234,
+    "validation_loss": 0.0289,
+    "test_loss": 0.0301,
+    "mae": 0.0156,
+    "rmse": 0.0198,
+    "r2_score": 0.94
+  },
+  "deployment_info": {
+    "deployment_ready": true,
+    "tested_environments": ["development", "staging"],
+    "dependencies": {
+      "rust": "1.70.0",
+      "neural-trader": "0.1.0"
+    }
+  },
+  "checkpoints": [
+    {
+      "epoch": 50,
+      "filename": "checkpoint_epoch50_loss0.0234.pth",
+      "metrics": {
+        "train_loss": 0.0234,
+        "val_loss": 0.0289
+      }
+    }
+  ]
+}

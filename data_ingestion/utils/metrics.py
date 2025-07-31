@@ -98,6 +98,172 @@ class Metrics:
         )
         
         # Data quality metrics
+        self.data_quality_score = Gauge(
+            'data_ingestion_data_quality_score',
+            'Data quality score (0-1)',
+            ['provider']
+        )
+        
+        # WebSocket specific metrics (Phase 4)
+        self.websocket_connections = Gauge(
+            'data_ingestion_websocket_connections',
+            'Number of active WebSocket connections',
+            ['provider', 'status']
+        )
+        
+        self.websocket_messages = Counter(
+            'data_ingestion_websocket_messages_total',
+            'Total WebSocket messages received',
+            ['provider', 'message_type']
+        )
+        
+        self.websocket_reconnections = Counter(
+            'data_ingestion_websocket_reconnections_total',
+            'Total WebSocket reconnection attempts',
+            ['provider', 'reason']
+        )
+        
+        # Neural Prediction Metrics (Phase 6)
+        self.neural_prediction_confidence = Histogram(
+            'neural_trader_prediction_confidence_score',
+            'Confidence scores distribution for neural predictions',
+            ['model_name', 'market_regime'],
+            buckets=(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
+        )
+        
+        self.neural_confidence_breakdown = Histogram(
+            'neural_trader_confidence_breakdown_components',
+            'Individual components of confidence score breakdown',
+            ['component_type', 'model_name'],
+            buckets=(-0.3, -0.2, -0.1, -0.05, 0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0)
+        )
+        
+        self.neural_prediction_accuracy = Gauge(
+            'neural_trader_prediction_accuracy',
+            'Current prediction accuracy for neural models',
+            ['model_name', 'time_horizon', 'accuracy_type']
+        )
+        
+        self.neural_retraining_triggers = Counter(
+            'neural_trader_retraining_triggers_total',
+            'Number of retraining events triggered',
+            ['model_name', 'trigger_type', 'urgency_level']
+        )
+        
+        self.neural_retraining_frequency = Histogram(
+            'neural_trader_retraining_frequency_hours',
+            'Time between retraining events in hours',
+            ['model_name'],
+            buckets=(1, 6, 12, 24, 48, 72, 168, 336, 720)  # 1h to 30 days
+        )
+        
+        self.neural_model_ensemble_agreement = Gauge(
+            'neural_trader_ensemble_agreement_score',
+            'Model agreement score in ensemble predictions',
+            ['ensemble_size', 'market_regime']
+        )
+        
+        self.neural_prediction_intervals = Histogram(
+            'neural_trader_prediction_intervals_width',
+            'Width of prediction confidence intervals',
+            ['model_name', 'volatility_regime'],
+            buckets=(0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0)
+        )
+        
+        self.neural_ensemble_weights = Gauge(
+            'neural_trader_ensemble_model_weights',
+            'Current dynamic weights assigned to models in ensemble',
+            ['model_name', 'market_regime']
+        )
+        
+        self.neural_prediction_latency = Histogram(
+            'neural_trader_prediction_latency_seconds',
+            'Time taken to generate neural predictions',
+            ['model_name', 'prediction_type'],
+            buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0)
+        )
+        
+        self.neural_model_performance_tracking = Gauge(
+            'neural_trader_model_performance_metrics',
+            'Performance tracking metrics for neural models',
+            ['model_name', 'metric_type', 'regime']
+        )
+        
+        self.neural_data_quality_impact = Gauge(
+            'neural_trader_data_quality_confidence_impact',
+            'Impact of data quality on prediction confidence',
+            ['quality_component', 'severity_level']
+        )
+        
+        self.neural_market_regime_detection = Counter(
+            'neural_trader_market_regime_detection_total',
+            'Market regime detection events',
+            ['previous_regime', 'detected_regime', 'confidence_level']
+        )
+        
+        self.neural_volatility_adjustments = Gauge(
+            'neural_trader_volatility_based_adjustments',
+            'Volatility-based confidence and weight adjustments',
+            ['model_name', 'adjustment_type']
+        )
+        
+        # Health check metrics (Phase 4)
+        self.health_check_status = Gauge(
+            'data_ingestion_health_status',
+            'Health check status (1=healthy, 0=unhealthy)',
+            ['component']
+        )
+        
+        self.health_check_duration = Histogram(
+            'data_ingestion_health_check_duration_seconds',
+            'Health check duration in seconds',
+            ['component']
+        )
+        
+        # Circuit breaker metrics (Phase 4)
+        self.circuit_breaker_state = Gauge(
+            'data_ingestion_circuit_breaker_state',
+            'Circuit breaker state (0=closed, 1=open, 2=half_open)',
+            ['component']
+        )
+        
+        self.circuit_breaker_failures = Counter(
+            'data_ingestion_circuit_breaker_failures_total',
+            'Total circuit breaker failures',
+            ['component']
+        )
+        
+        # File backfill metrics (Phase 4)
+        self.file_backfill_progress = Gauge(
+            'data_ingestion_file_backfill_progress',
+            'File backfill progress (0-1)',
+            ['file', 'format']
+        )
+        
+        self.file_backfill_rows = Counter(
+            'data_ingestion_file_backfill_rows_total',
+            'Total rows processed in file backfill',
+            ['file', 'format', 'status']
+        )
+        
+        self.file_backfill_duration = Histogram(
+            'data_ingestion_file_backfill_duration_seconds',
+            'File backfill operation duration',
+            ['format']
+        )
+        
+        # Data flow metrics (Phase 4)
+        self.data_flow_age = Gauge(
+            'data_ingestion_data_flow_age_seconds',
+            'Age of last data received in seconds',
+            ['provider', 'symbol']
+        )
+        
+        self.data_flow_rate = Gauge(
+            'data_ingestion_data_flow_rate',
+            'Data points per second',
+            ['provider']
+        )
         self.data_quality_issues = Counter(
             'data_ingestion_data_quality_issues_total',
             'Number of data quality issues',
@@ -207,6 +373,13 @@ class Metrics:
             'data_ingestion_db_connection_pool_size',
             'Database connection pool size',
             ['pool_name', 'state']
+        )
+        
+        # Component health status (using existing health_check_status for overall)
+        self.health_check_component_status = Gauge(
+            'data_ingestion_health_component_status',
+            'Component health status (1=healthy, 0=unhealthy)',
+            ['component']
         )
         
         # Async operation metrics
@@ -511,6 +684,55 @@ class Metrics:
             return wrapper
         return decorator
     
+    def track_neural_prediction_operation(self, model_name: str, prediction_type: str = "standard"):
+        """Decorator to track neural prediction operations with automatic metrics collection."""
+        def decorator(func):
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                start_time = time.time()
+                
+                try:
+                    result = await func(*args, **kwargs)
+                    
+                    # Track prediction latency
+                    duration = time.time() - start_time
+                    self.track_neural_prediction_latency(
+                        model_name=model_name,
+                        prediction_type=prediction_type,
+                        latency_seconds=duration
+                    )
+                    
+                    # Auto-track enhanced prediction results if the result has the right structure
+                    if hasattr(result, '__iter__') and result:
+                        if hasattr(result[0], 'confidence') and hasattr(result[0], 'confidence_breakdown'):
+                            # This looks like a list of EnhancedPredictionResult objects
+                            for prediction in result:
+                                self.track_neural_prediction_with_enhanced_confidence(prediction)
+                        elif hasattr(result[0], 'confidence') and hasattr(result[0], 'model_name'):
+                            # This looks like a list of standard PredictionResult objects
+                            for prediction in result:
+                                # Extract market regime from context if available
+                                market_regime = getattr(prediction, 'market_regime', 'unknown')
+                                self.track_neural_prediction_confidence(
+                                    model_name=prediction.model_name,
+                                    market_regime=market_regime,
+                                    confidence_score=prediction.confidence
+                                )
+                    
+                    return result
+                except Exception as e:
+                    # Track failed predictions
+                    duration = time.time() - start_time
+                    self.track_neural_prediction_latency(
+                        model_name=model_name,
+                        prediction_type=f"{prediction_type}_failed",
+                        latency_seconds=duration
+                    )
+                    raise
+            
+            return wrapper
+        return decorator
+    
     @asynccontextmanager
     async def track_pipeline_throughput(self, pipeline: str, item_count: int):
         """Context manager to track pipeline throughput."""
@@ -562,6 +784,254 @@ class Metrics:
             pool_name=pool_name,
             state='total'
         ).set(total)
+    
+    # Neural Prediction Metrics Methods (Phase 6)
+    
+    def track_neural_prediction_confidence(self, model_name: str, market_regime: str, confidence_score: float):
+        """Track confidence score distribution for neural predictions."""
+        self.neural_prediction_confidence.labels(
+            model_name=model_name,
+            market_regime=market_regime
+        ).observe(confidence_score)
+    
+    def track_confidence_breakdown_component(self, component_type: str, model_name: str, component_value: float):
+        """Track individual components of confidence breakdown."""
+        self.neural_confidence_breakdown.labels(
+            component_type=component_type,
+            model_name=model_name
+        ).observe(component_value)
+    
+    def update_neural_prediction_accuracy(self, model_name: str, time_horizon: str, accuracy_type: str, accuracy_value: float):
+        """Update current prediction accuracy for neural models."""
+        self.neural_prediction_accuracy.labels(
+            model_name=model_name,
+            time_horizon=time_horizon,
+            accuracy_type=accuracy_type
+        ).set(accuracy_value)
+    
+    def track_neural_retraining_trigger(self, model_name: str, trigger_type: str, urgency_level: str):
+        """Track retraining triggers and their frequency."""
+        self.neural_retraining_triggers.labels(
+            model_name=model_name,
+            trigger_type=trigger_type,
+            urgency_level=urgency_level
+        ).inc()
+    
+    def track_neural_retraining_frequency(self, model_name: str, hours_since_last_training: float):
+        """Track time between retraining events."""
+        self.neural_retraining_frequency.labels(
+            model_name=model_name
+        ).observe(hours_since_last_training)
+    
+    def update_neural_ensemble_agreement(self, ensemble_size: str, market_regime: str, agreement_score: float):
+        """Update model agreement score in ensemble predictions."""
+        self.neural_model_ensemble_agreement.labels(
+            ensemble_size=ensemble_size,
+            market_regime=market_regime
+        ).set(agreement_score)
+    
+    def track_neural_prediction_interval_width(self, model_name: str, volatility_regime: str, interval_width: float):
+        """Track prediction confidence interval widths."""
+        self.neural_prediction_intervals.labels(
+            model_name=model_name,
+            volatility_regime=volatility_regime
+        ).observe(interval_width)
+    
+    def update_neural_ensemble_weight(self, model_name: str, market_regime: str, weight_value: float):
+        """Update current dynamic weights for ensemble models."""
+        self.neural_ensemble_weights.labels(
+            model_name=model_name,
+            market_regime=market_regime
+        ).set(weight_value)
+    
+    def track_neural_prediction_latency(self, model_name: str, prediction_type: str, latency_seconds: float):
+        """Track prediction generation latency."""
+        self.neural_prediction_latency.labels(
+            model_name=model_name,
+            prediction_type=prediction_type
+        ).observe(latency_seconds)
+    
+    def update_neural_model_performance(self, model_name: str, metric_type: str, regime: str, metric_value: float):
+        """Update performance tracking metrics for neural models."""
+        self.neural_model_performance_tracking.labels(
+            model_name=model_name,
+            metric_type=metric_type,
+            regime=regime
+        ).set(metric_value)
+    
+    def update_neural_data_quality_impact(self, quality_component: str, severity_level: str, impact_value: float):
+        """Update data quality impact on prediction confidence."""
+        self.neural_data_quality_impact.labels(
+            quality_component=quality_component,
+            severity_level=severity_level
+        ).set(impact_value)
+    
+    def track_neural_market_regime_detection(self, previous_regime: str, detected_regime: str, confidence_level: str):
+        """Track market regime detection events."""
+        self.neural_market_regime_detection.labels(
+            previous_regime=previous_regime,
+            detected_regime=detected_regime,
+            confidence_level=confidence_level
+        ).inc()
+    
+    def update_neural_volatility_adjustment(self, model_name: str, adjustment_type: str, adjustment_value: float):
+        """Update volatility-based adjustments."""
+        self.neural_volatility_adjustments.labels(
+            model_name=model_name,
+            adjustment_type=adjustment_type
+        ).set(adjustment_value)
+    
+    def track_neural_prediction_with_enhanced_confidence(self, enhanced_prediction_result):
+        """
+        Comprehensive tracking method for enhanced prediction results.
+        This method extracts and tracks all relevant metrics from an EnhancedPredictionResult.
+        """
+        # Determine market regime string
+        market_regime = enhanced_prediction_result.market_regime or "unknown"
+        
+        # Track main confidence score
+        self.track_neural_prediction_confidence(
+            model_name="ensemble", 
+            market_regime=market_regime,
+            confidence_score=enhanced_prediction_result.confidence
+        )
+        
+        # Track confidence breakdown components
+        breakdown = enhanced_prediction_result.confidence_breakdown
+        component_mapping = {
+            'base_confidence': breakdown.base_confidence,
+            'ensemble_agreement': breakdown.ensemble_agreement,
+            'historical_accuracy': breakdown.historical_accuracy,
+            'market_regime_adjustment': breakdown.market_regime_adjustment,
+            'volatility_penalty': breakdown.volatility_penalty,
+            'temporal_distance_penalty': breakdown.temporal_distance_penalty
+        }
+        
+        for component_type, value in component_mapping.items():
+            self.track_confidence_breakdown_component(
+                component_type=component_type,
+                model_name="ensemble",
+                component_value=value
+            )
+        
+        # Track data quality factor
+        self.update_neural_data_quality_impact(
+            quality_component="overall_quality_factor",
+            severity_level="current",
+            impact_value=breakdown.data_quality_factor
+        )
+        
+        # Track model agreement
+        ensemble_size_str = str(enhanced_prediction_result.ensemble_size)
+        self.update_neural_ensemble_agreement(
+            ensemble_size=ensemble_size_str,
+            market_regime=market_regime,
+            agreement_score=enhanced_prediction_result.model_agreement_score
+        )
+        
+        # Track prediction interval width
+        interval_width = (enhanced_prediction_result.interval_high - enhanced_prediction_result.interval_low) / enhanced_prediction_result.value
+        volatility_regime = "high" if enhanced_prediction_result.volatility_adjustment > 1.2 else "normal" if enhanced_prediction_result.volatility_adjustment > 0.8 else "low"
+        
+        self.track_neural_prediction_interval_width(
+            model_name="ensemble",
+            volatility_regime=volatility_regime,
+            interval_width=interval_width
+        )
+        
+        # Track volatility adjustments
+        self.update_neural_volatility_adjustment(
+            model_name="ensemble",
+            adjustment_type="interval_multiplier",
+            adjustment_value=enhanced_prediction_result.volatility_adjustment
+        )
+    
+    def track_neural_retraining_decision(self, retraining_metrics):
+        """
+        Track retraining decision metrics from RetrainingMetrics object.
+        """
+        # Determine urgency level
+        urgency_level = "critical" if retraining_metrics.urgency_score > 3.0 else "high" if retraining_metrics.urgency_score > 1.5 else "medium" if retraining_metrics.urgency_score > 0.5 else "low"
+        
+        # Track retraining trigger if needed
+        if retraining_metrics.should_retrain:
+            self.track_neural_retraining_trigger(
+                model_name="ensemble",
+                trigger_type=retraining_metrics.primary_trigger,
+                urgency_level=urgency_level
+            )
+            
+            # Track frequency since last training
+            self.track_neural_retraining_frequency(
+                model_name="ensemble",
+                hours_since_last_training=float(retraining_metrics.hours_since_training)
+            )
+        
+        # Update current accuracy metric
+        self.update_neural_prediction_accuracy(
+            model_name="ensemble",
+            time_horizon="recent",
+            accuracy_type="exponential_weighted",
+            accuracy_value=retraining_metrics.current_accuracy
+        )
+    
+    def track_neural_ensemble_performance(self, ensemble_stats):
+        """
+        Track comprehensive ensemble performance statistics.
+        """
+        current_regime = ensemble_stats.get("current_regime", "unknown")
+        
+        # Track dynamic weights
+        if "dynamic_weights" in ensemble_stats:
+            weights = ensemble_stats["dynamic_weights"]
+            for model_name, weight in weights.items():
+                self.update_neural_ensemble_weight(
+                    model_name=model_name,
+                    market_regime=current_regime,
+                    weight_value=weight
+                )
+        
+        # Track model performances
+        if "model_performances" in ensemble_stats:
+            performances = ensemble_stats["model_performances"]
+            for model_name, performance in performances.items():
+                if isinstance(performance, dict):
+                    # Track recent accuracy
+                    if "recent_accuracy" in performance:
+                        self.update_neural_model_performance(
+                            model_name=model_name,
+                            metric_type="recent_accuracy",
+                            regime=current_regime,
+                            metric_value=performance["recent_accuracy"]
+                        )
+                    
+                    # Track confidence score
+                    if "confidence_score" in performance:
+                        self.update_neural_model_performance(
+                            model_name=model_name,
+                            metric_type="confidence_calibration",
+                            regime=current_regime,
+                            metric_value=performance["confidence_score"]
+                        )
+                    
+                    # Track stability score
+                    if "stability_score" in performance:
+                        self.update_neural_model_performance(
+                            model_name=model_name,
+                            metric_type="stability",
+                            regime=current_regime,
+                            metric_value=performance["stability_score"]
+                        )
+        
+        # Track volatility adjustments
+        if "volatility_adjustments" in ensemble_stats:
+            adjustments = ensemble_stats["volatility_adjustments"]
+            for model_name, adjustment in adjustments.items():
+                self.update_neural_volatility_adjustment(
+                    model_name=model_name,
+                    adjustment_type="ensemble_weight_adjustment",
+                    adjustment_value=adjustment
+                )
 
 
 # Global metrics instance

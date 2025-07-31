@@ -1,5 +1,5 @@
 //! TimescaleDB adapter for historical market data
-//! 
+//!
 //! Provides efficient storage and retrieval of time-series market data
 //! using TimescaleDB's hypertable features.
 
@@ -73,15 +73,17 @@ impl TimescaleAdapter {
 
         Ok(rows
             .into_iter()
-            .map(|(symbol, timestamp, open, high, low, close, volume)| MarketData {
-                symbol,
-                timestamp,
-                open,
-                high,
-                low,
-                close,
-                volume,
-            })
+            .map(
+                |(symbol, timestamp, open, high, low, close, volume)| MarketData {
+                    symbol,
+                    timestamp,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
+                },
+            )
             .collect())
     }
 
@@ -96,35 +98,49 @@ impl TimescaleAdapter {
         for item in data {
             // Validate symbol
             if item.symbol.is_empty() {
-                return Err(AdapterError::Configuration("Symbol cannot be empty".to_string()));
+                return Err(AdapterError::Configuration(
+                    "Symbol cannot be empty".to_string(),
+                ));
             }
-            
+
             // Validate timestamp
             if item.timestamp < 0 {
-                return Err(AdapterError::Configuration("Timestamp must be non-negative".to_string()));
+                return Err(AdapterError::Configuration(
+                    "Timestamp must be non-negative".to_string(),
+                ));
             }
-            
+
             // Validate prices
             if item.open < 0.0 || item.high < 0.0 || item.low < 0.0 || item.close < 0.0 {
-                return Err(AdapterError::Configuration("Prices must be non-negative".to_string()));
+                return Err(AdapterError::Configuration(
+                    "Prices must be non-negative".to_string(),
+                ));
             }
-            
+
             // Validate OHLC relationships
             if item.high < item.low {
-                return Err(AdapterError::Configuration("High price must be >= low price".to_string()));
+                return Err(AdapterError::Configuration(
+                    "High price must be >= low price".to_string(),
+                ));
             }
-            
+
             if item.high < item.open || item.high < item.close {
-                return Err(AdapterError::Configuration("High price must be the highest price".to_string()));
+                return Err(AdapterError::Configuration(
+                    "High price must be the highest price".to_string(),
+                ));
             }
-            
+
             if item.low > item.open || item.low > item.close {
-                return Err(AdapterError::Configuration("Low price must be the lowest price".to_string()));
+                return Err(AdapterError::Configuration(
+                    "Low price must be the lowest price".to_string(),
+                ));
             }
-            
+
             // Validate volume
             if item.volume < 0.0 {
-                return Err(AdapterError::Configuration("Volume must be non-negative".to_string()));
+                return Err(AdapterError::Configuration(
+                    "Volume must be non-negative".to_string(),
+                ));
             }
         }
 

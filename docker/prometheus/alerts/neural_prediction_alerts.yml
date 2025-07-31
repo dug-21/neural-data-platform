@@ -1,0 +1,227 @@
+groups:
+  - name: neural_prediction_alerts
+    rules:
+      # Prediction Confidence Alerts
+      - alert: LowPredictionConfidence
+        expr: histogram_quantile(0.5, rate(neural_trader_prediction_confidence_score_bucket[5m])) < 0.6
+        for: 2m
+        labels:
+          severity: warning
+          component: neural_prediction
+        annotations:
+          summary: "Neural prediction confidence is consistently low"
+          description: "Median prediction confidence has been below 60% for {{ $labels.model_name }} in {{ $labels.market_regime }} regime for more than 2 minutes. Current value: {{ $value | humanizePercentage }}"
+
+      - alert: CriticallyLowPredictionConfidence
+        expr: histogram_quantile(0.5, rate(neural_trader_prediction_confidence_score_bucket[5m])) < 0.4
+        for: 1m
+        labels:
+          severity: critical
+          component: neural_prediction
+        annotations:
+          summary: "Neural prediction confidence critically low"
+          description: "Median prediction confidence has dropped below 40% for {{ $labels.model_name }} in {{ $labels.market_regime }} regime. Immediate attention required. Current value: {{ $value | humanizePercentage }}"
+
+      # Retraining Frequency Alerts
+      - alert: FrequentRetraining
+        expr: rate(neural_trader_retraining_triggers_total[1h]) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: neural_training
+        annotations:
+          summary: "Neural models requiring frequent retraining"
+          description: "Model {{ $labels.model_name }} has triggered retraining more than 2 times per hour. Trigger type: {{ $labels.trigger_type }}, Urgency: {{ $labels.urgency_level }}"
+
+      - alert: CriticalRetrainingFailure
+        expr: neural_trader_retraining_triggers_total{urgency_level="critical"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: neural_training
+        annotations:
+          summary: "Critical retraining required"
+          description: "Model {{ $labels.model_name }} requires critical retraining due to {{ $labels.trigger_type }}. Immediate action required."
+
+      # Model Performance Alerts
+      - alert: PredictionAccuracyDegraded
+        expr: neural_trader_prediction_accuracy{accuracy_type="exponential_weighted"} < 0.7
+        for: 3m
+        labels:
+          severity: warning
+          component: model_performance
+        annotations:
+          summary: "Neural model prediction accuracy degraded"
+          description: "Model {{ $labels.model_name }} accuracy has dropped below 70% for {{ $labels.time_horizon }} horizon. Current accuracy: {{ $value | humanizePercentage }}"
+
+      - alert: SevereAccuracyDegradation
+        expr: neural_trader_prediction_accuracy{accuracy_type="exponential_weighted"} < 0.5
+        for: 1m
+        labels:
+          severity: critical
+          component: model_performance
+        annotations:
+          summary: "Severe neural model accuracy degradation"
+          description: "Model {{ $labels.model_name }} accuracy has severely degraded below 50% for {{ $labels.time_horizon }} horizon. Model may be broken. Current accuracy: {{ $value | humanizePercentage }}"
+
+      # Ensemble Health Alerts
+      - alert: LowEnsembleAgreement
+        expr: neural_trader_ensemble_agreement_score < 0.5
+        for: 2m
+        labels:
+          severity: warning
+          component: ensemble_health
+        annotations:
+          summary: "Low ensemble model agreement"
+          description: "Ensemble models show low agreement ({{ $value | humanizePercentage }}) in {{ $labels.market_regime }} regime with {{ $labels.ensemble_size }} models. This may indicate model divergence or market regime transition."
+
+      - alert: EnsembleAgreementCritical
+        expr: neural_trader_ensemble_agreement_score < 0.3
+        for: 1m
+        labels:
+          severity: critical
+          component: ensemble_health
+        annotations:
+          summary: "Critical ensemble disagreement"
+          description: "Ensemble models show critical disagreement ({{ $value | humanizePercentage }}) in {{ $labels.market_regime }} regime. Predictions may be unreliable."
+
+      # Data Quality Impact Alerts
+      - alert: DataQualityImpactHigh
+        expr: neural_trader_data_quality_confidence_impact{severity_level="high"} < 0.8
+        for: 2m
+        labels:
+          severity: warning
+          component: data_quality
+        annotations:
+          summary: "Data quality impacting prediction confidence"
+          description: "Data quality issue in {{ $labels.quality_component }} is significantly impacting prediction confidence. Impact factor: {{ $value | humanizePercentage }}"
+
+      - alert: CriticalDataQualityImpact
+        expr: neural_trader_data_quality_confidence_impact{severity_level="high"} < 0.6
+        for: 1m
+        labels:
+          severity: critical
+          component: data_quality
+        annotations:
+          summary: "Critical data quality degradation"
+          description: "Severe data quality degradation in {{ $labels.quality_component }} is critically impacting predictions. Impact factor: {{ $value | humanizePercentage }}"
+
+      # Prediction Latency Alerts
+      - alert: HighPredictionLatency
+        expr: histogram_quantile(0.95, rate(neural_trader_prediction_latency_seconds_bucket[5m])) > 5.0
+        for: 2m
+        labels:
+          severity: warning
+          component: prediction_performance
+        annotations:
+          summary: "High neural prediction latency"
+          description: "95th percentile prediction latency for {{ $labels.model_name }} ({{ $labels.prediction_type }}) is {{ $value }}s, which exceeds the 5s threshold."
+
+      - alert: ExcessivePredictionLatency
+        expr: histogram_quantile(0.95, rate(neural_trader_prediction_latency_seconds_bucket[5m])) > 10.0
+        for: 1m
+        labels:
+          severity: critical
+          component: prediction_performance
+        annotations:
+          summary: "Excessive neural prediction latency"
+          description: "95th percentile prediction latency for {{ $labels.model_name }} ({{ $labels.prediction_type }}) is {{ $value }}s, which is critically high."
+
+      # Prediction Interval Width Alerts
+      - alert: WidePredictionIntervals
+        expr: histogram_quantile(0.8, rate(neural_trader_prediction_intervals_width_bucket[5m])) > 0.2
+        for: 3m
+        labels:
+          severity: warning
+          component: prediction_uncertainty
+        annotations:
+          summary: "Wide prediction confidence intervals"
+          description: "80th percentile prediction interval width for {{ $labels.model_name }} in {{ $labels.volatility_regime }} conditions is {{ $value | humanizePercentage }}, indicating high uncertainty."
+
+      # Market Regime Detection Alerts
+      - alert: FrequentRegimeChanges
+        expr: rate(neural_trader_market_regime_detection_total[1h]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: market_regime
+        annotations:
+          summary: "Frequent market regime changes detected"
+          description: "Market regime changes detected more than 5 times per hour ({{ $labels.previous_regime }} -> {{ $labels.detected_regime }}). This may indicate market instability or detection sensitivity issues."
+
+      # Model-Specific Performance Alerts
+      - alert: ModelPerformanceDegradation
+        expr: neural_trader_model_performance_metrics{metric_type="recent_accuracy"} < 0.6 
+        for: 3m
+        labels:
+          severity: warning
+          component: individual_models
+        annotations:
+          summary: "Individual model performance degradation"
+          description: "Model {{ $labels.model_name }} shows degraded {{ $labels.metric_type }} ({{ $value | humanizePercentage }}) in {{ $labels.regime }} regime."
+
+      - alert: ModelStabilityIssue
+        expr: neural_trader_model_performance_metrics{metric_type="stability"} < 0.7
+        for: 2m
+        labels:
+          severity: warning
+          component: model_stability
+        annotations:
+          summary: "Model stability concerns"
+          description: "Model {{ $labels.model_name }} shows reduced stability ({{ $value | humanizePercentage }}) in {{ $labels.regime }} regime, indicating inconsistent predictions."
+
+      # Volatility-Based Alert
+      - alert: HighVolatilityImpact
+        expr: abs(neural_trader_volatility_based_adjustments) > 0.3
+        for: 2m
+        labels:
+          severity: info
+          component: volatility_adjustment
+        annotations:
+          summary: "High volatility adjustments applied"
+          description: "Significant volatility-based adjustments ({{ $value }}) applied to {{ $labels.model_name }} {{ $labels.adjustment_type }}. This indicates volatile market conditions."
+
+  - name: neural_prediction_aggregated_alerts
+    rules:
+      # Aggregated health metrics
+      - alert: OverallNeuralSystemDegradation
+        expr: |
+          (
+            avg(neural_trader_prediction_accuracy{accuracy_type="exponential_weighted"}) < 0.7 
+            and 
+            avg(neural_trader_ensemble_agreement_score) < 0.6
+          )
+        for: 5m
+        labels:
+          severity: critical
+          component: system_health
+        annotations:
+          summary: "Overall neural prediction system degradation"
+          description: "Multiple indicators show neural prediction system degradation: average accuracy {{ $value | humanizePercentage }}, low ensemble agreement. System-wide investigation required."
+
+      - alert: NeuralSystemOperational
+        expr: |
+          (
+            avg(neural_trader_prediction_accuracy{accuracy_type="exponential_weighted"}) >= 0.8 
+            and 
+            avg(neural_trader_ensemble_agreement_score) >= 0.7
+          )
+        for: 10m
+        labels:
+          severity: info
+          component: system_health
+        annotations:
+          summary: "Neural prediction system operating optimally"
+          description: "Neural prediction system is operating within optimal parameters: average accuracy {{ $value | humanizePercentage }}, good ensemble agreement."
+
+      # Recovery alerts
+      - alert: ModelRecoveryDetected
+        expr: |
+          increase(neural_trader_prediction_accuracy{accuracy_type="exponential_weighted"}[5m]) > 0.1
+        for: 1m
+        labels:
+          severity: info
+          component: recovery
+        annotations:
+          summary: "Model performance recovery detected"
+          description: "Model {{ $labels.model_name }} shows significant accuracy improvement (+{{ $value | humanizePercentage }}) over the last 5 minutes."

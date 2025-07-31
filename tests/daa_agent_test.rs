@@ -1,6 +1,6 @@
 //! Integration tests for DAA agent framework
 
-use autonomous_platform::agents::{DAAAgent, AgentConfig, TradingStrategy, AutonomousAgent};
+use autonomous_platform::agents::{AgentConfig, AutonomousAgent, DAAAgent, TradingStrategy};
 use autonomous_platform::data::MarketContext;
 use chrono::Utc;
 use std::collections::HashMap;
@@ -14,10 +14,10 @@ async fn test_daa_agent_creation() {
         max_position_size: 10000.0,
         decision_threshold: 0.7,
     };
-    
+
     let agent = DAAAgent::new(config.clone()).await;
     assert!(agent.is_ok());
-    
+
     let agent = agent.unwrap();
     assert_eq!(agent.config.id, "test-agent-1");
 }
@@ -31,19 +31,19 @@ async fn test_daa_decision_making() {
         max_position_size: 5000.0,
         decision_threshold: 0.6,
     };
-    
+
     let agent = DAAAgent::new(config).await.unwrap();
-    
+
     let context = MarketContext {
         current_price: 100.0,
         volume: 10000.0,
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
-    
+
     let decision = agent.make_decision(&context, 0.8).await;
     assert!(decision.is_ok());
-    
+
     let decision = decision.unwrap();
     assert!(!decision.action.is_empty());
     assert!(decision.confidence >= 0.0 && decision.confidence <= 1.0);
@@ -59,19 +59,19 @@ async fn test_risk_assessment() {
         max_position_size: 1000.0,
         decision_threshold: 0.8,
     };
-    
+
     let agent = DAAAgent::new(config).await.unwrap();
-    
+
     let context = MarketContext {
         current_price: 150.0,
         volume: 5000.0,
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
-    
+
     let risk = agent.assess_risk(&context).await;
     assert!(risk.is_ok());
-    
+
     let risk_data = risk.unwrap();
     assert!(risk_data["riskScore"].as_f64().unwrap() >= 0.0);
     assert!(risk_data["riskScore"].as_f64().unwrap() <= 1.0);
@@ -86,19 +86,19 @@ async fn test_strategy_signal() {
         max_position_size: 20000.0,
         decision_threshold: 0.65,
     };
-    
+
     let agent = DAAAgent::new(config).await.unwrap();
-    
+
     let context = MarketContext {
         current_price: 99.5,
         volume: 15000.0,
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
-    
+
     let signal = agent.get_strategy_signal(&context).await;
     assert!(signal.is_ok());
-    
+
     let signal_data = signal.unwrap();
     assert!(signal_data.contains_key("signal"));
     assert!(signal_data.contains_key("strength"));
@@ -113,9 +113,9 @@ async fn test_adaptive_performance() {
         max_position_size: 10000.0,
         decision_threshold: 0.7,
     };
-    
+
     let agent = DAAAgent::new(config).await.unwrap();
-    
+
     // Simulate performance feedback
     let performance = serde_json::json!({
         "trades": 10,
@@ -123,10 +123,10 @@ async fn test_adaptive_performance() {
         "profitFactor": 1.5,
         "sharpeRatio": 1.2
     });
-    
+
     let result = agent.adapt_performance(performance).await;
     assert!(result.is_ok());
-    
+
     let adaptation = result.unwrap();
     assert!(adaptation.contains_key("adapted"));
     assert!(adaptation["adapted"].as_bool().unwrap());
@@ -144,15 +144,15 @@ async fn test_knowledge_sharing() {
         max_position_size: 15000.0,
         decision_threshold: 0.7,
     };
-    
+
     let agent = DAAAgent::new(config).await.unwrap();
-    
+
     let knowledge = serde_json::json!({
         "marketTrend": "bullish",
         "volatility": 0.25,
         "keyLevels": [98.0, 100.0, 102.0]
     });
-    
+
     let result = agent.share_knowledge(knowledge).await;
     assert!(result.is_ok());
 }
@@ -167,19 +167,19 @@ async fn test_autonomous_agent_compatibility() {
         max_position_size: 10000.0,
         decision_threshold: 0.6,
     };
-    
+
     let agent = AutonomousAgent::new(config);
-    
+
     let context = MarketContext {
         current_price: 101.0,
         volume: 12000.0,
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
-    
+
     let decision = agent.analyze(&context, 0.75).await;
     assert!(decision.is_ok());
-    
+
     let risk = agent.get_risk_assessment(&context).await;
     assert!(risk.is_ok());
 }
@@ -197,18 +197,18 @@ async fn test_multi_strategy_decision() {
         max_position_size: 25000.0,
         decision_threshold: 0.75,
     };
-    
+
     let agent = DAAAgent::new(config).await.unwrap();
-    
+
     let context = MarketContext {
         current_price: 100.5,
         volume: 20000.0,
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
-    
+
     let decision = agent.make_decision(&context, 0.8).await.unwrap();
-    
+
     // Hybrid strategy should provide breakdown
     assert!(decision.breakdown.is_some());
     let breakdown = decision.breakdown.unwrap();

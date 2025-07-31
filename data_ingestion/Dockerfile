@@ -25,8 +25,8 @@ USER trader
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Expose Prometheus metrics port
-EXPOSE 9090
+# Expose health check and metrics port
+EXPOSE 8001
 
 # Default command
 CMD ["python", "-m", "data_ingestion.main", "start"]

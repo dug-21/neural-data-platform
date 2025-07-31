@@ -16,7 +16,6 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "rust-lang.rust-analyzer",
         "ms-python.python",
         "ms-azuretools.vscode-docker",
         "ms-vscode.makefile-tools",
@@ -25,34 +24,11 @@
         "bierner.markdown-mermaid"
       ],
       "settings": {
-        "rust-analyzer.cargo.buildScripts.enable": true,
-        "rust-analyzer.checkOnSave.command": "clippy",
         "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
   },
 
-  "forwardPorts": [
-    3030,  // Neural Trader API
-    5432,  // PostgreSQL/TimescaleDB
-    6379,  // Redis
-    3000,  // Grafana Dashboard
-    8001,  // Data Ingestion Metrics
-    9090,  // Prometheus
-    8081,  // Redis Commander
-    8082   // pgAdmin
-  ],
-  
-  "portsAttributes": {
-    "3030": { "label": "Neural Trader API", "onAutoForward": "notify" },
-    "5432": { "label": "PostgreSQL/TimescaleDB", "onAutoForward": "silent" },
-    "6379": { "label": "Redis", "onAutoForward": "silent" },
-    "3000": { "label": "Grafana Dashboard", "onAutoForward": "openBrowser" },
-    "8001": { "label": "Data Ingestion Metrics", "onAutoForward": "notify" },
-    "9090": { "label": "Prometheus Metrics", "onAutoForward": "notify" },
-    "8081": { "label": "Redis Commander", "onAutoForward": "notify" },
-    "8082": { "label": "pgAdmin", "onAutoForward": "notify" }
-  },
   
   "postCreateCommand": "chmod +x .devcontainer/setup.sh && .devcontainer/setup.sh",
   "postStartCommand": "chmod +x .devcontainer/post-start.sh && .devcontainer/post-start.sh",

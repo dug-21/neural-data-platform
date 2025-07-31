@@ -14,6 +14,7 @@ alerting:
 # Load rules once and periodically evaluate them
 rule_files:
   - "alerts/*.yml"
+  - "alerts/neural_prediction_alerts.yml"
 
 # Scrape configurations
 scrape_configs:
@@ -22,19 +23,41 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # Neural Trader Rust application
+  # Neural Trader Rust application with Phase 6 neural prediction enhancements
   - job_name: 'neural-trader'
     static_configs:
       - targets: ['neural-trader:3030']
     metrics_path: '/metrics'
     scrape_interval: 10s
+    metric_relabel_configs:
+      # Keep all neural trader prediction metrics
+      - source_labels: [__name__]
+        regex: 'neural_trader_.*'
+        action: keep
+      # Keep standard application metrics
+      - source_labels: [__name__]
+        regex: 'autonomous_.*'
+        action: keep
 
-  # Data Ingestion Python service
+  # Data Ingestion Python service with neural prediction metrics
   - job_name: 'data-ingestion'
     static_configs:
-      - targets: ['data-ingestion:9090']
+      - targets: ['data-ingestion:8001']
     metrics_path: '/metrics'
     scrape_interval: 10s
+    metric_relabel_configs:
+      # Keep all neural trader prediction metrics from data ingestion
+      - source_labels: [__name__]
+        regex: 'neural_trader_.*'
+        action: keep
+      # Keep standard data ingestion metrics
+      - source_labels: [__name__]
+        regex: 'data_ingestion_.*'
+        action: keep
+      # Keep Python application metrics
+      - source_labels: [__name__]
+        regex: 'python_.*'
+        action: keep
 
   # TimescaleDB
   - job_name: 'timescaledb'

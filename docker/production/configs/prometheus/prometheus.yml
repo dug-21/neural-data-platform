@@ -11,27 +11,49 @@ alerting:
 
 rule_files:
   - "alerts.yml"
+  - "neural_prediction_alerts.yml"
 
 scrape_configs:
-  # Neural Trader metrics - currently not implemented
-  # Uncomment when HTTP server is added to neural-trader
-  # - job_name: 'neural-trader'
-  #   static_configs:
-  #     - targets: ['neural-trader:8080']
-  #   metrics_path: '/metrics'
-  #   scrape_interval: 10s
-    
-  # Data Ingestion metrics
-  - job_name: 'data-ingestion'
+  # Neural Trader metrics with Phase 6 neural prediction enhancements
+  - job_name: 'neural-trader'
     static_configs:
-      - targets: ['data-ingestion:9090']
+      - targets: ['neural-trader:8080']
     metrics_path: '/metrics'
     scrape_interval: 10s
+    metric_relabel_configs:
+      # Keep all neural trader prediction metrics
+      - source_labels: [__name__]
+        regex: 'neural_trader_.*'
+        action: keep
+      # Keep standard application metrics
+      - source_labels: [__name__]
+        regex: 'autonomous_.*'
+        action: keep
+    
+  # Data Ingestion metrics with neural prediction tracking
+  - job_name: 'data-ingestion'
+    static_configs:
+      - targets: ['data-ingestion:8001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    metric_relabel_configs:
+      # Keep all neural trader prediction metrics from data ingestion
+      - source_labels: [__name__]
+        regex: 'neural_trader_.*'
+        action: keep
+      # Keep standard data ingestion metrics
+      - source_labels: [__name__]
+        regex: 'data_ingestion_.*'
+        action: keep
+      # Keep Python application metrics
+      - source_labels: [__name__]
+        regex: 'python_.*'
+        action: keep
     
   # TimescaleDB metrics - requires postgres_exporter
-  # - job_name: 'timescaledb'
-  #   static_configs:
-  #     - targets: ['timescaledb:9187']
+  - job_name: 'timescaledb'
+    static_configs:
+      - targets: ['timescaledb:9187']
       
   # Redis metrics - requires redis_exporter
   # - job_name: 'redis'

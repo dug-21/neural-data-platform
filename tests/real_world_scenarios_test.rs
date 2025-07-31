@@ -1,5 +1,5 @@
 //! Real-World Trading Scenarios Integration Tests
-//! 
+//!
 //! This module tests realistic trading scenarios and market conditions:
 //! - Market open/close scenarios
 //! - Economic news event reactions
@@ -9,21 +9,23 @@
 //! - Regulatory compliance testing
 //! - Risk management scenarios
 
-use autonomous_platform::data::{DataPipeline, TimescaleDBStorage, RedisCache, TimeSeriesData};
-use autonomous_platform::integration::{
-    platform_orchestrator::{PlatformOrchestrator, SystemHealth, ValidationResult},
-    streaming::{StreamingPipeline, MarketData, NewsData, StreamConfig},
-    data_access::{DataAccessLayer, DataRequest, Timeframe},
-    neural_predictions::{NeuralPredictionSystem, DecisionContext, ModelType}
-};
-use autonomous_platform::config::{PlatformConfig, DatabaseConfig, RedisConfig, NeuralConfig, MonitoringConfig, PlatformInfo};
-use std::sync::Arc;
-use chrono::{DateTime, Utc, Duration, TimeZone, Weekday};
-use tokio::sync::mpsc;
 use anyhow::Result;
+use autonomous_platform::config::{
+    DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
+};
+use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::integration::{
+    data_access::{DataAccessLayer, DataRequest, Timeframe},
+    neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
+    platform_orchestrator::{PlatformOrchestrator, SystemHealth, ValidationResult},
+    streaming::{MarketData, NewsData, StreamConfig, StreamingPipeline},
+};
+use chrono::{DateTime, Duration, TimeZone, Utc, Weekday};
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::mpsc;
 
 /// Create a production-like configuration
 fn create_production_config() -> PlatformConfig {
@@ -56,58 +58,79 @@ fn create_production_config() -> PlatformConfig {
 
 /// Create market data for a specific market condition
 fn create_market_condition_data(
-    symbol: &str, 
-    condition: &str, 
-    base_price: f64, 
-    sequence: u64
+    symbol: &str,
+    condition: &str,
+    base_price: f64,
+    sequence: u64,
 ) -> MarketData {
     let (price, volume, spread, metadata) = match condition {
         "MARKET_OPEN" => {
             let gap = (sequence as f64 * 0.1).sin() * 100.0; // Price gap
-            (base_price + gap, 150000.0, 10.0, json!({
-                "session": "market_open",
-                "gap_size": gap,
-                "overnight_news": true,
-                "liquidity": "building"
-            }))
-        },
-        "MARKET_CLOSE" => {
-            (base_price, 80000.0, 5.0, json!({
+            (
+                base_price + gap,
+                150000.0,
+                10.0,
+                json!({
+                    "session": "market_open",
+                    "gap_size": gap,
+                    "overnight_news": true,
+                    "liquidity": "building"
+                }),
+            )
+        }
+        "MARKET_CLOSE" => (
+            base_price,
+            80000.0,
+            5.0,
+            json!({
                 "session": "market_close",
                 "day_range": 150.0,
                 "settlement": true,
                 "liquidity": "high"
-            }))
-        },
+            }),
+        ),
         "NEWS_EVENT" => {
             let spike = if sequence % 2 == 0 { 200.0 } else { -150.0 };
-            (base_price + spike, 300000.0, 25.0, json!({
-                "event_type": "economic_news",
-                "impact": "high",
-                "surprise_factor": 0.8,
-                "liquidity": "volatile"
-            }))
-        },
-        "LIQUIDITY_CRISIS" => {
-            (base_price, 5000.0, 100.0, json!({
+            (
+                base_price + spike,
+                300000.0,
+                25.0,
+                json!({
+                    "event_type": "economic_news",
+                    "impact": "high",
+                    "surprise_factor": 0.8,
+                    "liquidity": "volatile"
+                }),
+            )
+        }
+        "LIQUIDITY_CRISIS" => (
+            base_price,
+            5000.0,
+            100.0,
+            json!({
                 "liquidity_crisis": true,
                 "spread_widening": true,
                 "market_depth": 2,
                 "trading_halt_risk": 0.3
-            }))
-        },
+            }),
+        ),
         "WEEKEND_GAP" => {
             let gap = 300.0 * if sequence % 2 == 0 { 1.0 } else { -1.0 };
-            (base_price + gap, 50000.0, 50.0, json!({
-                "weekend_gap": true,
-                "gap_size": gap,
-                "low_liquidity": true,
-                "session": "weekend_opening"
-            }))
-        },
-        _ => (base_price, 100000.0, 10.0, json!({}))
+            (
+                base_price + gap,
+                50000.0,
+                50.0,
+                json!({
+                    "weekend_gap": true,
+                    "gap_size": gap,
+                    "low_liquidity": true,
+                    "session": "weekend_opening"
+                }),
+            )
+        }
+        _ => (base_price, 100000.0, 10.0, json!({})),
     };
-    
+
     MarketData {
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
@@ -117,7 +140,11 @@ fn create_market_condition_data(
         ask: price + spread / 2.0,
         source: format!("{}_feed", condition.to_lowercase()),
         sequence_number: sequence,
-        order_book_depth: Some(if condition == "LIQUIDITY_CRISIS" { 3 } else { 20 }),
+        order_book_depth: Some(if condition == "LIQUIDITY_CRISIS" {
+            3
+        } else {
+            20
+        }),
         metadata: Some(metadata),
     }
 }
@@ -128,38 +155,41 @@ async fn test_market_open_scenario() -> Result<()> {
     let config = create_production_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     // Set up trading agents for market open
     let trading_agents = vec![
         ("gap_trader", "GAP_TRADING"),
         ("momentum_trader", "OPENING_MOMENTUM"),
         ("mean_reversion_trader", "OPEN_MEAN_REVERSION"),
     ];
-    
+
     for (agent_id, _) in &trading_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Simulate market open with overnight gaps
     let symbols = vec!["AAPL", "MSFT", "GOOGL"];
     let base_prices = vec![150.0, 300.0, 2500.0];
-    
+
     for (i, (symbol, base_price)) in symbols.iter().zip(base_prices.iter()).enumerate() {
         // Pre-market data
         let premarket_data = create_market_condition_data(
-            &format!("{}/USD", symbol), 
-            "MARKET_OPEN", 
-            *base_price, 
-            i as u64
+            &format!("{}/USD", symbol),
+            "MARKET_OPEN",
+            *base_price,
+            i as u64,
         );
         orchestrator.inject_market_data(premarket_data).await?;
-        
+
         // Market open news
         let open_news = NewsData {
             id: format!("market_open_{}_{}", symbol, i),
             timestamp: Utc::now(),
             title: format!("{} Opens with Significant Gap After Earnings", symbol),
-            content: format!("Market opens with notable price action in {} following overnight developments", symbol),
+            content: format!(
+                "Market opens with notable price action in {} following overnight developments",
+                symbol
+            ),
             source: "market_open_feed".to_string(),
             symbols: vec![format!("{}/USD", symbol)],
             sentiment_score: 0.6 + (i as f64 * 0.1),
@@ -173,10 +203,10 @@ async fn test_market_open_scenario() -> Result<()> {
         };
         orchestrator.inject_news_data(open_news).await?;
     }
-    
+
     // Allow processing time
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-    
+
     // Test trading decisions during market open
     for (agent_id, strategy) in &trading_agents {
         let decision_context = DecisionContext {
@@ -209,18 +239,21 @@ async fn test_market_open_scenario() -> Result<()> {
             required_confidence: 0.8,
             prediction_horizon: 1800, // 30 minutes
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
         assert!(prediction.confidence >= 0.0);
         assert!(prediction.model_used.is_some());
-        
-        println!("Market Open - Agent {}: Confidence = {:.3}", agent_id, prediction.confidence);
+
+        println!(
+            "Market Open - Agent {}: Confidence = {:.3}",
+            agent_id, prediction.confidence
+        );
     }
-    
+
     // Verify market open handling
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
-    
+
     Ok(())
 }
 
@@ -230,17 +263,17 @@ async fn test_economic_news_event_reaction() -> Result<()> {
     let config = create_production_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let news_agents = vec![
         ("news_sentiment_agent", "NEWS_SENTIMENT_ANALYSIS"),
         ("event_driven_agent", "EVENT_DRIVEN_TRADING"),
         ("volatility_agent", "VOLATILITY_TRADING"),
     ];
-    
+
     for (agent_id, _) in &news_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Simulate major economic news event (e.g., Fed Rate Decision)
     let major_news = NewsData {
         id: "fed_rate_decision_2024".to_string(),
@@ -260,24 +293,26 @@ async fn test_economic_news_event_reaction() -> Result<()> {
             "currency_impact": "usd_bearish"
         })),
     };
-    
+
     orchestrator.inject_news_data(major_news).await?;
-    
+
     // Simulate immediate market reaction
     let affected_symbols = vec!["SPY/USD", "BTC/USD", "EUR/USD"];
     let base_prices = vec![400.0, 45000.0, 1.08];
-    
+
     for (i, (symbol, base_price)) in affected_symbols.iter().zip(base_prices.iter()).enumerate() {
         // Immediate reaction
-        let reaction_data = create_market_condition_data(symbol, "NEWS_EVENT", *base_price, i as u64);
+        let reaction_data =
+            create_market_condition_data(symbol, "NEWS_EVENT", *base_price, i as u64);
         orchestrator.inject_market_data(reaction_data).await?;
-        
+
         // Secondary wave
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        let secondary_data = create_market_condition_data(symbol, "NEWS_EVENT", *base_price, (i + 10) as u64);
+        let secondary_data =
+            create_market_condition_data(symbol, "NEWS_EVENT", *base_price, (i + 10) as u64);
         orchestrator.inject_market_data(secondary_data).await?;
     }
-    
+
     // Test agent responses to news
     for (agent_id, strategy) in &news_agents {
         let decision_context = DecisionContext {
@@ -312,16 +347,19 @@ async fn test_economic_news_event_reaction() -> Result<()> {
             required_confidence: 0.7, // Lower confidence due to news volatility
             prediction_horizon: 3600, // 1 hour for news events
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
         assert!(prediction.confidence >= 0.0);
-        
-        println!("News Event - Agent {}: Confidence = {:.3}", agent_id, prediction.confidence);
+
+        println!(
+            "News Event - Agent {}: Confidence = {:.3}",
+            agent_id, prediction.confidence
+        );
     }
-    
+
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
-    
+
     Ok(())
 }
 
@@ -331,37 +369,37 @@ async fn test_liquidity_crisis_scenario() -> Result<()> {
     let config = create_production_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let crisis_agents = vec![
         ("liquidity_agent", "LIQUIDITY_MANAGEMENT"),
         ("risk_manager", "RISK_MANAGEMENT"),
         ("emergency_trader", "EMERGENCY_TRADING"),
     ];
-    
+
     for (agent_id, _) in &crisis_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Simulate liquidity crisis across multiple assets
     let crisis_symbols = vec!["CRISIS1/USD", "CRISIS2/USD", "CRISIS3/USD"];
     let base_prices = vec![1000.0, 2000.0, 500.0];
-    
+
     for (i, (symbol, base_price)) in crisis_symbols.iter().zip(base_prices.iter()).enumerate() {
         // Generate liquidity crisis conditions
         for wave in 0..5 {
             let crisis_data = create_market_condition_data(
-                symbol, 
-                "LIQUIDITY_CRISIS", 
-                *base_price, 
-                (i * 5 + wave) as u64
+                symbol,
+                "LIQUIDITY_CRISIS",
+                *base_price,
+                (i * 5 + wave) as u64,
             );
             orchestrator.inject_market_data(crisis_data).await?;
-            
+
             // Simulate crisis deepening
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
     }
-    
+
     // Test crisis response
     for (agent_id, strategy) in &crisis_agents {
         let decision_context = DecisionContext {
@@ -394,23 +432,25 @@ async fn test_liquidity_crisis_scenario() -> Result<()> {
                 metadata
             },
             required_confidence: 0.9, // High confidence required in crisis
-            prediction_horizon: 900, // 15 minutes for crisis management
+            prediction_horizon: 900,  // 15 minutes for crisis management
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
         assert!(prediction.confidence >= 0.0);
-        
+
         // In crisis, system should either provide high-confidence predictions or fail gracefully
         if prediction.confidence > 0.0 {
-            println!("Crisis - Agent {}: Confidence = {:.3} (Model: {:?})", 
-                     agent_id, prediction.confidence, prediction.model_used);
+            println!(
+                "Crisis - Agent {}: Confidence = {:.3} (Model: {:?})",
+                agent_id, prediction.confidence, prediction.model_used
+            );
         }
     }
-    
+
     let health = orchestrator.health_check().await?;
     // System should handle crisis gracefully
     assert!(health.overall_healthy || health.metrics.error_count > 0);
-    
+
     Ok(())
 }
 
@@ -420,39 +460,38 @@ async fn test_weekend_gap_trading() -> Result<()> {
     let config = create_production_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let gap_agents = vec![
         ("gap_trader", "GAP_TRADING"),
         ("weekend_trader", "WEEKEND_STRATEGY"),
         ("crypto_trader", "CRYPTO_24_7"), // Crypto trades over weekends
     ];
-    
+
     for (agent_id, _) in &gap_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Simulate weekend gaps for different asset classes
     let weekend_assets = vec![
         ("FOREX/USD", 1.2000, "FOREX"), // Forex has weekend gaps
         ("BTC/USD", 45000.0, "CRYPTO"), // Crypto trades continuously
         ("STOCK/USD", 100.0, "EQUITY"), // Stocks have weekend gaps
     ];
-    
+
     for (i, (symbol, base_price, asset_class)) in weekend_assets.iter().enumerate() {
-        let weekend_data = create_market_condition_data(
-            symbol, 
-            "WEEKEND_GAP", 
-            *base_price, 
-            i as u64
-        );
+        let weekend_data =
+            create_market_condition_data(symbol, "WEEKEND_GAP", *base_price, i as u64);
         orchestrator.inject_market_data(weekend_data).await?;
-        
+
         // Weekend news that might cause gaps
         let weekend_news = NewsData {
             id: format!("weekend_news_{}_{}", asset_class, i),
             timestamp: Utc::now(),
             title: format!("Weekend Development Affects {} Markets", asset_class),
-            content: format!("Significant developments over the weekend are expected to impact {} trading", asset_class),
+            content: format!(
+                "Significant developments over the weekend are expected to impact {} trading",
+                asset_class
+            ),
             source: "weekend_feed".to_string(),
             symbols: vec![symbol.to_string()],
             sentiment_score: if i % 2 == 0 { 0.7 } else { 0.3 },
@@ -466,7 +505,7 @@ async fn test_weekend_gap_trading() -> Result<()> {
         };
         orchestrator.inject_news_data(weekend_news).await?;
     }
-    
+
     // Test weekend trading strategies
     for (agent_id, strategy) in &gap_agents {
         let decision_context = DecisionContext {
@@ -500,13 +539,16 @@ async fn test_weekend_gap_trading() -> Result<()> {
             required_confidence: 0.75,
             prediction_horizon: 7200, // 2 hours for gap trading
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
         assert!(prediction.confidence >= 0.0);
-        
-        println!("Weekend Gap - Agent {}: Confidence = {:.3}", agent_id, prediction.confidence);
+
+        println!(
+            "Weekend Gap - Agent {}: Confidence = {:.3}",
+            agent_id, prediction.confidence
+        );
     }
-    
+
     Ok(())
 }
 
@@ -516,18 +558,18 @@ async fn test_multi_asset_portfolio_scenario() -> Result<()> {
     let config = create_production_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let portfolio_agents = vec![
         ("portfolio_manager", "PORTFOLIO_OPTIMIZATION"),
         ("risk_manager", "PORTFOLIO_RISK_MANAGEMENT"),
         ("correlation_trader", "CORRELATION_ARBITRAGE"),
         ("sector_rotator", "SECTOR_ROTATION"),
     ];
-    
+
     for (agent_id, _) in &portfolio_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Create a diversified portfolio
     let portfolio_assets = vec![
         ("TECH/USD", 300.0, "TECHNOLOGY"),
@@ -538,26 +580,26 @@ async fn test_multi_asset_portfolio_scenario() -> Result<()> {
         ("BONDS/USD", 100.0, "FIXED_INCOME"),
         ("CRYPTO/USD", 40000.0, "CRYPTOCURRENCY"),
     ];
-    
+
     // Generate correlated market movements
     let correlation_factor = 0.7;
     let market_direction = 1.0; // Bullish market
-    
+
     for (i, (symbol, base_price, sector)) in portfolio_assets.iter().enumerate() {
         let sector_multiplier = match *sector {
             "TECHNOLOGY" => 1.2,
             "FINANCIAL" => 0.8,
             "ENERGY" => 1.1,
             "HEALTHCARE" => 0.9,
-            "COMMODITY" => -0.3, // Inverse correlation
-            "FIXED_INCOME" => -0.5, // Inverse correlation
+            "COMMODITY" => -0.3,     // Inverse correlation
+            "FIXED_INCOME" => -0.5,  // Inverse correlation
             "CRYPTOCURRENCY" => 1.5, // High correlation with risk-on
             _ => 1.0,
         };
-        
+
         let price_change = market_direction * correlation_factor * sector_multiplier * 0.02; // 2% base move
         let new_price = base_price * (1.0 + price_change);
-        
+
         let market_data = MarketData {
             symbol: symbol.to_string(),
             timestamp: Utc::now(),
@@ -575,21 +617,22 @@ async fn test_multi_asset_portfolio_scenario() -> Result<()> {
                 "market_regime": "bull_market"
             })),
         };
-        
+
         orchestrator.inject_market_data(market_data).await?;
     }
-    
+
     // Test portfolio-level decisions
     for (agent_id, strategy) in &portfolio_agents {
         // Test with a representative asset from each major category
         let test_symbols = vec!["TECH/USD", "GOLD/USD", "CRYPTO/USD"];
-        
+
         for symbol in &test_symbols {
-            let base_price = portfolio_assets.iter()
+            let base_price = portfolio_assets
+                .iter()
                 .find(|(s, _, _)| s == symbol)
                 .map(|(_, p, _)| *p)
                 .unwrap_or(1000.0);
-            
+
             let decision_context = DecisionContext {
                 agent_id: agent_id.to_string(),
                 decision_type: strategy.to_string(),
@@ -623,18 +666,20 @@ async fn test_multi_asset_portfolio_scenario() -> Result<()> {
                 required_confidence: 0.8,
                 prediction_horizon: 14400, // 4 hours for portfolio management
             };
-            
+
             let prediction = orchestrator.get_neural_prediction(decision_context).await?;
             assert!(prediction.confidence >= 0.0);
-            
-            println!("Portfolio - Agent {} ({}): Confidence = {:.3}", 
-                     agent_id, symbol, prediction.confidence);
+
+            println!(
+                "Portfolio - Agent {} ({}): Confidence = {:.3}",
+                agent_id, symbol, prediction.confidence
+            );
         }
     }
-    
+
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
-    
+
     Ok(())
 }
 
@@ -644,18 +689,18 @@ async fn test_risk_management_scenario() -> Result<()> {
     let config = create_production_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let risk_agents = vec![
         ("var_calculator", "VALUE_AT_RISK"),
         ("stress_tester", "STRESS_TESTING"),
         ("limit_monitor", "POSITION_LIMITS"),
         ("circuit_breaker", "CIRCUIT_BREAKER"),
     ];
-    
+
     for (agent_id, _) in &risk_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Simulate high-risk market conditions
     let risk_scenarios = vec![
         ("VOLATILE/USD", 1000.0, "HIGH_VOLATILITY", 0.5),
@@ -663,7 +708,7 @@ async fn test_risk_management_scenario() -> Result<()> {
         ("CORRELATED/USD", 500.0, "HIGH_CORRELATION", 0.9),
         ("LEVERAGED/USD", 100.0, "HIGH_LEVERAGE", 2.0),
     ];
-    
+
     for (i, (symbol, base_price, risk_type, risk_multiplier)) in risk_scenarios.iter().enumerate() {
         let risk_data = MarketData {
             symbol: symbol.to_string(),
@@ -681,10 +726,10 @@ async fn test_risk_management_scenario() -> Result<()> {
                 "warning_level": if *risk_multiplier > 1.5 { "high" } else { "medium" }
             })),
         };
-        
+
         orchestrator.inject_market_data(risk_data).await?;
     }
-    
+
     // Test risk management responses
     for (agent_id, strategy) in &risk_agents {
         let decision_context = DecisionContext {
@@ -719,26 +764,31 @@ async fn test_risk_management_scenario() -> Result<()> {
                 metadata
             },
             required_confidence: 0.95, // Very high confidence for risk management
-            prediction_horizon: 3600, // 1 hour for risk assessment
+            prediction_horizon: 3600,  // 1 hour for risk assessment
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
-        
+
         // Risk management should either provide high-confidence predictions or reject
         if prediction.confidence > 0.0 {
-            assert!(prediction.confidence >= 0.7, "Risk management requires high confidence");
-            println!("Risk Management - Agent {}: Confidence = {:.3}", 
-                     agent_id, prediction.confidence);
+            assert!(
+                prediction.confidence >= 0.7,
+                "Risk management requires high confidence"
+            );
+            println!(
+                "Risk Management - Agent {}: Confidence = {:.3}",
+                agent_id, prediction.confidence
+            );
         }
     }
-    
+
     // Store final results
     let memory_key = "swarm-auto-centralized-1751484080479/integration-testing-final/results";
     orchestrator.store_results_in_memory(memory_key).await?;
-    
+
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
-    
+
     Ok(())
 }
 
@@ -748,24 +798,24 @@ async fn test_regulatory_compliance_scenario() -> Result<()> {
     let config = create_production_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     orchestrator.start_platform().await?;
-    
+
     let compliance_agents = vec![
         ("compliance_monitor", "COMPLIANCE_MONITORING"),
         ("position_reporter", "POSITION_REPORTING"),
         ("audit_logger", "AUDIT_LOGGING"),
     ];
-    
+
     for (agent_id, _) in &compliance_agents {
         orchestrator.register_daa_agent(agent_id).await?;
     }
-    
+
     // Simulate compliance-sensitive trading
     let regulated_assets = vec![
         ("REGULATED1/USD", 1000.0, "EQUITIES"),
         ("REGULATED2/USD", 50.0, "DERIVATIVES"),
         ("REGULATED3/USD", 2000.0, "FOREX"),
     ];
-    
+
     for (i, (symbol, base_price, asset_class)) in regulated_assets.iter().enumerate() {
         let compliance_data = MarketData {
             symbol: symbol.to_string(),
@@ -784,10 +834,10 @@ async fn test_regulatory_compliance_scenario() -> Result<()> {
                 "position_limits": true
             })),
         };
-        
+
         orchestrator.inject_market_data(compliance_data).await?;
     }
-    
+
     // Test compliance-aware trading decisions
     for (agent_id, strategy) in &compliance_agents {
         let decision_context = DecisionContext {
@@ -816,16 +866,18 @@ async fn test_regulatory_compliance_scenario() -> Result<()> {
             required_confidence: 0.9, // High confidence for compliance
             prediction_horizon: 3600,
         };
-        
+
         let prediction = orchestrator.get_neural_prediction(decision_context).await?;
         assert!(prediction.confidence >= 0.0);
-        
-        println!("Compliance - Agent {}: Confidence = {:.3}", 
-                 agent_id, prediction.confidence);
+
+        println!(
+            "Compliance - Agent {}: Confidence = {:.3}",
+            agent_id, prediction.confidence
+        );
     }
-    
+
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy);
-    
+
     Ok(())
 }

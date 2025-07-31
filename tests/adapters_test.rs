@@ -1,5 +1,5 @@
 //! Unit tests for data adapters
-//! 
+//!
 //! SPARC Architecture:
 //! - Specification: Test TimescaleDB and Redis adapter functionality
 //! - Pseudocode: TDD approach with failing tests first
@@ -8,9 +8,9 @@
 //! - Completion: Comprehensive adapter test coverage
 
 use autonomous_platform::adapters::{
-    AdapterError, DataAdapter, MarketData, OrderBook, OrderBookEntry,
     redis::{RedisAdapter, RedisConfig},
     timescale::{TimescaleAdapter, TimescaleConfig},
+    AdapterError, DataAdapter, MarketData, OrderBook, OrderBookEntry,
 };
 use mockall::predicate::*;
 use std::sync::Arc;
@@ -40,8 +40,11 @@ mod timescale_adapter_tests {
 
         // THEN: Connection should succeed (or fail predictably in test env)
         // This test will fail initially as expected in TDD
-        assert!(result.is_err(), "Expected connection to fail in test environment");
-        
+        assert!(
+            result.is_err(),
+            "Expected connection to fail in test environment"
+        );
+
         // Verify adapter state
         assert!(!adapter.is_connected());
         assert_eq!(adapter.name(), "TimescaleDB");
@@ -65,7 +68,7 @@ mod timescale_adapter_tests {
         // GIVEN: Market data with invalid values
         let config = TimescaleConfig::default();
         let adapter = TimescaleAdapter::new(config);
-        
+
         let invalid_data = vec![
             MarketData {
                 symbol: "".to_string(), // Empty symbol
@@ -99,9 +102,13 @@ mod timescale_adapter_tests {
         // WHEN: We try to insert invalid data
         for data in &invalid_data {
             let result = adapter.insert_market_data(&[data.clone()]).await;
-            
+
             // THEN: Should return appropriate errors
-            assert!(result.is_err(), "Expected error for invalid data: {:?}", data);
+            assert!(
+                result.is_err(),
+                "Expected error for invalid data: {:?}",
+                data
+            );
         }
     }
 
@@ -147,7 +154,7 @@ mod redis_adapter_tests {
                 // Redis is running - verify connected state
                 assert!(adapter.is_connected());
                 assert_eq!(adapter.name(), "Redis");
-                
+
                 // Clean up
                 let _ = adapter.disconnect().await;
             }
@@ -165,7 +172,7 @@ mod redis_adapter_tests {
         // GIVEN: A disconnected Redis adapter
         let config = RedisConfig::default();
         let adapter = RedisAdapter::new(config);
-        
+
         let market_data = MarketData {
             symbol: "BTC/USD".to_string(),
             timestamp: 1704067200,
@@ -177,7 +184,9 @@ mod redis_adapter_tests {
         };
 
         // WHEN: We try to publish without connection
-        let result = adapter.publish_market_data("market:BTC/USD", &market_data).await;
+        let result = adapter
+            .publish_market_data("market:BTC/USD", &market_data)
+            .await;
 
         // THEN: Should return connection error
         assert!(matches!(result, Err(AdapterError::Connection(_))));
@@ -201,7 +210,7 @@ mod redis_adapter_tests {
         // GIVEN: An order book with invalid data
         let config = RedisConfig::default();
         let adapter = RedisAdapter::new(config);
-        
+
         let invalid_order_book = OrderBook {
             symbol: "".to_string(), // Empty symbol
             timestamp: 1704067200,
@@ -236,7 +245,9 @@ mod redis_adapter_tests {
         let adapter = RedisAdapter::new(config);
 
         // WHEN: We try to set/get latest price
-        let set_result = adapter.set_latest_price("BTC/USD", 50000.0, 1704067200).await;
+        let set_result = adapter
+            .set_latest_price("BTC/USD", 50000.0, 1704067200)
+            .await;
         let get_result = adapter.get_latest_price("BTC/USD").await;
 
         // THEN: Both should return connection errors
@@ -275,18 +286,18 @@ mod integration_scenarios {
         // GIVEN: Both adapters
         let timescale_config = TimescaleConfig::default();
         let redis_config = RedisConfig::default();
-        
+
         let mut timescale = TimescaleAdapter::new(timescale_config);
         let mut redis = RedisAdapter::new(redis_config);
 
         // WHEN: We go through connect/disconnect cycle
         // These will fail as expected in TDD
-        
+
         // Test TimescaleDB lifecycle
         assert!(!timescale.is_connected());
         let ts_connect = timescale.connect().await;
         assert!(ts_connect.is_err()); // Expected to fail in test env
-        
+
         let ts_disconnect = timescale.disconnect().await;
         assert!(ts_disconnect.is_ok()); // Should always succeed
         assert!(!timescale.is_connected());
@@ -295,7 +306,7 @@ mod integration_scenarios {
         assert!(!redis.is_connected());
         let redis_connect = redis.connect().await;
         assert!(redis_connect.is_err()); // Expected to fail in test env
-        
+
         let redis_disconnect = redis.disconnect().await;
         assert!(redis_disconnect.is_ok()); // Should always succeed
         assert!(!redis.is_connected());

@@ -9,6 +9,7 @@ from storage import TimescaleDB, RedisStore
 from config import get_settings
 from utils.logging import get_logger
 from utils.metrics import metrics
+from utils.health_tracker import health_tracker
 
 
 logger = get_logger(__name__)
@@ -213,6 +214,9 @@ class RealtimeCoordinator:
             
             # Store in TimescaleDB
             await self.timescale.insert_market_data([cleaned])
+            
+            # Update health tracker
+            health_tracker.update_data_timestamp(provider_name, cleaned.get('symbol', 'UNKNOWN'))
             
             # Cache in Redis
             cache_key = f"realtime:{cleaned['symbol']}:latest"

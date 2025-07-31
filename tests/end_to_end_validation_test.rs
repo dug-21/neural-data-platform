@@ -1,8 +1,8 @@
 //! End-to-End Validation Tests
-//! 
+//!
 //! This module implements comprehensive system flow testing with complete validation
 //! of the entire neural trading pipeline from market data ingestion to trading decisions.
-//! 
+//!
 //! Test Coverage:
 //! - Complete data flow: Market Data → Pipeline → DAA → FANN → Decisions
 //! - Error propagation and recovery testing
@@ -10,23 +10,25 @@
 //! - Resource leak detection and cleanup
 //! - Performance validation against system targets
 
-use autonomous_platform::data::{TimeSeriesData};
-use autonomous_platform::integration::{
-    platform_orchestrator::{PlatformOrchestrator, ValidationResult, PredictionMetrics},
-    streaming::{MarketData, NewsData},
-    neural_predictions::{DecisionContext, PredictionResult}
-};
-use autonomous_platform::monitoring::{SystemHealth};
-use autonomous_platform::config::{PlatformConfig, DatabaseConfig, RedisConfig, NeuralConfig, MonitoringConfig, PlatformInfo};
-use std::sync::Arc;
-use chrono::{DateTime, Utc};
 use anyhow::Result;
+use autonomous_platform::config::{
+    DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
+};
+use autonomous_platform::data::TimeSeriesData;
+use autonomous_platform::integration::{
+    neural_predictions::{DecisionContext, PredictionResult},
+    platform_orchestrator::{PlatformOrchestrator, PredictionMetrics, ValidationResult},
+    streaming::{MarketData, NewsData},
+};
+use autonomous_platform::monitoring::SystemHealth;
+use chrono::{DateTime, Utc};
+use futures::future::try_join_all;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 use uuid::Uuid;
-use futures::future::try_join_all;
 
 /// Performance targets for validation
 const TARGET_DATA_STORAGE_LATENCY_MS: u64 = 50;
@@ -146,7 +148,7 @@ fn create_validation_config() -> PlatformConfig {
 fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) -> MarketData {
     let price_variation = (sequence as f64 % 100.0) / 100.0 * 0.02; // 2% variation
     let current_price = base_price * (1.0 + price_variation - 0.01);
-    
+
     MarketData {
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
@@ -171,8 +173,14 @@ fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) ->
 /// Create contextual news data with sentiment analysis
 fn create_contextual_news_data(symbol: &str, sentiment: f64) -> NewsData {
     let news_id = Uuid::new_v4().to_string();
-    let sentiment_label = if sentiment > 0.6 { "bullish" } else if sentiment < 0.4 { "bearish" } else { "neutral" };
-    
+    let sentiment_label = if sentiment > 0.6 {
+        "bullish"
+    } else if sentiment < 0.4 {
+        "bearish"
+    } else {
+        "neutral"
+    };
+
     NewsData {
         id: news_id,
         timestamp: Utc::now(),
@@ -198,45 +206,51 @@ async fn test_complete_trading_scenario() -> Result<()> {
     let config = create_validation_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     let resource_tracker = ResourceTracker::new();
-    
+
     // Start the complete platform
     orchestrator.start_platform().await?;
     resource_tracker.track_connection();
-    
+
     // Phase 1: Market Data Ingestion
     let symbol = "BTC/USD";
     let base_price = 45000.0;
     let agent_id = "complete_scenario_agent";
-    
+
     // Register DAA agent
     orchestrator.register_daa_agent(agent_id).await?;
     resource_tracker.track_connection();
-    
+
     // Inject realistic market data sequence
     let start_time = Instant::now();
     for i in 0..20 {
         let market_data = create_realistic_market_data(symbol, base_price, i);
         orchestrator.inject_market_data(market_data).await?;
-        
+
         let news_data = create_contextual_news_data(symbol, 0.7 + (i as f64 % 10.0) / 50.0);
         orchestrator.inject_news_data(news_data).await?;
-        
+
         // Small delay to simulate real-time feed
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
     let ingestion_time = start_time.elapsed();
-    
+
     // Phase 2: Pipeline Processing and Event Propagation
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-    
+
     let validation_result = orchestrator.validate_data_flow().await?;
     assert!(validation_result.data_ingested, "Data ingestion failed");
-    assert!(validation_result.pipeline_processed, "Pipeline processing failed");
-    assert!(validation_result.events_published, "Event publishing failed");
-    
+    assert!(
+        validation_result.pipeline_processed,
+        "Pipeline processing failed"
+    );
+    assert!(
+        validation_result.events_published,
+        "Event publishing failed"
+    );
+
     // Phase 3: DAA Decision Making with Neural Predictions
     resource_tracker.track_task_start();
-    
+
     let decision_context = DecisionContext {
         agent_id: agent_id.to_string(),
         decision_type: "BUY_SIGNAL_VALIDATION".to_string(),
@@ -246,35 +260,59 @@ async fn test_complete_trading_scenario() -> Result<()> {
         required_confidence: 0.8,
         prediction_horizon: 300, // 5 minutes
     };
-    
+
     let prediction_start = Instant::now();
     let prediction_result = orchestrator.get_neural_prediction(decision_context).await?;
     let prediction_time = prediction_start.elapsed();
-    
+
     resource_tracker.track_task_end();
-    
+
     // Phase 4: Validation and Performance Checks
-    assert!(prediction_result.confidence >= 0.0, "Invalid prediction confidence");
-    assert!(prediction_result.confidence <= 1.0, "Prediction confidence out of range");
-    assert!(prediction_result.model_used.is_some(), "No model used for prediction");
-    assert!(!prediction_result.prediction_values.is_empty(), "Empty prediction values");
-    assert!(prediction_result.execution_recommendations.is_some(), "No execution recommendations");
-    
+    assert!(
+        prediction_result.confidence >= 0.0,
+        "Invalid prediction confidence"
+    );
+    assert!(
+        prediction_result.confidence <= 1.0,
+        "Prediction confidence out of range"
+    );
+    assert!(
+        prediction_result.model_used.is_some(),
+        "No model used for prediction"
+    );
+    assert!(
+        !prediction_result.prediction_values.is_empty(),
+        "Empty prediction values"
+    );
+    assert!(
+        prediction_result.execution_recommendations.is_some(),
+        "No execution recommendations"
+    );
+
     // Performance validation
-    assert!(ingestion_time.as_millis() < TARGET_DATA_STORAGE_LATENCY_MS as u128 * 20, 
-            "Data ingestion too slow: {}ms", ingestion_time.as_millis());
-    assert!(prediction_time.as_millis() < TARGET_NEURAL_PREDICTION_LATENCY_MS as u128,
-            "Neural prediction too slow: {}ms", prediction_time.as_millis());
-    
+    assert!(
+        ingestion_time.as_millis() < TARGET_DATA_STORAGE_LATENCY_MS as u128 * 20,
+        "Data ingestion too slow: {}ms",
+        ingestion_time.as_millis()
+    );
+    assert!(
+        prediction_time.as_millis() < TARGET_NEURAL_PREDICTION_LATENCY_MS as u128,
+        "Neural prediction too slow: {}ms",
+        prediction_time.as_millis()
+    );
+
     // Phase 5: Memory Storage and Cleanup
     let memory_key = "swarm-auto-centralized-1751484080479/end-to-end-validation/complete_scenario";
     orchestrator.store_results_in_memory(memory_key).await?;
     resource_tracker.mark_cleanup_completed();
-    
+
     // Final validation
     let final_health = orchestrator.health_check().await?;
-    assert!(final_health.overall_healthy, "System unhealthy after complete scenario");
-    
+    assert!(
+        final_health.overall_healthy,
+        "System unhealthy after complete scenario"
+    );
+
     Ok(())
 }
 
@@ -285,36 +323,36 @@ async fn test_system_under_load() -> Result<()> {
     let orchestrator = PlatformOrchestrator::new(config).await?;
     let resource_tracker = ResourceTracker::new();
     let load_config = LoadTestConfig::default();
-    
+
     orchestrator.start_platform().await?;
-    
+
     let test_start = Instant::now();
     let mut agent_handles = Vec::new();
-    
+
     // Spawn concurrent agents for load testing
     for agent_idx in 0..load_config.concurrent_agents {
         let orchestrator_clone = orchestrator.clone();
         let resource_tracker_clone = resource_tracker.clone();
         let load_config_clone = load_config.clone();
-        
+
         let handle = tokio::spawn(async move {
             let agent_id = format!("load_test_agent_{}", agent_idx);
-            
+
             // Register agent
             orchestrator_clone.register_daa_agent(&agent_id).await?;
             resource_tracker_clone.track_connection();
-            
+
             let symbol = &load_config_clone.symbols[agent_idx % load_config_clone.symbols.len()];
             let base_price = 1000.0 + (agent_idx as f64 * 100.0);
-            
+
             // High-frequency data processing
             for msg_idx in 0..load_config_clone.messages_per_agent {
                 resource_tracker_clone.track_task_start();
-                
+
                 // Inject market data
                 let market_data = create_realistic_market_data(symbol, base_price, msg_idx as u64);
                 orchestrator_clone.inject_market_data(market_data).await?;
-                
+
                 // Periodic predictions
                 if msg_idx % 10 == 0 {
                     let decision_context = DecisionContext {
@@ -326,50 +364,60 @@ async fn test_system_under_load() -> Result<()> {
                         required_confidence: 0.6,
                         prediction_horizon: 60,
                     };
-                    
-                    let _prediction = orchestrator_clone.get_neural_prediction(decision_context).await?;
+
+                    let _prediction = orchestrator_clone
+                        .get_neural_prediction(decision_context)
+                        .await?;
                 }
-                
+
                 resource_tracker_clone.track_task_end();
-                
+
                 // Avoid overwhelming the system
                 if msg_idx % 50 == 0 {
                     tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
                 }
             }
-            
+
             Ok::<(), anyhow::Error>(())
         });
-        
+
         agent_handles.push(handle);
     }
-    
+
     // Wait for all agents to complete
     let agent_results: Result<Vec<_>, _> = try_join_all(agent_handles).await;
     for result in agent_results? {
         result?;
     }
-    
+
     let total_test_time = test_start.elapsed();
     let total_operations = (load_config.concurrent_agents * load_config.messages_per_agent) as u64;
     let throughput = total_operations as f64 / total_test_time.as_secs_f64();
-    
+
     // Validate performance under load
-    assert!(throughput > 50.0, "Throughput too low: {:.2} ops/sec", throughput);
-    
+    assert!(
+        throughput > 50.0,
+        "Throughput too low: {:.2} ops/sec",
+        throughput
+    );
+
     // System health validation
     let health = orchestrator.health_check().await?;
     assert!(health.overall_healthy, "System unhealthy after load test");
-    
+
     // Resource leak detection
     let (connections, _memory, active_tasks, _cleanup) = resource_tracker.get_metrics();
-    assert!(active_tasks == 0, "Tasks not properly cleaned up: {}", active_tasks);
+    assert!(
+        active_tasks == 0,
+        "Tasks not properly cleaned up: {}",
+        active_tasks
+    );
     assert!(connections > 0, "No connections tracked");
-    
+
     // Store load test results
     let memory_key = "swarm-auto-centralized-1751484080479/end-to-end-validation/load_test";
     orchestrator.store_results_in_memory(memory_key).await?;
-    
+
     Ok(())
 }
 
@@ -379,12 +427,12 @@ async fn test_error_recovery() -> Result<()> {
     let config = create_validation_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
     let resource_tracker = ResourceTracker::new();
-    
+
     orchestrator.start_platform().await?;
-    
+
     let agent_id = "error_recovery_agent";
     orchestrator.register_daa_agent(agent_id).await?;
-    
+
     // Scenario 1: Invalid market data
     let scenario_start = Instant::now();
     let invalid_market_data = MarketData {
@@ -399,18 +447,21 @@ async fn test_error_recovery() -> Result<()> {
         order_book_depth: None,
         metadata: None,
     };
-    
+
     let result = orchestrator.inject_market_data(invalid_market_data).await;
     assert!(result.is_err(), "Should have failed with invalid data");
-    
+
     // Verify system recovers
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     let health = orchestrator.health_check().await?;
-    assert!(health.overall_healthy, "System should recover from invalid data");
-    
+    assert!(
+        health.overall_healthy,
+        "System should recover from invalid data"
+    );
+
     // Scenario 2: Network timeout simulation with high load
     resource_tracker.track_task_start();
-    
+
     // Simulate high load to trigger potential timeouts
     let mut timeout_handles = Vec::new();
     for i in 0..100 {
@@ -421,19 +472,24 @@ async fn test_error_recovery() -> Result<()> {
         });
         timeout_handles.push(handle);
     }
-    
+
     // Add some that should timeout
     tokio::time::timeout(
         tokio::time::Duration::from_millis(50),
-        try_join_all(timeout_handles)
-    ).await.ok(); // Expect some to timeout
-    
+        try_join_all(timeout_handles),
+    )
+    .await
+    .ok(); // Expect some to timeout
+
     resource_tracker.track_task_end();
-    
+
     // System should still be healthy
     let health = orchestrator.health_check().await?;
-    assert!(health.overall_healthy, "System should handle network timeouts");
-    
+    assert!(
+        health.overall_healthy,
+        "System should handle network timeouts"
+    );
+
     // Scenario 3: Neural model failure simulation
     let invalid_decision_context = DecisionContext {
         agent_id: agent_id.to_string(),
@@ -451,30 +507,35 @@ async fn test_error_recovery() -> Result<()> {
         },
         context_metadata: HashMap::new(),
         required_confidence: 2.0, // Invalid confidence > 1.0
-        prediction_horizon: 0, // Invalid horizon
+        prediction_horizon: 0,    // Invalid horizon
     };
-    
-    let prediction_result = orchestrator.get_neural_prediction(invalid_decision_context).await;
+
+    let prediction_result = orchestrator
+        .get_neural_prediction(invalid_decision_context)
+        .await;
     // Should either fail gracefully or return low confidence prediction
     if let Ok(result) = prediction_result {
-        assert!(result.confidence < 0.5, "Should have low confidence for invalid data");
+        assert!(
+            result.confidence < 0.5,
+            "Should have low confidence for invalid data"
+        );
     }
-    
+
     // Final recovery validation
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let final_health = orchestrator.health_check().await?;
     assert!(final_health.overall_healthy, "System should fully recover");
-    
+
     // Verify system can still process valid data
     let valid_data = create_realistic_market_data("BTC/USD", 45000.0, 1);
     let result = orchestrator.inject_market_data(valid_data).await;
     assert!(result.is_ok(), "Should process valid data after errors");
-    
+
     // Store error recovery results
     let memory_key = "swarm-auto-centralized-1751484080479/end-to-end-validation/error_recovery";
     orchestrator.store_results_in_memory(memory_key).await?;
     resource_tracker.mark_cleanup_completed();
-    
+
     Ok(())
 }
 
@@ -483,48 +544,65 @@ async fn test_error_recovery() -> Result<()> {
 async fn test_data_flow_validation() -> Result<()> {
     let config = create_validation_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
-    
+
     orchestrator.start_platform().await?;
-    
+
     // Multi-stage data flow testing
     let symbols = vec!["BTC/USD", "ETH/USD", "ADA/USD", "DOT/USD"];
-    
+
     for (idx, symbol) in symbols.iter().enumerate() {
         let stage_start = Instant::now();
-        
+
         // Stage 1: Data Ingestion
         let ingestion_start = Instant::now();
-        let market_data = create_realistic_market_data(symbol, 1000.0 + (idx as f64 * 500.0), idx as u64);
+        let market_data =
+            create_realistic_market_data(symbol, 1000.0 + (idx as f64 * 500.0), idx as u64);
         orchestrator.inject_market_data(market_data.clone()).await?;
         let ingestion_time = ingestion_start.elapsed();
-        
+
         // Stage 2: Pipeline Processing
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         let validation_result = orchestrator.validate_data_flow().await?;
-        assert!(validation_result.data_ingested, "Pipeline should process data for {}", symbol);
-        assert!(validation_result.pipeline_processed, "Indicators should be calculated for {}", symbol);
-        
+        assert!(
+            validation_result.data_ingested,
+            "Pipeline should process data for {}",
+            symbol
+        );
+        assert!(
+            validation_result.pipeline_processed,
+            "Indicators should be calculated for {}",
+            symbol
+        );
+
         // Stage 3: Event Bus Propagation
-        assert!(validation_result.events_published, "Events should be published for {}", symbol);
-        
+        assert!(
+            validation_result.events_published,
+            "Events should be published for {}",
+            symbol
+        );
+
         // Stage 4: Data Access Layer
         let dal_start = Instant::now();
         let latest_data = orchestrator.get_latest_market_data(symbol).await?;
         let dal_time = dal_start.elapsed();
-        
+
         if let Some(data) = latest_data {
             assert_eq!(data.symbol, *symbol, "Symbol should match");
         }
-        
+
         // Performance validation
-        assert!(ingestion_time.as_millis() < TARGET_DATA_STORAGE_LATENCY_MS as u128,
-                "Data ingestion too slow for {}: {}ms", symbol, ingestion_time.as_millis());
+        assert!(
+            ingestion_time.as_millis() < TARGET_DATA_STORAGE_LATENCY_MS as u128,
+            "Data ingestion too slow for {}: {}ms",
+            symbol,
+            ingestion_time.as_millis()
+        );
     }
-    
+
     // Store data flow validation results
     let memory_key = "swarm-auto-centralized-1751484080479/end-to-end-validation/data_flow";
     orchestrator.store_results_in_memory(memory_key).await?;
-    
+
     Ok(())
 }
 
@@ -533,12 +611,12 @@ async fn test_data_flow_validation() -> Result<()> {
 async fn test_performance_validation() -> Result<()> {
     let config = create_validation_config();
     let orchestrator = PlatformOrchestrator::new(config).await?;
-    
+
     orchestrator.start_platform().await?;
-    
+
     let agent_id = "performance_validation_agent";
     orchestrator.register_daa_agent(agent_id).await?;
-    
+
     // Test 1: Data Storage Latency
     let mut storage_latencies = Vec::new();
     for i in 0..50 {
@@ -547,15 +625,22 @@ async fn test_performance_validation() -> Result<()> {
         orchestrator.inject_market_data(market_data).await?;
         storage_latencies.push(start.elapsed().as_millis() as u64);
     }
-    
-    let avg_storage_latency = storage_latencies.iter().sum::<u64>() / storage_latencies.len() as u64;
+
+    let avg_storage_latency =
+        storage_latencies.iter().sum::<u64>() / storage_latencies.len() as u64;
     let max_storage_latency = *storage_latencies.iter().max().unwrap();
-    
-    assert!(avg_storage_latency < TARGET_DATA_STORAGE_LATENCY_MS,
-            "Average storage latency too high: {}ms", avg_storage_latency);
-    assert!(max_storage_latency < TARGET_DATA_STORAGE_LATENCY_MS * 2,
-            "Max storage latency too high: {}ms", max_storage_latency);
-    
+
+    assert!(
+        avg_storage_latency < TARGET_DATA_STORAGE_LATENCY_MS,
+        "Average storage latency too high: {}ms",
+        avg_storage_latency
+    );
+    assert!(
+        max_storage_latency < TARGET_DATA_STORAGE_LATENCY_MS * 2,
+        "Max storage latency too high: {}ms",
+        max_storage_latency
+    );
+
     // Test 2: Neural Prediction Latency
     let mut prediction_latencies = Vec::new();
     for i in 0..20 {
@@ -568,40 +653,48 @@ async fn test_performance_validation() -> Result<()> {
             required_confidence: 0.7,
             prediction_horizon: 60,
         };
-        
+
         let start = Instant::now();
         let _prediction = orchestrator.get_neural_prediction(decision_context).await?;
         prediction_latencies.push(start.elapsed().as_millis() as u64);
     }
-    
-    let avg_prediction_latency = prediction_latencies.iter().sum::<u64>() / prediction_latencies.len() as u64;
-    
-    assert!(avg_prediction_latency < TARGET_NEURAL_PREDICTION_LATENCY_MS,
-            "Average prediction latency too high: {}ms", avg_prediction_latency);
-    
+
+    let avg_prediction_latency =
+        prediction_latencies.iter().sum::<u64>() / prediction_latencies.len() as u64;
+
+    assert!(
+        avg_prediction_latency < TARGET_NEURAL_PREDICTION_LATENCY_MS,
+        "Average prediction latency too high: {}ms",
+        avg_prediction_latency
+    );
+
     // Test 3: Agent Decision Latency
     let mut decision_latencies = Vec::new();
     for i in 0..30 {
         let start = Instant::now();
         let market_data = create_realistic_market_data("DECISION/TEST", 1000.0, i);
         orchestrator.inject_market_data(market_data).await?;
-        
+
         // Simulate agent decision processing
         tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
-        
+
         let _agent_events = orchestrator.get_agent_events(agent_id).await?;
         decision_latencies.push(start.elapsed().as_millis() as u64);
     }
-    
-    let avg_decision_latency = decision_latencies.iter().sum::<u64>() / decision_latencies.len() as u64;
-    
-    assert!(avg_decision_latency < TARGET_AGENT_DECISION_LATENCY_MS,
-            "Average decision latency too high: {}ms", avg_decision_latency);
-    
+
+    let avg_decision_latency =
+        decision_latencies.iter().sum::<u64>() / decision_latencies.len() as u64;
+
+    assert!(
+        avg_decision_latency < TARGET_AGENT_DECISION_LATENCY_MS,
+        "Average decision latency too high: {}ms",
+        avg_decision_latency
+    );
+
     // Store performance validation results
     let memory_key = "swarm-auto-centralized-1751484080479/end-to-end-validation/performance";
     orchestrator.store_results_in_memory(memory_key).await?;
-    
+
     Ok(())
 }
 
@@ -617,7 +710,7 @@ fn create_enhanced_time_series_data(symbol: &str, price: f64) -> TimeSeriesData 
     indicators.insert("Bollinger_Lower".to_string(), price - 50.0);
     indicators.insert("ATR".to_string(), 25.0);
     indicators.insert("Volume_SMA".to_string(), 1000.0);
-    
+
     TimeSeriesData {
         symbol: symbol.to_string(),
         timestamp: Utc::now(),

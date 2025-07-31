@@ -1,5 +1,5 @@
 //! Integration module for external services and APIs
-//! 
+//!
 //! This module provides integration with various external services including:
 //! - Market data providers
 //! - Trading platforms
@@ -8,22 +8,47 @@
 
 use anyhow::Result;
 
-pub mod data_access;
-pub mod daa_coordinator;
 pub mod autonomous_decisions;
+pub mod autonomous_neural_coordinator;
+// Original monolithic module (Phase 3B will use this)
+pub mod daa_coordinator;
+
+// Refactored modular version (available for Phase 3C migration)
+pub mod daa_coordinator_modular {
+    pub mod config;
+    pub mod core; 
+    pub mod decisions;
+    pub mod strategies;
+    pub mod agents;
+}
+pub mod data_access;
+pub mod training_data_service;
+pub mod model_persistence_service;
+
+// Phase 3B: Removed architectural layers - these should NOT exist
+// Only simple field additions allowed, no new patterns!
 
 // Re-export commonly used types
-pub use daa_coordinator::{DaaCoordinator, DaaConfig, AutonomousDecision, TradingAction};
 pub use autonomous_decisions::{DaaDecisionMaker, MarketTrend};
+pub use daa_coordinator::{AutonomousDecision, DaaConfig, DaaCoordinator, TradingAction};
+pub use training_data_service::{
+    ModelType, PreparedTrainingData, TrainingDataConfig, TrainingDataService, ValidationError,
+};
+pub use model_persistence_service::{
+    ModelPersistenceService, ModelPersistenceConfig, ModelOperation, ModelOperationResult,
+};
+
+// Phase 3B: Removed re-exports of architectural components
+// These were mistakenly added and violate Phase 3B requirements
 
 /// Trait for market data providers
 pub trait MarketDataProvider: Send + Sync {
     /// Get real-time market data
     async fn get_real_time_data(&self, symbol: &str) -> Result<crate::data::TimeSeriesData>;
-    
+
     /// Subscribe to market data stream
     async fn subscribe(&self, symbols: Vec<String>) -> Result<()>;
-    
+
     /// Unsubscribe from market data stream
     async fn unsubscribe(&self, symbols: Vec<String>) -> Result<()>;
 }
@@ -32,10 +57,10 @@ pub trait MarketDataProvider: Send + Sync {
 pub trait TradingPlatform: Send + Sync {
     /// Execute a trade
     async fn execute_trade(&self, order: TradeOrder) -> Result<TradeResult>;
-    
+
     /// Get account balance
     async fn get_balance(&self) -> Result<AccountBalance>;
-    
+
     /// Get open positions
     async fn get_positions(&self) -> Result<Vec<Position>>;
 }

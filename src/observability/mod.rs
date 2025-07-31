@@ -1,5 +1,5 @@
 //! Observability module for production monitoring and debugging
-//! 
+//!
 //! This module provides comprehensive observability capabilities including:
 //! - Structured logging with tracing
 //! - Prometheus metrics export
@@ -9,9 +9,9 @@
 
 use anyhow::Result;
 // Simplified metrics for compilation
-use std::sync::atomic::{AtomicU64, AtomicI64, Ordering};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info};
@@ -19,8 +19,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 pub mod logger;
 pub mod metrics;
-pub mod tracer;
 pub mod system_monitor;
+pub mod tracer;
 
 use crate::config::PlatformConfig;
 
@@ -41,16 +41,16 @@ impl ObservabilitySystem {
 
         // Initialize structured logger
         let logger = Arc::new(StructuredLogger::new(config)?);
-        
+
         // Initialize Prometheus metrics exporter
         let metrics_exporter = Arc::new(PrometheusExporter::new(config).await?);
-        
+
         // Initialize distributed tracer
         let tracer = Arc::new(DistributedTracer::new(config)?);
-        
+
         // Initialize performance tracker
         let performance_tracker = Arc::new(PerformanceTracker::new());
-        
+
         // Initialize error tracker
         let error_tracker = Arc::new(ErrorTracker::new());
 
@@ -72,7 +72,7 @@ impl ObservabilitySystem {
     /// Start background monitoring tasks
     async fn start_monitoring_tasks(&self, config: &PlatformConfig) -> Result<()> {
         let metrics_interval = Duration::from_secs(config.monitoring.metrics_interval_secs);
-        
+
         // Start metrics collection task
         let metrics_exporter = Arc::clone(&self.metrics_exporter);
         let performance_tracker = Arc::clone(&self.performance_tracker);
@@ -114,7 +114,7 @@ impl ObservabilitySystem {
     pub async fn get_health_status(&self) -> HealthStatus {
         let performance = self.performance_tracker.get_snapshot().await;
         let error_rate = self.error_tracker.get_error_rate().await;
-        
+
         HealthStatus {
             overall_status: self.calculate_overall_health(&performance, error_rate),
             performance,
@@ -123,10 +123,17 @@ impl ObservabilitySystem {
         }
     }
 
-    fn calculate_overall_health(&self, performance: &PerformanceSnapshot, error_rate: f64) -> HealthLevel {
+    fn calculate_overall_health(
+        &self,
+        performance: &PerformanceSnapshot,
+        error_rate: f64,
+    ) -> HealthLevel {
         if error_rate > 0.1 || performance.cpu_usage > 90.0 || performance.memory_usage > 95.0 {
             HealthLevel::Critical
-        } else if error_rate > 0.05 || performance.cpu_usage > 80.0 || performance.memory_usage > 85.0 {
+        } else if error_rate > 0.05
+            || performance.cpu_usage > 80.0
+            || performance.memory_usage > 85.0
+        {
             HealthLevel::Warning
         } else {
             HealthLevel::Healthy
@@ -142,21 +149,19 @@ pub struct StructuredLogger {
 impl StructuredLogger {
     pub fn new(config: &PlatformConfig) -> Result<Self> {
         let logging_config = LoggingConfig::from_platform_config(config);
-        
+
         // Initialize tracing subscriber
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new(&logging_config.level));
 
-        let subscriber = Registry::default()
-            .with(env_filter)
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .json()
-                    .with_current_span(true)
-                    .with_span_list(true)
-                    .with_thread_ids(true)
-                    .with_thread_names(true)
-            );
+        let subscriber = Registry::default().with(env_filter).with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_current_span(true)
+                .with_span_list(true)
+                .with_thread_ids(true)
+                .with_thread_names(true),
+        );
 
         subscriber.init();
 
@@ -178,11 +183,11 @@ impl SimpleCounter {
             value: Arc::new(AtomicU64::new(0)),
         }
     }
-    
+
     pub fn increment(&self, by: u64) {
         self.value.fetch_add(by, Ordering::Relaxed);
     }
-    
+
     pub fn get(&self) -> u64 {
         self.value.load(Ordering::Relaxed)
     }
@@ -200,11 +205,11 @@ impl SimpleGauge {
             value: Arc::new(AtomicI64::new(0)),
         }
     }
-    
+
     pub fn set(&self, value: f64) {
         self.value.store(value as i64, Ordering::Relaxed);
     }
-    
+
     pub fn get(&self) -> f64 {
         self.value.load(Ordering::Relaxed) as f64
     }
@@ -224,16 +229,17 @@ impl SimpleHistogram {
             sum: Arc::new(AtomicI64::new(0)),
         }
     }
-    
+
     pub fn record(&self, value: f64) {
         self.count.fetch_add(1, Ordering::Relaxed);
-        self.sum.fetch_add((value * 1000.0) as i64, Ordering::Relaxed); // Store as millis
+        self.sum
+            .fetch_add((value * 1000.0) as i64, Ordering::Relaxed); // Store as millis
     }
-    
+
     pub fn count(&self) -> u64 {
         self.count.load(Ordering::Relaxed)
     }
-    
+
     pub fn average(&self) -> f64 {
         let count = self.count();
         if count == 0 {
@@ -252,14 +258,14 @@ pub struct PrometheusExporter {
     pub model_inference_time: SimpleHistogram,
     pub active_connections: SimpleGauge,
     pub cache_hit_rate: SimpleGauge,
-    
+
     // System metrics
     pub cpu_usage: SimpleGauge,
     pub memory_usage: SimpleGauge,
     pub disk_usage: SimpleGauge,
     pub network_bytes_sent: SimpleCounter,
     pub network_bytes_received: SimpleCounter,
-    
+
     // Error metrics
     pub errors_total: SimpleCounter,
     pub http_request_duration: SimpleHistogram,
@@ -269,7 +275,7 @@ pub struct PrometheusExporter {
 impl PrometheusExporter {
     pub async fn new(_config: &PlatformConfig) -> Result<Self> {
         info!("Simplified metrics exporter initialized");
-        
+
         Ok(Self {
             // Business metrics
             predictions_total: SimpleCounter::new(),
@@ -277,14 +283,14 @@ impl PrometheusExporter {
             model_inference_time: SimpleHistogram::new(),
             active_connections: SimpleGauge::new(),
             cache_hit_rate: SimpleGauge::new(),
-            
+
             // System metrics
             cpu_usage: SimpleGauge::new(),
             memory_usage: SimpleGauge::new(),
             disk_usage: SimpleGauge::new(),
             network_bytes_sent: SimpleCounter::new(),
             network_bytes_received: SimpleCounter::new(),
-            
+
             // Error metrics
             errors_total: SimpleCounter::new(),
             http_request_duration: SimpleHistogram::new(),
@@ -302,10 +308,12 @@ impl PrometheusExporter {
         self.cpu_usage.set(metrics.cpu_usage_percent);
         self.memory_usage.set(metrics.memory_usage_percent);
         self.disk_usage.set(metrics.disk_usage_percent);
-        
+
         // Update network metrics
-        self.network_bytes_sent.increment(metrics.network_bytes_sent);
-        self.network_bytes_received.increment(metrics.network_bytes_received);
+        self.network_bytes_sent
+            .increment(metrics.network_bytes_sent);
+        self.network_bytes_received
+            .increment(metrics.network_bytes_received);
 
         Ok(())
     }
@@ -396,10 +404,11 @@ impl ErrorTracker {
 
     pub async fn get_error_rate(&self) -> f64 {
         let errors = self.errors.read().await;
-        let recent_errors = errors.iter()
+        let recent_errors = errors
+            .iter()
             .filter(|e| e.timestamp > chrono::Utc::now() - chrono::Duration::minutes(5))
             .count();
-        
+
         recent_errors as f64 / 300.0 // errors per second over 5 minutes
     }
 
@@ -407,7 +416,7 @@ impl ErrorTracker {
         // Analyze error patterns for alerting
         let errors = self.errors.read().await;
         let mut patterns = self.error_patterns.write().await;
-        
+
         for error in errors.iter() {
             let pattern = self.extract_error_pattern(&error.message);
             *patterns.entry(pattern).or_insert(0) += 1;

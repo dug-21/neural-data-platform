@@ -1,5 +1,5 @@
 //! Integration tests for Neural Trader orchestration components
-//! 
+//!
 //! Tests cover:
 //! - Redis connection and data subscription
 //! - EventBus message routing
@@ -9,27 +9,27 @@
 
 use autonomous_platform::{
     adapters::{RedisAdapter, RedisConfig},
-    streaming::event_bus::{
-        EventBusIntegration, MarketEvent, NewsEvent, QualityEvent, SystemEvent,
-        BatchConfig, RetryConfig, EventRouter, DaaEvent,
-    },
-    neural::{NeuralPredictor, PredictionResult},
+    config::{load_default_config, NeuralConfig},
+    data::TimeSeriesData,
     integration::{
-        daa_coordinator::{DaaCoordinator, DaaConfig, AutonomousDecision, TradingAction},
+        daa_coordinator::{AutonomousDecision, DaaConfig, DaaCoordinator, TradingAction},
         data_access::DataAccessLayer,
     },
-    strategies::{MarketContext, Position, Signal, TradingStrategy, RiskParameters, PositionSide},
-    data::TimeSeriesData,
-    config::{NeuralConfig, load_default_config},
+    neural::{NeuralPredictor, PredictionResult},
+    strategies::{MarketContext, Position, PositionSide, RiskParameters, Signal, TradingStrategy},
+    streaming::event_bus::{
+        BatchConfig, DaaEvent, EventBusIntegration, EventRouter, MarketEvent, NewsEvent,
+        QualityEvent, RetryConfig, SystemEvent,
+    },
 };
 
 use anyhow::Result;
-use chrono::{Utc, Duration};
+use async_trait::async_trait;
+use chrono::{Duration, Utc};
+use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use std::collections::HashMap;
-use serde_json::json;
-use async_trait::async_trait;
 
 /// Mock Redis adapter for testing
 struct MockRedisAdapter {
@@ -65,7 +65,10 @@ impl MockRedisAdapter {
         if !self.is_connected().await {
             return Err(anyhow::anyhow!("Not connected to Redis"));
         }
-        self.published_data.write().await.push(format!("{}:{}", channel, data));
+        self.published_data
+            .write()
+            .await
+            .push(format!("{}:{}", channel, data));
         Ok(())
     }
 
@@ -95,7 +98,7 @@ impl MockDaaAgent {
     async fn get_receiver(&self) -> mpsc::Receiver<DaaEvent> {
         let (tx, rx) = mpsc::channel(100);
         let events = self.received_events.clone();
-        
+
         // Spawn task to collect events
         tokio::spawn(async move {
             let mut rx = rx;
@@ -103,7 +106,7 @@ impl MockDaaAgent {
                 events.write().await.push(event);
             }
         });
-        
+
         rx
     }
 
@@ -117,7 +120,7 @@ fn create_test_time_series(count: usize) -> Vec<TimeSeriesData> {
     let mut data = Vec::new();
     let base_price = 50000.0;
     let now = Utc::now();
-    
+
     for i in 0..count {
         data.push(TimeSeriesData {
             symbol: "BTC/USD".to_string(),
@@ -134,7 +137,7 @@ fn create_test_time_series(count: usize) -> Vec<TimeSeriesData> {
             metadata: None,
         });
     }
-    
+
     data
 }
 
@@ -152,7 +155,7 @@ impl TradingStrategy for MockStrategy {
     ) -> Result<Signal> {
         Ok(self.signal.clone())
     }
-    
+
     async fn calculate_position_size(
         &self,
         _signal: &Signal,
@@ -170,14 +173,14 @@ mod redis_connection_tests {
     #[tokio::test]
     async fn test_redis_connection_lifecycle() {
         let adapter = MockRedisAdapter::new();
-        
+
         // Test initial state
         assert!(!adapter.is_connected().await);
-        
+
         // Test connection
         assert!(adapter.connect().await.is_ok());
         assert!(adapter.is_connected().await);
-        
+
         // Test disconnection
         assert!(adapter.disconnect().await.is_ok());
         assert!(!adapter.is_connected().await);
@@ -186,7 +189,7 @@ mod redis_connection_tests {
     #[tokio::test]
     async fn test_redis_publish_when_disconnected() {
         let adapter = MockRedisAdapter::new();
-        
+
         // Try to publish without connection
         let result = adapter.publish("test_channel", "test_data").await;
         assert!(result.is_err());
@@ -196,18 +199,28 @@ mod redis_connection_tests {
     #[tokio::test]
     async fn test_redis_publish_subscribe_flow() {
         let adapter = MockRedisAdapter::new();
-        
+
         // Connect first
         adapter.connect().await.unwrap();
-        
+
         // Add some subscription data
-        adapter.add_subscription_data("market:BTC/USD:50000".to_string()).await;
-        adapter.add_subscription_data("market:ETH/USD:3000".to_string()).await;
-        
+        adapter
+            .add_subscription_data("market:BTC/USD:50000".to_string())
+            .await;
+        adapter
+            .add_subscription_data("market:ETH/USD:3000".to_string())
+            .await;
+
         // Publish data
-        adapter.publish("market", r#"{"symbol":"BTC/USD","price":50000}"#).await.unwrap();
-        adapter.publish("market", r#"{"symbol":"ETH/USD","price":3000}"#).await.unwrap();
-        
+        adapter
+            .publish("market", r#"{"symbol":"BTC/USD","price":50000}"#)
+            .await
+            .unwrap();
+        adapter
+            .publish("market", r#"{"symbol":"ETH/USD","price":3000}"#)
+            .await
+            .unwrap();
+
         // Verify published data
         assert_eq!(adapter.get_published_count().await, 2);
     }
@@ -222,10 +235,10 @@ mod redis_connection_tests {
             db: 0,
             pool_size: 10,
         };
-        
+
         // In real scenario, this would create actual Redis adapter
         let adapter = RedisAdapter::new(config.clone());
-        
+
         // Verify configuration
         assert_eq!(config.host, "localhost");
         assert_eq!(config.port, 6379);
@@ -241,11 +254,11 @@ mod event_bus_tests {
     async fn test_event_bus_initialization() -> Result<()> {
         let daa_access = Arc::new(DataAccessLayer::new_mock()?);
         let event_bus = EventBusIntegration::new(daa_access).await?;
-        
+
         // Test health check
         assert!(event_bus.health_check().await?);
         assert!(event_bus.daa_integration_health().await?);
-        
+
         Ok(())
     }
 
@@ -253,10 +266,10 @@ mod event_bus_tests {
     async fn test_market_event_publishing() -> Result<()> {
         let daa_access = Arc::new(DataAccessLayer::new_mock()?);
         let event_bus = EventBusIntegration::new(daa_access).await?;
-        
+
         // Enable performance monitoring
         event_bus.enable_performance_monitoring(true).await?;
-        
+
         // Create test market event
         let market_event = MarketEvent {
             symbol: "BTC/USD".to_string(),
@@ -273,20 +286,20 @@ mod event_bus_tests {
             quality_score: 0.95,
             metadata: Some(json!({"exchange": "test"})),
         };
-        
+
         // Publish event
         event_bus.publish_market_event(market_event).await?;
-        
+
         // Verify event was stored
         let published = event_bus.get_published_events("market").await?;
         assert_eq!(published.len(), 1);
         assert_eq!(published[0].event_type, "market_update");
-        
+
         // Check performance metrics
         let metrics = event_bus.get_performance_metrics().await?;
         assert_eq!(metrics.total_events_published, 1);
         assert!(metrics.events_by_type.contains_key("market"));
-        
+
         Ok(())
     }
 
@@ -294,7 +307,7 @@ mod event_bus_tests {
     async fn test_news_event_publishing() -> Result<()> {
         let daa_access = Arc::new(DataAccessLayer::new_mock()?);
         let event_bus = EventBusIntegration::new(daa_access).await?;
-        
+
         let news_event = NewsEvent {
             id: "news_001".to_string(),
             timestamp: Utc::now(),
@@ -312,14 +325,14 @@ mod event_bus_tests {
             tags: vec!["bitcoin".to_string(), "bullish".to_string()],
             metadata: None,
         };
-        
+
         event_bus.publish_news_event(news_event).await?;
-        
+
         let published = event_bus.get_published_events("news").await?;
         assert_eq!(published.len(), 1);
         assert_eq!(published[0].event_type, "news_event");
         assert_eq!(published[0].priority, "high"); // High relevance score
-        
+
         Ok(())
     }
 
@@ -327,13 +340,13 @@ mod event_bus_tests {
     async fn test_event_routing_with_filters() -> Result<()> {
         let daa_access = Arc::new(DataAccessLayer::new_mock()?);
         let event_bus = EventBusIntegration::new(daa_access).await?;
-        
+
         // Set up event router with filters
         let mut router = EventRouter::new();
         router.add_filter_rule("high_quality_only", "quality_score > 0.9")?;
         router.add_filter_rule("btc_events_only", "symbol contains BTC")?;
         event_bus.set_event_router(router).await?;
-        
+
         // Publish events with different quality scores
         let high_quality_event = MarketEvent {
             symbol: "BTC/USD".to_string(),
@@ -350,7 +363,7 @@ mod event_bus_tests {
             source: "test".to_string(),
             metadata: None,
         };
-        
+
         let low_quality_event = MarketEvent {
             symbol: "ETH/USD".to_string(),
             quality_score: 0.85,
@@ -366,14 +379,14 @@ mod event_bus_tests {
             source: "test".to_string(),
             metadata: None,
         };
-        
+
         event_bus.publish_market_event(high_quality_event).await?;
         event_bus.publish_market_event(low_quality_event).await?;
-        
+
         // Check routed events (only high quality BTC should pass)
         let routed = event_bus.get_routed_events().await?;
         assert_eq!(routed.len(), 1);
-        
+
         Ok(())
     }
 
@@ -381,10 +394,10 @@ mod event_bus_tests {
     async fn test_batch_processing() -> Result<()> {
         let daa_access = Arc::new(DataAccessLayer::new_mock()?);
         let event_bus = EventBusIntegration::new(daa_access).await?;
-        
+
         // Configure batch processing
         event_bus.configure_batch_processing(10, 1000).await?;
-        
+
         // Create batch of events
         let mut events = Vec::new();
         for i in 0..25 {
@@ -404,14 +417,14 @@ mod event_bus_tests {
                 metadata: None,
             });
         }
-        
+
         // Batch publish
         event_bus.batch_publish_market_events(events).await?;
-        
+
         // Verify all events were published
         let published = event_bus.get_published_events("market").await?;
         assert_eq!(published.len(), 25);
-        
+
         Ok(())
     }
 }
@@ -431,13 +444,13 @@ mod neural_predictor_tests {
             enable_model_monitoring: true,
             accuracy_threshold: 0.8,
         };
-        
+
         let predictor = NeuralPredictor::new(config)?;
-        
+
         // Load historical data
         let data = create_test_time_series(100);
         predictor.load_historical_data(data.clone()).await?;
-        
+
         Ok(())
     }
 
@@ -445,21 +458,21 @@ mod neural_predictor_tests {
     async fn test_single_model_prediction() -> Result<()> {
         let config = NeuralConfig::default();
         let predictor = NeuralPredictor::new(config)?;
-        
+
         let data = create_test_time_series(50);
         let predictions = predictor.predict(&data, 5, None).await?;
-        
+
         // Verify predictions
         assert!(!predictions.is_empty());
         assert!(predictions.len() <= 5);
-        
+
         for pred in &predictions {
             assert!(pred.confidence >= 0.0 && pred.confidence <= 1.0);
             assert!(pred.interval_low <= pred.value);
             assert!(pred.value <= pred.interval_high);
             assert!(!pred.model_name.is_empty());
         }
-        
+
         Ok(())
     }
 
@@ -467,17 +480,20 @@ mod neural_predictor_tests {
     async fn test_prediction_with_features() -> Result<()> {
         let config = NeuralConfig::default();
         let predictor = NeuralPredictor::new(config)?;
-        
+
         let data = create_test_time_series(50);
         let mut features = HashMap::new();
         features.insert("volatility".to_string(), json!(0.15));
         features.insert("trend".to_string(), json!("bullish"));
-        features.insert("volume_profile".to_string(), json!({"high": 2000, "low": 500}));
-        
+        features.insert(
+            "volume_profile".to_string(),
+            json!({"high": 2000, "low": 500}),
+        );
+
         let predictions = predictor.predict(&data, 3, Some(features)).await?;
-        
+
         assert!(!predictions.is_empty());
-        
+
         Ok(())
     }
 
@@ -485,17 +501,17 @@ mod neural_predictor_tests {
     async fn test_feature_importance() -> Result<()> {
         let config = NeuralConfig::default();
         let predictor = NeuralPredictor::new(config)?;
-        
+
         let importance = predictor.get_feature_importance().await?;
-        
+
         // Should return feature importance scores
         assert!(!importance.is_empty());
-        
+
         for (feature, score) in &importance {
             assert!(*score >= 0.0 && *score <= 1.0);
             assert!(!feature.is_empty());
         }
-        
+
         Ok(())
     }
 }
@@ -509,15 +525,15 @@ mod daa_coordinator_tests {
         let neural_config = NeuralConfig::default();
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
         let (tx, _rx) = mpsc::channel(100);
-        
+
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx);
-        
+        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx, create_test_market_hours());
+
         // Verify initial metrics
         let metrics = coordinator.get_metrics().await;
         assert_eq!(metrics.total_decisions, 0);
         assert_eq!(metrics.profitable_decisions, 0);
-        
+
         Ok(())
     }
 
@@ -526,14 +542,14 @@ mod daa_coordinator_tests {
         let neural_config = NeuralConfig::default();
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
         let (tx, mut rx) = mpsc::channel(100);
-        
+
         let config = DaaConfig {
             enabled: true,
             min_confidence: 0.7,
             ..Default::default()
         };
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
-        
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+
         // Register a bullish strategy
         let strategy = Box::new(MockStrategy {
             signal: Signal::Buy {
@@ -542,8 +558,10 @@ mod daa_coordinator_tests {
                 take_profit: Some(1.02),
             },
         });
-        coordinator.register_strategy("mock_bullish".to_string(), strategy).await;
-        
+        coordinator
+            .register_strategy("mock_bullish".to_string(), strategy)
+            .await;
+
         // Create market context
         let market_context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -554,25 +572,23 @@ mod daa_coordinator_tests {
             volatility: 0.02,
             timestamp: Utc::now(),
         };
-        
+
         let historical_data = create_test_time_series(50);
-        
+
         // Make decision
-        let decision = coordinator.make_decision(
-            &market_context,
-            None,
-            &historical_data,
-        ).await?;
-        
+        let decision = coordinator
+            .make_decision(&market_context, None, &historical_data)
+            .await?;
+
         // Verify decision was sent through channel
         let received = rx.try_recv();
         assert!(received.is_ok());
-        
+
         // Check decision properties
         assert!(decision.confidence > 0.0);
         assert!(!decision.reasoning.is_empty());
         assert!(!decision.neural_consensus.is_empty());
-        
+
         Ok(())
     }
 
@@ -581,13 +597,13 @@ mod daa_coordinator_tests {
         let neural_config = NeuralConfig::default();
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
         let (tx, _rx) = mpsc::channel(100);
-        
+
         let config = DaaConfig {
             enabled: false, // Disabled
             ..Default::default()
         };
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
-        
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+
         let market_context = MarketContext {
             symbol: "TEST/USD".to_string(),
             current_price: 1000.0,
@@ -598,13 +614,11 @@ mod daa_coordinator_tests {
             timestamp: Utc::now(),
         };
         let historical_data = create_test_time_series(50);
-        
-        let decision = coordinator.make_decision(
-            &market_context,
-            None,
-            &historical_data,
-        ).await?;
-        
+
+        let decision = coordinator
+            .make_decision(&market_context, None, &historical_data)
+            .await?;
+
         // Should always hold when disabled
         match decision.action {
             TradingAction::Hold { reason } => {
@@ -612,9 +626,9 @@ mod daa_coordinator_tests {
             }
             _ => panic!("Expected Hold action when disabled"),
         }
-        
+
         assert_eq!(decision.confidence, 0.0);
-        
+
         Ok(())
     }
 
@@ -623,10 +637,10 @@ mod daa_coordinator_tests {
         let neural_config = NeuralConfig::default();
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
         let (tx, _rx) = mpsc::channel(100);
-        
+
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
-        
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+
         // High volatility context
         let volatile_context = MarketContext {
             symbol: "BTC/USD".to_string(),
@@ -637,19 +651,17 @@ mod daa_coordinator_tests {
             volume_24h: 1000000.0,
             timestamp: Utc::now(),
         };
-        
+
         let historical_data = create_test_time_series(50);
-        
-        let decision = coordinator.make_decision(
-            &volatile_context,
-            None,
-            &historical_data,
-        ).await?;
-        
+
+        let decision = coordinator
+            .make_decision(&volatile_context, None, &historical_data)
+            .await?;
+
         // Check risk assessment
         assert!(decision.risk_assessment.market_risk > 0.1);
         assert!(decision.risk_assessment.volatility_adjusted_size < 0.02);
-        
+
         Ok(())
     }
 
@@ -658,10 +670,10 @@ mod daa_coordinator_tests {
         let neural_config = NeuralConfig::default();
         let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
         let (tx, _rx) = mpsc::channel(100);
-        
+
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx);
-        
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+
         let market_context = MarketContext {
             symbol: "TEST/USD".to_string(),
             current_price: 1000.0,
@@ -672,24 +684,22 @@ mod daa_coordinator_tests {
             timestamp: Utc::now(),
         };
         let historical_data = create_test_time_series(50);
-        
+
         // Make several decisions
         for i in 0..5 {
             let mut ctx = market_context.clone();
             ctx.current_price += i as f64 * 100.0;
-            
-            let _ = coordinator.make_decision(
-                &ctx,
-                None,
-                &historical_data,
-            ).await?;
+
+            let _ = coordinator
+                .make_decision(&ctx, None, &historical_data)
+                .await?;
         }
-        
+
         let metrics = coordinator.get_metrics().await;
         assert_eq!(metrics.total_decisions, 5);
         assert!(metrics.avg_confidence > 0.0);
         assert!(!metrics.model_accuracy.is_empty());
-        
+
         Ok(())
     }
 }

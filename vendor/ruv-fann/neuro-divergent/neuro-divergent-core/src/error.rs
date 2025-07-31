@@ -3,7 +3,6 @@
 //! This module provides detailed error types that cover all aspects of neural forecasting
 //! operations, from data validation to model training and prediction errors.
 
-use std::fmt;
 use thiserror::Error;
 
 /// Result type alias for neuro-divergent operations

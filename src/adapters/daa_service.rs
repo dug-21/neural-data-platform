@@ -1,17 +1,17 @@
 //! DAA Service Integration Adapter
-//! 
+//!
 //! This module provides adapters for integrating with the JS/WASM DAA service,
 //! enabling seamless communication between Rust trading strategies and the
 //! distributed autonomous agent coordination layer.
 
-use std::collections::HashMap;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use anyhow::{Result, Context};
+use std::collections::HashMap;
 
-use crate::data::TimeSeriesData;
 use super::AdapterError;
+use crate::data::TimeSeriesData;
 
 /// DAA message format for agent communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,21 +83,24 @@ pub struct DAAServiceAdapter;
 impl DAAServiceAdapter {
     /// Convert TimeSeriesData to DAA format for analysis
     pub fn to_daa_format(data: &[TimeSeriesData]) -> Result<Value> {
-        let formatted_data: Vec<Value> = data.iter().map(|point| {
-            json!({
-                "timestamp": point.timestamp.timestamp_millis(),
-                "symbol": point.symbol,
-                "ohlcv": {
-                    "open": point.open,
-                    "high": point.high,
-                    "low": point.low,
-                    "close": point.close,
-                    "volume": point.volume
-                },
-                "indicators": point.indicators,
-                "metadata": point.metadata
+        let formatted_data: Vec<Value> = data
+            .iter()
+            .map(|point| {
+                json!({
+                    "timestamp": point.timestamp.timestamp_millis(),
+                    "symbol": point.symbol,
+                    "ohlcv": {
+                        "open": point.open,
+                        "high": point.high,
+                        "low": point.low,
+                        "close": point.close,
+                        "volume": point.volume
+                    },
+                    "indicators": point.indicators,
+                    "metadata": point.metadata
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(json!({
             "type": "market_data",
@@ -197,17 +200,20 @@ impl DAAServiceAdapter {
     /// Convert market analysis to indicator updates
     pub fn analysis_to_indicators(analysis: &DAAMarketAnalysis) -> HashMap<String, f64> {
         let mut indicators = analysis.indicators.clone();
-        
+
         // Add derived indicators
         indicators.insert("sentiment".to_string(), analysis.sentiment);
         indicators.insert("volatility".to_string(), analysis.volatility);
-        indicators.insert("trend_strength".to_string(), match analysis.trend {
-            MarketTrend::Bullish => 1.0,
-            MarketTrend::Bearish => -1.0,
-            MarketTrend::Neutral => 0.0,
-            MarketTrend::Volatile => 0.5,
-        });
-        
+        indicators.insert(
+            "trend_strength".to_string(),
+            match analysis.trend {
+                MarketTrend::Bullish => 1.0,
+                MarketTrend::Bearish => -1.0,
+                MarketTrend::Neutral => 0.0,
+                MarketTrend::Volatile => 0.5,
+            },
+        );
+
         // Add support/resistance levels
         if let Some(support) = analysis.support_levels.first() {
             indicators.insert("primary_support".to_string(), *support);
@@ -215,7 +221,7 @@ impl DAAServiceAdapter {
         if let Some(resistance) = analysis.resistance_levels.first() {
             indicators.insert("primary_resistance".to_string(), *resistance);
         }
-        
+
         indicators
     }
 }
@@ -238,10 +244,10 @@ impl DAAServiceHandle {
 // FFI exports for JS/WASM communication
 #[no_mangle]
 pub extern "C" fn daa_create_analysis_request(
-    symbol_ptr: *const u8,
-    symbol_len: usize,
-    data_ptr: *const u8,
-    data_len: usize,
+    _symbol_ptr: *const u8,
+    _symbol_len: usize,
+    _data_ptr: *const u8,
+    _data_len: usize,
 ) -> *mut u8 {
     // Implementation for FFI boundary crossing
     // This would deserialize the data and create the request
@@ -250,8 +256,8 @@ pub extern "C" fn daa_create_analysis_request(
 
 #[no_mangle]
 pub extern "C" fn daa_parse_trading_decision(
-    message_ptr: *const u8,
-    message_len: usize,
+    _message_ptr: *const u8,
+    _message_len: usize,
 ) -> *mut u8 {
     // Implementation for FFI boundary crossing
     // This would parse the DAA message and return the decision
@@ -264,22 +270,20 @@ mod tests {
 
     #[test]
     fn test_daa_format_conversion() {
-        let data = vec![
-            TimeSeriesData {
-                symbol: "ETH/USD".to_string(),
-                timestamp: Utc::now(),
-                open: 3000.0,
-                high: 3100.0,
-                low: 2950.0,
-                close: 3050.0,
-                volume: 5000.0,
-                indicators: HashMap::new(),
-                source: None,
-                entity: None,
-                value: None,
-                metadata: None,
-            }
-        ];
+        let data = vec![TimeSeriesData {
+            symbol: "ETH/USD".to_string(),
+            timestamp: Utc::now(),
+            open: 3000.0,
+            high: 3100.0,
+            low: 2950.0,
+            close: 3050.0,
+            volume: 5000.0,
+            indicators: HashMap::new(),
+            source: None,
+            entity: None,
+            value: None,
+            metadata: None,
+        }];
 
         let daa_format = DAAServiceAdapter::to_daa_format(&data).unwrap();
         assert!(daa_format["type"] == "market_data");

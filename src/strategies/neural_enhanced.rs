@@ -1,5 +1,5 @@
 //! Neural-Enhanced Trading Strategy
-//! 
+//!
 //! Combines neural network predictions with traditional technical indicators
 //! for sophisticated trading signal generation.
 
@@ -83,39 +83,39 @@ impl NeuralEnhancedStrategy {
             initialized: false,
         }
     }
-    
+
     /// Calculate market volatility from price history
     fn calculate_volatility(&self, prices: &VecDeque<f64>) -> f64 {
         if prices.len() < 20 {
             return 0.02; // Default volatility
         }
-        
+
         let prices_vec: Vec<f64> = prices.iter().copied().collect();
-        let returns: Vec<f64> = prices_vec.windows(2)
+        let returns: Vec<f64> = prices_vec
+            .windows(2)
             .map(|w| (w[1] - w[0]) / w[0])
             .collect();
-        
+
         let mean = returns.iter().sum::<f64>() / returns.len() as f64;
-        let variance = returns.iter()
-            .map(|r| (r - mean).powi(2))
-            .sum::<f64>() / returns.len() as f64;
-        
+        let variance =
+            returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
+
         variance.sqrt()
     }
-    
+
     /// Calculate trend strength using linear regression
     async fn calculate_trend_strength(&self, prices: &VecDeque<f64>) -> f64 {
         if prices.len() < 20 {
             return 0.0;
         }
-        
+
         // Simple linear regression on recent prices
         let n = prices.len().min(50) as f64;
         let mut sum_x = 0.0;
         let mut sum_y = 0.0;
         let mut sum_xy = 0.0;
         let mut sum_x2 = 0.0;
-        
+
         for (i, &price) in prices.iter().rev().take(50).enumerate() {
             let x = i as f64;
             sum_x += x;
@@ -123,10 +123,10 @@ impl NeuralEnhancedStrategy {
             sum_xy += x * price;
             sum_x2 += x * x;
         }
-        
+
         let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
         let avg_price = sum_y / n;
-        
+
         // Normalize slope to [-1, 1] range
         (slope / avg_price * 100.0).max(-1.0).min(1.0)
     }
@@ -208,16 +208,16 @@ impl NeuralEnhancedStrategy {
         let rs = avg_gain / avg_loss;
         Some(100.0 - (100.0 / (1.0 + rs)))
     }
-    
+
     /// Helper function to calculate RSI for a specific index
     async fn calculate_rsi_for_index(&self, prices: &VecDeque<f64>, index: usize) -> Option<f64> {
         if index < 14 {
             return None;
         }
-        
+
         let mut gains = 0.0;
         let mut losses = 0.0;
-        
+
         for i in (index - 13)..=index {
             if i > 0 {
                 let change = prices[i] - prices[i - 1];
@@ -228,28 +228,31 @@ impl NeuralEnhancedStrategy {
                 }
             }
         }
-        
+
         let avg_gain = gains / 14.0;
         let avg_loss = losses / 14.0;
-        
+
         if avg_loss == 0.0 {
             return Some(100.0);
         }
-        
+
         let rs = avg_gain / avg_loss;
         Some(100.0 - (100.0 / (1.0 + rs)))
     }
-    
+
     /// Helper function to calculate SMA for a specific index
-    async fn calculate_sma_for_index(&self, prices: &VecDeque<f64>, index: usize, period: usize) -> Option<f64> {
+    async fn calculate_sma_for_index(
+        &self,
+        prices: &VecDeque<f64>,
+        index: usize,
+        period: usize,
+    ) -> Option<f64> {
         if index < period - 1 {
             return None;
         }
-        
-        let sum: f64 = ((index - period + 1)..=index)
-            .map(|i| prices[i])
-            .sum();
-        
+
+        let sum: f64 = ((index - period + 1)..=index).map(|i| prices[i]).sum();
+
         Some(sum / period as f64)
     }
 
@@ -258,18 +261,24 @@ impl NeuralEnhancedStrategy {
         // Convert price history to TimeSeriesData for neural predictor
         let prices = self.price_history.read().await;
         let volumes = self.volume_history.read().await;
-        
+
         if prices.len() < 20 {
-            return Err(StrategyError::InsufficientData("Not enough historical data".to_string()));
+            return Err(StrategyError::InsufficientData(
+                "Not enough historical data".to_string(),
+            ));
         }
 
         let mut time_series_data: Vec<TimeSeriesData> = Vec::new();
         let now = Utc::now().timestamp();
-        
+
         for (i, (price, volume)) in prices.iter().zip(volumes.iter()).enumerate() {
             time_series_data.push(TimeSeriesData {
                 symbol: symbol.to_string(),
-                timestamp: DateTime::<Utc>::from_timestamp(now - ((prices.len() - i) as i64 * 3600), 0).unwrap_or_else(Utc::now),
+                timestamp: DateTime::<Utc>::from_timestamp(
+                    now - ((prices.len() - i) as i64 * 3600),
+                    0,
+                )
+                .unwrap_or_else(Utc::now),
                 open: price * 0.99,
                 high: price * 1.01,
                 low: price * 0.99,
@@ -285,13 +294,16 @@ impl NeuralEnhancedStrategy {
 
         // Get predictions using ensemble of models for better accuracy
         let models = vec!["NHITS".to_string(), "TCN".to_string(), "DeepAR".to_string()];
-        let predictions = self.neural_predictor
+        let predictions = self
+            .neural_predictor
             .predict_ensemble(&time_series_data, 5, &models, None)
             .await
             .map_err(|e| StrategyError::Execution(format!("Neural prediction failed: {}", e)))?;
 
         if predictions.is_empty() {
-            return Err(StrategyError::Execution("No predictions returned".to_string()));
+            return Err(StrategyError::Execution(
+                "No predictions returned".to_string(),
+            ));
         }
 
         // Extract price predictions from the results
@@ -299,7 +311,10 @@ impl NeuralEnhancedStrategy {
     }
 
     /// Generate composite signal
-    async fn generate_composite_signal(&self, symbol: &str) -> Result<(f64, f64, Vec<String>), StrategyError> {
+    async fn generate_composite_signal(
+        &self,
+        symbol: &str,
+    ) -> Result<(f64, f64, Vec<String>), StrategyError> {
         let mut signal_strength = 0.0;
         let mut confidence = 0.0;
         let mut reasons = Vec::new();
@@ -314,8 +329,14 @@ impl NeuralEnhancedStrategy {
         // Momentum signals
         if let (Some(s20), Some(s50), Some(e12), Some(e26)) = (sma_20, sma_50, ema_12, ema_26) {
             let macd = e12 - e26;
-            let momentum_signal = if macd > 0.0 && s20 > s50 { 0.7 } else if macd < 0.0 && s20 < s50 { -0.7 } else { 0.0 };
-            
+            let momentum_signal = if macd > 0.0 && s20 > s50 {
+                0.7
+            } else if macd < 0.0 && s20 < s50 {
+                -0.7
+            } else {
+                0.0
+            };
+
             signal_strength += momentum_signal * self.config.momentum_weight;
             if momentum_signal.abs() > 0.5 {
                 reasons.push(format!("Momentum: {:.2}", momentum_signal));
@@ -334,7 +355,10 @@ impl NeuralEnhancedStrategy {
 
             signal_strength += mean_reversion_signal * self.config.mean_reversion_weight;
             if mean_reversion_signal.abs() > 0.5 {
-                reasons.push(format!("Mean Reversion: {:.2} (RSI: {:.2})", mean_reversion_signal, rsi_val));
+                reasons.push(format!(
+                    "Mean Reversion: {:.2} (RSI: {:.2})",
+                    mean_reversion_signal, rsi_val
+                ));
             }
         }
 
@@ -345,7 +369,7 @@ impl NeuralEnhancedStrategy {
                     let current_price = *self.price_history.read().await.back().unwrap_or(&0.0);
                     let predicted_price = predictions[0];
                     let price_change = (predicted_price - current_price) / current_price;
-                    
+
                     // Use multiple prediction horizons for better signal
                     let mut trend_strength = 0.0;
                     for (i, &pred) in predictions.iter().enumerate().take(3) {
@@ -354,24 +378,28 @@ impl NeuralEnhancedStrategy {
                         trend_strength += horizon_change * (1.0 / (i + 1) as f64);
                     }
                     trend_strength /= 1.833; // Normalize by sum of weights
-                    
+
                     let neural_signal = trend_strength.max(-1.0).min(1.0);
                     signal_strength += neural_signal * self.config.neural_weight;
-                    
+
                     // Higher confidence with ensemble predictions
                     confidence = 0.85;
-                    
+
                     if neural_signal.abs() > 0.01 {
                         reasons.push(format!("Neural Ensemble: {:.2}% predicted change (multi-horizon trend: {:.2}%)", 
                             price_change * 100.0, trend_strength * 100.0));
                     }
-                    
+
                     // Add volatility adjustment based on prediction intervals
                     if predictions.len() > 0 {
-                        let pred_volatility = (predictions[0] - current_price).abs() / current_price;
+                        let pred_volatility =
+                            (predictions[0] - current_price).abs() / current_price;
                         if pred_volatility > 0.05 {
                             confidence *= 0.9; // Reduce confidence in high volatility
-                            reasons.push(format!("High volatility detected: {:.2}%", pred_volatility * 100.0));
+                            reasons.push(format!(
+                                "High volatility detected: {:.2}%",
+                                pred_volatility * 100.0
+                            ));
                         }
                     }
                 }
@@ -379,19 +407,20 @@ impl NeuralEnhancedStrategy {
             Err(e) => {
                 warn!("Neural prediction error: {}", e);
                 confidence = 0.5; // Lower confidence without neural predictions
-                
+
                 // Fall back to simple technical analysis
                 if let (Some(s20), Some(s50)) = (sma_20, sma_50) {
                     let trend_signal = if s20 > s50 { 0.3 } else { -0.3 };
                     signal_strength += trend_signal * self.config.neural_weight * 0.5;
-                    reasons.push("Using technical fallback due to neural unavailability".to_string());
+                    reasons
+                        .push("Using technical fallback due to neural unavailability".to_string());
                 }
             }
         }
 
         // Normalize signal strength
         signal_strength = signal_strength.max(-1.0).min(1.0);
-        
+
         // Adjust confidence based on indicator agreement
         if reasons.len() > 2 {
             confidence += 0.2;
@@ -437,7 +466,10 @@ impl TradingStrategy for NeuralEnhancedStrategy {
         metrics.insert("winning_trades".to_string(), 0.0);
         metrics.insert("total_pnl".to_string(), 0.0);
 
-        info!("Neural-enhanced strategy initialized with config: {:?}", self.config);
+        info!(
+            "Neural-enhanced strategy initialized with config: {:?}",
+            self.config
+        );
         Ok(())
     }
 
@@ -447,7 +479,9 @@ impl TradingStrategy for NeuralEnhancedStrategy {
         position: Option<&Position>,
     ) -> Result<Signal, StrategyError> {
         if !self.initialized {
-            return Err(StrategyError::Configuration("Strategy not initialized".to_string()));
+            return Err(StrategyError::Configuration(
+                "Strategy not initialized".to_string(),
+            ));
         }
 
         // Update history
@@ -476,8 +510,9 @@ impl TradingStrategy for NeuralEnhancedStrategy {
             }
 
             // Check for exit signal
-            let (signal_strength, confidence, reasons) = self.generate_composite_signal(&context.symbol).await?;
-            
+            let (signal_strength, confidence, reasons) =
+                self.generate_composite_signal(&context.symbol).await?;
+
             if signal_strength < -0.5 && confidence > self.config.min_confidence {
                 return Ok(Signal::Sell {
                     confidence,
@@ -493,12 +528,12 @@ impl TradingStrategy for NeuralEnhancedStrategy {
                     reason: "Insufficient historical data".to_string(),
                 });
             }
-            
+
             // Calculate market regime for adaptive thresholds
             let volatility = self.calculate_volatility(&price_history);
             let trend_strength = self.calculate_trend_strength(&price_history).await;
             drop(price_history);
-            
+
             // Adaptive signal threshold based on market conditions
             let signal_threshold = if volatility > 0.03 {
                 0.4 // Higher threshold in volatile markets
@@ -508,7 +543,8 @@ impl TradingStrategy for NeuralEnhancedStrategy {
                 0.3 // Normal threshold
             };
 
-            let (signal_strength, confidence, reasons) = self.generate_composite_signal(&context.symbol).await?;
+            let (signal_strength, confidence, reasons) =
+                self.generate_composite_signal(&context.symbol).await?;
 
             if signal_strength > signal_threshold && confidence > self.config.min_confidence {
                 // Calculate position size based on confidence
@@ -613,13 +649,12 @@ mod tests {
             memory_gb: 1.0,
             models: vec!["MLP".to_string()],
             prediction_cache_ttl: 3600,
-            model_load_timeout: 60,
-            max_concurrent_predictions: 10,
-            enable_model_monitoring: false,
             accuracy_threshold: 0.7,
+            enable_model_monitoring: false,
+            ..Default::default()
         };
-        
-        let neural_predictor = match NeuralPredictor::new(neural_config) {
+
+        let neural_predictor = match NeuralPredictor::new(neural_config).await {
             Ok(predictor) => Arc::new(predictor),
             Err(_) => {
                 // If we can't create a real predictor, skip test

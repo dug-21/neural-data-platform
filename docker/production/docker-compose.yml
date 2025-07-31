@@ -1,0 +1,267 @@
+# Production Docker Compose Configuration for Neural Trader
+# Week 3 Implementation: Model Persistence and Production Deployment
+
+version: '3.8'
+
+services:
+  # Main neural trading service
+  neural-trader:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile
+    container_name: neural-trader-main
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgresql://neural_user:${DB_PASSWORD}@timescaledb:5432/neural_trader
+      - REDIS_URL=redis://redis:6379
+      - MODEL_STORAGE_PATH=/opt/neural-trader/models
+      - MODEL_BACKUP_PATH=/opt/neural-trader/backup
+      - ENABLE_MODEL_PERSISTENCE=true
+      - ENABLE_AUTO_ROLLBACK=true
+      - CHECKPOINT_FREQUENCY=100
+      - ROLLBACK_THRESHOLD=10.0
+      - MAX_MODEL_VERSIONS=10
+      - METRICS_PORT=9090
+    volumes:
+      - model_storage:/opt/neural-trader/models
+      - model_backup:/opt/neural-trader/backup
+      - model_exports:/opt/neural-trader/exports
+      - logs:/opt/neural-trader/logs
+      - ./config:/opt/neural-trader/config:ro
+    ports:
+      - "8080:8080"  # Main API
+      - "9090:9090"  # Metrics endpoint
+    depends_on:
+      - timescaledb
+      - redis
+    networks:
+      - neural-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # TimescaleDB for time series data
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    container_name: neural-trader-timescale
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=neural_trader
+      - POSTGRES_USER=neural_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - neural-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neural_user -d neural_trader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and real-time data
+  redis:
+    image: redis:7-alpine
+    container_name: neural-trader-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - neural-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Model management service (separate service for scalability)
+  model-manager:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile.model-manager
+    container_name: neural-trader-models
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+      - MODEL_STORAGE_PATH=/opt/neural-trader/models
+      - MODEL_BACKUP_PATH=/opt/neural-trader/backup
+      - DATABASE_URL=postgresql://neural_user:${DB_PASSWORD}@timescaledb:5432/neural_trader
+      - REDIS_URL=redis://redis:6379
+      - ENABLE_AUTO_CHECKPOINTING=true
+      - CHECKPOINT_FREQUENCY=100
+      - MAX_CONCURRENT_OPERATIONS=4
+    volumes:
+      - model_storage:/opt/neural-trader/models
+      - model_backup:/opt/neural-trader/backup
+      - model_exports:/opt/neural-trader/exports
+      - logs:/opt/neural-trader/logs
+    ports:
+      - "8081:8081"  # Model management API
+    depends_on:
+      - timescaledb
+      - redis
+    networks:
+      - neural-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring and observability
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: neural-trader-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    networks:
+      - neural-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: neural-trader-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"
+    networks:
+      - neural-network
+
+  # Log aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: neural-trader-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/tmp/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - neural-network
+
+  # Log shipping
+  promtail:
+    image: grafana/promtail:latest
+    container_name: neural-trader-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - logs:/var/log/neural-trader:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - neural-network
+
+  # Backup service for models and data
+  backup-manager:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile.backup
+    container_name: neural-trader-backup
+    restart: unless-stopped
+    environment:
+      - BACKUP_SCHEDULE=0 2 * * *  # Daily at 2 AM
+      - BACKUP_RETENTION_DAYS=30
+      - MODEL_STORAGE_PATH=/opt/neural-trader/models
+      - BACKUP_DESTINATION=/opt/neural-trader/backup
+      - S3_BUCKET=${BACKUP_S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - model_storage:/opt/neural-trader/models:ro
+      - model_backup:/opt/neural-trader/backup
+      - timescale_data:/var/lib/postgresql/data:ro
+    networks:
+      - neural-network
+
+# Persistent volumes for data durability
+volumes:
+  model_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/neural-trader/data/models
+  
+  model_backup:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/neural-trader/data/backup
+  
+  model_exports:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/neural-trader/data/exports
+  
+  timescale_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/neural-trader/data/timescale
+  
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/neural-trader/data/redis
+  
+  logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/neural-trader/logs
+  
+  prometheus_data:
+    driver: local
+  
+  grafana_data:
+    driver: local
+  
+  loki_data:
+    driver: local
+
+# Network configuration
+networks:
+  neural-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

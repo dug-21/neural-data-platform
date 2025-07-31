@@ -1,0 +1,378 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "expr": "websocket:active_connections",
+          "refId": "A"
+        }
+      ],
+      "title": "Active WebSocket Connections",
+      "type": "gauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "msg/s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "expr": "websocket:messages_rate_1m",
+          "legendFormat": "{{ provider }}",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Message Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "expr": "websocket:errors_rate_1m / websocket:messages_rate_1m",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Error Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "expr": "websocket:message_latency_p95",
+          "legendFormat": "{{ provider }} - p95",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Message Latency (95th percentile)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reconn/s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "tooltip": {
+          "mode": "single"
+        },
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "pluginVersion": "7.5.0",
+      "targets": [
+        {
+          "expr": "websocket:reconnections_rate_1m",
+          "legendFormat": "{{ provider }}",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Reconnection Rate",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": ["websocket", "health", "monitoring"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "WebSocket Health Monitoring",
+  "uid": "websocket-health",
+  "version": 0
+}

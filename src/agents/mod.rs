@@ -9,9 +9,9 @@
 //! - Cognitive pattern recognition
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 // Re-export DAA bridge for direct DAA service integration
 mod daa_bridge;
@@ -75,7 +75,7 @@ impl AutonomousAgent {
             daa_agent: None,
         })
     }
-    
+
     /// Initialize the DAA agent asynchronously
     async fn ensure_daa_initialized(&mut self) -> Result<()> {
         if self.daa_agent.is_none() {
@@ -84,12 +84,12 @@ impl AutonomousAgent {
         }
         Ok(())
     }
-    
+
     pub async fn update_market_context(&self, context: MarketContext) -> Result<()> {
         // Update internal market context
         Ok(())
     }
-    
+
     pub async fn make_decision(
         &mut self,
         symbol: &str,
@@ -99,7 +99,7 @@ impl AutonomousAgent {
     ) -> Result<TradingDecision> {
         // Ensure DAA is initialized
         self.ensure_daa_initialized().await?;
-        
+
         // Delegate to DAA agent for autonomous decision-making
         self.daa_agent
             .as_ref()
@@ -107,7 +107,7 @@ impl AutonomousAgent {
             .make_decision(symbol, market_data, current_position, position_size)
             .await
     }
-    
+
     pub async fn get_strategy_signal(
         &mut self,
         strategy: &str,
@@ -116,7 +116,7 @@ impl AutonomousAgent {
     ) -> Result<serde_json::Value> {
         // Ensure DAA is initialized
         self.ensure_daa_initialized().await?;
-        
+
         // Use DAA's pattern recognition for strategy signals
         self.daa_agent
             .as_ref()
@@ -124,7 +124,7 @@ impl AutonomousAgent {
             .get_strategy_signal(strategy, symbol, market_data)
             .await
     }
-    
+
     pub async fn assess_risk(
         &mut self,
         symbol: &str,
@@ -134,7 +134,7 @@ impl AutonomousAgent {
     ) -> Result<RiskAssessment> {
         // Ensure DAA is initialized
         self.ensure_daa_initialized().await?;
-        
+
         // Use DAA's self-monitoring for comprehensive risk assessment
         self.daa_agent
             .as_ref()

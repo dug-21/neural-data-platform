@@ -7,7 +7,7 @@ use autonomous_platform::integration::daa_coordinator::*;
 use autonomous_platform::config::{NeuralConfig, Config};
 use autonomous_platform::neural::{NeuralPredictor, PredictionResult};
 use autonomous_platform::strategies::{
-    TradingStrategy, Signal, MarketContext, Position, PositionSide, 
+use neural_trader::utils::market_hours::MarketHours;    TradingStrategy, Signal, MarketContext, Position, PositionSide, 
     StrategyConfig, StrategyError, StrategyFactory
 };
 use autonomous_platform::data::TimeSeriesData;
@@ -61,6 +61,10 @@ fn create_test_config() -> Config {
     }
 }
 
+// Helper function to create test MarketHours
+fn create_test_market_hours() -> Arc<MarketHours> {
+    Arc::new(MarketHours::default())
+}
 #[tokio::test]
 async fn test_daa_coordinator_initializes_strategies_before_use() {
     // GIVEN: A DAA coordinator with strategy configurations
@@ -69,7 +73,7 @@ async fn test_daa_coordinator_initializes_strategies_before_use() {
     let (tx, mut rx) = mpsc::channel(100);
     
     let daa_config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx);
+    let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx, create_test_market_hours());
     
     // Register strategies using the new initialization method
     for (i, strategy_config) in config.strategies.iter().enumerate() {
@@ -142,7 +146,7 @@ async fn test_daa_handles_mixed_initialized_uninitialized_strategies() {
     let (tx, _rx) = mpsc::channel(100);
     
     let daa_config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx);
+    let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx, create_test_market_hours());
     
     // Register an initialized strategy
     let config1 = StrategyConfig {
@@ -215,7 +219,7 @@ async fn test_daa_strategy_initialization_with_invalid_config() {
     );
     let (tx, _rx) = mpsc::channel(100);
     
-    let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx);
+    let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
     
     // Try to register strategy with invalid config
     let invalid_config = StrategyConfig {
@@ -364,7 +368,7 @@ async fn test_daa_strategy_initialization_preserves_state() {
     );
     let (tx, _rx) = mpsc::channel(100);
     
-    let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx);
+    let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
     
     // Register strategy with specific parameters
     let config = StrategyConfig {
@@ -416,7 +420,7 @@ async fn test_daa_handles_strategy_runtime_errors_gracefully() {
     );
     let (tx, mut rx) = mpsc::channel(100);
     
-    let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx);
+    let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
     
     // Register multiple strategies
     for i in 0..3 {
