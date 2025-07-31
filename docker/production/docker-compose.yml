@@ -22,7 +22,7 @@ services:
       - CHECKPOINT_FREQUENCY=100
       - ROLLBACK_THRESHOLD=10.0
       - MAX_MODEL_VERSIONS=10
-      - METRICS_PORT=9090
+      - METRICS_PORT=9092
     volumes:
       - model_storage:/opt/neural-trader/models
       - model_backup:/opt/neural-trader/backup
@@ -31,7 +31,7 @@ services:
       - ./config:/opt/neural-trader/config:ro
     ports:
       - "8080:8080"  # Main API
-      - "9090:9090"  # Metrics endpoint
+      - "9092:9092"  # Metrics endpoint
     depends_on:
       - timescaledb
       - redis

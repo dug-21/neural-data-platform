@@ -1,0 +1,181 @@
+services:
+  # Core Services
+  neural-trader:
+    image: neural-trader:prod
+    container_name: neural-trader
+    ports:
+      - "8080:8080"    # API port
+      - "9092:9092"    # Metrics port (FIXED - was 9090)
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@timescaledb:5432/neural_trader
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=info
+      - METRICS_PORT=9092
+      - PROMETHEUS_METRICS_ENABLED=true
+    volumes:
+      - ./configs/neural-trader:/app/config
+      - ./logs:/app/logs
+    networks:
+      - neural-trader-network
+    depends_on:
+      - timescaledb
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Data Ingestion Service (ADDED)
+  data-ingestion:
+    image: neural-trader/data-ingestion:prod
+    container_name: data-ingestion
+    ports:
+      - "8001:8001"
+    environment:
+      - PROMETHEUS_METRICS_ENABLED=true
+      - METRICS_PORT=8001
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@timescaledb:5432/neural_trader
+      - REDIS_URL=redis://redis:6379
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+    volumes:
+      - ./configs/data-ingestion:/app/config
+      - ./logs/data-ingestion:/app/logs
+    networks:
+      - neural-trader-network
+    depends_on:
+      - timescaledb
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Database
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=neural_trader
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - neural-trader-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - neural-trader-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"  # FIXED: Consistent port mapping (was 9091:9090)
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml  # FIXED path (was ./monitoring/)
+      - ./configs/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - ./configs/prometheus/neural_prediction_alerts.yml:/etc/prometheus/neural_prediction_alerts.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - neural-trader-network
+    depends_on:
+      - neural-trader
+      - data-ingestion
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards  # FIXED path (was ./monitoring/grafana/dashboards)
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - neural-trader-network
+    depends_on:
+      - prometheus
+
+  # Exporters (ADDED - All three were missing)
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@timescaledb:5432/neural_trader?sslmode=disable"
+    networks:
+      - neural-trader-network
+    depends_on:
+      - timescaledb
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    ports:
+      - "9121:9121"
+    environment:
+      REDIS_ADDR: "redis:6379"
+    networks:
+      - neural-trader-network
+    depends_on:
+      - redis
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+    networks:
+      - neural-trader-network
+
+networks:
+  neural-trader-network:  # FIXED: Consistent network naming (was neural-network)
+    driver: bridge
+
+volumes:
+  timescaledb_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
