@@ -300,6 +300,10 @@ impl TrainingDataService {
                 "window_size": window,
                 "data_points": data.len()
             })),
+            // Required fields for vendor model integration
+            values: vec![latest.close],
+            timestamps: vec![latest.timestamp],
+            metadata_map: HashMap::new(),
         })
     }
 

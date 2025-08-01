@@ -22,6 +22,10 @@ mod enhanced_predictor;
 mod performance_optimizer;
 mod batch_optimizer;
 
+// Phase 1: Vendor model integration
+pub mod vendor_predictor;
+pub mod model_factory;
+
 // Public predictor module - using predictor.rs file  
 pub mod predictor;
 
@@ -69,6 +73,20 @@ pub struct PredictionResult {
     pub interval_high: f64,
     pub model_name: String,
     pub metadata: Option<HashMap<String, serde_json::Value>>,
+}
+
+impl Default for PredictionResult {
+    fn default() -> Self {
+        Self {
+            timestamp: Utc::now(),
+            value: 0.0,
+            confidence: 0.0,
+            interval_low: 0.0,
+            interval_high: 0.0,
+            model_name: "unknown".to_string(),
+            metadata: None,
+        }
+    }
 }
 
 // Public trait for neural predictors

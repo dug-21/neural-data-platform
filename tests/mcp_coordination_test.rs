@@ -20,7 +20,7 @@ use autonomous_platform::config::{
     DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
 };
 use autonomous_platform::data::{
-    DataPipeline, PlatformMetrics, PredictionResult, QualityMetrics, RedisCache, TimeSeriesData,
+    QualityMetrics, RedisCache, TimeSeriesData,
     TimescaleDBStorage,
 };
 

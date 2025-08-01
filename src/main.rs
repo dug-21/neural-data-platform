@@ -26,8 +26,7 @@ use autonomous_platform::utils::market_hours::MarketHours;
 // Import health monitoring
 use autonomous_platform::monitoring::health::{
     AsyncHealthMonitor, HealthServer, HealthServerConfig, HealthMonitorConfig,
-    ComponentType, DatabaseHealthChecker, RedisHealthChecker, 
-    NeuralSystemHealthChecker, DAAOrchestratorHealthChecker
+    ComponentType
 };
 
 #[tokio::main]
@@ -433,6 +432,11 @@ async fn main() -> Result<()> {
                                             event.payload.clone().into_iter()
                                                 .collect::<serde_json::Map<String, serde_json::Value>>()
                                         )),
+                                        // Add required fields for vendor model integration
+                                        values: vec![close],
+                                        timestamps: vec![chrono::DateTime::from_timestamp(timestamp, 0)
+                                            .unwrap_or_else(chrono::Utc::now)],
+                                        metadata_map: HashMap::new(),
                                     };
 
                                     time_series_data.push(ts_data);

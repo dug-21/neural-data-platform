@@ -16,11 +16,10 @@ use autonomous_platform::config::{
 };
 use autonomous_platform::data::TimeSeriesData;
 use autonomous_platform::integration::{
-    neural_predictions::{DecisionContext, PredictionResult},
-    platform_orchestrator::{PlatformOrchestrator, PredictionMetrics, ValidationResult},
-    streaming::{MarketData, NewsData},
+    autonomous_decisions::{DaaDecisionMaker, MarketTrend, DecisionContext},
+    daa_coordinator::{DaaCoordinator, AutonomousDecision},
 };
-use autonomous_platform::monitoring::SystemHealth;
+// SystemHealth removed - using monitoring config instead
 use chrono::{DateTime, Utc};
 use futures::future::try_join_all;
 use serde_json::json;

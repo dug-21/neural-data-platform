@@ -3,9 +3,10 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime, Instant};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
@@ -153,7 +154,7 @@ impl AsyncHealthMonitor {
             ComponentHealth {
                 component_type: component,
                 status: HealthStatus::Unknown,
-                last_check: Instant::now(),
+                last_check: SystemTime::now(),
                 response_time_ms: None,
                 error_message: None,
                 consecutive_failures: 0,
@@ -279,7 +280,7 @@ impl AsyncHealthMonitor {
                 } else {
                     HealthStatus::Unhealthy
                 };
-                health.last_check = Instant::now();
+                health.last_check = SystemTime::now();
                 health.response_time_ms = result.response_time_ms;
                 health.error_message = result.error_message;
                 
@@ -330,13 +331,13 @@ impl AsyncHealthMonitor {
 
         // Determine overall status
         state.system_health.status = if unhealthy_count > 0 {
-            "unhealthy"
+            "unhealthy".to_string()
         } else if degraded_count > 0 {
-            "degraded"
+            "degraded".to_string()
         } else if healthy_count > 0 {
-            "healthy"
+            "healthy".to_string()
         } else {
-            "unknown"
+            "unknown".to_string()
         };
 
         debug!(
@@ -365,7 +366,7 @@ mod tests {
     async fn test_async_health_monitor_starts_quickly() {
         let mut monitor = AsyncHealthMonitor::new(HealthMonitorConfig::default());
         
-        let start = Instant::now();
+        let start = SystemTime::now();
         let result = monitor.start().await;
         let elapsed = start.elapsed();
 

@@ -6,13 +6,13 @@
 //! 3. Bridge trading strategies with AI decisions
 
 use chrono::Utc;
-use neural_trader::adapters::{
+use autonomous_platform::adapters::{
     daa_service::{DAAMessage, DAAServiceAdapter, TradingAction},
     integration_bridge::{BridgeBuilder, IntegrationBridge},
     neuro_divergent::NeuroDivergentAdapter,
 };
-use neural_trader::data::TimeSeriesData;
-use neural_trader::strategies::momentum::MomentumStrategy;
+use autonomous_platform::data::TimeSeriesData;
+use autonomous_platform::strategies::momentum::MomentumStrategy;
 use std::collections::HashMap;
 
 #[tokio::main]

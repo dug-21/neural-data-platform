@@ -241,6 +241,14 @@ impl VendorDataConverter {
                         "precision": "f32_converted",
                         "base_timestamp": base_data.timestamp.to_rfc3339(),
                     })),
+                    // Enhanced fields for vendor model integration
+                    values: vec![pred as f64], // Single prediction value
+                    timestamps: vec![timestamp], // Single prediction timestamp
+                    metadata_map: HashMap::from([
+                        ("type".to_string(), serde_json::json!("forecast")),
+                        ("model".to_string(), serde_json::json!("vendor_model")),
+                        ("precision".to_string(), serde_json::json!("f32_converted")),
+                    ]), // Metadata from JSON
                 }
             })
             .collect()

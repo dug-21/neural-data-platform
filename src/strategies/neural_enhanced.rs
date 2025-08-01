@@ -289,6 +289,13 @@ impl NeuralEnhancedStrategy {
                 entity: Some(symbol.to_string()),
                 value: Some(*price),
                 metadata: None,
+                // Enhanced fields for vendor model integration
+                values: vec![*price], // Single price value
+                timestamps: vec![DateTime::<Utc>::from_timestamp(
+                    now - ((prices.len() - i) as i64 * 3600),
+                    0,
+                ).unwrap_or_else(Utc::now)], // Single timestamp
+                metadata_map: HashMap::new(), // Empty metadata map
             });
         }
 

@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Test neural system health check
     println!("\n🧠 Checking Neural System Health...");
-    let neural_health = monitor.check_component_health(ComponentType::NeuralSystem).await?;
+    let neural_health = monitor.check_component_health(LegacyComponentType::NeuralSystem).await?;
     
     println!("Status: {}", neural_health.status);
     println!("Response Time: {:?}ms", neural_health.response_time_ms);

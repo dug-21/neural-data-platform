@@ -732,6 +732,10 @@ impl HealthChecker for ModelHealthChecker {
             entity: Some("test".to_string()),
             value: Some(100.5),
             metadata: None,
+            // Enhanced fields for vendor model integration
+            values: vec![100.5], // Single test value
+            timestamps: vec![chrono::Utc::now()], // Single test timestamp
+            metadata_map: HashMap::new(), // Empty metadata map
         }];
 
         // Try a simple prediction to check health

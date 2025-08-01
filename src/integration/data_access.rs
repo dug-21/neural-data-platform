@@ -281,6 +281,10 @@ impl DataAccessLayer {
                     entity: Some(data_point.entity.clone()),
                     value: Some(data_point.value),
                     metadata: data_point.metadata.clone(),
+                    // Required fields for vendor model integration
+                    values: vec![data_point.value],
+                    timestamps: vec![data_point.timestamp],
+                    metadata_map: HashMap::new(),
                 });
             }
         }
@@ -490,6 +494,10 @@ impl DataAccessLayer {
                 entity: Some(symbol.clone()),
                 value: Some(price_info.price),
                 metadata: None,
+                // Required fields for vendor model integration
+                values: vec![price_info.price],
+                timestamps: vec![price_info.timestamp],
+                metadata_map: HashMap::new(),
             });
         }
 
@@ -557,6 +565,10 @@ impl DataAccessLayer {
                 entity: Some(stat.entity.clone()),
                 value: Some(stat.avg_value.unwrap_or(0.0)),
                 metadata: None,
+                // Required fields for vendor model integration
+                values: vec![stat.avg_value.unwrap_or(0.0)],
+                timestamps: vec![stat.bucket],
+                metadata_map: HashMap::new(),
             });
         }
 
