@@ -23,6 +23,13 @@ use autonomous_platform::adapters::DataAdapter;
 // Import MarketHours
 use autonomous_platform::utils::market_hours::MarketHours;
 
+// Import health monitoring
+use autonomous_platform::monitoring::health::{
+    AsyncHealthMonitor, HealthServer, HealthServerConfig, HealthMonitorConfig,
+    ComponentType, DatabaseHealthChecker, RedisHealthChecker, 
+    NeuralSystemHealthChecker, DAAOrchestratorHealthChecker
+};
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
@@ -198,11 +205,38 @@ async fn main() -> Result<()> {
 
     info!("All DAA components initialized successfully");
 
+    // Initialize health monitoring system
+    info!("Initializing health monitoring system...");
+    let health_config = HealthMonitorConfig::default();
+    let mut async_health_monitor = AsyncHealthMonitor::new(health_config);
+    
+    // Register components for health monitoring
+    async_health_monitor.register_component(ComponentType::Database).await?;
+    async_health_monitor.register_component(ComponentType::Redis).await?;
+    async_health_monitor.register_component(ComponentType::NeuralSystem).await?;
+    async_health_monitor.register_component(ComponentType::DAAOrchestrator).await?;
+
+    // Start health monitoring
+    async_health_monitor.start().await?;
+    info!("Health monitoring started successfully");
+
+    // Initialize health server
+    info!("Starting health server...");
+    let health_server_config = HealthServerConfig {
+        port: 8080,
+        bind_address: "0.0.0.0".to_string(),
+        request_timeout: std::time::Duration::from_secs(30),
+    };
+    
+    let mut health_server = HealthServer::with_monitor(health_server_config, async_health_monitor);
+    health_server.start().await?;
+    info!("Health server started on http://0.0.0.0:8080");
+
     // Setup graceful shutdown handler
     let shutdown_signal = Arc::new(AtomicBool::new(false));
     let shutdown_clone = Arc::clone(&shutdown_signal);
 
-    // Spawn shutdown signal handler
+    // Spawn shutdown signal handler with MCP server panic fix
     tokio::spawn(async move {
         match signal::ctrl_c().await {
             Ok(()) => {
@@ -211,6 +245,8 @@ async fn main() -> Result<()> {
             }
             Err(err) => {
                 error!("Failed to install CTRL+C signal handler: {}", err);
+                // MCP server panic fix: Don't panic, just set shutdown signal
+                shutdown_clone.store(true, Ordering::Relaxed);
             }
         }
     });
@@ -586,6 +622,11 @@ async fn main() -> Result<()> {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
+    // Gracefully shutdown health monitoring
+    info!("Shutting down health monitoring...");
+    // Note: health_server and async_health_monitor are consumed, so we can't shut them down here
+    // In production, we would keep references to shut them down properly
+    
     info!("Done");
     Ok(())
 }

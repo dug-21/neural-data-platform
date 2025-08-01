@@ -7,7 +7,7 @@ fn main() {
 
     // 1. Create a real neural network
     println!("📍 Creating real ruv-FANN network...");
-    let network = NetworkBuilder::new()
+    let mut network = NetworkBuilder::new()
         .input_layer(3)
         .hidden_layer_with_activation(5, ActivationFunction::Sigmoid, 1.0)
         .hidden_layer_with_activation(4, ActivationFunction::Tanh, 1.0)
@@ -97,7 +97,7 @@ fn main() {
     println!("\nAfter training:");
     for (input, expected) in inputs.iter().zip(&outputs) {
         let prediction = trainable_network.run(input);
-        let error = (prediction[0] - expected[0]).abs() as f32;
+        let error = ((prediction[0] - expected[0]) as f64).abs() as f32;
         println!(
             "  {} XOR {} = {:.3} (expected: {}, error: {:.3})",
             input[0], input[1], prediction[0], expected[0], error

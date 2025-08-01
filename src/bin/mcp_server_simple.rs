@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
     println!("📋 Configuration: Simple standalone mode");
 
     // Load configuration
-    let config = load_default_config()?;
+    let _config = load_default_config()?;
 
     println!("🔧 Initializing components...");
 

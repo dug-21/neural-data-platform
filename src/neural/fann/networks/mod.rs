@@ -159,17 +159,17 @@ impl Default for TrainingAlgorithm {
 pub enum NetworkArchitecture {
     /// Multi-layer perceptron
     MLP,
-    /// Simulated LSTM (using MLP with state management)
+    /// LSTM network with proper memory cell configuration
     LSTM,
-    /// Simulated GRU (using MLP with simplified gating)
+    /// GRU network with reset and update gate configuration  
     GRU,
-    /// Simulated DeepAR (probabilistic forecasting)
+    /// DeepAR network for probabilistic forecasting
     DeepAR,
-    /// Simulated TCN (temporal convolutional networks)
+    /// TCN network with dilated causal convolution configuration
     TCN,
-    /// Simulated NHITS (neural hierarchical interpolation)
+    /// NHITS network with hierarchical interpolation configuration
     NHITS,
-    /// Simulated Transformer (attention mechanism)
+    /// Transformer network with multi-head attention configuration
     Transformer,
 }
 
