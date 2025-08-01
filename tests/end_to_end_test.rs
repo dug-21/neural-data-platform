@@ -12,12 +12,11 @@ use autonomous_platform::config::{
     GracefulShutdownConfig, LoggingConfig, MonitoringConfig, NeuralConfig, ObservabilityConfig,
     PerformanceConfig, PlatformConfig, PlatformInfo, RedisConfig, SecurityConfig,
 };
-use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
 use autonomous_platform::integration::{
-    data_access::{DataAccessLayer, DataRequest, Timeframe},
-    neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
-    platform_orchestrator::{PlatformOrchestrator, SystemHealth, ValidationResult},
-    streaming::{MarketData, NewsData, StreamConfig, StreamingPipeline},
+    data_access::DataAccessLayer,
+    autonomous_decisions::{DaaDecisionMaker, MarketTrend},
+    daa_coordinator::{DaaCoordinator, AutonomousDecision},
 };
 use chrono::{DateTime, Duration, Utc};
 use serde_json::json;

@@ -13,7 +13,8 @@ use tokio::sync::RwLock;
 
 use crate::agents::AutonomousAgent;
 use crate::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
-use crate::monitoring::{ComponentHealth, HealthMonitor, HealthStatus, SystemHealth};
+use crate::monitoring::{ComponentHealth, HealthMonitor, SystemHealth};
+use crate::monitoring::health::config::HealthStatus;
 use crate::neural::NeuralPredictor;
 
 /// MCP Trading Tools Implementation
@@ -482,7 +483,8 @@ impl TradingMcpTools {
                 },
                 "message": match &health_info.status {
                     HealthStatus::Healthy => "Operating normally",
-                    HealthStatus::Degraded(msg) | HealthStatus::Unhealthy(msg) => msg.as_str(),
+                    HealthStatus::Degraded(msg) => msg,
+                    HealthStatus::Unhealthy(msg) => msg,
                     HealthStatus::Unknown => "Status unknown",
                 },
                 "last_check": health_info.last_check.to_rfc3339(),
@@ -562,6 +564,10 @@ impl TradingMcpTools {
                 entity: Some(row.get::<String, _>("symbol")),
                 value: Some(row.get("value")),
                 metadata: None,
+                // Required fields for vendor model integration
+                values: vec![row.get("value")],
+                timestamps: vec![row.get("timestamp")],
+                metadata_map: HashMap::new(),
             })
             .collect())
     }

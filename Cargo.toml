@@ -49,6 +49,7 @@ redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec", "rt"] }
 async-trait = "0.1"
 futures = "0.3"
 
@@ -110,6 +111,12 @@ flate2 = "1.0"
 
 # CLI
 clap = { version = "4.0", features = ["derive"] }
+
+# Web framework and HTTP
+axum = { version = "0.7", features = ["http2", "query", "tracing"] }
+
+# Macros for collections
+maplit = "1.0"
 
 [features]
 default = ["neural", "daa-features"]

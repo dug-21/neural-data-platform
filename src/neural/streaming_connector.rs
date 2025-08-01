@@ -383,6 +383,21 @@ impl StreamingConnector {
                 "ask": message.ask,
                 "source": message.source
             })),
+            // Required fields for vendor model integration
+            values: vec![message.price],
+            timestamps: vec![message.timestamp],
+            metadata_map: {
+                let mut map = HashMap::new();
+                map.insert("symbol".to_string(), serde_json::json!(message.symbol));
+                map.insert("source".to_string(), serde_json::json!(message.source));
+                if let Some(bid) = message.bid {
+                    map.insert("bid".to_string(), serde_json::json!(bid));
+                }
+                if let Some(ask) = message.ask {
+                    map.insert("ask".to_string(), serde_json::json!(ask));
+                }
+                map
+            },
         })
     }
 

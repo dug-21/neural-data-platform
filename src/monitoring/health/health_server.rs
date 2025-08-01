@@ -175,7 +175,11 @@ async fn health_handler(State(state): State<AppState>) -> Response {
                 ComponentHealthInfo {
                     status: component_health.status.to_string(),
                     response_time_ms: component_health.response_time_ms,
-                    last_check: format_instant_as_iso8601(component_health.last_check),
+                    last_check: component_health.last_check
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                        .to_string(),
                     error: component_health.error_message,
                 },
             );

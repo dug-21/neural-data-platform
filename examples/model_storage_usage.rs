@@ -12,7 +12,7 @@ use ruv_fann::Network;
 use std::path::PathBuf;
 use tokio;
 
-use neural_trader::adapters::model_storage::{
+use autonomous_platform::adapters::model_storage::{
     CheckpointMetrics, DataInfo, ModelMetadata, ModelStorage, ModelStorageConfig,
     PerformanceMetrics, SemanticVersion, TrainingParams, VersionIncrement,
 };
@@ -20,7 +20,7 @@ use neural_trader::adapters::model_storage::{
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
-    tracing_subscriber::init();
+    tracing_subscriber::fmt::init();
 
     // Configure storage
     let config = ModelStorageConfig {

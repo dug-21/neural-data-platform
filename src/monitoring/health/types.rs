@@ -4,7 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 /// Component types in the system
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -73,7 +73,7 @@ pub struct HealthCheckResult {
 pub struct ComponentHealth {
     pub component_type: ComponentType,
     pub status: HealthStatus,
-    pub last_check: Instant,
+    pub last_check: SystemTime,
     pub response_time_ms: Option<u64>,
     pub error_message: Option<String>,
     pub consecutive_failures: u32,
@@ -81,7 +81,7 @@ pub struct ComponentHealth {
 }
 
 /// System-wide health information
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemHealth {
     pub status: String,
     pub total_components: usize,
@@ -91,6 +91,21 @@ pub struct SystemHealth {
     pub health_score: f64,
     pub system_uptime: Duration,
     pub timestamp: std::time::SystemTime,
+}
+
+impl Default for SystemHealth {
+    fn default() -> Self {
+        Self {
+            status: "unknown".to_string(),
+            total_components: 0,
+            healthy_components: 0,
+            degraded_components: 0,
+            unhealthy_components: 0,
+            health_score: 0.0,
+            system_uptime: Duration::from_secs(0),
+            timestamp: SystemTime::UNIX_EPOCH,
+        }
+    }
 }
 
 /// Configuration for health monitoring
@@ -146,7 +161,7 @@ pub enum CircuitBreakerState {
 pub struct CircuitBreaker {
     pub state: CircuitBreakerState,
     pub failure_count: u32,
-    pub last_failure_time: Option<Instant>,
+    pub last_failure_time: Option<SystemTime>,
     pub success_count: u32,
     pub config: CircuitBreakerConfig,
 }
@@ -198,7 +213,7 @@ impl CircuitBreaker {
     pub fn record_failure(&mut self) {
         self.failure_count += 1;
         self.success_count = 0;
-        self.last_failure_time = Some(Instant::now());
+        self.last_failure_time = Some(SystemTime::now());
 
         if self.failure_count >= self.config.failure_threshold {
             self.state = CircuitBreakerState::Open;
@@ -210,7 +225,7 @@ impl CircuitBreaker {
             CircuitBreakerState::Closed => true,
             CircuitBreakerState::Open => {
                 if let Some(last_failure) = self.last_failure_time {
-                    if last_failure.elapsed() >= self.config.recovery_timeout {
+                    if last_failure.elapsed().unwrap_or_default() >= self.config.recovery_timeout {
                         self.state = CircuitBreakerState::HalfOpen;
                         self.failure_count = 0;
                         self.success_count = 0;

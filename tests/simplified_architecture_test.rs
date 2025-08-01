@@ -64,6 +64,9 @@ async fn test_phase2_simplified_architecture() {
         entity: None,
         value: None,
         metadata: None,
+        values: vec![50500.0],
+        timestamps: vec![chrono::Utc::now()],
+        metadata_map: HashMap::new(),
     }];
 
     // Test Phase 2 single routing path: Client → NeuralPredictor → EnhancedNeuralAdapter → FannPredictor

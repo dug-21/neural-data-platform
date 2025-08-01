@@ -112,7 +112,7 @@ fn benchmark_batch_throughput(c: &mut Criterion) {
     let predictor = runtime.block_on(async {
         let config = NeuralConfig::default();
         let base = std::sync::Arc::new(FannPredictor::new(config).unwrap());
-        OptimizedFannPredictor::new(base).await.unwrap()
+        crate::neural::performance_optimizer::OptimizedFannPredictor::new(base).await.unwrap()
     });
 
     let mut group = c.benchmark_group("batch_throughput");
@@ -189,7 +189,7 @@ fn benchmark_parallel_scaling(c: &mut Criterion) {
     let predictor = runtime.block_on(async {
         let config = NeuralConfig::default();
         let base = std::sync::Arc::new(FannPredictor::new(config).unwrap());
-        OptimizedFannPredictor::new(base).await.unwrap()
+        crate::neural::performance_optimizer::OptimizedFannPredictor::new(base).await.unwrap()
     });
 
     let mut group = c.benchmark_group("parallel_scaling");
@@ -235,7 +235,7 @@ fn benchmark_cache_efficiency(c: &mut Criterion) {
     let predictor = runtime.block_on(async {
         let config = NeuralConfig::default();
         let base = std::sync::Arc::new(FannPredictor::new(config).unwrap());
-        OptimizedFannPredictor::new(base).await.unwrap()
+        crate::neural::performance_optimizer::OptimizedFannPredictor::new(base).await.unwrap()
     });
 
     let mut group = c.benchmark_group("cache_efficiency");
