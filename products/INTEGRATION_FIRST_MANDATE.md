@@ -80,6 +80,42 @@ Before ANY commit, verify:
 ❌ **WRONG**: Create parallel voting system
 ✅ **RIGHT**: Extend `DAACoordinator::get_strategy_signals()` with new signals
 
+## CRITICAL EXCEPTION: Neural Engine Replacement
+
+**🚨 NEURAL ENGINE EXCEPTION**: The current neural factory system has a fundamental incompatibility that requires complete replacement, not integration.
+
+### Why This Exception is Necessary
+
+The existing `src/neural/fann/` system creates **fake models** (LSTM/TCN are actually basic MLPs) instead of using real vendor models from `vendor/ruv-fann`. This creates an insurmountable architectural incompatibility:
+
+- **Current**: `Network<f32>` (basic FANN networks)
+- **Required**: `BaseModel<T>` trait (27+ real neural architectures)
+
+### Neural Engine Exception Scope
+
+**✅ EXEMPT from integration-first mandate:**
+- Complete replacement of `src/neural/fann/` neural factory system
+- Direct implementation with vendor models (no adapters)
+- Neural prediction and training logic
+
+**✅ MUST STILL INTEGRATE with existing systems:**
+- **vendor/ruv-fann usage**: MANDATORY - use real vendor models
+- **DAA autonomous training**: MANDATORY - preserve autonomous capabilities  
+- **Market-time data processing**: MANDATORY - maintain real-time trading
+- **Performance tracking**: MANDATORY - feed data to DAA decisions
+- **Redis pub/sub communication**: MANDATORY - use existing channels
+- **Logging and monitoring**: MANDATORY - integrate with existing health checks
+
+### Implementation Requirements
+
+When replacing the neural engine:
+
+1. **Preserve DAA Integration**: New neural system MUST work with existing `DAACoordinator`
+2. **Maintain Performance Tracking**: MUST feed performance data to DAA training decisions
+3. **Keep Communication Channels**: MUST use existing Redis pub/sub for coordination
+4. **Use Vendor Models**: MUST use real `BaseModel<T>` implementations, not fake networks
+5. **Preserve Market Timing**: MUST maintain real-time market data processing capabilities
+
 ## Enforcement
 
 Every PR must demonstrate:
@@ -88,8 +124,11 @@ Every PR must demonstrate:
 3. **Decision impact** - Evidence that changes affect trading decisions
 4. **No duplicates** - Verification that no parallel systems were created
 
+**Exception**: Neural engine replacement PRs must demonstrate preservation of DAA, vendor model usage, and market-time capabilities instead of traditional integration points.
+
 ## Remember
 
 The neural-trader is a **production system** making **real autonomous decisions**. Every line of code must integrate into this living system, not exist alongside it.
 
 **When in doubt: EXTEND, don't CREATE**
+**Neural Exception: BUILD CORRECTLY with vendor models, preserve DAA autonomy**
