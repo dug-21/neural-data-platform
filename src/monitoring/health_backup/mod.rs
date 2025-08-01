@@ -1,14 +1,19 @@
-//! Health monitoring module for the Neural Trader platform
+//! Health Monitoring System for Autonomous Platform
 //!
 //! This module provides comprehensive health monitoring and observability for all
 //! system components including database, cache, streaming, neural networks, and
 //! DAA orchestrator agents.
 //!
-//! The health monitoring system integrates both the existing modular components
-//! and the new async health monitoring system from healthfix.
+//! The health monitoring system has been refactored into modular components:
+//! - `config`: Core types and configuration structures
+//! - `checks`: Health check implementations and component monitoring
+//! - `metrics`: Performance metrics collection and calculation
+//! - `alerts`: Alert management and notification system
+//! - `dashboard`: HTTP endpoints and reporting functionality
 
 use anyhow::Result;
 use chrono::Utc;
+// Removed unused metrics imports to fix compilation
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,43 +21,29 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
-// Legacy modular components (existing system)
 pub mod alerts;
 pub mod checks;
 pub mod config;
 pub mod dashboard;
 pub mod metrics;
 
-// New async health monitoring components (from healthfix)
-mod types;
-mod async_health_monitor;
-mod health_server;
-mod component_checkers;
-
-// Re-export commonly used types and structs from legacy system
+// Re-export commonly used types and structs
 pub use alerts::{Alert, AlertManager};
-pub use checks::{HealthChecker as LegacyHealthChecker};
+pub use checks::{HealthChecker};
 pub use config::{
-    AlertConfig, AlertSeverity, AlertType, ComponentHealth as LegacyComponentHealth, 
-    ComponentType as LegacyComponentType, HealthStatus as LegacyHealthStatus,
-    PerformanceMetrics, SystemHealth as LegacySystemHealth,
+    AlertConfig, AlertSeverity, AlertType, ComponentHealth, ComponentType, HealthStatus,
+    PerformanceMetrics, SystemHealth,
 };
 pub use dashboard::{HealthEndpoints, HealthMonitorInterface, HealthReporter};
 pub use metrics::MetricsCollector;
 
-// Re-export new async health monitoring types
-pub use types::*;
-pub use async_health_monitor::*;
-pub use health_server::*;
-pub use component_checkers::*;
-
-/// Main health monitoring system (legacy system)
+/// Main health monitoring system
 #[derive(Debug)]
 pub struct HealthMonitor {
-    component_health: Arc<RwLock<HashMap<LegacyComponentType, LegacyComponentHealth>>>,
+    component_health: Arc<RwLock<HashMap<ComponentType, ComponentHealth>>>,
     pub metrics_collector: MetricsCollector,
     pub alert_manager: AlertManager,
-    health_checker: LegacyHealthChecker,
+    health_checker: HealthChecker,
     start_time: Instant,
     monitoring_interval: Duration,
     is_monitoring: Arc<RwLock<bool>>,
@@ -63,7 +54,7 @@ impl HealthMonitor {
     pub async fn new() -> Result<Self> {
         let metrics_collector = MetricsCollector::new();
         let alert_manager = AlertManager::new();
-        let health_checker = LegacyHealthChecker::new();
+        let health_checker = HealthChecker::new();
 
         let component_health = Arc::new(RwLock::new(HashMap::new()));
         let is_monitoring = Arc::new(RwLock::new(false));
@@ -84,27 +75,27 @@ impl HealthMonitor {
     /// Check health of a specific component
     pub async fn check_component_health(
         &self,
-        component: LegacyComponentType,
-    ) -> Result<LegacyComponentHealth> {
+        component: ComponentType,
+    ) -> Result<ComponentHealth> {
         let start_time = Instant::now();
-        let mut health = LegacyComponentHealth::new(component.clone());
+        let mut health = ComponentHealth::new(component.clone());
 
         let result = match component {
-            LegacyComponentType::Database => self.check_database_health(&mut health).await,
-            LegacyComponentType::Redis => self.check_redis_health(&mut health).await,
-            LegacyComponentType::Streaming => self.check_streaming_health(&mut health).await,
-            LegacyComponentType::DAAOrchestrator => self.check_daa_health(&mut health).await,
-            LegacyComponentType::NeuralSystem => self.check_neural_health(&mut health).await,
-            LegacyComponentType::EventBus => self.check_event_bus_health(&mut health).await,
-            LegacyComponentType::DataPipeline => self.check_data_pipeline_health(&mut health).await,
-            LegacyComponentType::Cache => self.check_cache_health(&mut health).await,
+            ComponentType::Database => self.check_database_health(&mut health).await,
+            ComponentType::Redis => self.check_redis_health(&mut health).await,
+            ComponentType::Streaming => self.check_streaming_health(&mut health).await,
+            ComponentType::DAAOrchestrator => self.check_daa_health(&mut health).await,
+            ComponentType::NeuralSystem => self.check_neural_health(&mut health).await,
+            ComponentType::EventBus => self.check_event_bus_health(&mut health).await,
+            ComponentType::DataPipeline => self.check_data_pipeline_health(&mut health).await,
+            ComponentType::Cache => self.check_cache_health(&mut health).await,
         };
 
         let elapsed = start_time.elapsed();
 
         match result {
             Ok(()) => {
-                health.update_status(LegacyHealthStatus::Healthy, Some(elapsed));
+                health.update_status(HealthStatus::Healthy, Some(elapsed));
                 self.metrics_collector
                     .record_latency(&component, elapsed)
                     .await;
@@ -118,6 +109,8 @@ impl HealthMonitor {
             }
         }
 
+        // counter!("component_health_checks_total").increment(1);
+
         // Store in component health map
         self.component_health
             .write()
@@ -128,16 +121,16 @@ impl HealthMonitor {
     }
 
     /// Get overall system health
-    pub async fn get_system_health(&self) -> Result<LegacySystemHealth> {
+    pub async fn get_system_health(&self) -> Result<SystemHealth> {
         let components = vec![
-            LegacyComponentType::Database,
-            LegacyComponentType::Redis,
-            LegacyComponentType::Streaming,
-            LegacyComponentType::DAAOrchestrator,
-            LegacyComponentType::NeuralSystem,
-            LegacyComponentType::EventBus,
-            LegacyComponentType::DataPipeline,
-            LegacyComponentType::Cache,
+            ComponentType::Database,
+            ComponentType::Redis,
+            ComponentType::Streaming,
+            ComponentType::DAAOrchestrator,
+            ComponentType::NeuralSystem,
+            ComponentType::EventBus,
+            ComponentType::DataPipeline,
+            ComponentType::Cache,
         ];
 
         let mut component_health = HashMap::new();
@@ -147,7 +140,10 @@ impl HealthMonitor {
             component_health.insert(health.component_type.clone(), health);
         }
 
-        let system_health = LegacySystemHealth::from_components(component_health, self.start_time);
+        let system_health = SystemHealth::from_components(component_health, self.start_time);
+
+        // Record system health score
+        // gauge!("system_health_score").set(system_health.health_score());
 
         Ok(system_health)
     }
@@ -197,8 +193,8 @@ impl HealthMonitor {
     }
 
     /// Register a component for monitoring
-    pub async fn register_component(&self, component: LegacyComponentType) -> Result<()> {
-        let health = LegacyComponentHealth::new(component.clone());
+    pub async fn register_component(&self, component: ComponentType) -> Result<()> {
+        let health = ComponentHealth::new(component.clone());
         self.component_health
             .write()
             .await
@@ -210,8 +206,8 @@ impl HealthMonitor {
     /// Update component health directly
     pub async fn update_component_health(
         &self,
-        component: LegacyComponentType,
-        health: LegacyComponentHealth,
+        component: ComponentType,
+        health: ComponentHealth,
     ) -> Result<()> {
         self.component_health
             .write()
@@ -270,49 +266,49 @@ impl HealthMonitor {
     }
 
     /// Component-specific health check implementations
-    async fn check_database_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_database_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check database connectivity
         Ok(())
     }
 
-    async fn check_redis_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_redis_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check Redis connectivity
         Ok(())
     }
 
-    async fn check_streaming_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_streaming_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check streaming system
         Ok(())
     }
 
-    async fn check_daa_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_daa_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check DAA orchestrator
         Ok(())
     }
 
-    async fn check_neural_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_neural_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check neural network status
         Ok(())
     }
 
-    async fn check_event_bus_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_event_bus_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check event bus
         Ok(())
     }
 
-    async fn check_data_pipeline_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_data_pipeline_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check data pipeline
         Ok(())
     }
 
-    async fn check_cache_health(&self, _health: &mut LegacyComponentHealth) -> Result<()> {
+    async fn check_cache_health(&self, _health: &mut ComponentHealth) -> Result<()> {
         // Placeholder implementation - in real system would check cache
         Ok(())
     }
 }
 
 impl HealthMonitorInterface for HealthMonitor {
-    async fn get_system_health(&self) -> Result<LegacySystemHealth> {
+    async fn get_system_health(&self) -> Result<SystemHealth> {
         self.get_system_health().await
     }
 
@@ -331,7 +327,7 @@ impl Clone for HealthMonitor {
             component_health: self.component_health.clone(),
             metrics_collector: self.metrics_collector.clone(),
             alert_manager: AlertManager::new(), // Create new alert manager for cloned instance
-            health_checker: LegacyHealthChecker::new(),
+            health_checker: HealthChecker::new(),
             start_time: self.start_time,
             monitoring_interval: self.monitoring_interval,
             is_monitoring: self.is_monitoring.clone(),

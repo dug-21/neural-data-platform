@@ -23,6 +23,7 @@ use super::fallback_manager::{
     FallbackManager, FallbackResult, FallbackStrategy, UltimateFallbackStrategy,
 };
 use super::health_monitor::{HealthChecker, HealthMonitor, HealthMonitorConfig, HealthStatus};
+use crate::monitoring::health::{AsyncHealthMonitor, ComponentType as HealthComponentType};
 use super::{DataAdapter, AdapterMetadata, ConnectionStatus};
 // Removed: neuro_divergent adapter import (deprecated)
 use crate::config::NeuralConfig;
