@@ -851,7 +851,7 @@ mod tests {
                 volatility: 0.02,
                 model_agreement: 0.9,
                 consecutive_failures: 0,
-                trading_volume: 1000000.0,
+                trading_volume: vec![1000000.0],
                 profit_loss: 0.0,
             },
             resource_requirements: crate::daa::autonomous_training::ResourceRequirements::minimal(),

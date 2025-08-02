@@ -58,7 +58,7 @@ async fn test_phase2_simplified_architecture() {
         high: 51000.0,
         low: 49500.0,
         close: 50500.0,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: None,
         entity: None,

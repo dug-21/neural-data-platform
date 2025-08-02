@@ -313,7 +313,7 @@ impl DataConverter {
                     high: pred,
                     low: pred,
                     close: pred,
-                    volume: 0.0,
+                    volume: vec![0.0],
                     indicators: HashMap::new(),
                     source: Some("neural_prediction".to_string()),
                     entity: base_data.entity.clone(),

@@ -394,7 +394,7 @@ mod tests {
                 high: 105.0 + (i as f64 * 0.1 * (i as f64 / 5.0).sin()),
                 low: 95.0 + (i as f64 * 0.1 * (i as f64 / 5.0).sin()),
                 close: 102.0 + (i as f64 * 0.1 * (i as f64 / 5.0).sin()),
-                volume: 1000.0 + i as f64 * 10.0,
+                volume: vec![1000.0 + i as f64 * 10.0],
             });
         }
         data

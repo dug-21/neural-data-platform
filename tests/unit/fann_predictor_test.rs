@@ -165,7 +165,7 @@ async fn test_volatility_calculation() {
             high: 100.0,
             low: 100.0,
             close: 100.0 + (i as f64),
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("TEST".to_string()),

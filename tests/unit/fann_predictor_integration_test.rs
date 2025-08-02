@@ -199,7 +199,7 @@ mod data_conversion_integration_tests {
                 high: price as f64 * 1.01,
                 low: price as f64 * 0.99,
                 close: price as f64,
-                volume: 1000.0,
+                volume: vec![1000.0],
                 indicators,
                 source: Some("prediction".to_string()),
                 entity: Some("BTC/USD".to_string()),

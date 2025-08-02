@@ -601,7 +601,7 @@ fn create_test_time_series_data() -> TimeSeriesData {
         high: 45100.0,
         low: 44900.0,
         close: 45000.0 + (Utc::now().timestamp() % 1000) as f64,
-        volume: 1.5,
+        volume: vec![1.5],
         indicators: {
             let mut indicators = HashMap::new();
             indicators.insert("RSI".to_string(), 50.0);

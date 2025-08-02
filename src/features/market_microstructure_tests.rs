@@ -23,7 +23,7 @@ mod tests {
                 high,
                 low,
                 close,
-                volume,
+                volume: vec![volume],
             }
         }).collect()
     }

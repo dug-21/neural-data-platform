@@ -100,7 +100,7 @@ impl TestDataGenerator {
                 high: price + 1.0,
                 low: price - 1.0,
                 close: price,
-                volume: 1000.0 + (i as f64 * 10.0),
+                volume: vec![1000.0 + (i as f64 * 10.0)],
                 indicators: HashMap::from([
                     ("rsi".to_string(), 50.0 + (i as f64 % 50.0)),
                     ("macd".to_string(), (i as f64 % 20.0) - 10.0),
@@ -134,7 +134,7 @@ impl TestDataGenerator {
                 high: price + volatility,
                 low: price - volatility,
                 close: price,
-                volume: 2000.0 + (i as f64 * 50.0),
+                volume: vec![2000.0 + (i as f64 * 50.0)],
                 indicators: HashMap::from([
                     ("rsi".to_string(), 30.0 + (i as f64 % 40.0)),
                     ("sma_20".to_string(), price - (i as f64 * 0.1)),
@@ -161,7 +161,7 @@ impl TestDataGenerator {
                 high: 0.0,
                 low: 0.0,
                 close: 0.0,
-                volume: 0.0,
+                volume: vec![0.0],
                 indicators: HashMap::new(),
                 source: Some("edge_case".to_string()),
                 entity: Some("zero_test".to_string()),
@@ -176,7 +176,7 @@ impl TestDataGenerator {
                 high: f64::MAX / 2.0,
                 low: f64::MIN / 2.0,
                 close: f64::MAX / 4.0,
-                volume: f64::MAX / 10.0,
+                volume: vec![f64::MAX / 10.0],
                 indicators: HashMap::from([
                     ("extreme_indicator".to_string(), f64::MAX / 100.0),
                 ]),
@@ -193,7 +193,7 @@ impl TestDataGenerator {
                 high: 101.0,
                 low: 99.0,
                 close: 100.5,
-                volume: 1000.0,
+                volume: vec![1000.0],
                 indicators: HashMap::from([
                     ("nan_indicator".to_string(), f64::NAN),
                 ]),

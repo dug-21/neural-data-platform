@@ -256,7 +256,7 @@ impl NeuralEnhancedStrategy {
         Some(sum / period as f64)
     }
 
-    /// Get neural predictions with real FANN neural networks
+    /// Get neural predictions with real vendor neural networks
     async fn get_neural_predictions(&self, symbol: &str) -> Result<Vec<f64>, StrategyError> {
         // Convert price history to TimeSeriesData for neural predictor
         let prices = self.price_history.read().await;
@@ -299,13 +299,13 @@ impl NeuralEnhancedStrategy {
             });
         }
 
-        // Get predictions using ensemble of models for better accuracy
-        let models = vec!["NHITS".to_string(), "TCN".to_string(), "DeepAR".to_string()];
+        // Get predictions using ensemble of vendor models for better accuracy
+        let models = vec!["LSTM".to_string(), "GRU".to_string(), "TCN".to_string()];
         let predictions = self
             .neural_predictor
             .predict_ensemble(&time_series_data, 5, &models, None)
             .await
-            .map_err(|e| StrategyError::Execution(format!("Neural prediction failed: {}", e)))?;
+            .map_err(|e| StrategyError::Execution(format!("Vendor neural prediction failed: {}", e)))?;
 
         if predictions.is_empty() {
             return Err(StrategyError::Execution(
@@ -369,7 +369,7 @@ impl NeuralEnhancedStrategy {
             }
         }
 
-        // Neural predictions with real FANN networks
+        // Neural predictions with real vendor networks
         match self.get_neural_predictions(symbol).await {
             Ok(predictions) => {
                 if !predictions.is_empty() {

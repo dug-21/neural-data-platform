@@ -90,7 +90,7 @@ fn create_test_market_data(symbol: &str, price: f64) -> MarketData {
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
         price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         bid: price - 5.0,
         ask: price + 5.0,
         source: "test_feed".to_string(),
@@ -551,7 +551,7 @@ fn create_time_series_data(symbol: &str, price: f64) -> TimeSeriesData {
         high: price + 20.0,
         low: price - 20.0,
         close: price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: {
             let mut indicators = HashMap::new();
             indicators.insert("RSI".to_string(), 65.5);

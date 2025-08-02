@@ -449,7 +449,7 @@ fn create_test_market_context(symbol: &str) -> MarketContext {
         current_price: 50000.0,
         bid: 49995.0,
         ask: 50005.0,
-        volume: 1000000.0,
+        volume: vec![1000000.0],
         features: HashMap::new(),
         timestamp: chrono::Utc::now(),
     }

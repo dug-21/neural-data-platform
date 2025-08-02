@@ -56,20 +56,18 @@ impl NeuralPredictor {
     }
 
     /// Get model configurations (required by autonomous training)
-    pub fn get_model_configs(&self) -> HashMap<String, crate::neural::fann::ModelConfig> {
+    pub fn get_model_configs(&self) -> HashMap<String, crate::neural::vendor_predictor::BaseModelConfig> {
         // Return current model configurations
         let mut configs = HashMap::new();
         
         // Add placeholder configurations for each model type
         for model_name in &self.config.models {
-            configs.insert(model_name.clone(), crate::neural::fann::ModelConfig {
+            configs.insert(model_name.clone(), crate::neural::vendor_predictor::BaseModelConfig {
+                model_type: model_name.clone(),
                 input_size: 60,
                 output_size: 1,
                 hidden_layers: vec![128, 64, 32],
                 learning_rate: 0.001,
-                horizon: 1,
-                hidden_activation: ::ruv_fann::ActivationFunction::SigmoidSymmetric,
-                output_activation: ::ruv_fann::ActivationFunction::Linear,
             });
         }
         
@@ -327,7 +325,7 @@ mod tests {
             high: 51000.0,
             low: 49500.0,
             close: 50500.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
             source: None,
             entity: None,

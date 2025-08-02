@@ -15,6 +15,8 @@ use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
 use crate::neural::vendor_predictor::{
     VendorPredictor, VendorPredictorConfig, ModelKey, ModelConfig, DataRequirements
 };
+use crate::adapters::vendor_bridge::VendorTimeSeriesData;
+use crate::data::data_converter::ConversionMetadata;
 use crate::neural::{NeuralPredictorTrait, PredictionResult};
 
 // Mock vendor types for testing
@@ -83,48 +85,64 @@ impl MockBaseModel {
 // Test utilities
 fn create_test_neural_config() -> NeuralConfig {
     NeuralConfig {
-        model_path: "/tmp/test_models".to_string(),
-        batch_size: 32,
-        learning_rate: 0.001,
+        input_size: 60,
+        output_size: 1,
         hidden_layers: vec![64, 32],
-        activation: "relu".to_string(),
-        optimizer: "adam".to_string(),
-        loss_function: "mse".to_string(),
+        learning_rate: 0.001,
         epochs: 100,
+        batch_size: 32,
+        sequence_length: 60,
+        prediction_horizon: 1,
+        enable_feature_scaling: true,
+        enable_technical_indicators: true,
+        dropout_rate: 0.1,
+        l2_regularization: 0.001,
         validation_split: 0.2,
         early_stopping: true,
         patience: 10,
-        enable_cuda: false,
-        model_type: "lstm".to_string(),
-        sequence_length: 60,
-        prediction_horizon: 1,
-        features: vec!["price".to_string(), "volume".to_string()],
-        enable_technical_indicators: true,
-        enable_feature_scaling: true,
-        dropout_rate: 0.1,
-        l2_regularization: 0.001,
+        use_real_models: false,
+        models: vec!["LSTM".to_string(), "GRU".to_string()],
+        memory_gb: 1.0,
+        prediction_cache_ttl: 3600,
+        accuracy_threshold: 0.7,
+        enable_model_monitoring: false,
     }
 }
 
 fn create_test_time_series_data(symbol: &str, values: Vec<f64>) -> TimeSeriesData {
-    let timestamps: Vec<DateTime<Utc>> = (0..values.len())
-        .map(|i| Utc::now() - chrono::Duration::hours((values.len() - i - 1) as i64))
-        .collect();
+    let now = Utc::now();
     
-    let mut metadata = HashMap::new();
-    metadata.insert("symbol".to_string(), serde_json::json!(symbol));
-    metadata.insert("source".to_string(), serde_json::json!("test"));
+    // Create a basic TimeSeriesData using the last value as close price
+    let close_price = values.last().copied().unwrap_or(100.0);
     
     TimeSeriesData {
-        values,
-        timestamps,
-        metadata: metadata.clone(),
         symbol: symbol.to_string(),
+        timestamp: now,
+        open: close_price * 0.99,
+        high: close_price * 1.01,
+        low: close_price * 0.98,
+        close: close_price,
+        volume: vec![1000000.0],
+        indicators: HashMap::new(),
+        source: Some("test".to_string()),
+        entity: Some(symbol.to_string()),
+        value: Some(close_price),
+        metadata: Some({
+            let mut map = HashMap::new();
+            map.insert("symbol".to_string(), serde_json::json!(symbol));
+            map.insert("test_values".to_string(), serde_json::json!(values));
+            map
+        }),
+        // Additional fields for vendor integration
+        values: values.clone(),
+        timestamps: (0..values.len())
+            .map(|i| now - chrono::Duration::hours((values.len() - i - 1) as i64))
+            .collect(),
         metadata_map: {
             let mut map = HashMap::new();
             map.insert("symbol".to_string(), serde_json::json!(symbol));
             map
-        }
+        },
     }
 }
 
@@ -309,7 +327,7 @@ mod tests {
         
         // Test prediction
         let test_data = create_test_time_series_data("AAPL", vec![170.0, 172.0, 168.0, 175.0]);
-        let result = predictor.predict(&test_data).await;
+        let result = predictor.predict_single(&test_data).await;
         
         assert!(result.is_ok());
         let prediction = result.unwrap();
@@ -317,8 +335,7 @@ mod tests {
         // Verify prediction structure
         assert!(prediction.value > 0.0);
         assert!(prediction.confidence > 0.0 && prediction.confidence <= 1.0);
-        assert!(prediction.model_type.contains("ensemble"));
-        assert!(!prediction.features_used.is_empty());
+        assert!(prediction.model_name.contains("ensemble"));
         assert!(prediction.metadata.is_some());
     }
     
@@ -355,14 +372,14 @@ mod tests {
         
         // Test ensemble prediction
         let test_data = create_test_time_series_data("AAPL", vec![170.0, 172.0, 168.0, 175.0]);
-        let result = predictor.predict(&test_data).await;
+        let result = predictor.predict_single(&test_data).await;
         
         assert!(result.is_ok());
         let prediction = result.unwrap();
         
         // Verify ensemble averaging: (175.0 + 177.0 + 173.0) / 3 = 175.0
         assert!((prediction.value - 175.0).abs() < 0.1);
-        assert!(prediction.model_type.contains("ensemble_3_models"));
+        assert!(prediction.model_name.contains("ensemble_3_models"));
         
         // Verify metadata contains individual model info
         let metadata = prediction.metadata.unwrap();
@@ -407,7 +424,7 @@ mod tests {
         
         // Should use only the working model
         assert_eq!(prediction.value, 180.0);
-        assert!(prediction.model_type.contains("ensemble_1_models"));
+        assert!(prediction.model_name.contains("ensemble_1_models"));
     }
     
     #[tokio::test]
@@ -420,7 +437,7 @@ mod tests {
         
         // Test prediction with no models added
         let test_data = create_test_time_series_data("UNKNOWN", vec![100.0, 102.0, 98.0]);
-        let result = predictor.predict(&test_data).await;
+        let result = predictor.predict_single(&test_data).await;
         
         assert!(result.is_ok());
         let prediction = result.unwrap();
@@ -428,7 +445,7 @@ mod tests {
         // Should return default prediction
         assert_eq!(prediction.value, 0.0);
         assert_eq!(prediction.confidence, 0.5);
-        assert_eq!(prediction.model_type, "none");
+        assert_eq!(prediction.model_name, "none");
     }
     
     #[tokio::test]
@@ -481,12 +498,8 @@ mod tests {
         let test_data = create_test_time_series_data("AAPL", vec![100.0, 200.0, 150.0]);
         let (_, metadata) = predictor.convert_to_vendor_format(&test_data, "AAPL").await.unwrap();
         
-        // Create mock forecast result
-        let forecast = MockForecastResult {
-            forecasts: vec![0.5, 0.7, 0.3], // Normalized values
-            confidence: Some(0.85),
-            metadata: None,
-        };
+        // Create mock forecast result using neuro_divergent types
+        let forecast = neuro_divergent_models::foundation::ForecastOutput::new(vec![150.0f32]);
         
         let result = predictor.convert_from_vendor_format(forecast, "AAPL", "test_model").await;
         assert!(result.is_ok());
@@ -496,7 +509,7 @@ mod tests {
         // Verify conversion back to original scale
         assert!(prediction_result.value >= 100.0 && prediction_result.value <= 200.0);
         assert_eq!(prediction_result.confidence, 0.85);
-        assert_eq!(prediction_result.model_type, "test_model");
+        assert_eq!(prediction_result.model_name, "test_model");
         assert!(prediction_result.metadata.is_some());
     }
     
@@ -520,7 +533,7 @@ mod tests {
         
         // Make prediction (should trigger performance tracking)
         let test_data = create_test_time_series_data("AAPL", vec![170.0, 172.0, 168.0, 175.0]);
-        let result = predictor.predict(&test_data).await;
+        let result = predictor.predict_single(&test_data).await;
         
         assert!(result.is_ok());
         let prediction = result.unwrap();
@@ -528,6 +541,51 @@ mod tests {
         // Verify prediction was made (performance tracking happens internally)
         assert!(prediction.value > 0.0);
         assert!(prediction.confidence > 0.0);
+    }
+    
+    #[tokio::test]
+    async fn test_sector_based_model_routing() {
+        let config = create_test_neural_config();
+        let sector_mapper = create_test_sector_mapper();
+        let performance_tracker = create_test_performance_tracker();
+        
+        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        
+        // Test getting models for known technology symbol
+        let models = predictor.get_models_for_symbol("AAPL").await.unwrap();
+        // Should return empty since no models loaded yet, but shouldn't error
+        assert!(models.is_empty());
+        
+        // Test getting models for financial symbol
+        let models = predictor.get_models_for_symbol("JPM").await.unwrap();
+        assert!(models.is_empty());
+    }
+    
+    #[tokio::test]
+    async fn test_cross_sector_model_fallback() {
+        let config = create_test_neural_config();
+        let sector_mapper = create_test_sector_mapper();
+        let performance_tracker = create_test_performance_tracker();
+        
+        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        
+        // Test fallback to cross-sector models when no sector-specific models exist
+        let models = predictor.get_models_for_symbol("UNKNOWN_SYMBOL").await.unwrap();
+        assert!(models.is_empty()); // No universal models loaded yet
+    }
+    
+    #[tokio::test]
+    async fn test_sector_allocation_statistics() {
+        let config = create_test_neural_config();
+        let sector_mapper = create_test_sector_mapper();
+        let performance_tracker = create_test_performance_tracker();
+        
+        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        
+        // Test getting sector allocation stats
+        let stats = predictor.get_sector_allocation_stats().await;
+        // Should be empty since no models loaded
+        assert!(stats.is_empty());
     }
     
     #[tokio::test]
@@ -585,7 +643,7 @@ mod tests {
                     "AAPL", 
                     vec![170.0 + i as f64, 172.0 + i as f64, 168.0 + i as f64]
                 );
-                predictor_clone.predict(&data).await
+                predictor_clone.predict_single(&data).await
             });
             handles.push(handle);
         }
@@ -620,6 +678,193 @@ mod tests {
     }
     
     #[tokio::test]
+    async fn test_cluster_model_pool_creation() {
+        let config = ClusterPoolConfig::default();
+        let pool = ClusterModelPool::new("technology".to_string(), config).await;
+        assert!(pool.is_ok());
+        
+        let pool = pool.unwrap();
+        assert_eq!(pool.sector_id, "technology");
+        assert_eq!(pool.shared_models.len(), 0);
+        assert_eq!(pool.active_symbols.len(), 0);
+    }
+    
+    #[tokio::test]
+    async fn test_cluster_pool_model_addition() {
+        let config = ClusterPoolConfig::default();
+        let pool = ClusterModelPool::new("technology".to_string(), config).await.unwrap();
+        
+        // Add a mock shared model
+        let mock_model = Box::new(MockBaseModel::new("LSTM", 150.0, 0.85));
+        let result = pool.add_shared_model("LSTM", mock_model, 10.0).await;
+        
+        assert!(result.is_ok());
+        assert_eq!(pool.shared_models.len(), 1);
+        assert!(pool.shared_models.contains_key("LSTM"));
+        
+        // Check memory usage
+        let (_, memory_mb) = pool.get_memory_usage().await;
+        assert!(memory_mb > 0.0);
+    }
+    
+    #[tokio::test]
+    async fn test_cluster_pool_memory_limits() {
+        let mut config = ClusterPoolConfig::default();
+        config.max_memory_mb = 5.0; // Very small limit for testing
+        config.enable_lazy_loading = false; // Disable lazy loading to test hard limit
+        
+        let pool = ClusterModelPool::new("technology".to_string(), config).await.unwrap();
+        
+        // Add models until memory limit is exceeded
+        let model1 = Box::new(MockBaseModel::new("LSTM", 150.0, 0.85));
+        let result1 = pool.add_shared_model("LSTM", model1, 3.0).await;
+        assert!(result1.is_ok());
+        
+        let model2 = Box::new(MockBaseModel::new("GRU", 160.0, 0.80));
+        let result2 = pool.add_shared_model("GRU", model2, 3.0).await;
+        assert!(result2.is_err()); // Should fail due to memory limit
+    }
+    
+    #[tokio::test]
+    async fn test_cluster_pool_symbol_registration() {
+        let config = ClusterPoolConfig::default();
+        let pool = ClusterModelPool::new("technology".to_string(), config).await.unwrap();
+        
+        // Register symbols
+        let result1 = pool.register_symbol("AAPL").await;
+        let result2 = pool.register_symbol("MSFT").await;
+        let result3 = pool.register_symbol("GOOGL").await;
+        
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+        assert!(result3.is_ok());
+        
+        assert_eq!(pool.active_symbols.len(), 3);
+        assert!(pool.active_symbols.contains_key("AAPL"));
+        assert!(pool.active_symbols.contains_key("MSFT"));
+        assert!(pool.active_symbols.contains_key("GOOGL"));
+    }
+    
+    #[tokio::test]
+    async fn test_cluster_pool_lazy_loading() {
+        let mut config = ClusterPoolConfig::default();
+        config.idle_timeout_minutes = 0; // Immediate timeout for testing
+        config.enable_lazy_loading = true;
+        
+        let pool = ClusterModelPool::new("technology".to_string(), config).await.unwrap();
+        
+        // Pool should be eligible for unloading immediately
+        let should_unload = pool.should_unload().await;
+        assert!(should_unload);
+    }
+    
+    #[tokio::test]
+    async fn test_vendor_predictor_with_cluster_pools() {
+        let predictor = VendorPredictor::new(
+            &create_test_neural_config(),
+            create_test_sector_mapper(),
+            create_test_performance_tracker()
+        ).unwrap();
+        
+        // Add shared model to cluster pool
+        let mock_model = Box::new(MockBaseModel::new("LSTM", 175.0, 0.85));
+        let result = predictor.add_shared_model("technology", "LSTM", mock_model, 10.0).await;
+        assert!(result.is_ok());
+        
+        // Register symbol with cluster
+        let register_result = predictor.register_symbol_with_cluster("AAPL").await;
+        assert!(register_result.is_ok());
+        
+        // Verify cluster pool was created
+        assert_eq!(predictor.cluster_pools.len(), 1);
+        assert!(predictor.cluster_pools.contains_key("technology"));
+        
+        // Get model info should include cluster statistics
+        let model_info = predictor.get_model_info().await;
+        assert_eq!(model_info.get("cluster_pools").unwrap(), &serde_json::json!(1));
+        assert!(model_info.contains_key("cluster_pool_stats"));
+        assert!(model_info.contains_key("total_cluster_memory_mb"));
+    }
+    
+    #[tokio::test]
+    async fn test_cluster_prediction_integration() {
+        let predictor = VendorPredictor::new(
+            &create_test_neural_config(),
+            create_test_sector_mapper(),
+            create_test_performance_tracker()
+        ).unwrap();
+        
+        // Add shared model to cluster pool
+        let mock_model = Box::new(MockBaseModel::new("LSTM", 175.0, 0.85));
+        predictor.add_shared_model("technology", "LSTM", mock_model, 10.0).await.unwrap();
+        
+        // Test cluster prediction
+        let test_data = create_test_time_series_data("AAPL", vec![170.0, 172.0, 168.0, 175.0]);
+        let result = predictor.predict_single(&test_data).await;
+        
+        assert!(result.is_ok());
+        let prediction = result.unwrap();
+        
+        // Should use cluster prediction
+        assert!(prediction.model_name.contains("cluster"));
+        assert!(prediction.value > 0.0);
+        assert!(prediction.confidence > 0.0);
+        
+        // Check metadata for cluster-specific information
+        if let Some(metadata) = &prediction.metadata {
+            assert_eq!(metadata.get("prediction_method").unwrap(), &serde_json::json!("cluster_ensemble"));
+            assert!(metadata.contains_key("sector_id"));
+            assert!(metadata.contains_key("memory_efficient"));
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_cluster_pool_maintenance() {
+        let predictor = VendorPredictor::new(
+            &create_test_neural_config(),
+            create_test_sector_mapper(),
+            create_test_performance_tracker()
+        ).unwrap();
+        
+        // Create cluster pools for multiple sectors
+        let pool1 = predictor.get_or_create_cluster_pool("technology").await.unwrap();
+        let pool2 = predictor.get_or_create_cluster_pool("financial").await.unwrap();
+        
+        assert_eq!(predictor.cluster_pools.len(), 2);
+        
+        // Run maintenance
+        let maintenance_result = predictor.maintain_cluster_pools().await;
+        assert!(maintenance_result.is_ok());
+        
+        // Pools might be removed due to inactivity (depending on configuration)
+        // This tests that maintenance runs without error
+    }
+    
+    #[tokio::test]
+    async fn test_cluster_stats_retrieval() {
+        let predictor = VendorPredictor::new(
+            &create_test_neural_config(),
+            create_test_sector_mapper(),
+            create_test_performance_tracker()
+        ).unwrap();
+        
+        // Add shared model
+        let mock_model = Box::new(MockBaseModel::new("LSTM", 175.0, 0.85));
+        predictor.add_shared_model("technology", "LSTM", mock_model, 10.0).await.unwrap();
+        
+        // Get cluster statistics
+        let cluster_stats = predictor.get_cluster_stats().await;
+        
+        assert_eq!(cluster_stats.len(), 1);
+        assert!(cluster_stats.contains_key("technology"));
+        
+        let tech_stats = &cluster_stats["technology"];
+        assert_eq!(tech_stats.get("sector_id").unwrap(), &serde_json::json!("technology"));
+        assert_eq!(tech_stats.get("model_count").unwrap(), &serde_json::json!(1));
+        assert!(tech_stats.contains_key("memory_usage_mb"));
+    }
+    
+    #[tokio::test]
     async fn test_symbol_metadata_extraction() {
         let predictor = VendorPredictor::new(
             &create_test_neural_config(),
@@ -637,5 +882,75 @@ mod tests {
         // Both should work (fallback mechanisms)
         // Note: Actual implementation would handle symbol extraction
         // This test verifies the interface exists
+    }
+    
+    #[tokio::test]
+    async fn test_shared_feature_integration() {
+        let predictor = VendorPredictor::new(
+            &create_test_neural_config(),
+            create_test_sector_mapper(),
+            create_test_performance_tracker()
+        ).unwrap();
+        
+        // Add shared model with feature extractor
+        let mock_model = Box::new(MockBaseModel::new("LSTM", 175.0, 0.85));
+        predictor.add_shared_model("technology", "LSTM", mock_model, 10.0).await.unwrap();
+        
+        // Register multiple symbols in the same sector
+        predictor.register_symbol_with_cluster("AAPL").await.unwrap();
+        predictor.register_symbol_with_cluster("MSFT").await.unwrap();
+        predictor.register_symbol_with_cluster("GOOGL").await.unwrap();
+        
+        // Test prediction - should use shared features
+        let test_data = create_test_time_series_data("AAPL", vec![170.0, 172.0, 168.0, 175.0]);
+        let result = predictor.predict_single(&test_data).await;
+        
+        assert!(result.is_ok());
+        let prediction = result.unwrap();
+        
+        // Verify shared feature usage in metadata
+        if let Some(metadata) = &prediction.metadata {
+            assert_eq!(metadata.get("shared_features_used").unwrap_or(&serde_json::json!(false)), &serde_json::json!(true));
+            assert!(metadata.contains_key("feature_version"));
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_memory_efficiency_validation() {
+        let custom_config = ClusterPoolConfig {
+            max_memory_mb: 25.0, // Reduced from default 50MB
+            min_active_symbols: 2,
+            idle_timeout_minutes: 10,
+            enable_lazy_loading: true,
+            max_models_per_pool: 3,
+        };
+        
+        let predictor = VendorPredictor::with_cluster_config(
+            &create_test_neural_config(),
+            create_test_sector_mapper(),
+            create_test_performance_tracker(),
+            custom_config
+        ).unwrap();
+        
+        // Add multiple shared models and verify memory limits are respected
+        let model1 = Box::new(MockBaseModel::new("LSTM", 175.0, 0.85));
+        let model2 = Box::new(MockBaseModel::new("GRU", 180.0, 0.80));
+        let model3 = Box::new(MockBaseModel::new("Transformer", 185.0, 0.90));
+        
+        predictor.add_shared_model("technology", "LSTM", model1, 8.0).await.unwrap();
+        predictor.add_shared_model("technology", "GRU", model2, 8.0).await.unwrap();
+        predictor.add_shared_model("technology", "Transformer", model3, 8.0).await.unwrap();
+        
+        // Get cluster statistics to verify memory tracking
+        let cluster_stats = predictor.get_cluster_stats().await;
+        let tech_stats = &cluster_stats["technology"];
+        
+        let memory_usage = tech_stats.get("memory_usage_mb").unwrap().as_f64().unwrap();
+        let max_memory = tech_stats.get("max_memory_mb").unwrap().as_f64().unwrap();
+        
+        assert!(memory_usage <= max_memory);
+        assert_eq!(max_memory, 25.0);
+        
+        info!("Memory efficiency test: {:.2} MB used of {:.2} MB limit", memory_usage, max_memory);
     }
 }

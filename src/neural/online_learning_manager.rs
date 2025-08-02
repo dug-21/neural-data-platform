@@ -601,7 +601,7 @@ mod tests {
             high: 1002.0,
             low: 998.0,
             close: 1001.0,
-            volume: 1000000.0,
+            volume: vec![1000000.0],
             source: Some("test".to_string()),
             value: Some(1001.0),
             metadata: None,

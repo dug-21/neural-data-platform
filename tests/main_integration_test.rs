@@ -29,7 +29,7 @@ fn create_market_event(symbol: &str, price: f64, sequence: u64) -> MarketEvent {
         timestamp: Utc::now(),
         event_type: "market_update".to_string(),
         price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         bid: price - 5.0,
         ask: price + 5.0,
         spread: 10.0,

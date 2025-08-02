@@ -8,6 +8,7 @@ pub mod cache;
 pub mod market_context;
 pub mod storage;
 pub mod sector_mapper;
+pub mod sector_aggregator;
 pub mod data_converter;
 
 // Re-export main types
@@ -16,6 +17,7 @@ pub use market_context::MarketContext;
 pub use storage::{
     AggregatedStats, PredictionData, TimeSeriesData as StorageTimeSeriesData, TimescaleDBStorage,
 };
+pub use sector_mapper::{SectorId, SectorInfo, SectorMapper};
 
 /// Time series data point - enhanced for vendor model integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +28,7 @@ pub struct TimeSeriesData {
     pub high: f64,
     pub low: f64,
     pub close: f64,
-    pub volume: f64,
+    pub volume: Vec<f64>, // Changed to Vec for compatibility
     pub indicators: HashMap<String, f64>,
     // Storage compatibility fields
     pub source: Option<String>,
@@ -37,6 +39,8 @@ pub struct TimeSeriesData {
     // Enhanced fields for vendor model integration
     /// Raw price values for time series analysis
     pub values: Vec<f64>,
+    /// Volume data points
+    pub intervals: Vec<u64>,
     /// Timestamps corresponding to values (for time-based feature engineering)
     pub timestamps: Vec<DateTime<Utc>>,
     /// Additional metadata for vendor model conversion
@@ -74,7 +78,7 @@ impl TimeSeriesData {
             high: 0.0,
             low: 0.0,
             close: 0.0,
-            volume: 0.0,
+            volume: vec![0.0],
             indicators: HashMap::new(),
             source: None,
             entity: None,
@@ -90,6 +94,16 @@ impl TimeSeriesData {
     pub fn add_value(&mut self, value: f64, timestamp: DateTime<Utc>) {
         self.values.push(value);
         self.timestamps.push(timestamp);
+    }
+    
+    /// Add volume data
+    pub fn add_volume(&mut self, volume: f64) {
+        self.volume.push(volume);
+    }
+    
+    /// Add multiple volumes at once
+    pub fn add_volumes(&mut self, volumes: Vec<f64>) {
+        self.volume.extend(volumes);
     }
     
     /// Add multiple values at once

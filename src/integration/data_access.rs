@@ -559,7 +559,7 @@ impl DataAccessLayer {
                 high: stat.max_value.unwrap_or(0.0),
                 low: stat.min_value.unwrap_or(0.0),
                 close: stat.avg_value.unwrap_or(0.0),
-                volume: 1000.0, // Default volume for aggregated data
+                volume: vec![1000.0], // Default volume for aggregated data
                 indicators,
                 source: Some("aggregated_stats".to_string()),
                 entity: Some(stat.entity.clone()),

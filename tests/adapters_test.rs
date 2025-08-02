@@ -77,7 +77,7 @@ mod timescale_adapter_tests {
                 high: 105.0,
                 low: 95.0,
                 close: 102.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
             },
             MarketData {
                 symbol: "BTC/USD".to_string(),
@@ -86,7 +86,7 @@ mod timescale_adapter_tests {
                 high: 105.0,
                 low: 95.0,
                 close: 102.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
             },
             MarketData {
                 symbol: "BTC/USD".to_string(),
@@ -95,7 +95,7 @@ mod timescale_adapter_tests {
                 high: 90.0, // High < Low (invalid)
                 low: 95.0,
                 close: 102.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
             },
         ];
 
@@ -180,7 +180,7 @@ mod redis_adapter_tests {
             high: 51000.0,
             low: 49000.0,
             close: 50500.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         };
 
         // WHEN: We try to publish without connection
@@ -324,7 +324,7 @@ mod integration_scenarios {
                 high: 105.0,
                 low: 95.0,
                 close: 102.0,
-                volume: 0.0,
+                volume: vec![0.0],
             },
             // Negative prices (should be rejected)
             MarketData {
@@ -334,7 +334,7 @@ mod integration_scenarios {
                 high: 105.0,
                 low: 95.0,
                 close: 102.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
             },
             // All prices equal
             MarketData {
@@ -344,7 +344,7 @@ mod integration_scenarios {
                 high: 100.0,
                 low: 100.0,
                 close: 100.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
             },
         ];
 

@@ -13,7 +13,7 @@ use crate::data::TimeSeriesData;
 
 // Internal modules - temporarily public for compilation
 // REMOVED: fann_predictor_legacy_deprecated - was causing 131 compilation errors
-pub mod fann; // New modular FANN architecture (PREFERRED)
+// pub mod fann; // New modular FANN architecture (DISABLED - missing implementation)
 mod fann_model_adapter;
 mod streaming_connector;
 mod online_validator;
@@ -24,7 +24,22 @@ mod batch_optimizer;
 
 // Phase 1: Vendor model integration
 pub mod vendor_predictor;
+pub mod memory_optimized_predictor;
+pub mod sector_aggregator;
 pub mod model_factory;
+
+// Re-export vendor integration components
+pub use vendor_predictor::{VendorPredictor, VendorPredictorConfig};
+pub use memory_optimized_predictor::{
+    MemoryOptimizedPredictor,
+    MemoryOptimizedConfig,
+    MemoryUsageStats,
+    OptimizationResult,
+};
+pub use sector_aggregator::{
+    SectorAggregator, SectorAggregatorConfig, SectorAggregation, 
+    ETFCorrelation, BreadthConfig
+};
 
 // Public predictor module - using predictor.rs file  
 pub mod predictor;
@@ -113,22 +128,12 @@ pub trait NeuralPredictorTrait: Send + Sync {
 // Re-export the clean NeuralPredictor implementation
 pub use predictor::NeuralPredictor;
 
-// Re-export modular FANN components (PRIMARY EXPORTS)
-pub use fann::{
-    FannPredictor, // Primary FannPredictor implementation - TRAIT IMPLEMENTATION ADDED ✅
-    ModelConfig, 
-    FannModelConfig,
-    ModelPerformance,
-    MarketRegime,
-    NeuralError,
-    EnsembleManager,
-    StreamingConfig,
-    TrainingResult,
-    TrainingAlgorithm,
-    NetworkArchitecture,
-    ConversionConfig,
-    NormalizationMethod,
-    RecurrentState,
+// Note: fann module exports disabled - using VendorPredictor instead
+// Re-export vendor predictor components (PRIMARY EXPORTS)
+pub use vendor_predictor::{
+    VendorPredictorConfig,
+    ModelConfig,
+    ClusterModelPool,
 };
 
 // LEGACY: Removed legacy predictor - now using modular FannPredictor from fann/ module

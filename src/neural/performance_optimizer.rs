@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
-use super::fann::{FannModelConfig, FannPredictor};
+// Removed fann import - VendorPredictor replaces FannPredictor
+use crate::neural::vendor_predictor::{VendorPredictor, VendorPredictorConfig};
 use crate::data::TimeSeriesData;
 use crate::neural::NeuralPredictorTrait;
 use ::ruv_fann::{Network, NetworkBuilder};
@@ -47,7 +48,7 @@ pub struct PerformanceMetrics {
 #[derive(Clone)]
 struct CachedModel {
     network: Arc<Network<f32>>,
-    config: FannModelConfig,
+    config: VendorPredictorConfig,
     last_used: Instant,
     load_time_ms: f64,
 }
@@ -55,7 +56,7 @@ struct CachedModel {
 /// High-performance predictor with optimizations
 pub struct OptimizedFannPredictor {
     /// Base predictor
-    base_predictor: Arc<FannPredictor>,
+    base_predictor: Arc<VendorPredictor>,
     /// Model cache with preloaded networks
     model_cache: Arc<DashMap<String, CachedModel>>,
     /// Memory pool for allocations
@@ -93,20 +94,24 @@ struct BatchRequest {
 
 impl OptimizedFannPredictor {
     /// Get default model configuration as static method
-    fn get_default_model_config(_model_name: &str) -> Option<FannModelConfig> {
-        Some(FannModelConfig {
-            layers: vec![60, 128, 64, 32, 1], // input + hidden + output
-            activation: ruv_fann::ActivationFunction::Sigmoid,
-            learning_rate: 0.001,
-            epochs: 1000,
-            desired_error: 0.01,
-            max_epochs: 1000,
-            epochs_between_reports: 100,
+    fn get_default_model_config(_model_name: &str) -> Option<VendorPredictorConfig> {
+        Some(VendorPredictorConfig {
+            base_config: crate::neural::vendor_predictor::BaseModelConfig {
+                model_type: "MLP".to_string(),
+                input_size: 60,
+                output_size: 1,
+                hidden_layers: vec![128, 64, 32],
+                learning_rate: 0.001,
+            },
+            model_pool_size: 10,
+            prediction_timeout_ms: 5000,
+            memory_limit_mb: 100.0,
+            enable_caching: true,
         })
     }
 
     /// Create new optimized predictor
-    pub async fn new(base_predictor: Arc<FannPredictor>) -> Result<Self> {
+    pub async fn new(base_predictor: Arc<VendorPredictor>) -> Result<Self> {
         // Initialize batch queue
         let (sender, receiver) = bounded(1000);
         let batch_queue = Arc::new(BatchQueue { sender, receiver });
@@ -133,15 +138,19 @@ impl OptimizedFannPredictor {
     }
 
     /// Get default model configuration
-    fn default_model_config(&self, _model_name: &str) -> Option<FannModelConfig> {
-        Some(FannModelConfig {
-            layers: vec![60, 128, 64, 32, 1], // input + hidden + output
-            activation: ruv_fann::ActivationFunction::Sigmoid,
-            learning_rate: 0.001,
-            epochs: 1000,
-            desired_error: 0.01,
-            max_epochs: 1000,
-            epochs_between_reports: 100,
+    fn default_model_config(&self, _model_name: &str) -> Option<VendorPredictorConfig> {
+        Some(VendorPredictorConfig {
+            base_config: crate::neural::vendor_predictor::BaseModelConfig {
+                model_type: "MLP".to_string(),
+                input_size: 60,
+                output_size: 1,
+                hidden_layers: vec![128, 64, 32],
+                learning_rate: 0.001,
+            },
+            model_pool_size: 10,
+            prediction_timeout_ms: 5000,
+            memory_limit_mb: 100.0,
+            enable_caching: true,
         })
     }
 
@@ -183,7 +192,7 @@ impl OptimizedFannPredictor {
     async fn load_and_cache_model(
         model_name: &str,
         cache: Arc<DashMap<String, CachedModel>>,
-        _predictor: Arc<FannPredictor>,
+        _predictor: Arc<VendorPredictor>,
     ) -> Result<()> {
         let start = Instant::now();
 

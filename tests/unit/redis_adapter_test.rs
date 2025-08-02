@@ -29,7 +29,7 @@ mod tests {
             high: 49000.0,
             low: 47500.0,
             close: 48500.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         }
     }
 

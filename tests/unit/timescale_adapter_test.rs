@@ -31,7 +31,7 @@ mod tests {
             high: 49000.0,
             low: 47500.0,
             close: 48500.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         }
     }
 
@@ -330,7 +330,7 @@ mod tests {
                 high: 3900.0,
                 low: 3750.0,
                 close: 3850.0,
-                volume: 500.0,
+                volume: vec![500.0],
             },
         ];
 

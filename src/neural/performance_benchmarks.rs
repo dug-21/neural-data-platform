@@ -28,7 +28,7 @@ fn generate_benchmark_data(size: usize) -> Vec<TimeSeriesData> {
                 high: base_price + 1.0,
                 low: base_price - 1.0,
                 close: base_price,
-                volume: 1_000_000.0 + (i as f64 * 100.0),
+                volume: vec![1_000_000.0 + (i as f64 * 100.0)],
                 indicators: std::collections::HashMap::from([
                     ("rsi".to_string(), 50.0 + (i as f64 * 0.2).sin() * 20.0),
                     ("macd".to_string(), (i as f64 * 0.05).sin()),

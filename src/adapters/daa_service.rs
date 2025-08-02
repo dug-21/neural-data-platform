@@ -277,7 +277,7 @@ mod tests {
             high: 3100.0,
             low: 2950.0,
             close: 3050.0,
-            volume: 5000.0,
+            volume: vec![5000.0],
             indicators: HashMap::new(),
             source: None,
             entity: None,

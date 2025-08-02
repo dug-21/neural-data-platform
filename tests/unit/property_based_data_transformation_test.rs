@@ -284,7 +284,7 @@ async fn property_minmax_normalization_ordering() {
             high: price + 10.0,
             low: price - 10.0,
             close: price,
-            volume: 1000.0,
+            volume: vec![1000.0],
         });
     }
     

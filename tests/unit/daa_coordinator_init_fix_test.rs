@@ -91,7 +91,7 @@ mod daa_init_fix_tests {
                 high: 50100.0,
                 low: 49700.0,
                 close: 50000.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
                 indicators: HashMap::new(),
                 source: Some("test".to_string()),
                 entity: Some("BTC".to_string()),

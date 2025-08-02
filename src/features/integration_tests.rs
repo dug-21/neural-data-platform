@@ -27,7 +27,7 @@ mod tests {
             high: 152.0,
             low: 149.0,
             close: 151.5,
-            volume: 50_000_000.0,
+            volume: vec![50_000_000.0],
         };
         
         // Historical data with various patterns
@@ -83,7 +83,7 @@ mod tests {
                 high,
                 low,
                 close,
-                volume,
+                volume: vec![volume],
             });
         }
         
@@ -101,7 +101,7 @@ mod tests {
                 high: h.high * 3.0 * correlation_factor + noise,
                 low: h.low * 3.0 * correlation_factor + noise,
                 close: h.close * 3.0 * correlation_factor + noise,
-                volume: h.volume * 2.0,
+                volume: vec![h.volume.first().unwrap_or(&0.0) * 2.0],
             }
         }).collect();
         market_context.insert("SPY".to_string(), spy_data);
@@ -116,7 +116,7 @@ mod tests {
                 high: inverse_price + 1.0,
                 low: inverse_price - 1.0,
                 close: inverse_price,
-                volume: 10_000_000.0,
+                volume: vec![10_000_000.0],
             }
         }).collect();
         market_context.insert("VIX".to_string(), vix_data);
@@ -132,7 +132,7 @@ mod tests {
                     high: h.high * factor,
                     low: h.low * factor,
                     close: h.close * factor,
-                    volume: h.volume * 0.5,
+                    volume: vec![h.volume.first().unwrap_or(&0.0) * 0.5],
                 }
             }).collect();
             market_context.insert(symbol.to_string(), sector_data);
@@ -314,7 +314,7 @@ mod tests {
             high: 100.0,
             low: 100.0,
             close: 100.0,
-            volume: 0.0,
+            volume: vec![0.0],
         };
         let empty_historical = vec![];
         let empty_context = HashMap::new();

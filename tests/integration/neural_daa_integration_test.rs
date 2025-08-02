@@ -159,7 +159,7 @@ async fn test_daa_agent_trading_decisions() {
         high: 50500.0,
         low: 49500.0,
         close: 50200.0,
-        volume: 1500.0,
+        volume: vec![1500.0],
     };
     
     // Test decision context preparation

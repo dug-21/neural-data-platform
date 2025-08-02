@@ -621,7 +621,7 @@ fn generate_sideways_market_data(symbol: &str, noise_level: f64, count: usize) -
             high: price * 1.0002,
             low: price * 0.9998,
             close: price,
-            volume: 800000.0,
+            volume: vec![800000.0],
             bid: price * 0.9999,
             ask: price * 1.0001,
             indicators: HashMap::new(),
