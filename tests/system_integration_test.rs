@@ -224,7 +224,7 @@ async fn test_daa_to_neural_coordination() -> Result<()> {
                 high: 2020.0,
                 low: 1960.0,
                 close: 2000.0,
-                volume: 50000.0,
+                volume: vec![50000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 65.5);
@@ -303,7 +303,7 @@ async fn test_multi_component_failure_recovery() -> Result<()> {
             high: 1510.0,
             low: 1480.0,
             close: 1500.0,
-            volume: 10000.0,
+            volume: vec![10000.0],
             indicators: HashMap::new(),
         },
         context_metadata: HashMap::new(),
@@ -446,7 +446,7 @@ async fn test_high_frequency_trading_scenario() -> Result<()> {
                 high: 3010.0,
                 low: 2980.0,
                 close: 3000.0,
-                volume: 100000.0,
+                volume: vec![100000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 55.0);
@@ -533,7 +533,7 @@ async fn test_market_volatility_response() -> Result<()> {
             high: 4000.0,
             low: 3200.0, // Large range indicating high volatility
             close: 3950.0,
-            volume: 500000.0, // High volume
+            volume: vec![500000.0], // High volume
             indicators: {
                 let mut indicators = HashMap::new();
                 indicators.insert("RSI".to_string(), 25.0); // Oversold
@@ -617,7 +617,7 @@ async fn test_multi_agent_consensus() -> Result<()> {
                 high: 5050.0,
                 low: 4900.0,
                 close: 5000.0,
-                volume: 75000.0,
+                volume: vec![75000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 62.0);
@@ -739,7 +739,7 @@ async fn test_model_fallback_and_selection() -> Result<()> {
                 high: 6100.0,
                 low: 5900.0,
                 close: 6050.0,
-                volume: 80000.0,
+                volume: vec![80000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 58.0);
@@ -835,7 +835,7 @@ async fn test_cross_component_memory_usage() -> Result<()> {
                     high: 7100.0 + (symbol_idx as f64 * 500.0),
                     low: 6900.0 + (symbol_idx as f64 * 500.0),
                     close: 7050.0 + (symbol_idx as f64 * 500.0),
-                    volume: 100000.0,
+                    volume: vec![100000.0],
                     indicators: {
                         let mut indicators = HashMap::new();
                         indicators.insert("RSI".to_string(), 50.0 + (agent_idx as f64 * 5.0));

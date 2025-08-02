@@ -571,7 +571,7 @@ async fn test_end_to_end_data_flow() -> Result<()> {
         high: 45500.0,
         low: 44800.0,
         close: 45200.0,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: vec![("sma_20".to_string(), 44900.0), ("rsi".to_string(), 65.5)]
             .into_iter()
             .collect(),

@@ -27,7 +27,7 @@ fn create_test_market_data() -> MarketData {
         high: 50500.0,
         low: 49500.0,
         close: 50200.0,
-        volume: 1000.0,
+        volume: vec![1000.0],
     }
 }
 
@@ -264,7 +264,7 @@ fn test_edge_cases() {
         high: 60000.0,  // 20% spike
         low: 40000.0,   // 20% drop
         close: 45000.0, // 10% down
-        volume: 10000.0, // 10x normal volume
+        volume: vec![10000.0], // 10x normal volume
     };
     
     let volatility = (extreme_market.high - extreme_market.low) / extreme_market.close;

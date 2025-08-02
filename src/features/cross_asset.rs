@@ -116,7 +116,7 @@ impl CrossAssetCorrelationEngine {
         self.compute_market_betas(target_data, market_context, &mut features)?;
         
         // Advanced correlation stability metrics
-        self.compute_correlation_stability(target_data, market_context, &mut features)?
+        self.compute_correlation_stability(target_data, market_context, &mut features)?;
         
         Ok(features)
     }

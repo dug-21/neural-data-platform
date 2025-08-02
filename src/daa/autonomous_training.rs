@@ -156,7 +156,7 @@ impl AutonomousTrainingEngine {
                 volatility: 0.1,
                 model_agreement: 0.9,
                 consecutive_failures: 0,
-                trading_volume: 1000.0,
+                trading_volume: vec![1000.0],
                 profit_loss: 50.0,
             },
             affected_models: vec!["all".to_string()],
@@ -266,7 +266,7 @@ mod legacy_tests {
             volatility: 0.03,
             model_agreement: 0.6,
             consecutive_failures: 6, // Above 5 threshold
-            trading_volume: 1000000.0,
+            trading_volume: vec![1000000.0],
             profit_loss: -0.05,
         };
 
@@ -301,7 +301,7 @@ mod legacy_tests {
             volatility: 0.02,
             model_agreement: 0.9,
             consecutive_failures: 1, // Below threshold
-            trading_volume: 1000000.0,
+            trading_volume: vec![1000000.0],
             profit_loss: 0.03,
         };
 
@@ -343,7 +343,7 @@ mod legacy_tests {
             volatility: 0.08,
             model_agreement: 0.3,
             consecutive_failures: 12,
-            trading_volume: 1000000.0,
+            trading_volume: vec![1000000.0],
             profit_loss: -0.15,
         };
 

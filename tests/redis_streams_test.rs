@@ -39,7 +39,7 @@ async fn test_redis_streams_functionality() {
             high: 51000.0,
             low: 49000.0,
             close: 50500.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         },
         MarketData {
             symbol: "BTC/USD".to_string(),
@@ -48,7 +48,7 @@ async fn test_redis_streams_functionality() {
             high: 50800.0,
             low: 50400.0,
             close: 50700.0,
-            volume: 1100.0,
+            volume: vec![1100.0],
         },
         MarketData {
             symbol: "BTC/USD".to_string(),
@@ -57,7 +57,7 @@ async fn test_redis_streams_functionality() {
             high: 51200.0,
             low: 50600.0,
             close: 51000.0,
-            volume: 1200.0,
+            volume: vec![1200.0],
         },
     ];
 

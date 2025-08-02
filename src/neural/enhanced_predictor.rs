@@ -866,7 +866,7 @@ mod tests {
                 high: price * 1.001,
                 low: price * 0.998,
                 close: price,
-                volume: 1000000.0 + (i as f64 * 1000.0),
+                volume: vec![1000000.0 + (i as f64 * 1000.0)],
                 source: Some("test".to_string()),
                 value: Some(price),
                 metadata: Some(serde_json::json!({})),

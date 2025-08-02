@@ -282,7 +282,7 @@ impl MarketDataBuilder {
             high: 105.0,
             low: 95.0,
             close: 102.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         }
     }
 

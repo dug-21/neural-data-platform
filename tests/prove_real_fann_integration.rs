@@ -46,7 +46,7 @@ async fn test_real_fann_network_creation() {
             high: 105.0 + (i as f64).sin() * 10.0,
             low: 95.0 + (i as f64).sin() * 10.0,
             open: 100.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
         });
     }
@@ -102,7 +102,7 @@ async fn test_real_vendor_models() {
         high: 105.0,
         low: 95.0,
         open: 100.0,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
     }];
 
@@ -200,7 +200,7 @@ async fn test_model_training() {
             high: 105.0,
             low: 95.0,
             open: 100.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
         });
     }
@@ -263,7 +263,7 @@ async fn test_ensemble_with_real_models() {
             high: 110.0,
             low: 90.0,
             open: 100.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
         });
     }

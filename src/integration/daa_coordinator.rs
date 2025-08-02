@@ -3,7 +3,7 @@
 //! This module integrates neural-enhanced strategies with Decentralized Autonomous Agents
 //! for fully autonomous trading decisions based on neural feedback.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,6 +13,7 @@ use tracing::{debug, error, info, warn};
 use crate::daa::autonomous_training::{AutonomousTrainingEngine, PerformanceSnapshot};
 use crate::daa::training_scheduler::DAATrainingScheduler;
 use crate::data::TimeSeriesData;
+use crate::data::sector_mapper::{SectorId, SectorMapper, SectorInfo};
 use uuid::Uuid;
 use crate::neural::{
     NeuralPredictor, PredictionResult,
@@ -723,7 +724,7 @@ impl DaaCoordinator {
                     volatility: 0.02,
                     model_agreement: metrics.accuracy,
                     consecutive_failures: 0,
-                    trading_volume: 0.0,
+                    trading_volume: vec![0.0],
                     profit_loss: 0.0,
                 },
                 priority: match priority {
@@ -998,7 +999,7 @@ impl DaaCoordinator {
                 volatility: 0.02, // Default value
                 model_agreement: confidence,
                 consecutive_failures: if accuracy < 0.5 { 3 } else { 0 },
-                trading_volume: 0.0,
+                trading_volume: vec![0.0],
                 profit_loss: metrics.total_pnl,
             };
             
@@ -1030,7 +1031,7 @@ impl DaaCoordinator {
             volatility: 0.02, // Would be calculated from market data
             model_agreement: 0.8, // Would be calculated from ensemble
             consecutive_failures: 0,
-            trading_volume: 0.0,
+            trading_volume: vec![0.0],
             profit_loss: metrics.total_pnl,
         })
     }
@@ -1057,7 +1058,7 @@ impl DaaCoordinator {
                 volatility: divergence_score * 0.1, // Approximate volatility from divergence
                 model_agreement,
                 consecutive_failures: 0,
-                trading_volume: 0.0,
+                trading_volume: vec![0.0],
                 profit_loss: metrics.total_pnl,
             };
             
@@ -1138,7 +1139,7 @@ impl DaaCoordinator {
                     volatility: 0.02,
                     model_agreement: accuracy,
                     consecutive_failures: if accuracy < 0.5 { 3 } else { 0 },
-                    trading_volume: 0.0,
+                    trading_volume: vec![0.0],
                     profit_loss: 0.0,
                 };
                 let _ = training_engine.evaluate_training_need(snapshot).await;
@@ -1171,9 +1172,422 @@ impl DaaCoordinator {
     /// Simple method to check if market is open for training
     pub fn check_market_timing(&self) -> bool {
         // Use market_hours to determine if it's a good time for training
-        // For now, assume training is allowed outside market hours
-        // Market hours check - simplified for compilation
-        false // TODO: implement proper market hours check
+        // Implement market hours check using the market hours utilities
+        use crate::utils::market_hours::{MarketHours, Exchange};
+        use chrono::Utc;
+        
+        let market_hours = MarketHours::new();
+        let now = Utc::now();
+        
+        // Check if any major exchanges are open (NYSE, NASDAQ)
+        let nyse_open = market_hours.is_market_open(Exchange::NYSE, now);
+        let nasdaq_open = market_hours.is_market_open(Exchange::NASDAQ, now);
+        
+        // Training is allowed during market hours for real-time adaptation
+        // but can also run outside market hours for batch processing
+        nyse_open || nasdaq_open
+    }
+}
+
+/// Sector-specific DAA Coordinator that extends the base DaaCoordinator
+/// 
+/// This coordinator provides sector-aware autonomous trading decisions by:
+/// - Wrapping an existing DaaCoordinator internally
+/// - Adding sector context to trading decisions
+/// - Maintaining 60/40 neural/strategy voting with sector awareness
+/// - Supporting 10 concurrent sector coordinators
+pub struct SectorDAACoordinator {
+    /// The sector this coordinator manages
+    sector_id: SectorId,
+    
+    /// Base DAA coordinator for core functionality
+    base_coordinator: Arc<DaaCoordinator>,
+    
+    /// Sector mapper for symbol classification
+    sector_mapper: Arc<SectorMapper>,
+    
+    /// Sector-specific performance metrics
+    sector_metrics: Arc<RwLock<SectorPerformanceMetrics>>,
+    
+    /// Sector decision history
+    sector_decision_history: Arc<RwLock<Vec<SectorAwareDecision>>>,
+    
+    /// Configuration specific to this sector
+    sector_config: SectorDAAConfig,
+}
+
+/// Configuration for sector-specific DAA coordination
+#[derive(Debug, Clone)]
+pub struct SectorDAAConfig {
+    /// Enable sector-specific logic
+    pub enable_sector_awareness: bool,
+    /// Weight for sector-specific signals (0.0 to 1.0)
+    pub sector_signal_weight: f64,
+    /// Minimum symbols required for sector decision
+    pub min_sector_symbols: usize,
+    /// Enable cross-sector correlation analysis
+    pub enable_cross_sector_analysis: bool,
+}
+
+impl Default for SectorDAAConfig {
+    fn default() -> Self {
+        Self {
+            enable_sector_awareness: true,
+            sector_signal_weight: 0.3,
+            min_sector_symbols: 3,
+            enable_cross_sector_analysis: true,
+        }
+    }
+}
+
+/// Sector-aware autonomous decision
+#[derive(Debug, Clone)]
+pub struct SectorAwareDecision {
+    /// Base autonomous decision
+    pub base_decision: AutonomousDecision,
+    /// Sector context information
+    pub sector_context: SectorDecisionContext,
+}
+
+/// Sector-specific decision context
+#[derive(Debug, Clone)]
+pub struct SectorDecisionContext {
+    /// The sector this decision applies to
+    pub sector_id: SectorId,
+    /// Sector-wide metrics at decision time
+    pub sector_metrics: SectorMetrics,
+    /// Cross-sector correlation factors
+    pub cross_sector_correlations: HashMap<SectorId, f64>,
+    /// Sector-specific confidence adjustments
+    pub sector_confidence_adjustments: HashMap<String, f64>,
+}
+
+/// Sector metrics snapshot
+#[derive(Debug, Clone)]
+pub struct SectorMetrics {
+    /// Average sector performance
+    pub avg_performance: f64,
+    /// Sector volatility
+    pub volatility: f64,
+    /// Number of symbols analyzed
+    pub symbol_count: usize,
+    /// Sector momentum indicator
+    pub momentum: f64,
+    /// Sector strength relative to market
+    pub relative_strength: f64,
+}
+
+/// Sector-specific performance tracking
+#[derive(Debug, Default, Clone)]
+struct SectorPerformanceMetrics {
+    /// Base performance metrics
+    base_metrics: PerformanceMetrics,
+    /// Sector-specific win rate
+    sector_win_rate: f64,
+    /// Average sector signal strength
+    avg_sector_signal: f64,
+    /// Cross-sector correlation accuracy
+    correlation_accuracy: f64,
+    /// Sector timing accuracy
+    sector_timing_accuracy: f64,
+}
+
+impl SectorDAACoordinator {
+    /// Create a new sector-specific DAA coordinator
+    pub fn new(
+        sector_id: SectorId,
+        base_coordinator: Arc<DaaCoordinator>,
+        sector_mapper: Arc<SectorMapper>,
+        sector_config: SectorDAAConfig,
+    ) -> Result<Self> {
+        info!("🏭 Creating SectorDAACoordinator for sector: {:?}", sector_id);
+        
+        Ok(Self {
+            sector_id,
+            base_coordinator,
+            sector_mapper,
+            sector_metrics: Arc::new(RwLock::new(SectorPerformanceMetrics::default())),
+            sector_decision_history: Arc::new(RwLock::new(Vec::new())),
+            sector_config,
+        })
+    }
+    
+    /// Make a sector-aware autonomous decision
+    pub async fn make_sector_decision(
+        &self,
+        market_context: &MarketContext,
+        current_position: Option<&Position>,
+        historical_data: &[TimeSeriesData],
+        sector_data: Option<&[TimeSeriesData]>, // Additional sector-wide data
+    ) -> Result<SectorAwareDecision> {
+        debug!("Making sector-aware decision for {:?} on symbol {}", 
+               self.sector_id, market_context.symbol);
+        
+        // Step 1: Verify symbol belongs to this sector
+        let symbol_sector_info = self.sector_mapper.get_sector(&market_context.symbol)?;
+        if symbol_sector_info.sector_id != self.sector_id {
+            return Err(anyhow!("Symbol {} does not belong to sector {:?}", 
+                              market_context.symbol, self.sector_id));
+        }
+        
+        // Step 2: Enhance market context with sector information
+        let enhanced_context = self.enhance_market_context_with_sector(
+            market_context, 
+            &symbol_sector_info,
+            sector_data
+        ).await?;
+        
+        // Step 3: Get base decision using enhanced context
+        let base_decision = self.base_coordinator.make_decision(
+            &enhanced_context,
+            current_position,
+            historical_data,
+        ).await?;
+        
+        // Step 4: Apply sector-specific adjustments
+        let sector_adjusted_decision = self.apply_sector_adjustments(
+            base_decision,
+            &symbol_sector_info,
+            &enhanced_context,
+        ).await?;
+        
+        // Step 5: Create sector context
+        let sector_context = self.create_sector_context(
+            &symbol_sector_info,
+            &enhanced_context,
+            sector_data,
+        ).await?;
+        
+        // Step 6: Create sector-aware decision
+        let sector_decision = SectorAwareDecision {
+            base_decision: sector_adjusted_decision,
+            sector_context,
+        };
+        
+        // Step 7: Update sector metrics and history
+        self.update_sector_metrics(&sector_decision).await;
+        self.sector_decision_history.write().await.push(sector_decision.clone());
+        
+        info!("Sector-aware decision completed for {:?}: {:?}", 
+              self.sector_id, sector_decision.base_decision.action);
+        
+        Ok(sector_decision)
+    }
+    
+    /// Enhance market context with sector-specific information
+    async fn enhance_market_context_with_sector(
+        &self,
+        context: &MarketContext,
+        sector_info: &SectorInfo,
+        sector_data: Option<&[TimeSeriesData]>,
+    ) -> Result<MarketContext> {
+        let mut enhanced_context = context.clone();
+        
+        // Add sector-specific volatility adjustments
+        if let Some(data) = sector_data {
+            let sector_volatility = self.calculate_sector_volatility(data);
+            enhanced_context.volatility = (enhanced_context.volatility + sector_volatility) / 2.0;
+        }
+        
+        // Adjust volume based on sector weight
+        enhanced_context.volume_24h *= sector_info.weight_in_sector;
+        
+        Ok(enhanced_context)
+    }
+    
+    /// Apply sector-specific adjustments to base decision
+    async fn apply_sector_adjustments(
+        &self,
+        mut base_decision: AutonomousDecision,
+        sector_info: &SectorInfo,
+        enhanced_context: &MarketContext,
+    ) -> Result<AutonomousDecision> {
+        if !self.sector_config.enable_sector_awareness {
+            return Ok(base_decision);
+        }
+        
+        // Get sector metrics
+        let sector_metrics = self.calculate_sector_metrics(enhanced_context).await?;
+        
+        // Adjust confidence based on sector performance
+        let sector_confidence_multiplier = if sector_metrics.relative_strength > 0.0 {
+            1.0 + (sector_metrics.relative_strength * 0.1) // Max 10% boost
+        } else {
+            1.0 + (sector_metrics.relative_strength * 0.05) // Max 5% penalty
+        };
+        
+        base_decision.confidence *= sector_confidence_multiplier;
+        base_decision.confidence = base_decision.confidence.max(0.0).min(1.0);
+        
+        // Adjust position size based on sector volatility
+        if let TradingAction::Buy { ref mut size, .. } = base_decision.action {
+            let volatility_adjustment = 1.0 / (1.0 + sector_metrics.volatility);
+            *size *= volatility_adjustment;
+        }
+        
+        // Add sector-specific reasoning
+        base_decision.reasoning.push(format!(
+            "Sector {:?} adjustment: confidence {:.3} -> {:.3}, relative strength: {:.3}",
+            self.sector_id, 
+            base_decision.confidence / sector_confidence_multiplier,
+            base_decision.confidence,
+            sector_metrics.relative_strength
+        ));
+        
+        Ok(base_decision)
+    }
+    
+    /// Create sector decision context
+    async fn create_sector_context(
+        &self,
+        sector_info: &SectorInfo,
+        enhanced_context: &MarketContext,
+        sector_data: Option<&[TimeSeriesData]>,
+    ) -> Result<SectorDecisionContext> {
+        // Calculate sector metrics
+        let sector_metrics = self.calculate_sector_metrics(enhanced_context).await?;
+        
+        // Calculate cross-sector correlations (simplified)
+        let cross_sector_correlations = self.calculate_cross_sector_correlations().await;
+        
+        // Sector-specific confidence adjustments
+        let mut sector_confidence_adjustments = HashMap::new();
+        sector_confidence_adjustments.insert(
+            "sector_momentum".to_string(),
+            sector_metrics.momentum * 0.1,
+        );
+        sector_confidence_adjustments.insert(
+            "sector_volatility".to_string(),
+            -sector_metrics.volatility * 0.05,
+        );
+        
+        Ok(SectorDecisionContext {
+            sector_id: self.sector_id,
+            sector_metrics,
+            cross_sector_correlations,
+            sector_confidence_adjustments,
+        })
+    }
+    
+    /// Calculate sector-wide metrics
+    async fn calculate_sector_metrics(&self, context: &MarketContext) -> Result<SectorMetrics> {
+        // Get all symbols in this sector
+        let sector_symbols = self.sector_mapper.get_symbols_in_sector(&self.sector_id);
+        
+        Ok(SectorMetrics {
+            avg_performance: 0.02, // Placeholder - would calculate from actual data
+            volatility: context.volatility * 1.1, // Slightly higher for sector
+            symbol_count: sector_symbols.len(),
+            momentum: 0.05, // Placeholder - would calculate from sector trend
+            relative_strength: 0.03, // Placeholder - sector vs market performance
+        })
+    }
+    
+    /// Calculate cross-sector correlations
+    async fn calculate_cross_sector_correlations(&self) -> HashMap<SectorId, f64> {
+        let mut correlations = HashMap::new();
+        
+        // Simplified correlation matrix - in practice would use historical data
+        for sector in SectorId::all_sectors() {
+            if sector != self.sector_id {
+                let correlation = match (self.sector_id, sector) {
+                    (SectorId::Technology, SectorId::ConsumerDiscretionary) => 0.7,
+                    (SectorId::Financial, SectorId::RealEstate) => 0.6,
+                    (SectorId::Energy, SectorId::Materials) => 0.5,
+                    _ => 0.3, // Default correlation
+                };
+                correlations.insert(sector, correlation);
+            }
+        }
+        
+        correlations
+    }
+    
+    /// Calculate sector volatility from historical data
+    fn calculate_sector_volatility(&self, data: &[TimeSeriesData]) -> f64 {
+        if data.len() < 2 {
+            return 0.02; // Default volatility
+        }
+        
+        let returns: Vec<f64> = data.windows(2)
+            .map(|window| {
+                let prev = window[0].close;
+                let curr = window[1].close;
+                (curr - prev) / prev
+            })
+            .collect();
+        
+        if returns.is_empty() {
+            return 0.02;
+        }
+        
+        let mean = returns.iter().sum::<f64>() / returns.len() as f64;
+        let variance = returns.iter()
+            .map(|r| (r - mean).powi(2))
+            .sum::<f64>() / returns.len() as f64;
+        
+        variance.sqrt()
+    }
+    
+    /// Update sector-specific performance metrics
+    async fn update_sector_metrics(&self, decision: &SectorAwareDecision) {
+        let mut metrics = self.sector_metrics.write().await;
+        
+        // Update sector win rate (simplified)
+        let sector_signal_strength = decision.sector_context.sector_metrics.momentum;
+        metrics.avg_sector_signal = (metrics.avg_sector_signal * 0.9) + (sector_signal_strength * 0.1);
+        
+        // Update sector timing accuracy based on relative strength
+        let timing_score = decision.sector_context.sector_metrics.relative_strength.abs();
+        metrics.sector_timing_accuracy = (metrics.sector_timing_accuracy * 0.95) + (timing_score * 0.05);
+        
+        debug!("Updated sector metrics for {:?}: avg_signal={:.3}, timing_accuracy={:.3}",
+               self.sector_id, metrics.avg_sector_signal, metrics.sector_timing_accuracy);
+    }
+    
+    /// Get sector-specific performance metrics
+    pub async fn get_sector_metrics(&self) -> SectorPerformanceMetrics {
+        self.sector_metrics.read().await.clone()
+    }
+    
+    /// Get sector decision history
+    pub async fn get_sector_decision_history(&self) -> Vec<SectorAwareDecision> {
+        self.sector_decision_history.read().await.clone()
+    }
+    
+    /// Get the sector ID this coordinator manages
+    pub fn get_sector_id(&self) -> SectorId {
+        self.sector_id
+    }
+    
+    /// Get underlying base coordinator (for accessing core functionality)
+    pub fn get_base_coordinator(&self) -> &Arc<DaaCoordinator> {
+        &self.base_coordinator
+    }
+    
+    /// Register a sector-specific strategy
+    pub async fn register_sector_strategy(
+        &self,
+        name: String,
+        strategy: Box<dyn TradingStrategy + Send + Sync>,
+    ) {
+        let sector_aware_name = format!("{}_{:?}", name, self.sector_id);
+        self.base_coordinator.register_strategy(sector_aware_name, strategy).await;
+    }
+    
+    /// Force sector-specific retraining
+    pub async fn force_sector_retraining(&self) -> Result<()> {
+        info!("Forcing sector-specific retraining for {:?}", self.sector_id);
+        
+        // Use base coordinator's retraining but with sector context
+        self.base_coordinator.force_retraining().await?;
+        
+        // Reset sector-specific metrics after retraining
+        let mut metrics = self.sector_metrics.write().await;
+        metrics.sector_timing_accuracy = 0.5; // Reset to neutral
+        metrics.avg_sector_signal = 0.0; // Reset
+        
+        Ok(())
     }
 }
 
@@ -1277,7 +1691,7 @@ mod tests {
                 high: 49850.0,
                 low: 49650.0,
                 close: 49800.0,
-                volume: 100.0,
+                volume: vec![100.0],
                 indicators: HashMap::new(),
                 source: Some("test".to_string()),
                 entity: Some("BTC".to_string()),
@@ -1291,7 +1705,7 @@ mod tests {
                 high: 49950.0,
                 low: 49750.0,
                 close: 49900.0,
-                volume: 110.0,
+                volume: vec![110.0],
                 indicators: HashMap::new(),
                 source: Some("test".to_string()),
                 entity: Some("BTC".to_string()),
@@ -1305,7 +1719,7 @@ mod tests {
                 high: 50050.0,
                 low: 49850.0,
                 close: 50000.0,
-                volume: 120.0,
+                volume: vec![120.0],
                 indicators: HashMap::new(),
                 source: Some("test".to_string()),
                 entity: Some("BTC".to_string()),

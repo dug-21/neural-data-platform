@@ -325,7 +325,7 @@ mod tests {
                 high: 105.0,
                 low: 95.0,
                 close: 102.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
             },
             TimeSeriesData {
                 timestamp: DateTime::<Utc>::from_timestamp(1640995260, 0).unwrap(),
@@ -333,7 +333,7 @@ mod tests {
                 high: 107.0,
                 low: 98.0,
                 close: 104.0,
-                volume: 1100.0,
+                volume: vec![1100.0],
             },
             TimeSeriesData {
                 timestamp: DateTime::<Utc>::from_timestamp(1640995320, 0).unwrap(),
@@ -341,7 +341,7 @@ mod tests {
                 high: 109.0,
                 low: 101.0,
                 close: 106.0,
-                volume: 1200.0,
+                volume: vec![1200.0],
             },
         ]
     }

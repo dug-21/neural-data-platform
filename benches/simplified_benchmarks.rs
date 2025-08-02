@@ -453,7 +453,7 @@ fn create_mock_time_series_data() -> MockTimeSeriesData {
         symbol: "BTCUSD".to_string(),
         timestamp: Utc::now(),
         price: 45000.0,
-        volume: 1.5,
+        volume: vec![1.5],
     }
 }
 

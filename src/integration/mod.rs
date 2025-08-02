@@ -30,7 +30,11 @@ pub mod model_persistence_service;
 
 // Re-export commonly used types
 pub use autonomous_decisions::{DaaDecisionMaker, MarketTrend};
-pub use daa_coordinator::{AutonomousDecision, DaaConfig, DaaCoordinator, TradingAction};
+pub use daa_coordinator::{
+    AutonomousDecision, DaaConfig, DaaCoordinator, TradingAction,
+    SectorDAACoordinator, SectorDAAConfig, SectorAwareDecision, 
+    SectorDecisionContext, SectorMetrics
+};
 pub use training_data_service::{
     ModelType, PreparedTrainingData, TrainingDataConfig, TrainingDataService, ValidationError,
 };
@@ -132,4 +136,8 @@ pub struct Position {
     pub realized_pnl: f64,
 }
 
-// TODO: Implement specific providers like Binance, Coinbase, etc.
+// Provider implementations available in separate modules:
+// - binance: crate::adapters::binance_adapter
+// - coinbase: crate::adapters::coinbase_adapter
+// - polygon: crate::features::dataIngestion::providers::polygon
+// Add additional provider modules as needed for exchange integrations

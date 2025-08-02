@@ -501,7 +501,7 @@ async fn test_error_recovery() -> Result<()> {
             high: 0.0,
             low: 0.0,
             close: 0.0,
-            volume: 0.0,
+            volume: vec![0.0],
             indicators: HashMap::new(),
         },
         context_metadata: HashMap::new(),
@@ -717,7 +717,7 @@ fn create_enhanced_time_series_data(symbol: &str, price: f64) -> TimeSeriesData 
         high: price + 20.0,
         low: price - 20.0,
         close: price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators,
     }
 }

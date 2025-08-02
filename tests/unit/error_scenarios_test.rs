@@ -51,7 +51,7 @@ async fn test_neural_predictor_with_nan_values() {
             high: 101.0,
             low: 99.0,
             close: if i == 51 { f64::NAN } else { 100.5 },
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("TEST".to_string()),
@@ -87,7 +87,7 @@ async fn test_neural_predictor_with_infinite_values() {
         high: f64::INFINITY,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -120,7 +120,7 @@ async fn test_predictor_with_zero_horizon() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -154,7 +154,7 @@ async fn test_predictor_with_very_large_horizon() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -229,7 +229,7 @@ async fn test_ensemble_with_invalid_models() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -252,7 +252,7 @@ fn test_time_series_data_with_missing_fields() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: None,  // Missing source
         entity: None,  // Missing entity
@@ -280,7 +280,7 @@ fn test_extreme_market_conditions() {
             high: 100.0,
             low: 10.0,  // 90% crash
             close: 15.0,
-            volume: 1000000.0, // Extreme volume
+            volume: vec![1000000.0], // Extreme volume
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("CRASH".to_string()),
@@ -294,7 +294,7 @@ fn test_extreme_market_conditions() {
             high: 1000.0, // 900% spike
             low: 100.0,
             close: 950.0,
-            volume: 0.1, // Extremely low volume
+            volume: vec![0.1], // Extremely low volume
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("SPIKE".to_string()),
@@ -354,7 +354,7 @@ async fn test_cache_expiration() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),

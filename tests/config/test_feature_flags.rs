@@ -58,7 +58,7 @@ fn create_test_data() -> Vec<TimeSeriesData> {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("test".to_string()),

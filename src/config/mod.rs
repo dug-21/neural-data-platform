@@ -14,12 +14,14 @@ pub mod neural;
 pub mod database;
 pub mod monitoring;
 pub mod security;
+pub mod sector_models;
 
 // Re-export main configuration types
 pub use neural::{NeuralConfig, TrainingConfig, EnsembleConfig};
 pub use database::{DatabaseConfig, RedisConfig, BackupConfig};
 pub use monitoring::{MonitoringConfig, ObservabilityConfig, LoggingConfig, AlertsConfig, PerformanceConfig};
 pub use security::{SecurityConfig, CircuitBreakerConfig, GracefulShutdownConfig, AuthConfig, EncryptionConfig};
+pub use sector_models::{SectorModelsConfig, SectorConfig, ModelConfig, PerformanceThresholds, DAACoordinationConfig};
 
 // Re-export types defined in this module
 // Structs are already defined as pub in this module, no need for use statement
@@ -70,6 +72,8 @@ pub struct ModularPlatformConfig {
     pub training: TrainingConfig,
     #[serde(default)]
     pub ensemble: EnsembleConfig,
+    #[serde(default)]
+    pub sector_models: SectorModelsConfig,
 }
 
 /// Platform metadata
@@ -161,6 +165,7 @@ impl Default for ModularPlatformConfig {
             encryption: EncryptionConfig::default(),
             training: TrainingConfig::default(),
             ensemble: EnsembleConfig::default(),
+            sector_models: SectorModelsConfig::default(),
         }
     }
 }

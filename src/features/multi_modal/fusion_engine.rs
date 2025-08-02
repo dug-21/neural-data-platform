@@ -719,7 +719,7 @@ mod tests {
             high: 155.0,
             low: 148.0,
             close: 152.0,
-            volume: 1000000.0,
+            volume: vec![1000000.0],
             technical_indicators: HashMap::new(),
             microstructure_features: None,
         };

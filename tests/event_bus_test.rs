@@ -62,7 +62,7 @@ fn create_test_market_event() -> MarketEvent {
         timestamp: Utc::now(),
         event_type: "price_update".to_string(),
         price: 45000.0,
-        volume: 100.0,
+        volume: vec![100.0],
         bid: 44990.0,
         ask: 45010.0,
         spread: 20.0,

@@ -39,7 +39,7 @@ async fn test_single_model_prediction() {
         data.push(TimeSeriesData {
             timestamp: base_time - Duration::minutes(i as i64),
             value: 100.0 + (i as f64).sin() * 10.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         });
     }
 
@@ -137,7 +137,7 @@ async fn test_prediction_with_features() {
         data.push(TimeSeriesData {
             timestamp: base_time - Duration::minutes(i as i64),
             value: 100.0 + (i as f64).cos() * 10.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         });
     }
 
@@ -176,7 +176,7 @@ async fn test_online_learning() {
         data.push(TimeSeriesData {
             timestamp: base_time - Duration::minutes(i as i64),
             value: 100.0 + (i as f64) * 0.5,
-            volume: 1000.0,
+            volume: vec![1000.0],
         });
     }
 
@@ -188,7 +188,7 @@ async fn test_online_learning() {
         data.push(TimeSeriesData {
             timestamp: base_time - Duration::minutes(i as i64),
             value: 100.0 + (i as f64) * 0.5,
-            volume: 1000.0,
+            volume: vec![1000.0],
         });
     }
 

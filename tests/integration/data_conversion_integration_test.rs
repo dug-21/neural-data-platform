@@ -291,7 +291,7 @@ fn test_conversion_with_missing_indicators() -> Result<()> {
             high: 1010.0,
             low: 990.0,
             close: 1005.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators,
             source: Some("test".to_string()),
             entity: None,

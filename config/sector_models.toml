@@ -1,0 +1,413 @@
+# Phase 2: Sector-Based Neural Architecture Configuration
+# This configuration defines the 10-sector clustering system for neural trading models
+# with hierarchical DAA coordination and memory optimization
+
+[metadata]
+version = "2.0.0"
+created_by = "daa_hierarchy_developer"
+description = "Sector-based neural architecture configuration supporting 100+ symbols with 90% memory reduction"
+
+# ===== SECTOR DEFINITIONS =====
+
+[sectors.technology]
+etf_representative = "XLK"
+sector_name = "Technology"
+description = "Technology sector including FAANG and major tech companies"
+symbols = ["AAPL", "MSFT", "GOOGL", "META", "NVDA", "TSLA", "CRM", "ORCL", "AMD", "INTC"]
+shared_memory_mb = 512
+specialization_memory_mb = 8
+max_symbols = 15
+correlation_threshold = 0.65
+sector_weight = 0.25
+
+[sectors.financial_services]
+etf_representative = "XLF"
+sector_name = "Financial Services"
+description = "Banking, insurance, and financial services"
+symbols = ["JPM", "BAC", "WFC", "GS", "MS", "C", "BK", "USB", "PNC", "TFC"]
+shared_memory_mb = 384
+specialization_memory_mb = 6
+max_symbols = 12
+correlation_threshold = 0.70
+sector_weight = 0.15
+
+[sectors.healthcare]
+etf_representative = "XLV"
+sector_name = "Healthcare"
+description = "Pharmaceuticals, biotechnology, and healthcare services"
+symbols = ["JNJ", "PFE", "UNH", "CVS", "ABBV", "MRK", "TMO", "ABT", "LLY", "BMY"]
+shared_memory_mb = 320
+specialization_memory_mb = 6
+max_symbols = 12
+correlation_threshold = 0.60
+sector_weight = 0.12
+
+[sectors.energy]
+etf_representative = "XLE"
+sector_name = "Energy"
+description = "Oil, gas, and renewable energy companies"
+symbols = ["XOM", "CVX", "COP", "SLB", "EOG", "PXD", "KMI", "OKE", "VLO", "PSX"]
+shared_memory_mb = 256
+specialization_memory_mb = 5
+max_symbols = 10
+correlation_threshold = 0.75
+sector_weight = 0.08
+
+[sectors.consumer_discretionary]
+etf_representative = "XLY"
+sector_name = "Consumer Discretionary"
+description = "Consumer goods, retail, and discretionary spending"
+symbols = ["AMZN", "HD", "MCD", "NKE", "SBUX", "TJX", "LOW", "BKNG", "DIS", "CMG"]
+shared_memory_mb = 400
+specialization_memory_mb = 7
+max_symbols = 14
+correlation_threshold = 0.55
+sector_weight = 0.13
+
+[sectors.consumer_staples]
+etf_representative = "XLP"
+sector_name = "Consumer Staples"
+description = "Food, beverages, and household products"
+symbols = ["PG", "KO", "WMT", "COST", "PEP", "MDLZ", "CL", "KHC", "MO", "EL"]
+shared_memory_mb = 256
+specialization_memory_mb = 5
+max_symbols = 10
+correlation_threshold = 0.65
+sector_weight = 0.08
+
+[sectors.industrials]
+etf_representative = "XLI"
+sector_name = "Industrials"
+description = "Manufacturing, transportation, and infrastructure"
+symbols = ["BA", "CAT", "UNP", "UPS", "HON", "RTX", "LMT", "DE", "MMM", "GE"]
+shared_memory_mb = 320
+specialization_memory_mb = 6
+max_symbols = 12
+correlation_threshold = 0.60
+sector_weight = 0.10
+
+[sectors.materials]
+etf_representative = "XLB"
+sector_name = "Materials"
+description = "Basic materials, chemicals, and mining"
+symbols = ["DOW", "DD", "NEM", "FCX", "LIN", "SHW", "APD", "ECL", "CF", "FMC"]
+shared_memory_mb = 224
+specialization_memory_mb = 4
+max_symbols = 8
+correlation_threshold = 0.70
+sector_weight = 0.06
+
+[sectors.utilities]
+etf_representative = "XLU"
+sector_name = "Utilities"
+description = "Electric, gas, and water utilities"
+symbols = ["NEE", "DUK", "SO", "D", "EXC", "AEP", "XEL", "SRE", "PEG", "ED"]
+shared_memory_mb = 192
+specialization_memory_mb = 4
+max_symbols = 8
+correlation_threshold = 0.75
+sector_weight = 0.05
+
+[sectors.real_estate]
+etf_representative = "XLRE"
+sector_name = "Real Estate"
+description = "REITs and real estate companies"
+symbols = ["AMT", "PLD", "CCI", "EQIX", "SPG", "O", "PSA", "EXR", "VTR", "WELL"]
+shared_memory_mb = 192
+specialization_memory_mb = 4
+max_symbols = 8
+correlation_threshold = 0.70
+sector_weight = 0.05
+
+# ===== MODEL CONFIGURATIONS =====
+
+[models.technology_lstm]
+model_type = "LSTM"
+sector = "technology"
+description = "LSTM model optimized for technology sector patterns"
+required_data = ["price", "volume", "market_cap"]
+optional_data = ["sentiment", "news", "earnings", "insider_trading"]
+preferred_data = ["options_flow", "social_media", "analyst_ratings"]
+max_memory_mb = 256
+min_accuracy = 0.78
+max_latency_ms = 80
+ensemble_weight = 0.35
+lazy_load_conditions = ["data_available", "performance_threshold"]
+specialization_layers = 2
+
+[models.technology_transformer]
+model_type = "Transformer"
+sector = "technology"
+description = "Transformer model for complex technology sector relationships"
+required_data = ["price", "volume", "sentiment", "market_cap"]
+optional_data = ["news", "social_media", "earnings"]
+preferred_data = ["options_flow", "insider_trading", "analyst_ratings"]
+max_memory_mb = 512
+min_accuracy = 0.82
+max_latency_ms = 120
+ensemble_weight = 0.40
+lazy_load_conditions = ["enhanced_data_available", "high_volatility"]
+specialization_layers = 3
+
+[models.technology_tcn]
+model_type = "TCN"
+sector = "technology"
+description = "Temporal Convolutional Network for technology sector time series"
+required_data = ["price", "volume"]
+optional_data = ["sentiment", "news"]
+preferred_data = ["options_flow"]
+max_memory_mb = 192
+min_accuracy = 0.75
+max_latency_ms = 60
+ensemble_weight = 0.25
+lazy_load_conditions = ["real_time_mode"]
+specialization_layers = 1
+
+[models.financial_lstm]
+model_type = "LSTM"
+sector = "financial_services"
+description = "LSTM optimized for financial services patterns"
+required_data = ["price", "volume", "interest_rates"]
+optional_data = ["economic_indicators", "fed_minutes", "yield_curve"]
+preferred_data = ["credit_spreads", "sector_rotation"]
+max_memory_mb = 224
+min_accuracy = 0.76
+max_latency_ms = 70
+ensemble_weight = 0.40
+lazy_load_conditions = ["data_available"]
+specialization_layers = 2
+
+[models.financial_deepar]
+model_type = "DeepAR"
+sector = "financial_services"
+description = "DeepAR for financial sector probabilistic forecasting"
+required_data = ["price", "volume", "interest_rates"]
+optional_data = ["economic_indicators", "volatility"]
+preferred_data = ["options_data", "earnings"]
+max_memory_mb = 288
+min_accuracy = 0.78
+max_latency_ms = 100
+ensemble_weight = 0.35
+lazy_load_conditions = ["uncertainty_quantification"]
+specialization_layers = 2
+
+[models.healthcare_nhits]
+model_type = "NHITS"
+sector = "healthcare"
+description = "NHITS model for healthcare sector hierarchical forecasting"
+required_data = ["price", "volume"]
+optional_data = ["fda_announcements", "clinical_trials"]
+preferred_data = ["drug_approvals", "patent_expirations"]
+max_memory_mb = 192
+min_accuracy = 0.74
+max_latency_ms = 90
+ensemble_weight = 0.50
+lazy_load_conditions = ["regulatory_events"]
+specialization_layers = 2
+
+[models.energy_lstm]
+model_type = "LSTM"
+sector = "energy"
+description = "LSTM for energy sector with commodity correlation"
+required_data = ["price", "volume", "oil_prices", "gas_prices"]
+optional_data = ["weather_data", "inventory_reports"]
+preferred_data = ["drilling_permits", "production_data"]
+max_memory_mb = 160
+min_accuracy = 0.72
+max_latency_ms = 75
+ensemble_weight = 0.60
+lazy_load_conditions = ["commodity_volatility"]
+specialization_layers = 1
+
+[models.consumer_discretionary_mlp]
+model_type = "MLP"
+sector = "consumer_discretionary"
+description = "Multi-layer perceptron for consumer discretionary patterns"
+required_data = ["price", "volume", "consumer_confidence"]
+optional_data = ["retail_sales", "unemployment"]
+preferred_data = ["seasonal_trends", "holiday_impact"]
+max_memory_mb = 128
+min_accuracy = 0.70
+max_latency_ms = 50
+ensemble_weight = 0.45
+lazy_load_conditions = ["consumer_data_available"]
+specialization_layers = 1
+
+[models.consumer_staples_tcn]
+model_type = "TCN"
+sector = "consumer_staples"
+description = "TCN for stable consumer staples patterns"
+required_data = ["price", "volume"]
+optional_data = ["commodity_prices", "currency_rates"]
+preferred_data = ["dividend_yields", "inflation_data"]
+max_memory_mb = 112
+min_accuracy = 0.73
+max_latency_ms = 55
+ensemble_weight = 0.55
+lazy_load_conditions = ["macro_economic_shifts"]
+specialization_layers = 1
+
+[models.industrials_lstm]
+model_type = "LSTM"
+sector = "industrials"
+description = "LSTM for industrials with economic cycle sensitivity"
+required_data = ["price", "volume", "manufacturing_data"]
+optional_data = ["pmi_data", "construction_spending"]
+preferred_data = ["order_backlogs", "capacity_utilization"]
+max_memory_mb = 144
+min_accuracy = 0.71
+max_latency_ms = 65
+ensemble_weight = 0.50
+lazy_load_conditions = ["economic_indicators"]
+specialization_layers = 1
+
+# ===== DATA REQUIREMENTS =====
+
+[data_requirements]
+description = "Global data requirements and availability thresholds"
+
+[data_requirements.required]
+price = { min_history_days = 30, update_frequency = "1min", quality_threshold = 0.95 }
+volume = { min_history_days = 30, update_frequency = "1min", quality_threshold = 0.90 }
+market_cap = { min_history_days = 1, update_frequency = "daily", quality_threshold = 0.98 }
+
+[data_requirements.optional]
+sentiment = { min_history_days = 7, update_frequency = "5min", quality_threshold = 0.80 }
+news = { min_history_days = 14, update_frequency = "realtime", quality_threshold = 0.75 }
+earnings = { min_history_days = 90, update_frequency = "quarterly", quality_threshold = 0.99 }
+economic_indicators = { min_history_days = 365, update_frequency = "monthly", quality_threshold = 0.95 }
+
+[data_requirements.preferred]
+options_flow = { min_history_days = 5, update_frequency = "1min", quality_threshold = 0.85 }
+insider_trading = { min_history_days = 30, update_frequency = "daily", quality_threshold = 0.90 }
+analyst_ratings = { min_history_days = 60, update_frequency = "daily", quality_threshold = 0.88 }
+social_media = { min_history_days = 3, update_frequency = "realtime", quality_threshold = 0.70 }
+
+# ===== PERFORMANCE CONFIGURATION =====
+
+[performance]
+description = "Performance thresholds and optimization settings"
+
+[performance.memory_optimization]
+enable_shared_features = true
+feature_cache_ttl_seconds = 300
+max_cache_size_mb = 1024
+enable_lazy_loading = true
+unload_inactive_models_minutes = 15
+memory_pressure_threshold = 0.85
+
+[performance.prediction_latency]
+max_prediction_latency_ms = 100
+max_ensemble_latency_ms = 150
+timeout_strategy = "fallback_to_fastest"
+enable_parallel_inference = true
+max_concurrent_predictions = 8
+
+[performance.accuracy_thresholds]
+min_sector_accuracy = 0.70
+min_symbol_accuracy = 0.65
+ensemble_confidence_threshold = 0.75
+consensus_threshold = 0.70
+performance_degradation_threshold = 0.05
+
+[performance.resource_limits]
+max_total_memory_gb = 4.0
+max_cpu_percent = 80.0
+max_gpu_percent = 90.0
+disk_cache_limit_gb = 10.0
+network_bandwidth_limit_mbps = 100.0
+
+# ===== HIERARCHICAL DAA CONFIGURATION =====
+
+[daa_coordination]
+description = "Hierarchical DAA coordination settings"
+
+[daa_coordination.master_coordinator]
+portfolio_consensus_threshold = 0.70
+cross_sector_risk_weight = 0.30
+meta_predictor_weight = 0.20
+max_portfolio_positions = 20
+rebalancing_frequency = "hourly"
+
+[daa_coordination.sector_coordinators]
+sector_consensus_threshold = 0.65
+intra_sector_correlation_limit = 0.80
+max_sector_positions = 4
+position_sizing_method = "risk_parity"
+risk_per_sector = 0.02
+
+[daa_coordination.voting_mechanisms]
+voting_strategy = "weighted_confidence"
+minimum_model_agreement = 0.60
+uncertainty_penalty_factor = 0.15
+recency_bias_factor = 0.10
+performance_weight_decay = 0.95
+
+# ===== INTEGRATION SETTINGS =====
+
+[integration]
+description = "Integration with existing systems"
+
+[integration.redis_channels]
+preserve_symbol_channels = true
+add_sector_aggregation = true
+sector_metrics_ttl = 180
+enable_cross_sector_messaging = true
+
+[integration.daa_bridge]
+enable_legacy_compatibility = true
+enhanced_decision_weight = 0.70
+legacy_decision_weight = 0.30
+performance_feedback_enabled = true
+
+[integration.health_monitoring]
+enable_sector_health_checks = true
+health_check_interval_seconds = 30
+sector_degradation_threshold = 0.10
+auto_failover_enabled = true
+
+# ===== LAZY LOADING CONDITIONS =====
+
+[lazy_loading]
+description = "Conditions for model activation and deactivation"
+
+[lazy_loading.activation_conditions]
+data_available = { required_data_coverage = 0.90, preferred_data_coverage = 0.70 }
+performance_threshold = { accuracy_above = 0.75, latency_below_ms = 100 }
+enhanced_data_available = { preferred_data_coverage = 0.85, optional_data_coverage = 0.60 }
+high_volatility = { volatility_percentile = 0.90, volume_spike_factor = 2.0 }
+real_time_mode = { latency_requirement_ms = 50, accuracy_requirement = 0.70 }
+uncertainty_quantification = { confidence_required = 0.80, prediction_intervals = true }
+regulatory_events = { fda_calendar = true, earnings_season = true }
+commodity_volatility = { oil_volatility_threshold = 0.05, correlation_threshold = 0.60 }
+consumer_data_available = { consumer_confidence = true, retail_sales = true }
+macro_economic_shifts = { fed_meeting = true, inflation_data = true }
+economic_indicators = { pmi_available = true, employment_data = true }
+
+[lazy_loading.deactivation_conditions]
+performance_degradation = { accuracy_drop = 0.05, consecutive_failures = 5 }
+resource_pressure = { memory_usage_above = 0.90, cpu_usage_above = 0.95 }
+data_unavailable = { required_data_missing_hours = 2, quality_below = 0.80 }
+market_closed = { extended_hours = false, low_volume_threshold = 0.10 }
+
+# ===== TESTING AND VALIDATION =====
+
+[testing]
+description = "Configuration for testing and validation"
+
+[testing.backtesting]
+min_backtest_days = 252
+validation_split = 0.20
+walk_forward_windows = 12
+monte_carlo_simulations = 1000
+
+[testing.performance_benchmarks]
+benchmark_symbols = ["SPY", "QQQ", "XLK", "XLF", "XLV"]
+performance_metrics = ["sharpe_ratio", "max_drawdown", "win_rate", "profit_factor"]
+min_benchmark_outperformance = 0.02
+
+[testing.model_validation]
+cross_validation_folds = 5
+holdout_test_percentage = 0.15
+statistical_significance_level = 0.05
+minimum_sample_size = 1000

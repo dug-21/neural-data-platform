@@ -19,6 +19,8 @@ pub mod neural;
 // Use enhanced_neural_adapter with FANN predictor instead
 
 pub mod redis;
+pub mod redis_sector_channels;
+pub mod redis_integration;
 pub mod timescale;
 pub mod vendor_bridge;
 

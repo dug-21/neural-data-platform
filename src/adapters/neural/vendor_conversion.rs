@@ -134,7 +134,7 @@ impl VendorFormatConverter {
                 high: pred as f64,
                 low: pred as f64,
                 close: pred as f64,
-                volume: 0.0,
+                volume: vec![0.0],
                 indicators: HashMap::new(),
                 source: Some("vendor_neural_model".to_string()),
                 entity: base_data.entity.clone(),

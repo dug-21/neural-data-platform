@@ -220,7 +220,7 @@ async fn test_market_open_scenario() -> Result<()> {
                 high: 155.0,
                 low: 148.0,
                 close: 152.0,
-                volume: 150000.0,
+                volume: vec![150000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("GAP_SIZE".to_string(), 2.0);
@@ -326,7 +326,7 @@ async fn test_economic_news_event_reaction() -> Result<()> {
                 high: 420.0,
                 low: 395.0,
                 close: 415.0,
-                volume: 500000.0,
+                volume: vec![500000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("NEWS_SENTIMENT".to_string(), 0.8);
@@ -413,7 +413,7 @@ async fn test_liquidity_crisis_scenario() -> Result<()> {
                 high: 1020.0,
                 low: 950.0,
                 close: 970.0,
-                volume: 5000.0, // Very low volume
+                volume: vec![5000.0], // Very low volume
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("LIQUIDITY_SCORE".to_string(), 0.1); // Very low liquidity
@@ -519,7 +519,7 @@ async fn test_weekend_gap_trading() -> Result<()> {
                 high: 1.2300,
                 low: 1.1800,
                 close: 1.2150,
-                volume: 25000.0, // Lower weekend volume
+                volume: vec![25000.0], // Lower weekend volume
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("WEEKEND_GAP".to_string(), 0.0125); // 1.25% gap
@@ -644,7 +644,7 @@ async fn test_multi_asset_portfolio_scenario() -> Result<()> {
                     high: base_price * 1.02,
                     low: base_price * 0.98,
                     close: base_price * 1.01,
-                    volume: 150000.0,
+                    volume: vec![150000.0],
                     indicators: {
                         let mut indicators = HashMap::new();
                         indicators.insert("PORTFOLIO_BETA".to_string(), 1.2);
@@ -743,7 +743,7 @@ async fn test_risk_management_scenario() -> Result<()> {
                 high: 1100.0,
                 low: 900.0,
                 close: 1050.0,
-                volume: 100000.0,
+                volume: vec![100000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("VAR_95".to_string(), 0.05); // 5% VaR
@@ -821,7 +821,7 @@ async fn test_regulatory_compliance_scenario() -> Result<()> {
             symbol: symbol.to_string(),
             timestamp: Utc::now(),
             price: *base_price,
-            volume: 100000.0,
+            volume: vec![100000.0],
             bid: base_price - 1.0,
             ask: base_price + 1.0,
             source: "regulated_feed".to_string(),
@@ -851,7 +851,7 @@ async fn test_regulatory_compliance_scenario() -> Result<()> {
                 high: 1005.0,
                 low: 990.0,
                 close: 1000.0,
-                volume: 100000.0,
+                volume: vec![100000.0],
                 indicators: HashMap::new(),
             },
             context_metadata: {

@@ -53,7 +53,7 @@ fn create_test_time_series_data(symbol: &str, timestamp: DateTime<Utc>, price: f
         high: price + 10.0,
         low: price - 10.0,
         close: price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some(symbol.to_string()),

@@ -340,7 +340,7 @@ mod tests {
             high: 140.0, // Invalid: high < low
             low: 145.0,
             close: 148.0,
-            volume: 1000000.0,
+            volume: vec![1000000.0],
             technical_indicators: HashMap::new(),
             microstructure_features: None,
         });

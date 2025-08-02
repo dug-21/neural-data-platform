@@ -21,7 +21,7 @@ mod tests {
                 high: price + 0.5,
                 low: price - 1.0,
                 close: price,
-                volume,
+                volume: vec![volume],
             }
         }).collect()
     }
