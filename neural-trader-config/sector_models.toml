@@ -1,6 +1,9 @@
 # Phase 2: Sector-Based Neural Architecture Configuration
 # This configuration defines the 10-sector clustering system for neural trading models
 # with hierarchical DAA coordination and memory optimization
+#
+# ETF REFERENCE: See products/features/nrevamp/SECTOR_ETF_REFERENCE.md for complete ETF documentation
+# CONFIGURATION GUIDE: See products/features/nrevamp/NEURAL_TRADER_CONFIGURATION_GUIDE.md for all settings
 
 [metadata]
 version = "2.0.0"
