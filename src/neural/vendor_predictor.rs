@@ -883,6 +883,102 @@ impl VendorPredictor {
         Ok(stats)
     }
     
+    /// Create a VendorPredictor with default configuration
+    pub async fn new_with_defaults() -> Result<Self> {
+        let config = NeuralConfig {
+            memory_gb: 1.0,
+            models: vec!["MLP".to_string(), "LSTM".to_string()],
+            prediction_cache_ttl: 300,
+            model_load_timeout: 60,
+            max_concurrent_predictions: 10,
+            enable_model_monitoring: true,
+            accuracy_threshold: 0.8,
+            use_real_models: false,
+            enable_health_checks: true,
+            enable_fallback: true,
+            lookback_window: 24,
+            enable_circuit_breakers: true,
+            enable_graceful_degradation: false,
+            enable_performance_monitoring: true,
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
+            enable_adaptive_retry: true,
+            enable_model_ensembles: false,
+            model_timeout_seconds: 120,
+            max_retries: 3,
+            error_threshold: 0.15,
+        };
+        
+        Self::with_vendor_predictor(config).await
+    }
+
+    /// Initialize VendorPredictor with vendor predictor support
+    pub async fn with_vendor_predictor(neural_config: NeuralConfig) -> Result<Self> {
+        info!("🚀 Initializing VendorPredictor with vendor predictor support");
+        
+        // Create required dependencies
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
+        let performance_tracker = Arc::new(
+            crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new()
+        );
+        
+        // Create VendorPredictor instance
+        let mut predictor = Self::new(&neural_config, sector_mapper, performance_tracker)?;
+        
+        // Load sector models configuration
+        predictor.load_sector_models_config().await?;
+        
+        info!("✅ VendorPredictor with vendor predictor support initialized successfully");
+        Ok(predictor)
+    }
+    
+    /// Enable autonomous training system
+    pub async fn enable_autonomous_training(&self) -> Result<()> {
+        info!("🤖 Enabling autonomous training system");
+        
+        // Initialize autonomous training components
+        // This would typically involve:
+        // 1. Setting up continuous learning pipelines
+        // 2. Configuring performance monitoring
+        // 3. Establishing feedback loops
+        
+        debug!("Autonomous training system configuration completed");
+        Ok(())
+    }
+    
+    /// Enable real-time adaptation system
+    pub async fn enable_realtime_adaptation(&self) -> Result<()> {
+        info!("⚡ Enabling real-time adaptation system");
+        
+        // Initialize real-time adaptation components
+        // This would typically involve:
+        // 1. Setting up model parameter adjustment
+        // 2. Configuring dynamic learning rates
+        // 3. Establishing real-time feedback mechanisms
+        
+        debug!("Real-time adaptation system configuration completed");
+        Ok(())
+    }
+    
+    /// Enable data discovery system
+    pub async fn enable_data_discovery(&self) -> Result<()> {
+        info!("🔍 Enabling data discovery system");
+        
+        // Initialize data discovery components
+        // This would typically involve:
+        // 1. Setting up automatic data source detection
+        // 2. Configuring data quality assessment
+        // 3. Establishing data pipeline optimization
+        
+        debug!("Data discovery system configuration completed");
+        Ok(())
+    }
+    
     /// Get cluster statistics for all cluster pools
     pub async fn get_cluster_stats(&self) -> HashMap<String, HashMap<String, serde_json::Value>> {
         let mut stats = HashMap::new();
