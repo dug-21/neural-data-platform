@@ -18,6 +18,7 @@ COPY mcp-trading-server ./mcp-trading-server
 COPY benches ./benches
 COPY tests ./tests
 COPY examples ./examples
+COPY neural-trader-config ./config
 
 # Build the application in release mode
 RUN cargo build --release --bin neural-trader
@@ -36,21 +37,21 @@ RUN useradd -m -u 1000 -s /bin/bash trader
 
 # Create necessary directories
 RUN mkdir -p /etc/neural-trader /var/lib/neural-trader /var/log/neural-trader \
-    && chown -R trader:trader /etc/neural-trader /var/lib/neural-trader /var/log/neural-trader
+    && chown -R trader:trader /etc/neural-trader /var/lib/neural-trader /var/log/neural-trader 
 
 # Copy binary from builder
 COPY --from=builder /app/target/release/neural-trader /usr/local/bin/neural-trader
 
 # Copy configuration files
-COPY --chown=trader:trader config/ /var/lib/neural-trader/config/
+COPY --from=builder --chown=trader:trader /app/config/ /config/
 
 # Switch to root to create symlink
 USER root
 
 # Remove existing platform.toml and create symlink to production config
-RUN rm -f /var/lib/neural-trader/config/platform.toml && \
-    ln -s /var/lib/neural-trader/config/production.toml /var/lib/neural-trader/config/platform.toml && \
-    chown -h trader:trader /var/lib/neural-trader/config/platform.toml
+  RUN rm -f /config/platform.toml && \
+      ln -s /config/production.toml /config/platform.toml && \
+      chown -h trader:trader /config/platform.toml
 
 # Switch to non-root user
 USER trader
