@@ -1081,7 +1081,7 @@ mod tests {
         let model_path_v2 = _temp_dir.path().join("model_v2.bin");
         create_test_model(&model_path_v2).await.unwrap();
         
-        let v2 = manager.deploy_model(
+        let _v2 = manager.deploy_model(
             "test_model",
             &model_path_v2,
             serde_json::json!({"version": 2}),

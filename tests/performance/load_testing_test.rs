@@ -276,7 +276,7 @@ mod load_testing_tests {
         // Create system components
         let neural_config = create_load_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,
@@ -432,7 +432,7 @@ mod load_testing_tests {
         };
         
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,
@@ -556,7 +556,7 @@ mod load_testing_tests {
         // Create system components
         let neural_config = create_load_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,
@@ -719,7 +719,7 @@ mod load_testing_tests {
         // Create system components
         let neural_config = create_load_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,

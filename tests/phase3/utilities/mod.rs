@@ -13,7 +13,9 @@ use std::time::Duration;
 use autonomous_platform::config::NeuralConfig;
 use autonomous_platform::data::TimeSeriesData;
 use autonomous_platform::integration::{OrderSide, OrderType, TradeOrder, TradeResult, OrderStatus};
-use autonomous_platform::neural::{NeuralPredictor, NeuralPredictorTrait};
+use autonomous_platform::neural::{vendor_predictor::VendorPredictor, NeuralPredictorTrait};
+use autonomous_platform::data::sector_mapper::{SectorMapper, SectorMapperConfig};
+use autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker;
 use autonomous_platform::strategies::{Position, PositionSide, MarketContext};
 use autonomous_platform::utils::market_hours::MarketHours;
 
@@ -283,7 +285,7 @@ impl PortfolioState {
 }
 
 /// Create a test neural predictor with proper async initialization
-pub async fn create_test_neural_predictor(config: Option<NeuralConfig>) -> Result<Arc<NeuralPredictor>> {
+pub async fn create_test_neural_predictor(config: Option<NeuralConfig>) -> Result<Arc<VendorPredictor>> {
     let neural_config = config.unwrap_or_else(|| NeuralConfig {
         memory_gb: 1.0,
         models: vec!["MLP".to_string()],
@@ -302,7 +304,9 @@ pub async fn create_test_neural_predictor(config: Option<NeuralConfig>) -> Resul
         ..Default::default()
     });
 
-    let predictor = NeuralPredictor::new(neural_config).await?;
+    let sector_mapper = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+    let performance_tracker = Arc::new(ModelPerformanceTracker::new());
+    let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker)?;
     Ok(Arc::new(predictor))
 }
 

@@ -5,7 +5,7 @@
 
 use super::{MarketContext, Position, Signal, StrategyConfig, StrategyError, TradingStrategy};
 use crate::data::TimeSeriesData;
-use crate::neural::NeuralPredictor;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -663,7 +663,11 @@ mod tests {
             ..Default::default()
         };
 
-        let neural_predictor = match NeuralPredictor::new(neural_config).await {
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
+        let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
+        
+        let neural_predictor = match NeuralPredictor::new(&neural_config, sector_mapper, performance_tracker) {
             Ok(predictor) => Arc::new(predictor),
             Err(_) => {
                 // If we can't create a real predictor, skip test

@@ -4,7 +4,10 @@
 // Removed: NeuroDivergentAdapter import (deprecated)
 use autonomous_platform::config::NeuralConfig;
 use autonomous_platform::data::TimeSeriesData;
-use autonomous_platform::neural::{predictor::NeuralPredictor, NeuralPredictorTrait};
+use autonomous_platform::neural::{vendor_predictor::VendorPredictor, NeuralPredictorTrait};
+use autonomous_platform::data::sector_mapper::{SectorMapper, SectorMapperConfig};
+use autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker;
+use std::sync::Arc;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -42,9 +45,11 @@ async fn test_real_fann_network_creation() {
     };
 
     // Create predictor - this will create real vendor networks
-    let predictor = NeuralPredictor::new(config).await.unwrap();
+    let sector_mapper = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+    let performance_tracker = Arc::new(ModelPerformanceTracker::new());
+    let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
 
-    println!("✅ FannPredictor created successfully with real FANN networks");
+    println!("✅ VendorPredictor created successfully with real vendor networks");
 
     // Generate test data
     let mut data = Vec::new();
@@ -199,7 +204,11 @@ async fn test_model_training() {
         early_stopping_patience: 5,
     };
 
-    let mut predictor = NeuralPredictor::new(config).await.unwrap();
+    let mut predictor = {
+        let sector_mapper = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
+        VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap()
+    }.await.unwrap();
 
     // Generate training data
     let mut data = Vec::new();
@@ -266,7 +275,11 @@ async fn test_ensemble_with_real_models() {
         early_stopping_patience: 10,
     };
 
-    let predictor = NeuralPredictor::new(config).await.unwrap();
+    let predictor = {
+        let sector_mapper = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
+        VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap()
+    }.await.unwrap();
 
     // Generate test data
     let mut data = Vec::new();

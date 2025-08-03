@@ -1,7 +1,10 @@
 //! Integration tests for Neural and DAA components
 
-use autonomous_platform::neural::predictor::NeuralPredictor;
+use autonomous_platform::neural::vendor_predictor::VendorPredictor;
 use autonomous_platform::neural::NeuralPredictorTrait;
+use autonomous_platform::data::sector_mapper::{SectorMapper, SectorMapperConfig};
+use autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker;
+use std::sync::Arc;
 use autonomous_platform::agents::daa_bridge::DAAAgent;
 use autonomous_platform::agents::{TradingStrategy, AgentConfig};
 use autonomous_platform::config::NeuralConfig;
