@@ -25,7 +25,7 @@ cd "$SCRIPT_DIR"
 
 # Build images
 echo -e "${YELLOW}Building neural-trader image...${NC}"
-docker build --no-cache -f images/neural-trader.dockerfile -t neural-trader:prod "$PROJECT_ROOT"
+docker build -f images/neural-trader.dockerfile -t neural-trader:prod "$PROJECT_ROOT"
 
 echo -e "${YELLOW}Building timescaledb image...${NC}"
 docker build -f images/timescaledb.dockerfile -t neural-trader/timescaledb:prod .
@@ -37,7 +37,7 @@ echo -e "${YELLOW}Building grafana image...${NC}"
 docker build -f images/grafana.dockerfile  -t neural-trader/grafana:prod .
 
 echo -e "${YELLOW}Building data-ingestion image...${NC}"
-docker build -f images/data-ingestion.dockerfile --no-cache -t neural-trader/data-ingestion:prod "$PROJECT_ROOT"
+docker build -f images/data-ingestion.dockerfile -t neural-trader/data-ingestion:prod "$PROJECT_ROOT"
 
 echo -e "${GREEN}All images built successfully!${NC}"
 
