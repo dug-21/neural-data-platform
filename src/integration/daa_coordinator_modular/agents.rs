@@ -172,6 +172,19 @@ impl AgentManager {
                 consecutive_failures: 0, // Would be tracked separately 
                 trading_volume: market_context.volume_24h,
                 profit_loss: metrics.total_pnl,
+                // Missing fields with sensible defaults
+                data_type_metrics: None,
+                event_count: 50,
+                window_duration: chrono::Duration::hours(1),
+                symbol: "AGENTS".to_string(),
+                trading_performance: None,
+                accuracy_metrics: None,
+                cpu_usage: 55.0,
+                memory_usage: 700.0,
+                active_connections: 12,
+                requests_per_second: 40.0,
+                average_response_time: 28.0,
+                cache_hit_rate: 0.88,
             };
 
             // Evaluate training need

@@ -13,7 +13,7 @@ use anyhow::Result;
 use tokio::time::timeout;
 
 use crate::neural::predictor::NeuralPredictor;
-use crate::neural::fann_predictor::FannPredictor;
+use autonomous_platform::neural::predictor::NeuralPredictor;
 use crate::neural::NeuralPredictorTrait;
 use crate::config::NeuralConfig;
 use crate::adapters::enhanced_neural_adapter::{EnhancedNeuralAdapter, EnhancedNeuralConfig};

@@ -8,7 +8,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use neural_trader::{
+use autonomous_platform::{
     config::NeuralConfig,
     daa::autonomous_training::{AutonomousTrainingEngine, TrainingTrigger},
     data::TimeSeriesData,
@@ -154,7 +154,7 @@ async fn test_simple_training_flag_checks() -> Result<()> {
     )?;
     
     // Set up training engine
-    let training_config = neural_trader::daa::autonomous_training::AutonomousTrainingConfig::default();
+    let training_config = autonomous_platform::daa::autonomous_training::AutonomousTrainingConfig::default();
     let training_engine = Arc::new(AutonomousTrainingEngine::new(training_config).await?);
     coordinator.set_autonomous_training(training_engine.clone());
     

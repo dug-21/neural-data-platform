@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
 
     // Neural predictor
     println!("🧠 Initializing neural predictor...");
-    let predictor = match NeuralPredictor::default().await {
+    let predictor = match NeuralPredictor::new_with_defaults().await {
         Ok(predictor) => {
             println!("✅ Neural predictor ready");
             Arc::new(predictor)

@@ -683,6 +683,7 @@ mod tests {
                         interval_low: 95.0 + i as f64,
                         interval_high: 105.0 + i as f64,
                         model_name: model_name.clone(),
+                        metadata: None,
                     });
                 }
                 Ok(predictions)

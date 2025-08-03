@@ -78,7 +78,8 @@ fn create_test_time_series_data(symbol: &str, price: f64, volume: f64, timestamp
         high: price + 1.0,
         low: price - 1.0,
         close: price,
-        volume,
+        volume: vec![volume],
+        volume_value: volume,
         indicators: HashMap::from([
             ("rsi".to_string(), 50.0),
             ("macd".to_string(), 0.5),
@@ -87,6 +88,10 @@ fn create_test_time_series_data(symbol: &str, price: f64, volume: f64, timestamp
         entity: Some("test_entity".to_string()),
         value: Some(price),
         metadata: None,
+        values: vec![price],
+        intervals: vec![timestamp_offset_secs as u64],
+        timestamps: vec![Utc::now() + chrono::Duration::seconds(timestamp_offset_secs)],
+        metadata_map: HashMap::new(),
     }
 }
 

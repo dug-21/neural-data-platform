@@ -510,7 +510,7 @@ impl SectorModelsConfig {
     }
     
     /// Get all models for a sector
-    pub fn models_for_sector(&self, sector_name: &str) -> impl Iterator<Item = (&String, &ModelConfig)> {
+    pub fn models_for_sector<'a>(&'a self, sector_name: &'a str) -> impl Iterator<Item = (&String, &ModelConfig)> + 'a {
         self.models.iter().filter(move |(_, model)| model.sector == sector_name)
     }
     

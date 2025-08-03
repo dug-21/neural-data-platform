@@ -278,7 +278,7 @@ mod tests {
             .collect();
         
         let results: Vec<_> = futures::future::join_all(handles).await;
-        results.iter().all(|r| r.is_ok())
+        results.iter().all(|r: &Result<i32, _>| r.is_ok())
     }
 
     async fn test_resource_check() -> bool {
@@ -324,10 +324,10 @@ mod tests {
 // This would need to be added to Cargo.toml in a real implementation
 mod futures {
     pub mod future {
-        pub async fn join_all<I>(iter: I) -> Vec<I::Item::Output>
+        pub async fn join_all<I, T>(iter: I) -> Vec<T>
         where
             I: IntoIterator,
-            I::Item: std::future::Future,
+            I::Item: std::future::Future<Output = T>,
         {
             let mut results = Vec::new();
             for fut in iter {

@@ -12,6 +12,7 @@ pub mod autonomous_decisions;
 pub mod autonomous_neural_coordinator;
 // Original monolithic module (Phase 3B will use this)
 pub mod daa_coordinator;
+pub mod daa_coordinator_enhanced;
 
 // Refactored modular version (available for Phase 3C migration)
 pub mod daa_coordinator_modular {

@@ -245,7 +245,7 @@ impl BacktestEngine for StandardBacktestEngine {
                 current_price: data_point.close,
                 bid: data_point.close - (data_point.close * 0.0001), // Simulated spread
                 ask: data_point.close + (data_point.close * 0.0001),
-                volume_24h: data_point.volume,
+                volume_24h: data_point.volume_value,
                 volatility: self.calculate_volatility(&data[..=i], 20),
                 timestamp: data_point.timestamp.timestamp(),
             };
@@ -322,7 +322,7 @@ impl BacktestEngine for StandardBacktestEngine {
             current_price: last_data.close,
             bid: last_data.close - (last_data.close * 0.0001),
             ask: last_data.close + (last_data.close * 0.0001),
-            volume_24h: last_data.volume,
+            volume_24h: last_data.volume_value,
             volatility: self.calculate_volatility(&data, 20),
             timestamp: last_data.timestamp.timestamp(),
         };

@@ -8,11 +8,11 @@ use chrono::Utc;
 use std::collections::HashMap;
 use tokio;
 
-use neural_trader::config::NeuralConfig;
-use neural_trader::data::TimeSeriesData;
-use neural_trader::neural::fann_predictor::FannPredictor;
-use neural_trader::neural::mlp_adapter::{MLPAdapter, EnhancedMLPConfig};
-use neural_trader::neural::NeuralPredictorTrait;
+use autonomous_platform::config::NeuralConfig;
+use autonomous_platform::data::TimeSeriesData;
+use autonomous_platform::neural::predictor::NeuralPredictor;
+use autonomous_platform::neural::mlp_adapter::{MLPAdapter, EnhancedMLPConfig};
+use autonomous_platform::neural::NeuralPredictorTrait;
 
 /// Metrics validation utilities
 mod metrics_utils {
@@ -95,7 +95,7 @@ mod metrics_utils {
 #[tokio::test]
 async fn test_training_time_metrics_accuracy() -> Result<()> {
     let config = metrics_utils::create_metrics_config();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let training_data = metrics_utils::create_metrics_test_data(200);
     
     // Reset ensemble to start fresh metrics collection
@@ -243,7 +243,7 @@ async fn test_mlp_adapter_detailed_metrics() -> Result<()> {
 #[tokio::test]
 async fn test_ensemble_performance_tracking() -> Result<()> {
     let config = metrics_utils::create_metrics_config();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let training_data = metrics_utils::create_metrics_test_data(250);
     
     // Reset and perform ensemble training
@@ -342,7 +342,7 @@ async fn test_ensemble_performance_tracking() -> Result<()> {
 #[tokio::test]
 async fn test_metrics_persistence_and_aggregation() -> Result<()> {
     let config = metrics_utils::create_metrics_config();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let training_data = metrics_utils::create_metrics_test_data(200);
     
     // Reset and perform multiple training/prediction cycles
@@ -505,7 +505,7 @@ async fn test_error_metrics_and_convergence_tracking() -> Result<()> {
 
 // Helper functions
 
-fn calculate_cycle_accuracy(predictions: &[neural_trader::neural::PredictionResult], 
+fn calculate_cycle_accuracy(predictions: &[autonomous_platform::neural::PredictionResult], 
                           actual_values: &[f64]) -> f64 {
     if predictions.is_empty() || actual_values.is_empty() {
         return 0.0;

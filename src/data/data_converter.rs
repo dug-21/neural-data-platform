@@ -637,13 +637,21 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
     
-    fn create_test_data() -> TimeSeriesData {
+    // Test-only TimeSeriesData structure that matches what the converter expects
+    #[derive(Debug, Clone)]
+    struct TestTimeSeriesData {
+        values: Vec<f64>,
+        timestamps: Vec<DateTime<Utc>>,
+        metadata: HashMap<String, serde_json::Value>,
+    }
+    
+    fn create_test_data() -> TestTimeSeriesData {
         let values = vec![100.0, 101.0, 99.0, 102.0, 98.0, 103.0, 97.0, 104.0];
         let timestamps = (0..8)
             .map(|i| Utc.timestamp_opt(1600000000 + i * 3600, 0).unwrap())
             .collect();
         
-        TimeSeriesData {
+        TestTimeSeriesData {
             values,
             timestamps,
             metadata: {

@@ -8,11 +8,10 @@
 //! and the new async health monitoring system from healthfix.
 
 use anyhow::Result;
-use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
@@ -24,7 +23,7 @@ pub mod dashboard;
 pub mod metrics;
 
 // New async health monitoring components (from healthfix)
-mod types;
+pub mod types;
 mod async_health_monitor;
 mod health_server;
 mod component_checkers;

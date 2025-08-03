@@ -73,7 +73,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
 
         // Create base DAA coordinator
         let (tx, _rx) = mpsc::channel(100);
@@ -127,7 +127,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
 
         let (tx, _rx) = mpsc::channel(100);
         let base_config = DaaConfig::default();
@@ -191,7 +191,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
 
         let (tx, _rx) = mpsc::channel(100);
         let base_config = DaaConfig::default();
@@ -244,7 +244,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
 
         let (tx, _rx) = mpsc::channel(100);
         let base_config = DaaConfig::default();
@@ -301,7 +301,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
 
         let (tx, _rx) = mpsc::channel(100);
         let base_config = DaaConfig::default();

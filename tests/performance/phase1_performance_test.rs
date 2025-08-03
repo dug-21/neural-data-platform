@@ -99,21 +99,22 @@ fn create_performance_test_data(symbol: &str, size: usize) -> TimeSeriesData {
         .map(|i| Utc::now() - chrono::Duration::seconds((size - i) as i64))
         .collect();
     
-    TimeSeriesData {
-        values,
-        timestamps,
-        metadata: {
-            let mut map = HashMap::new();
+    {
+        let mut ts_data = TimeSeriesData::new(symbol.to_string(), timestamps[0]);
+        ts_data.values = values;
+        ts_data.timestamps = timestamps;
+        ts_data.metadata = Some({
+            let mut map = std::collections::BTreeMap::new();
             map.insert("symbol".to_string(), serde_json::json!(symbol));
             map.insert("source".to_string(), serde_json::json!("performance_test"));
-            map
-        },
-        symbol: symbol.to_string(),
-        metadata_map: {
+            serde_json::Value::Object(serde_json::Map::from_iter(map))
+        });
+        ts_data.metadata_map = {
             let mut map = HashMap::new();
             map.insert("symbol".to_string(), serde_json::json!(symbol));
             map
-        }
+        };
+        ts_data
     }
 }
 
@@ -510,12 +511,11 @@ mod tests {
         
         // Create mix of valid and invalid data
         let valid_data = create_performance_test_data("VALID", 50);
-        let invalid_data = TimeSeriesData {
-            values: vec![], // Empty data
-            timestamps: vec![],
-            metadata: HashMap::new(),
-            symbol: "INVALID".to_string(),
-            metadata_map: HashMap::new(),
+        let invalid_data = {
+            let mut ts_data = TimeSeriesData::new("INVALID".to_string(), Utc::now());
+            ts_data.values = vec![]; // Empty data
+            ts_data.timestamps = vec![];
+            ts_data
         };
         
         let mixed_data = vec![

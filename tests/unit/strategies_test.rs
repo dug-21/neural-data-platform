@@ -7,7 +7,7 @@
 //! - Refinement: Cover edge cases and market conditions
 //! - Completion: Comprehensive strategy behavior validation
 
-use neural_trader::strategies::{
+use autonomous_platform::strategies::{
     momentum::MomentumStrategy, MarketContext, Position, PositionSide, Signal, StrategyConfig,
     StrategyError, StrategyFactory, TradingStrategy,
 };
@@ -425,7 +425,7 @@ mod strategy_metrics_tests {
 
     #[test]
     fn test_momentum_config_default() {
-        use neural_trader::strategies::momentum::MomentumConfig;
+        use autonomous_platform::strategies::momentum::MomentumConfig;
 
         let config = MomentumConfig::default();
         assert_eq!(config.fast_period, 12);
@@ -604,7 +604,7 @@ mod strategy_metrics_tests {
 
     #[test]
     fn test_strategy_metrics_update() {
-        use neural_trader::strategies::StrategyMetrics;
+        use autonomous_platform::strategies::StrategyMetrics;
 
         // GIVEN: A new strategy metrics instance
         let mut metrics = StrategyMetrics::default();

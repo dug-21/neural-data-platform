@@ -66,6 +66,13 @@ pub struct VendorPredictorConfig {
     pub enable_performance_tracking: bool,
     /// Enable sector-based routing
     pub enable_sector_routing: bool,
+    // Missing fields that are used in the code
+    #[serde(default)]
+    pub layers: Vec<usize>,
+    #[serde(default)]
+    pub base_config: Option<serde_json::Value>,
+    #[serde(default)]
+    pub intervals: Vec<u64>, // For time intervals
 }
 
 impl Default for VendorPredictorConfig {
@@ -76,6 +83,9 @@ impl Default for VendorPredictorConfig {
             model_timeout_ms: 100,
             enable_performance_tracking: true,
             enable_sector_routing: true,
+            layers: vec![128, 64, 32],
+            base_config: None,
+            intervals: vec![60, 300, 900], // 1min, 5min, 15min
         }
     }
 }
@@ -260,8 +270,8 @@ impl ClusterModelPool {
     async fn evict_oldest_model(&self) -> Result<()> {
         // Simple eviction: remove a random model
         // In production, implement LRU or usage-based eviction
-        if let Some((key, _)) = self.shared_models.iter().next() {
-            let key = key.clone();
+        if let Some(entry) = self.shared_models.iter().next() {
+            let key = entry.key().clone();
             self.shared_models.remove(&key);
             
             // Rough estimate: reduce memory by 20%
@@ -297,13 +307,10 @@ impl ClusterModelPool {
     }
 }
 
-/// Model configuration with data requirements
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelConfig {
-    pub architecture: String,
-    pub parameters: HashMap<String, serde_json::Value>,
-    pub data_requirements: DataRequirements,
-}
+// Note: ModelConfig is defined earlier in this file (line 85-89)
+
+/// Type alias for backward compatibility
+pub type FannPredictor = VendorPredictor;
 
 /// Main VendorPredictor struct - replaces FannPredictor
 pub struct VendorPredictor {
@@ -834,7 +841,7 @@ impl VendorPredictor {
         Ok(Vec::new())
     }
     
-    pub async fn update_performance(&self, _model_name: &str, _actual: &[f64], _predictions: &[PredictionResult]) -> Result<()> {
+    pub async fn update_performance(&self, _model_name: &str, _actual: &[f64], _predictions: &[f64]) -> Result<()> {
         debug!("Performance update requested - tracking via ModelPerformanceTracker");
         Ok(())
     }
@@ -852,6 +859,28 @@ impl VendorPredictor {
     pub async fn trigger_automatic_retrain(&self, _model_name: &str) -> Result<()> {
         debug!("Automatic retrain requested - not yet implemented");
         Ok(())
+    }
+
+    pub async fn get_ensemble_stats(&self) -> Result<HashMap<String, serde_json::Value>> {
+        let mut stats = HashMap::new();
+        stats.insert("active_models".to_string(), serde_json::json!(self.models.len()));
+        stats.insert("cluster_pools".to_string(), serde_json::json!(self.cluster_pools.len()));
+        
+        // Add cluster pool statistics
+        let cluster_stats = self.get_cluster_stats().await;
+        stats.insert("cluster_pool_stats".to_string(), serde_json::json!(cluster_stats));
+        
+        // Calculate total memory usage across clusters
+        let total_cluster_memory: f64 = cluster_stats.values()
+            .filter_map(|stats| stats.get("memory_usage_mb")?.as_f64())
+            .sum();
+        stats.insert("total_cluster_memory_mb".to_string(), serde_json::json!(total_cluster_memory));
+        
+        // Add sector allocation statistics
+        let sector_stats = self.get_sector_allocation_stats().await;
+        stats.insert("sector_allocation".to_string(), serde_json::json!(sector_stats));
+        
+        Ok(stats)
     }
     
     /// Get cluster statistics for all cluster pools

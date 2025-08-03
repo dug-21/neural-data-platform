@@ -250,10 +250,10 @@ impl SectorAggregator {
             .sum::<f64>() / sector_data.len() as f64;
 
         // Calculate volume weighted price
-        let total_volume: f64 = sector_data.iter().map(|(data, _)| data.volume).sum();
+        let total_volume: f64 = sector_data.iter().map(|(data, _)| data.volume_value).sum();
         let volume_weighted_price = if total_volume > 0.0 {
             sector_data.iter()
-                .map(|(data, _)| data.close * data.volume)
+                .map(|(data, _)| data.close * data.volume_value)
                 .sum::<f64>() / total_volume
         } else {
             average_price
@@ -322,10 +322,10 @@ impl SectorAggregator {
                     
                     if change > 0.0 {
                         advancing += 1;
-                        up_volume += current.volume;
+                        up_volume += current.volume_value;
                     } else if change < 0.0 {
                         declining += 1;
-                        down_volume += current.volume;
+                        down_volume += current.volume_value;
                     } else {
                         unchanged += 1;
                     }
@@ -552,19 +552,19 @@ mod tests {
         
         // Add some test price history
         let test_data = vec![
-            TimeSeriesData {
-                symbol: "TEST1".to_string(),
-                timestamp: Utc::now(),
-                open: 100.0,
-                high: 102.0,
-                low: 99.0,
-                close: 101.0,
-                volume: vec![1000.0],
-                indicators: HashMap::new(),
-                source: None,
-                entity: None,
-                value: Some(101.0),
-                metadata: None,
+            {
+                let mut data = TimeSeriesData::new("TEST1".to_string(), Utc::now());
+                data.open = 100.0;
+                data.high = 102.0;
+                data.low = 99.0;
+                data.close = 101.0;
+                data.volume = vec![1000.0];
+                data.indicators = HashMap::new();
+                data.source = None;
+                data.entity = None;
+                data.value = Some(101.0);
+                data.metadata = None;
+                data
             }
         ];
         

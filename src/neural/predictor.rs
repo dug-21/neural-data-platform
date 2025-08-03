@@ -56,18 +56,25 @@ impl NeuralPredictor {
     }
 
     /// Get model configurations (required by autonomous training)
-    pub fn get_model_configs(&self) -> HashMap<String, crate::neural::vendor_predictor::BaseModelConfig> {
+    pub fn get_model_configs(&self) -> HashMap<String, crate::neural::vendor_predictor::ModelConfig> {
         // Return current model configurations
         let mut configs = HashMap::new();
         
         // Add placeholder configurations for each model type
         for model_name in &self.config.models {
-            configs.insert(model_name.clone(), crate::neural::vendor_predictor::BaseModelConfig {
-                model_type: model_name.clone(),
-                input_size: 60,
-                output_size: 1,
-                hidden_layers: vec![128, 64, 32],
-                learning_rate: 0.001,
+            let mut parameters = HashMap::new();
+            parameters.insert("input_size".to_string(), serde_json::Value::Number(serde_json::Number::from(60)));
+            parameters.insert("output_size".to_string(), serde_json::Value::Number(serde_json::Number::from(1)));
+            parameters.insert("learning_rate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.001).unwrap()));
+            
+            configs.insert(model_name.clone(), crate::neural::vendor_predictor::ModelConfig {
+                architecture: model_name.clone(),
+                parameters,
+                data_requirements: crate::neural::vendor_predictor::DataRequirements {
+                    required: vec!["price".to_string(), "volume".to_string()],
+                    optional: vec![],
+                    min_history: 60,
+                },
             });
         }
         
@@ -193,6 +200,41 @@ impl NeuralPredictor {
             .await
             .map_err(|e| anyhow::anyhow!("Shutdown failed: {}", e))
     }
+
+    /// Create a NeuralPredictor with default configuration
+    /// Note: This is async because neural predictor initialization is async
+    pub async fn new_with_defaults() -> Result<Self> {
+        let config = NeuralConfig {
+            memory_gb: 1.0,
+            models: vec!["MLP".to_string(), "LSTM".to_string()],
+            prediction_cache_ttl: 300,
+            model_load_timeout: 60,
+            max_concurrent_predictions: 10,
+            enable_model_monitoring: true,
+            accuracy_threshold: 0.8,
+            use_real_models: false,  // Simplified: always use FANN
+            enable_health_checks: true,
+            enable_fallback: true,
+            lookback_window: 24,
+            enable_circuit_breakers: true,
+            enable_graceful_degradation: false,
+            enable_performance_monitoring: true,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
+            enable_adaptive_retry: true,
+            enable_model_ensembles: false,
+            model_timeout_seconds: 120,
+            max_retries: 3,
+            error_threshold: 0.15,
+        };
+        
+        Self::new(config).await
+    }
 }
 
 /// Implement the standard trait for compatibility
@@ -241,42 +283,6 @@ impl NeuralPredictorTrait for NeuralPredictor {
     }
 }
 
-/// Create a NeuralPredictor with default configuration
-/// Note: This is async because neural predictor initialization is async
-impl NeuralPredictor {
-    pub async fn default() -> Result<Self> {
-        let config = NeuralConfig {
-            memory_gb: 1.0,
-            models: vec!["MLP".to_string(), "LSTM".to_string()],
-            prediction_cache_ttl: 300,
-            model_load_timeout: 60,
-            max_concurrent_predictions: 10,
-            enable_model_monitoring: true,
-            accuracy_threshold: 0.8,
-            use_real_models: false,  // Simplified: always use FANN
-            enable_health_checks: true,
-            enable_fallback: true,
-            lookback_window: 24,
-            enable_circuit_breakers: true,
-            enable_graceful_degradation: false,
-            enable_performance_monitoring: true,
-            enable_adaptive_retry: true,
-            enable_model_ensembles: false,
-            model_timeout_seconds: 30,
-            max_retries: 3,
-            error_threshold: 0.05,
-            input_size: 24,
-            output_size: 1,
-            hidden_layers: vec![64, 32],
-            learning_rate: 0.001,
-            prediction_horizon: None,
-            normalization_method: None,
-        };
-        
-        Self::new(config).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,6 +300,13 @@ mod tests {
             use_real_models: false,
             enable_health_checks: false, // Disable for test simplicity
             enable_fallback: false,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
             lookback_window: 24,
             enable_circuit_breakers: false,
             enable_graceful_degradation: false,

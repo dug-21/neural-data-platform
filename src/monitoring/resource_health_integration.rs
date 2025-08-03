@@ -5,8 +5,10 @@
 
 use crate::monitoring::health::{
     AlertConfig, AlertType, AlertSeverity, HealthMonitor,
+    LegacyComponentHealth as ComponentHealth, 
+    LegacyComponentType as ComponentType, 
+    LegacyHealthStatus as HealthStatus,
 };
-use crate::monitoring::health::config::{ComponentHealth, ComponentType, HealthStatus};
 use crate::utils::resource_monitor::{
     ResourceGovernor, ResourceSnapshot, ResourceViolation, 
     ViolationSeverity, ResourceType,

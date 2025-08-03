@@ -22,6 +22,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 
+use crate::helpers::test_utils::create_test_market_hours;
+
 /// Test helper to create market events
 fn create_market_event(symbol: &str, price: f64, sequence: u64) -> MarketEvent {
     MarketEvent {
@@ -72,12 +74,17 @@ async fn process_market_events_to_daa(
                 high: event.price + 20.0,
                 low: event.price - 20.0,
                 close: event.price,
-                volume: event.volume,
+                volume: event.volume.clone(),
+                volume_value: event.volume.iter().sum::<f64>(),
                 indicators: HashMap::new(),
                 source: Some("event_bus".to_string()),
                 entity: Some(symbol.clone()),
                 value: Some(event.price),
                 metadata: None,
+                values: vec![event.price],
+                intervals: vec![0],
+                timestamps: vec![event.timestamp],
+                metadata_map: HashMap::new(),
             };
 
             time_series_data.push(ts_data);
@@ -189,14 +196,24 @@ mod main_flow_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         // Create test events
@@ -235,14 +252,24 @@ mod main_flow_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         // Create events for multiple symbols
@@ -289,14 +316,24 @@ mod main_flow_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         let mut positions = HashMap::new();
@@ -366,14 +403,24 @@ mod main_flow_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         // Create volatile market events
@@ -413,14 +460,24 @@ mod main_flow_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         // Create only 5 events (less than required 10)
@@ -486,12 +543,13 @@ mod main_flow_tests {
             accuracy_threshold: 0.7,
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(1000);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         // Spawn multiple tasks processing different symbols
@@ -546,14 +604,24 @@ mod main_flow_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         // Create events with some invalid data
@@ -608,12 +676,13 @@ mod performance_tests {
             accuracy_threshold: 0.7,
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(10000);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         let start = std::time::Instant::now();

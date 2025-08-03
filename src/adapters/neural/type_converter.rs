@@ -231,6 +231,7 @@ impl VendorDataConverter {
                     low: pred as f64,
                     close: pred as f64,
                     volume: vec![0.0],
+                    volume_value: 0.0,
                     indicators: HashMap::new(),
                     source: Some("neural_prediction_f32".to_string()),
                     entity: base_data.entity.clone(),
@@ -243,6 +244,7 @@ impl VendorDataConverter {
                     })),
                     // Enhanced fields for vendor model integration
                     values: vec![pred as f64], // Single prediction value
+                    intervals: vec![],
                     timestamps: vec![timestamp], // Single prediction timestamp
                     metadata_map: HashMap::from([
                         ("type".to_string(), serde_json::json!("forecast")),
@@ -421,11 +423,16 @@ mod tests {
                 low: 49500.0,
                 close: 50500.0,
                 volume: vec![1000.0],
+                volume_value: 1000.0,
                 indicators: indicators.clone(),
                 source: Some("test".to_string()),
                 entity: None,
                 value: None,
                 metadata: None,
+                values: vec![50500.0],
+                intervals: vec![0],
+                timestamps: vec![Utc::now()],
+                metadata_map: HashMap::new(),
             },
             TimeSeriesData {
                 symbol: "BTC/USD".to_string(),
@@ -435,11 +442,16 @@ mod tests {
                 low: 50000.0,
                 close: 51000.0,
                 volume: vec![1100.0],
+                volume_value: 1100.0,
                 indicators,
                 source: Some("test".to_string()),
                 entity: None,
                 value: None,
                 metadata: None,
+                values: vec![51000.0],
+                intervals: vec![1],
+                timestamps: vec![Utc::now() + chrono::Duration::hours(1)],
+                metadata_map: HashMap::new(),
             },
         ]
     }

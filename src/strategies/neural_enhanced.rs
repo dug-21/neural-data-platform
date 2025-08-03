@@ -283,7 +283,8 @@ impl NeuralEnhancedStrategy {
                 high: price * 1.01,
                 low: price * 0.99,
                 close: *price,
-                volume: *volume,
+                volume: vec![*volume],
+                volume_value: *volume,
                 indicators: HashMap::new(),
                 source: Some("neural-enhanced".to_string()),
                 entity: Some(symbol.to_string()),
@@ -291,6 +292,7 @@ impl NeuralEnhancedStrategy {
                 metadata: None,
                 // Enhanced fields for vendor model integration
                 values: vec![*price], // Single price value
+                intervals: vec![],
                 timestamps: vec![DateTime::<Utc>::from_timestamp(
                     now - ((prices.len() - i) as i64 * 3600),
                     0,

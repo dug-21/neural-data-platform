@@ -2,7 +2,7 @@
 //!
 //! Ensures proper module boundaries, encapsulation, and dependency management.
 
-use neural_trader::neural::monitoring::{
+use autonomous_platform::neural::monitoring::{
     PerformanceChannel, PerformanceEvent, PerformanceEventBuilder, PerformanceEventType,
     PerformanceSource, PerformanceMetrics, EventPriority, AlertType, AlertSeverity,
     ComponentType, ChannelConfig, ChannelStatistics, CircularBuffer,
@@ -170,12 +170,12 @@ mod module_structure_tests {
         // performance_channel module should not expose internal types
         
         // These imports should work
-        use neural_trader::neural::monitoring::performance_channel::{
+        use autonomous_platform::neural::monitoring::performance_channel::{
             PerformanceChannel, PerformanceEvent, PerformanceEventBuilder,
         };
         
         // Internal types should not be accessible
-        // use neural_trader::neural::monitoring::performance_channel::CircularBuffer; // Should fail
+        // use autonomous_platform::neural::monitoring::performance_channel::CircularBuffer; // Should fail
         
         let _ = PerformanceChannel::new_with_buffer(10);
         let _ = PerformanceEventBuilder::new();
@@ -215,14 +215,14 @@ mod dependency_validation_tests {
         // by ensuring we can import each module independently
         
         // Performance channel should be independent
-        use neural_trader::neural::monitoring::performance_channel::PerformanceChannel;
+        use autonomous_platform::neural::monitoring::performance_channel::PerformanceChannel;
         let _ = PerformanceChannel::new_with_buffer(10);
         
         // Metrics should depend only on performance_channel
-        use neural_trader::neural::monitoring::metrics::MetricsPipeline;
+        use autonomous_platform::neural::monitoring::metrics::MetricsPipeline;
         
         // Notifications should depend only on performance_channel
-        use neural_trader::neural::monitoring::notifications::TrainingNotifier;
+        use autonomous_platform::neural::monitoring::notifications::TrainingNotifier;
     }
 
     #[test]

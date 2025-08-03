@@ -304,7 +304,7 @@ impl<'a> MomentumIndicators<'a> {
             
             let typical_price = (data[i].high + data[i].low + data[i].close) / 3.0;
             let prev_typical = (data[i - 1].high + data[i - 1].low + data[i - 1].close) / 3.0;
-            let money_flow = typical_price * data[i].volume;
+            let money_flow = typical_price * data[i].volume_value;
             
             if typical_price > prev_typical {
                 positive_flow += money_flow;
@@ -331,14 +331,13 @@ mod tests {
     fn create_test_data() -> Vec<TimeSeriesData> {
         let mut data = Vec::new();
         for i in 0..50 {
-            data.push(TimeSeriesData {
-                timestamp: DateTime::<Utc>::from_timestamp(1640995200 + i * 60, 0).unwrap(),
-                open: 100.0 + i as f64 * 0.5,
-                high: 105.0 + i as f64 * 0.5,
-                low: 95.0 + i as f64 * 0.5,
-                close: 102.0 + i as f64 * 0.5,
-                volume: vec![1000.0 + i as f64 * 10.0],
-            });
+            let mut ts_data = TimeSeriesData::new("TEST".to_string(), DateTime::<Utc>::from_timestamp(1640995200 + i * 60, 0).unwrap());
+            ts_data.open = 100.0 + i as f64 * 0.5;
+            ts_data.high = 105.0 + i as f64 * 0.5;
+            ts_data.low = 95.0 + i as f64 * 0.5;
+            ts_data.close = 102.0 + i as f64 * 0.5;
+            ts_data.volume = vec![1000.0 + i as f64 * 10.0];
+            data.push(ts_data);
         }
         data
     }

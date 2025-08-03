@@ -90,7 +90,7 @@ impl RedisIntegration {
             let symbol_redis_clone = {
                 // Clone the inner RedisAdapter for the sector channels
                 let redis_guard = futures::executor::block_on(self.symbol_redis.read());
-                redis_guard.clone() // Assuming RedisAdapter implements Clone
+                (*redis_guard).clone() // Clone the inner value, not the guard
             };
             
             let sector_channels = RedisSectorChannels::new(

@@ -28,6 +28,9 @@ pub mod memory_optimized_predictor;
 pub mod sector_aggregator;
 pub mod model_factory;
 
+// Phase 3: Real-time training extensions
+pub mod realtime_training;
+
 // Re-export vendor integration components
 pub use vendor_predictor::{VendorPredictor, VendorPredictorConfig};
 pub use memory_optimized_predictor::{
@@ -50,6 +53,12 @@ pub mod performance_benchmarks;
 
 // Ensemble types
 pub mod ensemble_types;
+
+// Performance channel communication
+pub mod performance_channel;
+
+// Performance events aggregation
+pub mod performance_events;
 
 // Phase 3B: Removed monitoring module - architectural layer not allowed
 
@@ -129,11 +138,20 @@ pub trait NeuralPredictorTrait: Send + Sync {
 pub use predictor::NeuralPredictor;
 
 // Note: fann module exports disabled - using VendorPredictor instead
-// Re-export vendor predictor components (PRIMARY EXPORTS)
+// Re-export additional vendor predictor components
 pub use vendor_predictor::{
-    VendorPredictorConfig,
     ModelConfig,
     ClusterModelPool,
+    VendorPredictor as FannPredictor, // Backward compatibility alias
+};
+
+// Re-export performance events types
+pub use performance_events::{
+    PerformanceSnapshot, 
+    TradingPerformanceMetrics, 
+    AccuracyMetrics, 
+    DataTypeMetrics, 
+    ChannelMetrics
 };
 
 // LEGACY: Removed legacy predictor - now using modular FannPredictor from fann/ module

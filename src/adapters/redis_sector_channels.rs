@@ -567,7 +567,7 @@ mod tests {
                 high: 152.0,
                 low: 149.0,
                 close: 151.0,
-                volume: vec![1000.0],
+                volume: 1000.0,
             },
             MarketData {
                 symbol: "MSFT".to_string(),
@@ -576,7 +576,7 @@ mod tests {
                 high: 252.0,
                 low: 249.0,
                 close: 251.0,
-                volume: vec![800.0],
+                volume: 800.0,
             },
         ];
         
@@ -621,7 +621,7 @@ mod tests {
             etf_symbol: "XLK".to_string(),
             etf_price: 150.0,
             avg_price: 200.0,
-            total_volume: vec![1000.0],
+            total_volume: 1000.0,
             volatility: 0.02,
             momentum: 0.01,
             timestamp: 1704067200,

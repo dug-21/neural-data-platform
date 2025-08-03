@@ -13,20 +13,20 @@ use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 
-use neural_trader::adapters::model_storage::{
+use autonomous_platform::adapters::model_storage::{
     ModelStorage, ModelStorageConfig, VersionIncrement, SemanticVersion,
 };
-use neural_trader::adapters::model_rollback::{
+use autonomous_platform::adapters::model_rollback::{
     ModelRollbackManager, RollbackConfig, ModelMetrics,
 };
-use neural_trader::neural::fann_model_adapter::{
+use autonomous_platform::neural::fann_model_adapter::{
     FannModelAdapter, FannModelConfig,
 };
-use neural_trader::integration::{
+use autonomous_platform::integration::{
     ModelPersistenceService, ModelPersistenceConfig,
     TrainingDataService, TrainingDataConfig, ModelType,
 };
-use neural_trader::adapters::vendor_bridge::{
+use autonomous_platform::adapters::vendor_bridge::{
     TrainingConfig, VendorTimeSeriesData,
 };
 

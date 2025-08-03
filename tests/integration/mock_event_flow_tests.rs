@@ -3,12 +3,12 @@
 //! Tests the interaction between PerformanceChannel and MarketHours modules
 //! focusing on event subscription, async handling, error scenarios, and decision triggers.
 
-use neural_trader::neural::monitoring::performance_channel::{
+use autonomous_platform::neural::monitoring::performance_channel::{
     PerformanceChannel, PerformanceEvent, PerformanceEventBuilder, PerformanceEventType,
     PerformanceSource, EventPriority, AlertType, AlertSeverity, PerformanceMetrics,
     ChannelConfig, ComponentType,
 };
-use neural_trader::utils::market_hours::{
+use autonomous_platform::utils::market_hours::{
     MarketHours, Exchange, TrainingWindow, MarketSession, MarketIntensity,
     EmergencyPriority, CircuitBreakerLevel,
 };

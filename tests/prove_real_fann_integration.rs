@@ -4,7 +4,7 @@
 // Removed: NeuroDivergentAdapter import (deprecated)
 use autonomous_platform::config::NeuralConfig;
 use autonomous_platform::data::TimeSeriesData;
-use autonomous_platform::neural::{FannPredictor, NeuralPredictorTrait};
+use autonomous_platform::neural::{predictor::NeuralPredictor, NeuralPredictorTrait};
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -14,41 +14,55 @@ async fn test_real_fann_network_creation() {
 
     // Create configuration
     let config = NeuralConfig {
+        memory_gb: 1.0,
         models: vec!["LSTM".to_string(), "GRU".to_string()],
-        ensemble_method: "weighted_average".to_string(),
+        prediction_cache_ttl: 300,
+        model_load_timeout: 60,
+        max_concurrent_predictions: 10,
+        enable_model_monitoring: true,
+        accuracy_threshold: 0.8,
+        use_real_models: true, // Using real vendor models
+        enable_health_checks: false,
+        enable_fallback: false,
+        enable_circuit_breakers: false,
+        enable_graceful_degradation: false,
+        enable_performance_monitoring: false,
+        enable_adaptive_retry: false,
+        enable_model_ensembles: true,
+        model_timeout_seconds: 60,
+        max_retries: 3,
+        error_threshold: 0.1,
         lookback_window: 24,
-        prediction_horizon: 6,
-        use_real_models: false, // Using FANN models directly
-        model_update_frequency: 100,
-        confidence_threshold: 0.7,
-        max_models: 5,
-        feature_extractors: vec!["technical".to_string()],
-        model_storage_path: "/tmp/models".to_string(),
-        enable_online_learning: false,
+        input_size: 24,
+        output_size: 6,
+        hidden_layers: vec![128, 64],
         learning_rate: 0.001,
-        batch_size: 32,
-        validation_split: 0.2,
-        early_stopping_patience: 10,
+        prediction_horizon: Some(6),
+        normalization_method: Some("minmax".to_string()),
     };
 
-    // Create predictor - this will create real FANN networks
-    let predictor = FannPredictor::new(config).unwrap();
+    // Create predictor - this will create real vendor networks
+    let predictor = NeuralPredictor::new(config).await.unwrap();
 
     println!("✅ FannPredictor created successfully with real FANN networks");
 
     // Generate test data
     let mut data = Vec::new();
     for i in 0..100 {
-        data.push(TimeSeriesData {
-            timestamp: Utc::now() - chrono::Duration::minutes(100 - i),
-            symbol: "TEST".to_string(),
-            close: 100.0 + (i as f64).sin() * 10.0,
-            high: 105.0 + (i as f64).sin() * 10.0,
-            low: 95.0 + (i as f64).sin() * 10.0,
-            open: 100.0,
-            volume: vec![1000.0],
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new("TEST".to_string(), Utc::now() - chrono::Duration::minutes(100 - i));
+        ts_data.close = 100.0 + (i as f64).sin() * 10.0;
+        ts_data.high = 105.0 + (i as f64).sin() * 10.0;
+        ts_data.low = 95.0 + (i as f64).sin() * 10.0;
+        ts_data.open = 100.0;
+        ts_data.volume = vec![1000.0];
+        ts_data.volume_value = 1000.0;
+        ts_data.values = vec![100.0 + (i as f64).sin() * 10.0];
+        ts_data.intervals = vec![300];
+        ts_data.timestamps = vec![Utc::now() - chrono::Duration::minutes(100 - i)];
+        ts_data.entity = Some("TEST".to_string());
+        ts_data.value = Some(100.0 + (i as f64).sin() * 10.0);
+        ts_data.source = Some("test".to_string());
+        data.push(ts_data);
     }
 
     // Make prediction - this uses real neural networks
@@ -95,16 +109,13 @@ async fn test_real_vendor_models() {
     println!("✅ Real VendorTCN created with ruv-FANN network");
 
     // Create test data
-    let data = vec![TimeSeriesData {
-        timestamp: Utc::now(),
-        symbol: "TEST".to_string(),
-        close: 100.0,
-        high: 105.0,
-        low: 95.0,
-        open: 100.0,
-        volume: vec![1000.0],
-        indicators: HashMap::new(),
-    }];
+    let mut ts_data = TimeSeriesData::new("TEST".to_string(), Utc::now());
+    ts_data.close = 100.0;
+    ts_data.high = 105.0;
+    ts_data.low = 95.0;
+    ts_data.open = 100.0;
+    ts_data.volume = vec![1000.0];
+    let data = vec![ts_data];
 
     // Test DeepAR prediction
     println!("\n🔮 Testing DeepAR prediction...");
@@ -188,21 +199,25 @@ async fn test_model_training() {
         early_stopping_patience: 5,
     };
 
-    let mut predictor = FannPredictor::new(config).unwrap();
+    let mut predictor = NeuralPredictor::new(config).await.unwrap();
 
     // Generate training data
     let mut data = Vec::new();
     for i in 0..50 {
-        data.push(TimeSeriesData {
-            timestamp: Utc::now() - chrono::Duration::minutes(50 - i),
-            symbol: "TRAIN".to_string(),
-            close: 100.0 + (i as f64 * 0.1).sin() * 20.0,
-            high: 105.0,
-            low: 95.0,
-            open: 100.0,
-            volume: vec![1000.0],
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new("TRAIN".to_string(), Utc::now() - chrono::Duration::minutes(50 - i));
+        ts_data.close = 100.0 + (i as f64 * 0.1).sin() * 20.0;
+        ts_data.high = 105.0;
+        ts_data.low = 95.0;
+        ts_data.open = 100.0;
+        ts_data.volume = vec![1000.0];
+        ts_data.volume_value = 1000.0;
+        ts_data.values = vec![100.0 + (i as f64).sin() * 10.0];
+        ts_data.intervals = vec![300];
+        ts_data.timestamps = vec![Utc::now() - chrono::Duration::minutes(100 - i)];
+        ts_data.entity = Some("TEST".to_string());
+        ts_data.value = Some(100.0 + (i as f64).sin() * 10.0);
+        ts_data.source = Some("test".to_string());
+        data.push(ts_data);
     }
 
     println!("📚 Training FANN model with {} data points...", data.len());
@@ -251,21 +266,25 @@ async fn test_ensemble_with_real_models() {
         early_stopping_patience: 10,
     };
 
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
 
     // Generate test data
     let mut data = Vec::new();
     for i in 0..50 {
-        data.push(TimeSeriesData {
-            timestamp: Utc::now() - chrono::Duration::minutes(50 - i),
-            symbol: "ENSEMBLE".to_string(),
-            close: 100.0 + (i as f64 * 0.2).cos() * 15.0,
-            high: 110.0,
-            low: 90.0,
-            open: 100.0,
-            volume: vec![1000.0],
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new("ENSEMBLE".to_string(), Utc::now() - chrono::Duration::minutes(50 - i));
+        ts_data.close = 100.0 + (i as f64 * 0.2).cos() * 15.0;
+        ts_data.high = 110.0;
+        ts_data.low = 90.0;
+        ts_data.open = 100.0;
+        ts_data.volume = vec![1000.0];
+        ts_data.volume_value = 1000.0;
+        ts_data.values = vec![100.0 + (i as f64).sin() * 10.0];
+        ts_data.intervals = vec![300];
+        ts_data.timestamps = vec![Utc::now() - chrono::Duration::minutes(100 - i)];
+        ts_data.entity = Some("TEST".to_string());
+        ts_data.value = Some(100.0 + (i as f64).sin() * 10.0);
+        ts_data.source = Some("test".to_string());
+        data.push(ts_data);
     }
 
     println!("🔮 Running ensemble prediction with 3 real FANN models...");

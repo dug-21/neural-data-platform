@@ -136,7 +136,13 @@ struct DataQualityTracker {
 impl EnhancedNeuralPredictor {
     /// Create a new enhanced neural predictor
     pub fn new(config: NeuralConfig) -> Result<Self> {
-        let fann_predictor = FannPredictor::new(config.clone())?;
+        let fann_predictor = FannPredictor::new(
+            &config, 
+            Arc::new(crate::data::sector_mapper::SectorMapper::new(
+                crate::data::sector_mapper::SectorMapperConfig::default()
+            )),
+            Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new())
+        )?;
 
         let performance_tracker = PerformanceTracker {
             recent_accuracy: 0.5, // Start neutral
@@ -728,7 +734,7 @@ impl EnhancedNeuralPredictor {
         // Calculate completeness (non-zero values)
         let non_zero_count = data
             .iter()
-            .filter(|d| d.close > 0.0 && d.volume > 0.0)
+            .filter(|d| d.close > 0.0 && d.volume_value > 0.0)
             .count();
         quality_tracker.completeness_score = non_zero_count as f64 / data.len() as f64;
 
@@ -756,7 +762,7 @@ impl EnhancedNeuralPredictor {
 
         // Calculate volume consistency
         if data.len() > 5 {
-            let volumes: Vec<f64> = data.iter().map(|d| d.volume).collect();
+            let volumes: Vec<f64> = data.iter().map(|d| d.volume_value).collect();
             let volume_mean = volumes.iter().sum::<f64>() / volumes.len() as f64;
             let volume_cv = if volume_mean > 0.0 {
                 let volume_std = {
@@ -806,6 +812,13 @@ impl Default for EnhancedNeuralPredictor {
             use_real_models: false,
             enable_health_checks: true,
             enable_fallback: true,
+            // Required fields for NeuralConfig
+            input_size: 24,  // Use the second value which seems more appropriate for enhanced predictor
+            output_size: 1,
+            hidden_layers: vec![64, 32],  // Use the second value which is more optimized
+            learning_rate: 0.001,
+            prediction_horizon: None,  // Use the second value 
+            normalization_method: None,  // Use the second value
             enable_circuit_breakers: true,
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,
@@ -815,12 +828,6 @@ impl Default for EnhancedNeuralPredictor {
             max_retries: 3,
             error_threshold: 0.1,
             lookback_window: 24,
-            input_size: 24,
-            output_size: 1,
-            hidden_layers: vec![64, 32],
-            learning_rate: 0.001,
-            prediction_horizon: None,
-            normalization_method: None,
         };
         Self::new(config).expect("Failed to create default enhanced predictor")
     }
@@ -894,6 +901,13 @@ mod tests {
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,
             enable_adaptive_retry: true,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
             enable_model_ensembles: false,
             model_timeout_seconds: 60,
             max_retries: 3,

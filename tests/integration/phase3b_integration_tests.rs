@@ -7,20 +7,15 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use neural_trader::{
+use autonomous_platform::{
     config::NeuralConfig,
     daa::autonomous_training::{AutonomousTrainingEngine, TrainingTrigger},
     data::TimeSeriesData,
     integration::{
         daa_coordinator::{DaaCoordinator, DaaConfig},
-        notifications::{NotificationChannel, TrainingNotification},
     },
     neural::{
-        NeuralPredictor,
-        monitoring::performance_channel::{
-            PerformanceChannel, PerformanceEvent, PerformanceEventBuilder,
-            PerformanceEventType, PerformanceSource, EventPriority,
-        },
+        predictor::NeuralPredictor,
     },
     strategies::MarketContext,
     utils::market_hours::MarketHours,
@@ -56,7 +51,7 @@ async fn test_market_hours_accessible_in_daa_coordinator() {
         lookback_window: 24,
     };
     
-    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
     let (decision_tx, _decision_rx) = mpsc::channel(100);
     
     // Create market hours
@@ -102,7 +97,7 @@ async fn test_performance_metrics_direct_update() {
         lookback_window: 24,
     };
     
-    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
     let (decision_tx, _decision_rx) = mpsc::channel(100);
     let market_hours = Arc::new(MarketHours::default());
     
@@ -138,11 +133,16 @@ async fn test_performance_metrics_direct_update() {
             low: 49700.0,
             close: 50000.0,
             volume: vec![1000.0],
+            volume_value: 1000.0,
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC".to_string()),
             value: Some(50000.0),
             metadata: None,
+            values: vec![50000.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: HashMap::new(),
         }
     ];
     
@@ -181,7 +181,7 @@ async fn test_low_performance_triggers_training_flag() {
         lookback_window: 24,
     };
     
-    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
     let (decision_tx, mut decision_rx) = mpsc::channel(100);
     let market_hours = Arc::new(MarketHours::default());
     
@@ -194,7 +194,7 @@ async fn test_low_performance_triggers_training_flag() {
     ).unwrap();
     
     // Create and set autonomous training engine
-    let training_config = neural_trader::daa::autonomous_training::AutonomousTrainingConfig::default();
+    let training_config = autonomous_platform::daa::autonomous_training::AutonomousTrainingConfig::default();
     let training_engine = Arc::new(AutonomousTrainingEngine::new(training_config).await.unwrap());
     coordinator.set_autonomous_training(training_engine.clone());
     
@@ -218,11 +218,16 @@ async fn test_low_performance_triggers_training_flag() {
             low: 49700.0,
             close: 50000.0,
             volume: vec![1000.0],
+            volume_value: 1000.0,
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC".to_string()),
             value: Some(50000.0),
             metadata: None,
+            values: vec![50000.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: HashMap::new(),
         }
     ];
     
@@ -273,7 +278,7 @@ async fn test_end_to_end_performance_to_training_flow() {
         lookback_window: 24,
     };
     
-    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
     let (decision_tx, mut decision_rx) = mpsc::channel(100);
     let market_hours = Arc::new(MarketHours::default());
     
@@ -286,7 +291,7 @@ async fn test_end_to_end_performance_to_training_flow() {
     ).unwrap();
     
     // Set up autonomous training
-    let training_config = neural_trader::daa::autonomous_training::AutonomousTrainingConfig::default();
+    let training_config = autonomous_platform::daa::autonomous_training::AutonomousTrainingConfig::default();
     let training_engine = Arc::new(AutonomousTrainingEngine::new(training_config).await.unwrap());
     coordinator.set_autonomous_training(training_engine.clone());
     
@@ -310,11 +315,16 @@ async fn test_end_to_end_performance_to_training_flow() {
             low: 49700.0,
             close: 50000.0,
             volume: vec![1000.0],
+            volume_value: 1000.0,
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC".to_string()),
             value: Some(50000.0),
             metadata: None,
+            values: vec![50000.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: HashMap::new(),
         }
     ];
     
@@ -371,7 +381,7 @@ async fn test_multiple_model_performance_tracking() {
         lookback_window: 24,
     };
     
-    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
     let (decision_tx, _decision_rx) = mpsc::channel(100);
     let market_hours = Arc::new(MarketHours::default());
     
@@ -402,11 +412,16 @@ async fn test_multiple_model_performance_tracking() {
             low: 49700.0,
             close: 50000.0,
             volume: vec![1000.0],
+            volume_value: 1000.0,
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC".to_string()),
             value: Some(50000.0),
             metadata: None,
+            values: vec![50000.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: HashMap::new(),
         }
     ];
     
@@ -453,7 +468,7 @@ async fn test_simple_field_access_patterns() {
         lookback_window: 24,
     };
     
-    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
     let (decision_tx, _decision_rx) = mpsc::channel(100);
     let market_hours = Arc::new(MarketHours::default());
     
@@ -495,11 +510,16 @@ async fn test_simple_field_access_patterns() {
             low: 49700.0,
             close: 50000.0,
             volume: vec![1000.0],
+            volume_value: 1000.0,
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC".to_string()),
             value: Some(50000.0),
             metadata: None,
+            values: vec![50000.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: HashMap::new(),
         }
     ];
     

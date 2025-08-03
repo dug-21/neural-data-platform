@@ -15,7 +15,7 @@ use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::timeout;
 
-use neural_trader::neural::monitoring::{
+use autonomous_platform::neural::monitoring::{
     PerformanceMonitoringSystem, MonitoringConfig, ChannelConfig,
     PerformanceEventBuilder, PerformanceEventType, PerformanceSource,
     EventPriority, TrainingThresholds, NotificationSystemConfig,

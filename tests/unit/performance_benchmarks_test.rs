@@ -41,7 +41,8 @@ mod performance_tests {
                     high: base_price + trend + noise + 100.0,
                     low: base_price + trend + noise - 80.0,
                     close: base_price + trend + noise + 50.0,
-                    volume: 1000.0 + (i as f64 * 10.0),
+                    volume: vec![1000.0 + (i as f64 * 10.0)],
+                    volume_value: 1000.0 + (i as f64 * 10.0),
                     indicators: {
                         let mut indicators = HashMap::new();
                         indicators.insert("sma_20".to_string(), base_price + trend);
@@ -55,6 +56,10 @@ mod performance_tests {
                     entity: Some("performance_test".to_string()),
                     value: Some(base_price + trend + noise + 50.0),
                     metadata: None,
+                    values: vec![base_price + trend + noise + 50.0],
+                    intervals: vec![i as u64],
+                    timestamps: vec![chrono::Utc::now() - chrono::Duration::minutes((count - i) as i64)],
+                    metadata_map: HashMap::new(),
                 }
             })
             .collect()
@@ -70,7 +75,7 @@ mod performance_tests {
             ..Default::default()
         };
 
-        let predictor = NeuralPredictor::new(config).unwrap();
+        let predictor = NeuralPredictor::new(config).await.unwrap();
         let test_data = create_benchmark_data("BTC/USD", 100);
 
         // Warm up
@@ -116,7 +121,7 @@ mod performance_tests {
             ..Default::default()
         };
 
-        let predictor = Arc::new(NeuralPredictor::new(config).unwrap());
+        let predictor = Arc::new(NeuralPredictor::new(config).await.unwrap());
         let test_data = create_benchmark_data("ETH/USD", 50);
 
         // Test different batch sizes
@@ -164,7 +169,7 @@ mod performance_tests {
             ..Default::default()
         };
 
-        let predictor = Arc::new(NeuralPredictor::new(config).unwrap());
+        let predictor = Arc::new(NeuralPredictor::new(config).await.unwrap());
         let test_data = create_benchmark_data("AAPL", 30);
 
         // Run sustained load for 30 seconds
@@ -374,7 +379,7 @@ mod performance_tests {
                 ..Default::default()
             };
             
-            let predictor = NeuralPredictor::new(config).unwrap();
+            let predictor = NeuralPredictor::new(config).await.unwrap();
             predictors.push(predictor);
         }
 
@@ -430,7 +435,7 @@ mod performance_tests {
             ..Default::default()
         };
 
-        let predictor = Arc::new(NeuralPredictor::new(config).unwrap());
+        let predictor = Arc::new(NeuralPredictor::new(config).await.unwrap());
         
         // Test with various problematic inputs
         let test_cases = vec![
@@ -522,7 +527,7 @@ mod performance_tests {
             ..Default::default()
         };
 
-        let predictor = NeuralPredictor::new(config).unwrap();
+        let predictor = NeuralPredictor::new(config).await.unwrap();
         let test_data = create_benchmark_data("BTC/USD", 50);
 
         // Define performance baseline (adjust based on system)
@@ -581,7 +586,7 @@ mod criterion_benchmarks {
                 use_real_models: false,
                 ..Default::default()
             };
-            let predictor = NeuralPredictor::new(config).unwrap();
+            let predictor = NeuralPredictor::new(config).await.unwrap();
             let test_data = create_benchmark_data("BTC/USD", 50);
             
             b.iter(|| {

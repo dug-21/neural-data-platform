@@ -41,6 +41,13 @@ async fn test_async_custom_initialization() {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.1,
+        // Required additional fields
+        input_size: 24,
+        output_size: 1,
+        hidden_layers: vec![50, 30],
+        learning_rate: 0.001,
+        prediction_horizon: None,
+        normalization_method: None,
     };
     
     // This should not panic with "Cannot start a runtime from within a runtime"

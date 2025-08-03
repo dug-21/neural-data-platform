@@ -33,6 +33,7 @@ impl Default for RedisConfig {
 }
 
 /// Redis adapter for real-time data
+#[derive(Clone)]  
 pub struct RedisAdapter {
     config: RedisConfig,
     client: Option<Client>,
@@ -287,7 +288,7 @@ impl RedisAdapter {
                 high: 0.0,
                 low: 0.0,
                 close: 0.0,
-                volume: vec![0.0],
+                volume: 0.0,
             };
 
             // Parse fields from stream entry

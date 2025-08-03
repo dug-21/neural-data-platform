@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 use chrono::{Duration, Utc};
 use uuid::Uuid;
 
-use neural_trader::{
+use autonomous_platform::{
     realtraining::{
         TrainingPipeline, TrainingConfig, ModelStorage,
         DataSelector, SelectionStrategy, FeatureEngine,

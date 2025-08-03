@@ -1,10 +1,10 @@
 //! Integration tests for TrainingDataService
 
-use neural_trader::integration::{
+use autonomous_platform::integration::{
     TrainingDataService, TrainingDataConfig, ModelType, ValidationError
 };
-use neural_trader::data::{TimeSeriesData, TimescaleDBStorage, RedisCache};
-use neural_trader::config::{DataConfig, RedisConfig};
+use autonomous_platform::data::{TimeSeriesData, TimescaleDBStorage, RedisCache};
+use autonomous_platform::config::{DataConfig, RedisConfig};
 use chrono::{Utc, Duration};
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -100,7 +100,7 @@ fn test_data_validation() {
             high: 50100.0 + (i as f64 * 10.0),
             low: 49900.0 + (i as f64 * 10.0),
             close: 50050.0 + (i as f64 * 10.0),
-            volume: 1000.0 + (i as f64),
+            volume: vec![1000.0 + (i as f64),
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC/USD".to_string()),
@@ -117,7 +117,7 @@ fn test_data_validation() {
 
 #[test]
 fn test_prepared_training_data_structure() {
-    use neural_trader::integration::training_data_service::{PreparedTrainingData, NormalizationParams};
+    use autonomous_platform::integration::training_data_service::{PreparedTrainingData, NormalizationParams};
     
     let prepared_data = PreparedTrainingData {
         model_type: ModelType::MLP,

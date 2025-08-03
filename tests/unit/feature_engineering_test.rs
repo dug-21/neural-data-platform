@@ -23,12 +23,17 @@ fn create_test_ohlcv_data(symbol: &str, timestamp: DateTime<Utc>, base_price: f6
         high: base_price + 50.0,
         low: base_price - 50.0,
         close: base_price + 10.0,
-        volume,
+        volume: vec![volume],
+        volume_value: volume,
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some(symbol.to_string()),
         value: Some(base_price + 10.0),
         metadata: None,
+        values: vec![base_price + 10.0],
+        intervals: vec![timestamp.timestamp() as u64],
+        timestamps: vec![timestamp],
+        metadata_map: HashMap::new(),
     }
 }
 
@@ -53,12 +58,17 @@ fn create_price_sequence(symbol: &str, start_time: DateTime<Utc>, count: usize, 
             high: price + (rand::random::<f64>() * 20.0),
             low: price - (rand::random::<f64>() * 20.0),
             close: price,
-            volume,
+            volume: vec![volume],
+            volume_value: volume,
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some(symbol.to_string()),
             value: Some(price),
             metadata: None,
+            values: vec![price],
+            intervals: vec![i as u64],
+            timestamps: vec![timestamp],
+            metadata_map: HashMap::new(),
         });
     }
     
@@ -304,12 +314,17 @@ async fn test_volume_indicators() {
             high: price + 10.0,
             low: price - 10.0,
             close: price,
-            volume,
+            volume: volume],
+            volume_value: volume,
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some(symbol.to_string()),
             value: Some(price),
             metadata: None,
+            values: vec![price],
+            intervals: vec![i as u64],
+            timestamps: vec![timestamp],
+            metadata_map: HashMap::new(),
         });
     }
     

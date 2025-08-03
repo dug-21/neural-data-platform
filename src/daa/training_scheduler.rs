@@ -19,6 +19,8 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::daa::autonomous_training::TrainingPriority;
+
 use crate::daa::autonomous_training::{
     TrainingDecision, TrainingOutcome, TrainingPriority as AutonomousTrainingPriority,
 };
@@ -49,6 +51,19 @@ impl From<AutonomousTrainingPriority> for JobPriority {
             AutonomousTrainingPriority::High => JobPriority::High,
             AutonomousTrainingPriority::Medium => JobPriority::Medium,
             AutonomousTrainingPriority::Low => JobPriority::Low,
+        }
+    }
+}
+
+impl From<Option<TrainingPriority>> for JobPriority {
+    fn from(priority: Option<TrainingPriority>) -> Self {
+        match priority {
+            Some(TrainingPriority::Emergency) => JobPriority::Emergency,
+            Some(TrainingPriority::Critical) => JobPriority::Critical,
+            Some(TrainingPriority::High) => JobPriority::High,
+            Some(TrainingPriority::Medium) => JobPriority::Medium,
+            Some(TrainingPriority::Low) => JobPriority::Low,
+            None => JobPriority::Medium, // Default to medium priority
         }
     }
 }
@@ -114,7 +129,10 @@ pub struct DAATrainingJob {
 impl DAATrainingJob {
     /// Create a new training job from a decision
     pub fn from_decision(decision: TrainingDecision) -> Self {
-        let priority = JobPriority::from(decision.priority.clone());
+        let priority = match decision.priority.clone() {
+            Some(training_priority) => JobPriority::from(training_priority),
+            None => JobPriority::Medium, // Default priority when none specified
+        };
         let resources = ResourceProfile {
             cpu_percentage: match &priority {
                 JobPriority::Emergency => 0.9,
@@ -841,6 +859,9 @@ mod tests {
             },
             confidence: 0.9,
             reasoning: vec![],
+            reasons: vec!["test".to_string()],
+            priority: Some(crate::daa::autonomous_training::TrainingPriority::High),
+            priority_numeric: Some(200), // High priority as numeric
             performance_snapshot: crate::daa::autonomous_training::PerformanceSnapshot {
                 timestamp: Utc::now(),
                 accuracy: 0.8,
@@ -851,13 +872,32 @@ mod tests {
                 volatility: 0.02,
                 model_agreement: 0.9,
                 consecutive_failures: 0,
-                trading_volume: vec![1000000.0],
+                trading_volume: 1000000.0,
                 profit_loss: 0.0,
+                latency_ms: 100,
+                error_rate: 0.05,
+                recent_predictions: 100,
+                event_count: 1,
+                window_duration: chrono::Duration::minutes(5),
+                symbol: "test".to_string(),
+                trading_performance: None,
+                accuracy_metrics: None,
+                data_type_metrics: None,
+                cpu_usage: 0.0,
+                memory_usage: 0.0,
+                active_connections: 0,
+                requests_per_second: 0.0,
+                average_response_time: 0.0,
+                cache_hit_rate: 0.0,
             },
             resource_requirements: crate::daa::autonomous_training::ResourceRequirements::minimal(),
             estimated_duration: Duration::hours(1),
-            priority: crate::daa::autonomous_training::TrainingPriority::High,
             affected_models: vec!["test".to_string()],
+            // MCP compatibility fields
+            triggered_by: Some("test".to_string()),
+            estimated_training_time_minutes: Some(60),
+            target_symbols: vec!["BTCUSD".to_string()],
+            training_parameters: None,
         };
 
         let mut job1 = DAATrainingJob::from_decision(decision.clone());

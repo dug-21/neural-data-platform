@@ -4,16 +4,16 @@
 //! and circuit breaker functionality.
 
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc, Weekday};
-use neural_trader::daa::autonomous_training::{
+use autonomous_platform::daa::autonomous_training::{
     ResourceRequirements, TrainingDecision, TrainingDecisionType, TrainingPriority,
 };
-use neural_trader::daa::training_scheduler::{
+use autonomous_platform::daa::training_scheduler::{
     CircuitBreaker, DAASchedulerConfig, DAATrainingJob, DAATrainingScheduler, EmergencyConfig,
     JobStatus, PreemptionConfig, QueueConfig, ResourceLimitConfig, ResourceProfile,
     SchedulerMetrics,
 };
-use neural_trader::streaming::event_bus::EventBusIntegration;
-use neural_trader::utils::market_hours::{MarketHours, TrainingWindow};
+use autonomous_platform::streaming::event_bus::EventBusIntegration;
+use autonomous_platform::utils::market_hours::{MarketHours, TrainingWindow};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -21,8 +21,8 @@ use uuid::Uuid;
 
 /// Create a mock event bus for testing
 async fn create_mock_event_bus() -> Arc<EventBusIntegration> {
-    use neural_trader::data::{RedisCache, TimescaleDBStorage};
-    use neural_trader::integration::data_access::DataAccessLayer;
+    use autonomous_platform::data::{RedisCache, TimescaleDBStorage};
+    use autonomous_platform::integration::data_access::DataAccessLayer;
 
     // In test environment, use mock connections
     let storage = Arc::new(
@@ -89,9 +89,9 @@ fn create_test_config() -> DAASchedulerConfig {
             min_progress_for_checkpoint: 0.1,
             preemption_grace_period_secs: 60,
         },
-        monitoring: neural_trader::daa::training_scheduler::MonitoringConfig {
+        monitoring: autonomous_platform::daa::training_scheduler::MonitoringConfig {
             metrics_interval_secs: 1,
-            alert_thresholds: neural_trader::daa::training_scheduler::AlertThresholds {
+            alert_thresholds: autonomous_platform::daa::training_scheduler::AlertThresholds {
                 queue_length_warning: 20,
                 queue_length_critical: 50,
                 resource_usage_warning: 0.8,
@@ -108,22 +108,55 @@ fn create_test_decision(priority: TrainingPriority) -> TrainingDecision {
     TrainingDecision {
         decision_id: Uuid::new_v4().to_string(),
         timestamp: Utc::now(),
-        decision_type: TrainingDecisionType::PredictiveRetrain,
-        priority,
-        confidence_score: 0.85,
+        decision_type: TrainingDecisionType::IncrementalTraining,
+        confidence: 0.85,
+        reasoning: vec!["test reasoning".to_string()],
+        reasons: vec!["test reason".to_string()],
+        priority: Some(priority),
+        priority_numeric: Some(128), // Medium priority as numeric
+        performance_snapshot: autonomous_platform::daa::autonomous_training::PerformanceSnapshot {
+            timestamp: Utc::now(),
+            accuracy: 0.8,
+            latency_ms: 100,
+            error_rate: 0.05,
+            recent_predictions: 100,
+            confidence: 0.85,
+            price_error: 0.05,
+            sharpe_ratio: 1.2,
+            max_drawdown: 0.05,
+            volatility: 0.02,
+            model_agreement: 0.9,
+            consecutive_failures: 0,
+            trading_volume: vec![1000000.0],
+            profit_loss: 0.05,
+            event_count: 1,
+            window_duration: chrono::Duration::minutes(5),
+            symbol: "BTCUSD".to_string(),
+            trading_performance: None,
+            accuracy_metrics: None,
+            data_type_metrics: None,
+            cpu_usage: 0.0,
+            memory_usage: 0.0,
+            active_connections: 0,
+            requests_per_second: 0.0,
+            average_response_time: 0.0,
+            cache_hit_rate: 0.0,
+        },
         resource_requirements: ResourceRequirements {
-            cpu_cores: 4,
             memory_gb: 16.0,
-            gpu_required: true,
-            estimated_time_minutes: 30,
-            network_bandwidth_mbps: 100.0,
+            cpu_cores: 4,
+            gpu_memory_gb: Some(8.0),
             storage_gb: 50.0,
+            gpu_required: true,
+            network_bandwidth_mbps: 100.0,
         },
         estimated_duration: Duration::minutes(30),
-        market_impact_assessment: "Low".to_string(),
-        performance_delta_threshold: 0.05,
         affected_models: vec!["model1".to_string(), "model2".to_string()],
-        training_data_requirements: HashMap::new(),
+        // MCP compatibility fields
+        triggered_by: Some("test".to_string()),
+        estimated_training_time_minutes: Some(30),
+        target_symbols: vec!["BTCUSD".to_string(), "ETHUSD".to_string()],
+        training_parameters: None,
     }
 }
 

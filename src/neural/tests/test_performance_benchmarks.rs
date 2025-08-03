@@ -9,8 +9,8 @@
 //! - Model training performance
 
 use super::super::enhanced_predictor::*;
-use super::super::fann::{FannPredictor, FannModelConfig, ModelPerformance};
-use super::super::{NeuralPredictorTrait, PredictionResult};
+// use super::super::fann::{NeuralPredictor, FannModelConfig, ModelPerformance};
+use super::super::{NeuralPredictor, NeuralPredictorTrait, PredictionResult};
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
 
@@ -188,7 +188,7 @@ mod latency_performance_tests {
     #[traced_test]
     async fn test_ensemble_prediction_latency() -> Result<()> {
         let config = create_performance_config();
-        let fann_predictor = FannPredictor::new(config)?;
+        let fann_predictor = NeuralPredictor::new(config)?;
         let test_data = create_large_dataset(200);
 
         let models = vec!["MLP".to_string(), "NHITS".to_string(), "DeepAR".to_string()];
@@ -402,7 +402,7 @@ mod memory_performance_tests {
     #[traced_test]
     async fn test_memory_efficiency_with_caching() -> Result<()> {
         let config = create_performance_config();
-        let fann_predictor = FannPredictor::new(config)?;
+        let fann_predictor = NeuralPredictor::new(config)?;
         let test_data = create_large_dataset(200);
 
         let initial_memory = estimate_memory_usage();
@@ -509,7 +509,7 @@ mod scalability_tests {
     #[traced_test]
     async fn test_scalability_with_model_count() -> Result<()> {
         let config = create_performance_config();
-        let fann_predictor = FannPredictor::new(config)?;
+        let fann_predictor = NeuralPredictor::new(config)?;
         let test_data = create_large_dataset(200);
 
         let model_sets = vec![
@@ -697,7 +697,7 @@ mod cache_performance_tests {
     #[traced_test]
     async fn test_cache_hit_rate_performance() -> Result<()> {
         let config = create_performance_config();
-        let fann_predictor = FannPredictor::new(config)?;
+        let fann_predictor = NeuralPredictor::new(config)?;
         let test_data = create_large_dataset(150);
 
         let num_repeated_requests = 10;
@@ -742,7 +742,7 @@ mod cache_performance_tests {
     #[traced_test]
     async fn test_cache_memory_efficiency() -> Result<()> {
         let config = create_performance_config();
-        let fann_predictor = FannPredictor::new(config)?;
+        let fann_predictor = NeuralPredictor::new(config)?;
 
         let initial_memory = estimate_memory_usage();
 
@@ -786,7 +786,7 @@ async fn test_comprehensive_performance_benchmark() -> Result<()> {
 
     let config = create_performance_config();
     let enhanced_predictor = EnhancedNeuralPredictor::new(config.clone())?;
-    let fann_predictor = FannPredictor::new(config)?;
+    let fann_predictor = NeuralPredictor::new(config)?;
 
     let test_data = create_large_dataset(500);
     let initial_memory = estimate_memory_usage();

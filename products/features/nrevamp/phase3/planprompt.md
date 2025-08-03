@@ -23,7 +23,7 @@ You will base your overall design on:
     - Project goals and objectives
     - Project design mandate: products/INTEGRATION_FIRST_MANDATE.md  ***CRITICAL ARCHITECTURE CONSTRAINT
 
-You will create your design team with a mesh topology, adaptive in nature and auto-spawn agents as necessary.  
+You will create your design team with a mesh topology, adaptive in nature and auto-spawn agents as necessary.  Store all phase 3 planning files in products/features/nrevamp/phase3/plan
 
 It is critical that you only spawn valid agent types: 
     - AVOID this error: Error: Agent type 'optimizer' not found. Available agents: general-purpose, refinement, 
