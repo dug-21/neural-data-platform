@@ -491,7 +491,10 @@ impl SectorModelsConfig {
     
     /// Load from the default location
     pub fn load_default() -> Result<Self> {
-        Self::load_from_file("config/sector_models.toml")
+        // Check environment variable first, fallback to default path
+        let config_path = std::env::var("SECTOR_CONFIG_PATH")
+            .unwrap_or_else(|_| "config/sector_models.toml".to_string());
+        Self::load_from_file(&config_path)
     }
     
     /// Get sector configuration by name
