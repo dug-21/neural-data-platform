@@ -182,7 +182,7 @@ mod memory_compliance_tests {
         // Create full Phase 3 system
         let neural_config = create_memory_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         // Create core components
         let predictor = Arc::new(VendorPredictor::new(
@@ -267,7 +267,7 @@ mod memory_compliance_tests {
         // Create components for single symbol testing
         let neural_config = create_memory_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,
@@ -335,7 +335,7 @@ mod memory_compliance_tests {
         // Create full Phase 3 system
         let neural_config = create_memory_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,
@@ -393,7 +393,7 @@ mod memory_compliance_tests {
         // Create components
         let neural_config = create_memory_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,
@@ -479,7 +479,7 @@ mod memory_compliance_tests {
         // Create shared components
         let neural_config = create_memory_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,
@@ -563,7 +563,7 @@ mod memory_compliance_tests {
         // Create components
         let neural_config = create_memory_test_config();
         let sector_mapper = Arc::new(SectorMapper::new(Default::default()));
-        let performance_tracker = Arc::new(ModelPerformanceTracker::new().unwrap());
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
         
         let predictor = Arc::new(VendorPredictor::new(
             &neural_config,

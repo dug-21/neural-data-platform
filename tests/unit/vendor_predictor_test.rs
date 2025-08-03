@@ -13,11 +13,13 @@ use crate::data::sector_mapper::{SectorMapper, SectorMapperConfig, SectorInfo, S
 use crate::data::{TimeSeriesData, data_converter::{DataConverter, DataConverterConfig}};
 use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
 use crate::neural::vendor_predictor::{
-    VendorPredictor, VendorPredictorConfig, ModelKey, ModelConfig, DataRequirements
+    VendorPredictor, VendorPredictorConfig, ModelKey, ModelConfig, DataRequirements, 
+    ClusterModelPool, ClusterPoolConfig
 };
 use crate::adapters::vendor_bridge::VendorTimeSeriesData;
 use crate::data::data_converter::ConversionMetadata;
 use crate::neural::{NeuralPredictorTrait, PredictionResult};
+use crate::neural::vendor_predictor::ClusterPoolConfig;
 
 // Mock vendor types for testing
 #[derive(Debug, Clone)]
@@ -153,7 +155,7 @@ fn create_test_sector_mapper() -> Arc<SectorMapper> {
 
 fn create_test_performance_tracker() -> Arc<ModelPerformanceTracker> {
     // Mock implementation for testing
-    Arc::new(ModelPerformanceTracker::new().unwrap())
+    Arc::new(ModelPerformanceTracker::new())
 }
 
 fn create_test_model_config(architecture: &str) -> ModelConfig {
@@ -951,6 +953,6 @@ mod tests {
         assert!(memory_usage <= max_memory);
         assert_eq!(max_memory, 25.0);
         
-        info!("Memory efficiency test: {:.2} MB used of {:.2} MB limit", memory_usage, max_memory);
+        tracing::info!("Memory efficiency test: {:.2} MB used of {:.2} MB limit", memory_usage, max_memory);
     }
 }

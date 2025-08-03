@@ -46,7 +46,7 @@ async fn test_phase3_complete_system_integration() -> Result<()> {
     // Phase 2: Initialize DAA Coordinator with MarketHours
     println!("🤖 Phase 2: DAA Coordinator Initialization");
     let market_hours = create_test_market_hours();
-    let coordinator = DaaCoordinator::new(Arc::clone(&predictor), market_hours).await?;
+    let coordinator = DaaCoordinator::new(predictor.clone(), market_hours).await?;
     
     assert!(coordinator.is_initialized().await?);
     assert!(memory_tracker.check_budget_compliance().await?);

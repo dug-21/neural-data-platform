@@ -15,7 +15,7 @@ use crate::daa::autonomous_training::{
 };
 use crate::data::TimeSeriesData;
 use crate::integration::daa_coordinator::{AutonomousDecision, DaaCoordinator, TradingAction};
-use crate::neural::NeuralPredictor;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 use crate::strategies::{MarketContext, Position};
 
 /// Enhanced DAA coordinator with autonomous neural training capabilities
@@ -503,7 +503,7 @@ pub struct PerformanceSummary {
 mod tests {
     use super::*;
     use crate::config::NeuralConfig;
-    use crate::neural::NeuralPredictor;
+    use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
     use tokio::sync::mpsc;
 
     async fn create_test_coordinator() -> AutonomousNeuralCoordinator {

@@ -82,7 +82,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_single_sample_online_learning() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -109,7 +109,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mini_batch_online_learning() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -134,7 +134,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_adaptive_learning_rate() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -155,7 +155,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_concept_drift_detection() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -183,12 +183,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_streaming_data_processing() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = Arc::new(VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap());
+        let predictor = Arc::new(VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap());
         
         // Train initial model
         let initial_data = create_test_data(100, 1000.0);
@@ -210,7 +211,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_performance_metrics_tracking() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -243,7 +244,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_model_degradation_detection() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -270,7 +271,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_checkpoint_management() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -325,12 +326,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_streaming_connector_mock_feed() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = Arc::new(VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap());
+        let predictor = Arc::new(VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap());
         
         let streaming_config = StreamingConfig {
             symbols: vec!["TESTCOIN".to_string()],
@@ -358,7 +360,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_memory_management_online_learning() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -385,7 +387,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_automatic_retraining_trigger() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -406,7 +408,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_real_time_performance_monitoring() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -435,7 +437,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ensemble_with_online_learning() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -470,7 +472,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fallback_mechanisms() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();
@@ -495,12 +497,13 @@ mod tests {
     /// Integration test combining all online learning features
     #[tokio::test]
     async fn test_complete_online_learning_pipeline() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = Arc::new(VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap());
+        let predictor = Arc::new(VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap());
         
         // 1. Initial training
         let initial_data = create_test_data(200, 1000.0);
@@ -546,7 +549,7 @@ mod tests {
     /// Stress test for online learning performance
     #[tokio::test]
     async fn test_online_learning_performance_stress() {
-        let config = create_test_neural_config();
+        let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
         let config = crate::data::sector_mapper::SectorMapperConfig::default();

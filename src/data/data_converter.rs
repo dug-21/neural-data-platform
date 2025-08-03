@@ -686,7 +686,7 @@ mod tests {
     #[test]
     fn test_missing_value_handling() {
         let converter = DataConverter::default();
-        let mut values = vec![1.0, f64::NAN, 3.0, f64::NAN, 5.0];
+        let values = vec![1.0, f64::NAN, 3.0, f64::NAN, 5.0];
         
         let result = converter.handle_missing_values(&values);
         assert!(result.is_ok());

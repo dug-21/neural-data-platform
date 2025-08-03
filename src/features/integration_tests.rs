@@ -402,7 +402,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_optimization() {
-        let mut config = FeaturePipelineConfig {
+        let config = FeaturePipelineConfig {
             num_workers: 2,
             ..Default::default()
         };

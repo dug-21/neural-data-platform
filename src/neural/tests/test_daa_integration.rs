@@ -484,7 +484,7 @@ mod performance_feedback_tests {
         let test_data = create_daa_test_data(30);
 
         // Initial predictions
-        let initial_predictions = enhanced_predictor
+        let _initial_predictions = enhanced_predictor
             .predict_with_confidence(&test_data, 5)
             .await?;
         let initial_performance = enhanced_predictor.get_performance_metrics().await?;
@@ -625,7 +625,7 @@ mod performance_feedback_tests {
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
-        let test_data = create_daa_test_data(25);
+        let _test_data = create_daa_test_data(25);
 
         // Test confidence calibration with different scenarios
 

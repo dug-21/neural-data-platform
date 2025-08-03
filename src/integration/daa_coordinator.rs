@@ -16,7 +16,7 @@ use crate::data::TimeSeriesData;
 use crate::data::sector_mapper::{SectorId, SectorMapper, SectorInfo};
 use uuid::Uuid;
 use crate::neural::{
-    NeuralPredictor, PredictionResult,
+    NeuralPredictor, PredictionResult, NeuralPredictorTrait,
 };
 use crate::strategies::{MarketContext, Position, Signal, TradingStrategy};
 use crate::utils::market_hours::MarketHours;

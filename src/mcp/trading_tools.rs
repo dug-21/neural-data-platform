@@ -15,7 +15,7 @@ use crate::agents::AutonomousAgent;
 use crate::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
 use crate::monitoring::HealthMonitor;
 use crate::monitoring::health::LegacyHealthStatus as HealthStatus;
-use crate::neural::NeuralPredictor;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 
 /// MCP Trading Tools Implementation
 pub struct TradingMcpTools {

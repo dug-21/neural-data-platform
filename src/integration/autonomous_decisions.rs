@@ -10,7 +10,7 @@ use tracing::{debug, info};
 
 use super::{OrderSide, OrderType, TradeOrder};
 use crate::data::TimeSeriesData;
-use crate::neural::NeuralPredictor;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 use crate::strategies::MarketContext;
 
 /// Market trend classification
