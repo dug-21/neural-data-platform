@@ -44,8 +44,7 @@ pub use sector_aggregator::{
     ETFCorrelation, BreadthConfig
 };
 
-// Public predictor module - using predictor.rs file  
-pub mod predictor;
+// NOTE: predictor.rs module removed - using VendorPredictor directly as NeuralPredictor
 
 // Performance benchmarking module
 #[cfg(test)]
@@ -76,8 +75,8 @@ pub mod online_learning_tests;
 
 // Phase 3B: Removed monitoring re-exports - these were architectural layers
 
-// Re-export the main neural predictor (clean wrapper)
-pub use predictor::{NeuralPredictor as CleanNeuralPredictor};
+// Re-export VendorPredictor as the main NeuralPredictor
+pub use vendor_predictor::VendorPredictor as NeuralPredictor;
 
 // Performance types already re-exported above - remove duplicate
 
@@ -134,8 +133,7 @@ pub trait NeuralPredictorTrait: Send + Sync {
     async fn get_feature_importance(&self) -> Result<HashMap<String, f64>>;
 }
 
-// Re-export the clean NeuralPredictor implementation
-pub use predictor::NeuralPredictor;
+// VendorPredictor is now our main NeuralPredictor (re-exported above)
 
 // Note: fann module exports disabled - using VendorPredictor instead
 // Re-export additional vendor predictor components
@@ -143,6 +141,7 @@ pub use vendor_predictor::{
     ModelConfig,
     ClusterModelPool,
     VendorPredictor as FannPredictor, // Backward compatibility alias
+    DataRequirements,
 };
 
 // Re-export performance events types
@@ -163,3 +162,165 @@ pub use crate::adapters::HealthStatus;
 
 // Integration tests are now in src/neural/predictor.rs
 // This ensures tests are co-located with the implementation
+
+#[cfg(test)]
+mod environment_tests {
+    use super::*;
+    use std::env;
+    use std::sync::Arc;
+    use crate::data::sector_mapper::{SectorMapper, SectorMapperConfig};
+    use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
+    use crate::config::NeuralConfig;
+
+    #[tokio::test]
+    async fn test_neural_vendor_environment_variable_respected() {
+        // Test that NEURAL_VENDOR environment variable is properly respected
+        
+        // Save original value
+        let original_vendor = env::var("NEURAL_VENDOR").ok();
+        
+        // Test with different vendor settings
+        env::set_var("NEURAL_VENDOR", "ruv_fann");
+        
+        let config = NeuralConfig {
+            use_real_models: true,
+            models: vec!["LSTM".to_string()],
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20],
+            learning_rate: 0.01,
+            ..Default::default()
+        };
+        
+        let sector_mapper = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
+        
+        // VendorPredictor should respect the NEURAL_VENDOR environment variable
+        let result = VendorPredictor::new(&config, sector_mapper, performance_tracker);
+        assert!(result.is_ok(), "VendorPredictor should initialize with NEURAL_VENDOR=ruv_fann");
+        
+        // Test with fallback vendor
+        env::set_var("NEURAL_VENDOR", "fallback");
+        
+        let sector_mapper2 = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker2 = Arc::new(ModelPerformanceTracker::new());
+        
+        let result2 = VendorPredictor::new(&config, sector_mapper2, performance_tracker2);
+        assert!(result2.is_ok(), "VendorPredictor should handle fallback vendor gracefully");
+        
+        // Restore original value
+        match original_vendor {
+            Some(val) => env::set_var("NEURAL_VENDOR", val),
+            None => env::remove_var("NEURAL_VENDOR"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_training_mode_environment_variable_respected() {
+        // Test that TRAINING_MODE environment variable is properly respected
+        
+        // Save original value
+        let original_mode = env::var("TRAINING_MODE").ok();
+        
+        // Test with online training mode
+        env::set_var("TRAINING_MODE", "online");
+        
+        let config = NeuralConfig {
+            use_real_models: true,
+            models: vec!["LSTM".to_string()],
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20],
+            learning_rate: 0.01,
+            ..Default::default()
+        };
+        
+        let sector_mapper = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
+        
+        // VendorPredictor should respect the TRAINING_MODE environment variable
+        let result = VendorPredictor::new(&config, sector_mapper, performance_tracker);
+        assert!(result.is_ok(), "VendorPredictor should handle TRAINING_MODE=online");
+        
+        // Test with batch training mode
+        env::set_var("TRAINING_MODE", "batch");
+        
+        let sector_mapper2 = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker2 = Arc::new(ModelPerformanceTracker::new());
+        
+        let result2 = VendorPredictor::new(&config, sector_mapper2, performance_tracker2);
+        assert!(result2.is_ok(), "VendorPredictor should handle TRAINING_MODE=batch");
+        
+        // Test with disabled training mode
+        env::set_var("TRAINING_MODE", "disabled");
+        
+        let sector_mapper3 = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker3 = Arc::new(ModelPerformanceTracker::new());
+        
+        let result3 = VendorPredictor::new(&config, sector_mapper3, performance_tracker3);
+        assert!(result3.is_ok(), "VendorPredictor should handle TRAINING_MODE=disabled");
+        
+        // Restore original value
+        match original_mode {
+            Some(val) => env::set_var("TRAINING_MODE", val),
+            None => env::remove_var("TRAINING_MODE"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_environment_variables_with_different_configurations() {
+        // Test environment variables with different neural configurations
+        
+        let original_vendor = env::var("NEURAL_VENDOR").ok();
+        let original_mode = env::var("TRAINING_MODE").ok();
+        
+        // Test configuration 1: Real models with ruv_fann vendor
+        env::set_var("NEURAL_VENDOR", "ruv_fann");
+        env::set_var("TRAINING_MODE", "online");
+        
+        let config1 = NeuralConfig {
+            use_real_models: true,
+            models: vec!["LSTM".to_string(), "GRU".to_string()],
+            input_size: 24,
+            output_size: 6,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(6),
+            ..Default::default()
+        };
+        
+        let sector_mapper1 = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker1 = Arc::new(ModelPerformanceTracker::new());
+        let result1 = VendorPredictor::new(&config1, sector_mapper1, performance_tracker1);
+        assert!(result1.is_ok(), "Should handle real models with ruv_fann vendor");
+        
+        // Test configuration 2: Mock models with fallback vendor
+        env::set_var("NEURAL_VENDOR", "mock");
+        env::set_var("TRAINING_MODE", "disabled");
+        
+        let config2 = NeuralConfig {
+            use_real_models: false,
+            models: vec!["MLP".to_string()],
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20],
+            learning_rate: 0.01,
+            ..Default::default()
+        };
+        
+        let sector_mapper2 = Arc::new(SectorMapper::new(SectorMapperConfig::default()));
+        let performance_tracker2 = Arc::new(ModelPerformanceTracker::new());
+        let result2 = VendorPredictor::new(&config2, sector_mapper2, performance_tracker2);
+        assert!(result2.is_ok(), "Should handle mock models with fallback vendor");
+        
+        // Restore original values
+        match original_vendor {
+            Some(val) => env::set_var("NEURAL_VENDOR", val),
+            None => env::remove_var("NEURAL_VENDOR"),
+        }
+        match original_mode {
+            Some(val) => env::set_var("TRAINING_MODE", val),
+            None => env::remove_var("TRAINING_MODE"),
+        }
+    }
+}
