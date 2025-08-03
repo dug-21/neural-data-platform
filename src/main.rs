@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use autonomous_platform::load_default_config;
 use futures::StreamExt;
 use std::collections::HashMap;
+use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::signal;
-use tracing::{error, info, Level};
+use tracing::{error, info, warn, Level};
 use tracing_subscriber;
 
 // Import existing DAA components
@@ -56,13 +57,87 @@ async fn main() -> Result<()> {
     info!("   Enforce FANN Routing: {}", config.feature_flags.enable_enhanced_neural_adapter);
     info!("   Enable DAA Orchestration: {}", config.feature_flags.enable_performance_monitoring);
 
-    // Initialize DAA components
-    info!("Initializing neural predictor...");
-    let neural_predictor = Arc::new(
-        NeuralPredictor::new(config.neural.clone())
-            .await
-            .context("Failed to initialize neural predictor")?,
-    );
+    // Check environment variables for neural system initialization
+    let enable_sector_models = env::var("ENABLE_SECTOR_MODELS")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(false);
+    
+    let enable_autonomous_training = env::var("ENABLE_AUTONOMOUS_TRAINING")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(false);
+    
+    let enable_realtime_adaptation = env::var("ENABLE_REALTIME_ADAPTATION")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(false);
+    
+    let enable_data_discovery = env::var("ENABLE_DATA_DISCOVERY")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(false);
+    
+    // Log neural system configuration
+    info!("Neural System Configuration:");
+    info!("   Sector Models: {}", enable_sector_models);
+    info!("   Autonomous Training: {}", enable_autonomous_training);
+    info!("   Real-time Adaptation: {}", enable_realtime_adaptation);
+    info!("   Data Discovery: {}", enable_data_discovery);
+    
+    // Initialize DAA components with proper error handling
+    info!("Initializing neural predictor with VendorPredictor...");
+    
+    // Initialize neural predictor based on configuration
+    let neural_predictor = if enable_sector_models {
+        info!("Using VendorPredictor with sector model support");
+        Arc::new(
+            NeuralPredictor::with_vendor_predictor(config.neural.clone())
+                .await
+                .context("Failed to initialize VendorPredictor")?,
+        )
+    } else {
+        info!("Using standard VendorPredictor");
+        // Create required dependencies for VendorPredictor
+        let sector_config = autonomous_platform::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(
+            autonomous_platform::data::sector_mapper::SectorMapper::new(sector_config)
+        );
+        let performance_tracker = Arc::new(
+            autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker::new()
+        );
+        
+        Arc::new(
+            NeuralPredictor::new(&config.neural, sector_mapper, performance_tracker)
+                .context("Failed to initialize neural predictor")?,
+        )
+    };
+    
+    // Initialize autonomous training if enabled
+    if enable_autonomous_training {
+        info!("Initializing autonomous training system...");
+        if let Err(e) = neural_predictor.enable_autonomous_training().await {
+            warn!("Failed to enable autonomous training: {}", e);
+        } else {
+            info!("✅ Autonomous training system initialized");
+        }
+    }
+    
+    // Initialize real-time adaptation if enabled
+    if enable_realtime_adaptation {
+        info!("Initializing real-time adaptation system...");
+        if let Err(e) = neural_predictor.enable_realtime_adaptation().await {
+            warn!("Failed to enable real-time adaptation: {}", e);
+        } else {
+            info!("✅ Real-time adaptation system initialized");
+        }
+    }
+    
+    // Initialize data discovery if enabled
+    if enable_data_discovery {
+        info!("Initializing data discovery system...");
+        if let Err(e) = neural_predictor.enable_data_discovery().await {
+            warn!("Failed to enable data discovery: {}", e);
+        } else {
+            info!("✅ Data discovery system initialized");
+        }
+    }
 
     info!("Initializing market hours tracker...");
     let market_hours = Arc::new(MarketHours::new());
