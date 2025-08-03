@@ -297,14 +297,14 @@ async fn main() -> Result<()> {
     // Initialize health server
     info!("Starting health server...");
     let health_server_config = HealthServerConfig {
-        port: 8080,
+        port: 9092,
         bind_address: "0.0.0.0".to_string(),
         request_timeout: std::time::Duration::from_secs(30),
     };
     
     let mut health_server = HealthServer::with_monitor(health_server_config, async_health_monitor);
     health_server.start().await?;
-    info!("Health server started on http://0.0.0.0:8080");
+    info!("Health server started on http://0.0.0.0:9092");
 
     // Setup graceful shutdown handler
     let shutdown_signal = Arc::new(AtomicBool::new(false));
