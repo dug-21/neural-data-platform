@@ -13,7 +13,9 @@ use anyhow::Result;
 use autonomous_platform::config::{
     DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
 };
-use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
+// Note: DataPipeline has been refactored - commenting out related code for compilation
+// use autonomous_platform::data_pipeline::DataPipeline;
 use autonomous_platform::integration::{
     data_access::{DataAccessLayer, DataRequest, Timeframe},
     neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
@@ -65,7 +67,7 @@ fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) ->
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
         price: current_price,
-        volume: 1000.0 + (sequence as f64 * 10.0),
+        volume: vec![1000.0 + (sequence as f64 * 10.0),
         bid: current_price - 5.0,
         ask: current_price + 5.0,
         source: "integration_feed".to_string(),
@@ -500,7 +502,7 @@ async fn test_market_volatility_response() -> Result<()> {
             symbol: "VOL/USD".to_string(),
             timestamp: Utc::now(),
             price: *price,
-            volume: 50000.0 + (i as f64 * 10000.0), // Increasing volume during volatility
+            volume: vec![50000.0 + (i as f64 * 10000.0), // Increasing volume during volatility
             bid: price - 50.0,
             ask: price + 50.0, // Wide spread during volatility
             source: "volatility_test".to_string(),
@@ -533,7 +535,7 @@ async fn test_market_volatility_response() -> Result<()> {
             high: 4000.0,
             low: 3200.0, // Large range indicating high volatility
             close: 3950.0,
-            volume: vec![500000.0], // High volume
+            volume: 500000.0, // High volume
             indicators: {
                 let mut indicators = HashMap::new();
                 indicators.insert("RSI".to_string(), 25.0); // Oversold

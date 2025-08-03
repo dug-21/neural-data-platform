@@ -87,7 +87,7 @@ async fn test_mlp_no_fallback_to_basic_fann() {
         error_threshold: 0.1,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     
     // Check MLP configuration - should NOT be basic fallback
     let model_configs = predictor.get_model_configs();
@@ -108,7 +108,7 @@ async fn test_mlp_no_fallback_to_basic_fann() {
     
     // Test that the model produces sophisticated predictions
     let test_data = generate_realistic_test_data(100);
-    let predictions = predictor.test_predict_with_model("MLP", &test_data, 5).await.unwrap();
+    let predictions = predictor.predict(&test_data, 5, None).await.unwrap();
     
     println!("\n🔮 Testing prediction sophistication:");
     for (i, pred) in predictions.iter().enumerate() {
@@ -158,7 +158,7 @@ async fn test_mlp_vs_other_models_integration() {
         error_threshold: 0.1,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let test_data = generate_realistic_test_data(120);
     
     // Test each model individually
@@ -244,7 +244,7 @@ async fn test_mlp_training_performance_validation() {
         error_threshold: 0.1,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     
     // Generate training data with pattern
     let training_data = generate_pattern_data(200);
@@ -317,7 +317,7 @@ async fn test_mlp_real_world_scenario() {
         error_threshold: 0.1,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     
     // Simulate realistic trading data (BTC-like)
     let mut trading_data = Vec::new();

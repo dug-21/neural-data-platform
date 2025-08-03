@@ -3,7 +3,7 @@
 //! Tests various edge cases and error conditions that can occur
 //! during strategy creation and initialization.
 
-use neural_trader::strategies::{
+use autonomous_platform::strategies::{
     MarketContext, Position, PositionSide, Signal, StrategyConfig, 
     StrategyError, StrategyFactory, TradingStrategy,
 };
@@ -77,7 +77,7 @@ mod edge_case_tests {
             HashMap::from([
                 ("fast_period".to_string(), json!(1)),
                 ("slow_period".to_string(), json!(2)),
-                ("rsi_period", json!(2)),
+                ("rsi_period".to_string(), json!(2)),
             ]),
             // Equal periods (should fail)
             HashMap::from([
@@ -263,7 +263,7 @@ mod edge_case_tests {
                 ("fast_period".to_string(), json!(12)),
                 ("slow_period".to_string(), json!(26)),
                 ("🚀_custom".to_string(), json!("ignored")), // Unicode key
-                (""; DROP TABLE;".to_string(), json!(0)), // SQL injection attempt
+                ("; DROP TABLE;".to_string(), json!(0)), // SQL injection attempt
             ]),
         };
 

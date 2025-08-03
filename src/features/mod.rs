@@ -51,7 +51,7 @@ pub struct FeatureMetadata {
 }
 
 /// Feature categories for organization
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum FeatureCategory {
     Price,
     Volume,

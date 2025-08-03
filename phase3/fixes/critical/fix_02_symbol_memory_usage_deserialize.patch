@@ -1,0 +1,15 @@
+# Fix 2: Add Deserialize trait to SymbolMemoryUsage
+# Error: the trait bound `SymbolMemoryUsage: Deserialize<'_>` is not satisfied
+# Location: src/neural/memory_optimized_predictor.rs:643
+
+--- a/src/neural/memory_optimized_predictor.rs
++++ b/src/neural/memory_optimized_predictor.rs
+@@ -65,7 +65,7 @@ pub loading_future: Option<tokio::task::JoinHandle<Result<()>>>,
+ }
+ 
+ /// Memory usage tracker per symbol
+-#[derive(Debug, Clone)]
++#[derive(Debug, Clone, Serialize, Deserialize)]
+ pub struct SymbolMemoryUsage {
+     pub symbol: String,
+     pub sector_id: String,

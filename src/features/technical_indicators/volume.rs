@@ -30,9 +30,9 @@ impl<'a> VolumeIndicators<'a> {
         
         // Volume rate of change
         if historical.len() >= 10 {
-            let past_volume = historical[historical.len() - 10].volume;
+            let past_volume = historical[historical.len() - 10].volume_value;
             if past_volume > 0.0 {
-                let volume_roc = ((current.volume - past_volume) / past_volume) * 100.0;
+                let volume_roc = ((current.volume_value - past_volume) / past_volume) * 100.0;
                 features.insert("volume_roc".to_string(), volume_roc);
             }
         }
@@ -107,9 +107,9 @@ impl<'a> VolumeIndicators<'a> {
         
         for i in 1..data.len().min(period) {
             if data[i].close > data[i - 1].close {
-                obv += data[i].volume;
+                obv += data[i].volume_value;
             } else if data[i].close < data[i - 1].close {
-                obv -= data[i].volume;
+                obv -= data[i].volume_value;
             }
             obv_values.push(obv);
         }
@@ -117,9 +117,9 @@ impl<'a> VolumeIndicators<'a> {
         // Add current
         if let Some(last) = data.last() {
             if current.close > last.close {
-                obv += current.volume;
+                obv += current.volume_value;
             } else if current.close < last.close {
-                obv -= current.volume;
+                obv -= current.volume_value;
             }
             obv_values.push(obv);
         }
@@ -157,11 +157,11 @@ impl<'a> VolumeIndicators<'a> {
             .collect();
         
         let total_value: f64 = recent.iter()
-            .map(|d| ((d.high + d.low + d.close) / 3.0) * d.volume)
+            .map(|d| ((d.high + d.low + d.close) / 3.0) * d.volume_value)
             .sum();
         
         let total_volume: f64 = recent.iter()
-            .map(|d| d.volume)
+            .map(|d| d.volume_value)
             .sum();
         
         if total_volume == 0.0 {
@@ -181,7 +181,7 @@ impl<'a> VolumeIndicators<'a> {
             
             let typical_price = (data[i].high + data[i].low + data[i].close) / 3.0;
             let prev_typical = (data[i - 1].high + data[i - 1].low + data[i - 1].close) / 3.0;
-            let money_flow = typical_price * data[i].volume;
+            let money_flow = typical_price * data[i].volume_value;
             
             if typical_price > prev_typical {
                 positive_flow += money_flow;
@@ -210,7 +210,7 @@ impl<'a> VolumeIndicators<'a> {
                 0.0
             };
             
-            let money_flow_volume = money_flow_multiplier * d.volume;
+            let money_flow_volume = money_flow_multiplier * d.volume_value;
             ad += money_flow_volume;
             ad_values.push(ad);
         }
@@ -254,7 +254,7 @@ impl<'a> VolumeIndicators<'a> {
         
         for d in &recent {
             let typical_price = (d.high + d.low + d.close) / 3.0;
-            price_volumes.push((typical_price, d.volume));
+            price_volumes.push((typical_price, d.volume_value));
         }
         
         // Sort by price
@@ -300,9 +300,9 @@ impl<'a> VolumeIndicators<'a> {
                 0.0
             };
             
-            let money_flow_volume = money_flow_multiplier * d.volume;
+            let money_flow_volume = money_flow_multiplier * d.volume_value;
             money_flow_volume_sum += money_flow_volume;
-            volume_sum += d.volume;
+            volume_sum += d.volume_value;
         }
         
         if volume_sum == 0.0 {
@@ -327,13 +327,13 @@ impl<'a> VolumeIndicators<'a> {
         let short_avg: f64 = data.iter()
             .rev()
             .take(short_period)
-            .map(|d| d.volume)
+            .map(|d| d.volume_value)
             .sum::<f64>() / short_period as f64;
         
         let long_avg: f64 = data.iter()
             .rev()
             .take(long_period)
-            .map(|d| d.volume)
+            .map(|d| d.volume_value)
             .sum::<f64>() / long_period as f64;
         
         if long_avg == 0.0 {
@@ -349,7 +349,7 @@ impl<'a> VolumeIndicators<'a> {
         data: &[TimeSeriesData],
         fast_period: usize,
         slow_period: usize,
-        signal_period: usize,
+        _signal_period: usize,
     ) -> Result<f64> {
         if data.len() < slow_period + 1 {
             return Ok(0.0);
@@ -362,7 +362,7 @@ impl<'a> VolumeIndicators<'a> {
             let prev_typical = (data[i - 1].high + data[i - 1].low + data[i - 1].close) / 3.0;
             
             let trend = if typical_price > prev_typical { 1.0 } else { -1.0 };
-            let vf = data[i].volume * trend * ((typical_price - prev_typical) / prev_typical).abs();
+            let vf = data[i].volume_value * trend * ((typical_price - prev_typical) / prev_typical).abs();
             
             volume_force.push(vf);
         }
@@ -396,13 +396,13 @@ impl<'a> VolumeIndicators<'a> {
         
         for i in 1..data.len() {
             let price_change_ratio = (data[i].close - data[i - 1].close) / data[i - 1].close;
-            vpt += data[i].volume * price_change_ratio;
+            vpt += data[i].volume_value * price_change_ratio;
         }
         
         // Add current
         if let Some(last) = data.last() {
             let price_change_ratio = (current.close - last.close) / last.close;
-            vpt += current.volume * price_change_ratio;
+            vpt += current.volume_value * price_change_ratio;
         }
         
         Ok(vpt)
@@ -422,7 +422,7 @@ impl<'a> VolumeIndicators<'a> {
                                 ((data[i - 1].high + data[i - 1].low) / 2.0);
             
             let box_height = data[i].high - data[i].low;
-            let box_ratio = if box_height > 0.0 { data[i].volume / box_height } else { 0.0 };
+            let box_ratio = if box_height > 0.0 { data[i].volume_value / box_height } else { 0.0 };
             
             let em = if box_ratio > 0.0 { distance_moved / box_ratio } else { 0.0 };
             em_values.push(em);
@@ -434,7 +434,7 @@ impl<'a> VolumeIndicators<'a> {
                                 ((last.high + last.low) / 2.0);
             
             let box_height = current.high - current.low;
-            let box_ratio = if box_height > 0.0 { current.volume / box_height } else { 0.0 };
+            let box_ratio = if box_height > 0.0 { current.volume_value / box_height } else { 0.0 };
             
             let em = if box_ratio > 0.0 { distance_moved / box_ratio } else { 0.0 };
             em_values.push(em);
@@ -457,8 +457,8 @@ impl<'a> VolumeIndicators<'a> {
         let mut nvi = 1000.0;
         
         for i in 1..data.len() {
-            if data[i].volume < data[i - 1].volume {
-                nvi *= (data[i].close / data[i - 1].close);
+            if data[i].volume_value < data[i - 1].volume_value {
+                nvi *= data[i].close / data[i - 1].close;
             }
         }
         
@@ -474,8 +474,8 @@ impl<'a> VolumeIndicators<'a> {
         let mut pvi = 1000.0;
         
         for i in 1..data.len() {
-            if data[i].volume > data[i - 1].volume {
-                pvi *= (data[i].close / data[i - 1].close);
+            if data[i].volume_value > data[i - 1].volume_value {
+                pvi *= data[i].close / data[i - 1].close;
             }
         }
         
@@ -492,13 +492,25 @@ mod tests {
     fn create_test_data() -> Vec<TimeSeriesData> {
         let mut data = Vec::new();
         for i in 0..50 {
+            let volume_val = 1000.0 + (i as f64 * 50.0).abs();
             data.push(TimeSeriesData {
+                symbol: "TEST".to_string(),
                 timestamp: DateTime::<Utc>::from_timestamp(1640995200 + i * 60, 0).unwrap(),
                 open: 100.0 + (i as f64 * 0.1).sin(),
                 high: 105.0 + (i as f64 * 0.1).sin(),
                 low: 95.0 + (i as f64 * 0.1).sin(),
                 close: 102.0 + (i as f64 * 0.1).sin(),
-                volume: vec![1000.0 + (i as f64 * 50.0).abs()],
+                volume: vec![volume_val],
+                volume_value: volume_val,
+                indicators: HashMap::new(),
+                source: None,
+                entity: None,
+                value: None,
+                metadata: None,
+                values: vec![102.0 + (i as f64 * 0.1).sin()],
+                intervals: vec![60],
+                timestamps: vec![DateTime::<Utc>::from_timestamp(1640995200 + i * 60, 0).unwrap()],
+                metadata_map: HashMap::new(),
             });
         }
         data

@@ -196,8 +196,8 @@ impl CrossAssetCorrelationEngine {
             ("XLRE", "real_estate"),
         ];
         
-        for (symbol, name) in sectors {
-            if let Some(sector_data) = market_context.get(symbol) {
+        for (symbol, name) in &sectors {
+            if let Some(sector_data) = market_context.get(&symbol.to_string()) {
                 if let Ok(correlation) = self.calculate_correlation(target_data, sector_data, 60) {
                     features.insert(format!("sector_corr_{}", name), correlation);
                 }
@@ -205,7 +205,7 @@ impl CrossAssetCorrelationEngine {
         }
         
         // Find dominant sector correlation
-        let mut max_corr = 0.0;
+        let mut max_corr: f64 = 0.0;
         let mut dominant_sector = "";
         
         for (_, name) in &sectors {
@@ -916,7 +916,7 @@ impl CrossAssetCorrelationEngine {
         let returns1 = self.calculate_returns(data1, 60)?;
         let returns2 = self.calculate_returns(data2, 60)?;
         
-        let mut max_correlation = 0.0;
+        let mut max_correlation: f64 = 0.0;
         let mut best_lag = 0i32;
         
         for lag in -(max_lag as i32)..=max_lag as i32 {

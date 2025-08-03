@@ -3,7 +3,7 @@
 //! Tests all feature extraction capabilities including technical indicators,
 //! price transformations, market microstructure features, and normalization.
 
-use super::training_features::*;
+use crate::features::training_features::*;
 use crate::data::TimeSeriesData;
 use chrono::{TimeZone, Utc};
 use std::collections::HashMap;

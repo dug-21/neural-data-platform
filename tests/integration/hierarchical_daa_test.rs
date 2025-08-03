@@ -263,40 +263,39 @@ impl HierarchicalDAATestEnvironment {
             current_price *= 1.0 + trend_factor + volatility + random_factor;
             
             let timestamp = now - chrono::Duration::hours(100 - i as i64);
-            data.push(TimeSeriesData {
-                symbol: symbol.to_string(),
-                timestamp,
-                open: current_price * 0.999,
-                high: current_price * 1.002,
-                low: current_price * 0.998,
-                close: current_price,
-                volume: 100000.0 + (i as f64 * 1000.0),
-                indicators: {
-                    let mut indicators = HashMap::new();
-                    indicators.insert("sma_20".to_string(), current_price * 0.995);
-                    indicators.insert("rsi".to_string(), 50.0 + trend * 10.0);
-                    indicators.insert("bb_upper".to_string(), current_price * 1.02);
-                    indicators.insert("bb_lower".to_string(), current_price * 0.98);
-                    indicators
-                },
-                source: Some("test_integration".to_string()),
-                entity: Some(symbol.to_string()),
-                value: Some(current_price),
-                metadata: Some({
-                    let mut meta = HashMap::new();
-                    meta.insert("trend".to_string(), serde_json::json!(trend));
-                    meta.insert("volatility".to_string(), serde_json::json!(volatility));
-                    meta
-                }),
-                values: vec![current_price],
-                timestamps: vec![timestamp],
-                metadata_map: {
-                    let mut map = HashMap::new();
-                    map.insert("symbol".to_string(), serde_json::json!(symbol));
-                    map.insert("data_quality".to_string(), serde_json::json!("high"));
-                    map
-                },
+            let mut ts_data = TimeSeriesData::new(symbol.to_string(), timestamp);
+            ts_data.open = current_price * 0.999;
+            ts_data.high = current_price * 1.002;
+            ts_data.low = current_price * 0.998;
+            ts_data.close = current_price;
+            ts_data.volume = vec![100000.0 + (i as f64 * 1000.0)];
+            ts_data.volume_value = 100000.0 + (i as f64 * 1000.0);
+            ts_data.indicators = {
+                let mut indicators = HashMap::new();
+                indicators.insert("sma_20".to_string(), current_price * 0.995);
+                indicators.insert("rsi".to_string(), 50.0 + trend * 10.0);
+                indicators.insert("bb_upper".to_string(), current_price * 1.02);
+                indicators.insert("bb_lower".to_string(), current_price * 0.98);
+                indicators
+            };
+            ts_data.source = Some("test_integration".to_string());
+            ts_data.entity = Some(symbol.to_string());
+            ts_data.value = Some(current_price);
+            ts_data.metadata = Some({
+                let mut meta = HashMap::new();
+                meta.insert("trend".to_string(), serde_json::json!(trend));
+                meta.insert("volatility".to_string(), serde_json::json!(volatility));
+                serde_json::Value::Object(serde_json::Map::from_iter(meta))
             });
+            ts_data.values = vec![current_price];
+            ts_data.timestamps = vec![timestamp];
+            ts_data.metadata_map = {
+                let mut map = HashMap::new();
+                map.insert("symbol".to_string(), serde_json::json!(symbol));
+                map.insert("data_quality".to_string(), serde_json::json!("high"));
+                map
+            };
+            data.push(ts_data);
         }
         
         data

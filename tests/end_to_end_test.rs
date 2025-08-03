@@ -552,6 +552,7 @@ fn create_time_series_data(symbol: &str, price: f64) -> TimeSeriesData {
         low: price - 20.0,
         close: price,
         volume: vec![1000.0],
+        volume_value: 1000.0,
         indicators: {
             let mut indicators = HashMap::new();
             indicators.insert("RSI".to_string(), 65.5);
@@ -559,6 +560,14 @@ fn create_time_series_data(symbol: &str, price: f64) -> TimeSeriesData {
             indicators.insert("SMA_20".to_string(), price - 5.0);
             indicators
         },
+        source: Some("test".to_string()),
+        entity: Some(symbol.to_string()),
+        value: Some(price),
+        metadata: None,
+        values: vec![price],
+        intervals: vec![0],
+        timestamps: vec![Utc::now()],
+        metadata_map: HashMap::new(),
     }
 }
 

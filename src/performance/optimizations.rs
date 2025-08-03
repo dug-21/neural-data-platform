@@ -7,6 +7,7 @@
 //! - Resource pool management
 
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -183,8 +184,8 @@ impl PerformanceOptimizer {
     pub async fn allocate_memory(&self, size_bytes: usize) -> Result<tokio::sync::OwnedSemaphorePermit> {
         let size_kb = (size_bytes + 1023) / 1024; // Round up to KB
         
-        let permit = self.memory_pool
-            .acquire_many(size_kb as u32)
+        let permit = Arc::clone(&self.memory_pool)
+            .acquire_many_owned(size_kb as u32)
             .await
             .context("Failed to acquire memory permit")?;
         
@@ -198,7 +199,7 @@ impl PerformanceOptimizer {
             stats.timestamp = Utc::now();
         }
         
-        Ok(permit)
+        Ok(permit)  // permit is already OwnedSemaphorePermit from acquire_many_owned
     }
     
     /// Load resource with lazy loading
@@ -545,6 +546,7 @@ pub struct GCResult {
 }
 
 /// Performance optimization integration trait
+#[async_trait]
 pub trait PerformanceOptimized {
     /// Apply performance optimizations
     async fn optimize_performance(&self, optimizer: &PerformanceOptimizer) -> Result<()>;

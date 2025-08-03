@@ -103,7 +103,13 @@ pub struct OnlineLearningManager {
 impl OnlineLearningManager {
     /// Create a new online learning manager
     pub fn new(config: OnlineLearningConfig) -> Result<Self> {
-        let predictor = Arc::new(FannPredictor::new(config.neural_config.clone())?);
+        let predictor = Arc::new(FannPredictor::new(
+            &config.neural_config, 
+            Arc::new(crate::data::sector_mapper::SectorMapper::new(
+                crate::data::sector_mapper::SectorMapperConfig::default()
+            )),
+            Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new())
+        )?);
         
         let status = OnlineLearningStatus {
             is_running: false,
@@ -255,7 +261,7 @@ impl OnlineLearningManager {
         let batch_size = 32;
         
         for model_name in &self.config.neural_config.models {
-            if let Err(e) = self.predictor.mini_batch_update(model_name, vec![], batch_size, None).await {
+            if let Err(e) = self.predictor.mini_batch_update(model_name, &[], batch_size, None).await {
                 warn!("Failed to process batch for model '{}': {}", model_name, e);
             }
         }
@@ -295,7 +301,7 @@ impl OnlineLearningManager {
         // Update performance metrics
         for model_name in &self.config.neural_config.models {
             let prediction_values: Vec<f64> = predictions.iter().map(|p| p.value).collect();
-            if let Err(e) = self.predictor.update_performance(model_name, actual_values.to_vec(), prediction_values).await {
+            if let Err(e) = self.predictor.update_performance(model_name, actual_values, &prediction_values).await {
                 warn!("Failed to update performance for model '{}': {}", model_name, e);
             }
         }

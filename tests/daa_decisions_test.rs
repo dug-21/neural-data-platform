@@ -5,9 +5,12 @@
 
 use autonomous_platform::{
     data::TimeSeriesData,
-    integration::{autonomous_decisions::*, OrderSide, OrderType, TradeOrder},
+    integration::{autonomous_decisions::*, OrderSide, OrderType, TradeOrder, MarketTrend},
     Result,
 };
+
+// Import test types needed for compilation
+use crate::phase3::utilities::*;
 use chrono::{DateTime, Utc};
 use serial_test::serial;
 use std::collections::HashMap;
@@ -17,7 +20,7 @@ use tokio;
 pub struct MockMarketContext {
     pub symbol: String,
     pub current_price: f64,
-    pub volume: f64,
+    pub volume: Vec<f64>,
     pub volatility: f64,
     pub trend: MarketTrend,
     pub support_level: f64,
@@ -324,7 +327,7 @@ async fn test_risk_management_agent() {
     let high_risk_context = MarketContext {
         symbol: "MEME-COIN".to_string(),
         current_price: 1.0,
-        volume: vec![10000.0], // Low volume
+        volume: 10000.0, // Low volume
         volatility: 2.5, // Extremely high volatility
         trend: MarketTrend::Bullish,
         support_level: 0.5,
@@ -507,7 +510,7 @@ async fn test_autonomous_adaptation() {
     let changed_context = MarketContext {
         symbol: "BNB-USD".to_string(),
         current_price: 350.0, // Price dropped
-        volume: vec![1500000.0],    // Volume spike
+        volume: 1500000.0,    // Volume spike
         volatility: 0.45,     // High volatility
         trend: MarketTrend::Bearish,
         support_level: 320.0,

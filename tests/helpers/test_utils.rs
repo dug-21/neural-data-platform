@@ -16,6 +16,7 @@ use tokio::sync::mpsc;
 use crate::data::TimeSeriesData;
 use crate::config::NeuralConfig;
 use crate::neural::{PredictionResult, PerformanceEvent};
+use crate::utils::market_hours::MarketHours;
 
 /// Test configuration builder
 pub struct TestConfigBuilder {
@@ -45,6 +46,13 @@ impl TestConfigBuilder {
                 model_timeout_seconds: 5, // Short timeout for tests
                 max_retries: 1, // Minimal retries for tests
                 error_threshold: 0.1,
+                // New required fields
+                input_size: 10,
+                output_size: 1,
+                hidden_layers: vec![20, 10],
+                learning_rate: 0.01,
+                prediction_horizon: None,
+                normalization_method: None,
             },
         }
     }
@@ -93,25 +101,28 @@ impl TestDataGenerator {
             let price_change = (i as f64 * 0.1) % 10.0 - 5.0; // Oscillating pattern
             let price = base_price + price_change;
             
-            data.push(TimeSeriesData {
-                symbol: "TEST".to_string(),
-                timestamp: base_time + chrono::Duration::seconds(i as i64 * 60),
-                open: price - 0.5,
-                high: price + 1.0,
-                low: price - 1.0,
-                close: price,
-                volume: vec![1000.0 + (i as f64 * 10.0)],
-                indicators: HashMap::from([
-                    ("rsi".to_string(), 50.0 + (i as f64 % 50.0)),
-                    ("macd".to_string(), (i as f64 % 20.0) - 10.0),
-                    ("bb_upper".to_string(), price + 2.0),
-                    ("bb_lower".to_string(), price - 2.0),
-                ]),
-                source: Some("test_generator".to_string()),
-                entity: Some("test".to_string()),
-                value: Some(price),
-                metadata: None,
-            });
+            let mut ts_data = TimeSeriesData::new(
+                "TEST".to_string(),
+                base_time + chrono::Duration::seconds(i as i64 * 60)
+            );
+            ts_data.open = price - 0.5;
+            ts_data.high = price + 1.0;
+            ts_data.low = price - 1.0;
+            ts_data.close = price;
+            ts_data.add_volume(1000.0 + (i as f64 * 10.0));
+            ts_data.indicators = HashMap::from([
+                ("rsi".to_string(), 50.0 + (i as f64 % 50.0)),
+                ("macd".to_string(), (i as f64 % 20.0) - 10.0),
+                ("bb_upper".to_string(), price + 2.0),
+                ("bb_lower".to_string(), price - 2.0),
+            ]);
+            ts_data.source = Some("test_generator".to_string());
+            ts_data.entity = Some("test".to_string());
+            ts_data.value = Some(price);
+            ts_data.values = vec![price];
+            ts_data.intervals = vec![i as u64];
+            ts_data.timestamps = vec![base_time + chrono::Duration::seconds(i as i64 * 60)];
+            data.push(ts_data);
         }
 
         data
@@ -127,24 +138,27 @@ impl TestDataGenerator {
             let price = base_price + (i as f64 * trend);
             let volatility = 1.0 + (i as f64 * 0.01); // Increasing volatility
             
-            data.push(TimeSeriesData {
-                symbol: "TREND_TEST".to_string(),
-                timestamp: base_time + chrono::Duration::seconds(i as i64 * 60),
-                open: price - (volatility * 0.5),
-                high: price + volatility,
-                low: price - volatility,
-                close: price,
-                volume: vec![2000.0 + (i as f64 * 50.0)],
-                indicators: HashMap::from([
-                    ("rsi".to_string(), 30.0 + (i as f64 % 40.0)),
-                    ("sma_20".to_string(), price - (i as f64 * 0.1)),
-                    ("ema_12".to_string(), price + (i as f64 * 0.05)),
-                ]),
-                source: Some("trend_generator".to_string()),
-                entity: Some("performance_test".to_string()),
-                value: Some(price),
-                metadata: None,
-            });
+            let mut ts_data = TimeSeriesData::new(
+                "TREND_TEST".to_string(),
+                base_time + chrono::Duration::seconds(i as i64 * 60)
+            );
+            ts_data.open = price - (volatility * 0.5);
+            ts_data.high = price + volatility;
+            ts_data.low = price - volatility;
+            ts_data.close = price;
+            ts_data.add_volume(2000.0 + (i as f64 * 50.0));
+            ts_data.indicators = HashMap::from([
+                ("rsi".to_string(), 30.0 + (i as f64 % 40.0)),
+                ("sma_20".to_string(), price - (i as f64 * 0.1)),
+                ("ema_12".to_string(), price + (i as f64 * 0.05)),
+            ]);
+            ts_data.source = Some("trend_generator".to_string());
+            ts_data.entity = Some("performance_test".to_string());
+            ts_data.value = Some(price);
+            ts_data.values = vec![price];
+            ts_data.intervals = vec![i as u64];
+            ts_data.timestamps = vec![base_time + chrono::Duration::seconds(i as i64 * 60)];
+            data.push(ts_data);
         }
 
         data
@@ -154,53 +168,58 @@ impl TestDataGenerator {
     pub fn generate_edge_case_data() -> Vec<TimeSeriesData> {
         vec![
             // Zero values
-            TimeSeriesData {
-                symbol: "EDGE_ZERO".to_string(),
-                timestamp: Utc::now(),
-                open: 0.0,
-                high: 0.0,
-                low: 0.0,
-                close: 0.0,
-                volume: vec![0.0],
-                indicators: HashMap::new(),
-                source: Some("edge_case".to_string()),
-                entity: Some("zero_test".to_string()),
-                value: Some(0.0),
-                metadata: None,
+            {
+                let mut ts_data = TimeSeriesData::new("EDGE_ZERO".to_string(), Utc::now());
+                ts_data.open = 0.0;
+                ts_data.high = 0.0;
+                ts_data.low = 0.0;
+                ts_data.close = 0.0;
+                ts_data.add_volume(0.0);
+                ts_data.source = Some("edge_case".to_string());
+                ts_data.entity = Some("zero_test".to_string());
+                ts_data.value = Some(0.0);
+                ts_data.values = vec![0.0];
+                ts_data.intervals = vec![0];
+                ts_data.timestamps = vec![Utc::now()];
+                ts_data
             },
             // Extreme values
-            TimeSeriesData {
-                symbol: "EDGE_EXTREME".to_string(),
-                timestamp: Utc::now(),
-                open: f64::MAX / 2.0,
-                high: f64::MAX / 2.0,
-                low: f64::MIN / 2.0,
-                close: f64::MAX / 4.0,
-                volume: vec![f64::MAX / 10.0],
-                indicators: HashMap::from([
+            {
+                let mut ts_data = TimeSeriesData::new("EDGE_EXTREME".to_string(), Utc::now());
+                ts_data.open = f64::MAX / 2.0;
+                ts_data.high = f64::MAX / 2.0;
+                ts_data.low = f64::MIN / 2.0;
+                ts_data.close = f64::MAX / 4.0;
+                ts_data.add_volume(f64::MAX / 10.0);
+                ts_data.indicators = HashMap::from([
                     ("extreme_indicator".to_string(), f64::MAX / 100.0),
-                ]),
-                source: Some("edge_case".to_string()),
-                entity: Some("extreme_test".to_string()),
-                value: Some(f64::MAX / 4.0),
-                metadata: None,
+                ]);
+                ts_data.source = Some("edge_case".to_string());
+                ts_data.entity = Some("extreme_test".to_string());
+                ts_data.value = Some(f64::MAX / 4.0);
+                ts_data.values = vec![f64::MAX / 4.0];
+                ts_data.intervals = vec![1];
+                ts_data.timestamps = vec![Utc::now()];
+                ts_data
             },
             // NaN values (should be handled gracefully)
-            TimeSeriesData {
-                symbol: "EDGE_NAN".to_string(),
-                timestamp: Utc::now(),
-                open: 100.0,
-                high: 101.0,
-                low: 99.0,
-                close: 100.5,
-                volume: vec![1000.0],
-                indicators: HashMap::from([
+            {
+                let mut ts_data = TimeSeriesData::new("EDGE_NAN".to_string(), Utc::now());
+                ts_data.open = 100.0;
+                ts_data.high = 101.0;
+                ts_data.low = 99.0;
+                ts_data.close = 100.5;
+                ts_data.add_volume(1000.0);
+                ts_data.indicators = HashMap::from([
                     ("nan_indicator".to_string(), f64::NAN),
-                ]),
-                source: Some("edge_case".to_string()),
-                entity: Some("nan_test".to_string()),
-                value: Some(100.5),
-                metadata: None,
+                ]);
+                ts_data.source = Some("edge_case".to_string());
+                ts_data.entity = Some("nan_test".to_string());
+                ts_data.value = Some(100.5);
+                ts_data.values = vec![100.5];
+                ts_data.intervals = vec![2];
+                ts_data.timestamps = vec![Utc::now()];
+                ts_data
             },
         ]
     }
@@ -424,6 +443,11 @@ impl TestResultValidator {
 
         Ok(())
     }
+}
+
+/// Create test MarketHours instance for testing
+pub fn create_test_market_hours() -> std::sync::Arc<MarketHours> {
+    std::sync::Arc::new(MarketHours::default())
 }
 
 /// File line counter for architecture tests

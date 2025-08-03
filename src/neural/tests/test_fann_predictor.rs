@@ -8,9 +8,9 @@
 //! - Performance tracking and adaptation
 //! - Error handling and edge cases
 
-use super::super::fann::{FannPredictor, FannModelConfig, ModelPerformance, MarketRegime, NeuralError, EnsembleManager, StreamingConfig};
+// use super::super::fann::{NeuralPredictor, FannModelConfig, ModelPerformance, MarketRegime, NeuralError, EnsembleManager, StreamingConfig};
 use ruv_fann::ActivationFunction;
-use super::super::{NeuralPredictorTrait, PredictionResult};
+use super::super::{NeuralPredictor, NeuralPredictorTrait, PredictionResult};
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
 
@@ -128,7 +128,7 @@ mod fann_initialization_tests {
     #[traced_test]
     async fn test_fann_predictor_basic_initialization() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config.clone())?;
+        let predictor = NeuralPredictor::new(config.clone())?;
 
         // Verify model configurations are created for all specified models
         let model_configs = predictor.get_model_configs();
@@ -149,7 +149,7 @@ mod fann_initialization_tests {
     #[traced_test]
     async fn test_fann_predictor_comprehensive_initialization() -> Result<()> {
         let config = create_comprehensive_fann_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
 
         // Verify all model types are configured
         let expected_models = [
@@ -188,7 +188,7 @@ mod fann_initialization_tests {
     #[traced_test]
     async fn test_model_configuration_specifics() -> Result<()> {
         let config = create_comprehensive_fann_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
 
         // Test specific model architecture configurations
         let model_configs = predictor.get_model_configs();
@@ -220,7 +220,7 @@ mod fann_prediction_tests {
     #[traced_test]
     async fn test_single_model_prediction() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(25);
 
         // Test prediction using the trait implementation
@@ -246,7 +246,7 @@ mod fann_prediction_tests {
     #[traced_test]
     async fn test_ensemble_prediction() -> Result<()> {
         let config = create_comprehensive_fann_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(30);
 
         let models = vec!["MLP".to_string(), "NHITS".to_string(), "DeepAR".to_string()];
@@ -269,7 +269,7 @@ mod fann_prediction_tests {
     #[traced_test]
     async fn test_ensemble_with_all_models() -> Result<()> {
         let config = create_comprehensive_fann_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(50);
 
         let all_models = vec![
@@ -301,7 +301,7 @@ mod fann_prediction_tests {
     #[traced_test]
     async fn test_prediction_caching() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(20);
 
         // First prediction (should be computed)
@@ -335,7 +335,7 @@ mod market_regime_tests {
     #[traced_test]
     async fn test_bullish_market_detection() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let bullish_data = create_regime_specific_data("bullish", 25);
 
         let models = vec!["MLP".to_string(), "DeepAR".to_string()];
@@ -361,7 +361,7 @@ mod market_regime_tests {
     #[traced_test]
     async fn test_high_volatility_detection() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let volatile_data = create_regime_specific_data("high_volatility", 25);
 
         let models = vec!["NHITS".to_string(), "DeepAR".to_string()];
@@ -382,7 +382,7 @@ mod market_regime_tests {
     #[traced_test]
     async fn test_bearish_market_detection() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let bearish_data = create_regime_specific_data("bearish", 25);
 
         let models = vec!["MLP".to_string(), "NHITS".to_string()];
@@ -411,7 +411,7 @@ mod dynamic_weighting_tests {
     #[traced_test]
     async fn test_dynamic_weight_adjustment() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(30);
 
         let models = vec!["MLP".to_string(), "NHITS".to_string(), "DeepAR".to_string()];
@@ -461,7 +461,7 @@ mod dynamic_weighting_tests {
     #[traced_test]
     async fn test_performance_based_weight_adjustment() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
 
         // Create predictions with known accuracy for different models
         let good_predictions = vec![PredictionResult {
@@ -519,7 +519,7 @@ mod dynamic_weighting_tests {
     #[traced_test]
     async fn test_ensemble_reset_functionality() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
 
         // Make some predictions to build performance history
         let test_data = create_fann_test_data(20);
@@ -566,7 +566,7 @@ mod feature_importance_tests {
     #[traced_test]
     async fn test_feature_importance_retrieval() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
 
         let feature_importance = predictor.get_feature_importance().await?;
 
@@ -600,7 +600,7 @@ mod error_handling_tests {
     #[traced_test]
     async fn test_prediction_with_insufficient_data() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let insufficient_data = create_fann_test_data(2); // Too little data
 
         let result = predictor.predict(&insufficient_data, 3, None).await;
@@ -625,7 +625,7 @@ mod error_handling_tests {
     #[traced_test]
     async fn test_prediction_with_invalid_models() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(25);
 
         let invalid_models = vec!["INVALID_MODEL".to_string(), "ANOTHER_INVALID".to_string()];
@@ -654,7 +654,7 @@ mod error_handling_tests {
     #[traced_test]
     async fn test_prediction_with_zero_horizon() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(20);
 
         let result = predictor.predict(&test_data, 0, None).await;
@@ -676,7 +676,7 @@ mod error_handling_tests {
     #[traced_test]
     async fn test_ensemble_with_no_models() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(25);
 
         let no_models: Vec<String> = vec![];
@@ -707,7 +707,7 @@ mod performance_tracking_tests {
     #[traced_test]
     async fn test_model_performance_tracking() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
 
         // Create test predictions and actual values
         let predictions = vec![
@@ -763,7 +763,7 @@ mod performance_tracking_tests {
     #[traced_test]
     async fn test_online_learning_update() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
 
         let new_data = create_fann_test_data(10);
 
@@ -795,7 +795,7 @@ mod integration_verification_tests {
     #[traced_test]
     async fn test_comprehensive_workflow() -> Result<()> {
         let config = create_comprehensive_fann_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(40);
 
         // 1. Test single model prediction
@@ -841,7 +841,7 @@ mod integration_verification_tests {
     #[traced_test]
     async fn test_phase6_integration_requirements() -> Result<()> {
         let config = create_comprehensive_fann_config();
-        let predictor = FannPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config)?;
         let test_data = create_fann_test_data(30);
 
         // Test Phase 6 requirements:
@@ -896,10 +896,10 @@ async fn test_fann_predictor_coverage_verification() -> Result<()> {
     println!("🧪 Testing FANN Predictor Coverage Verification");
 
     let config = create_comprehensive_fann_config();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let test_data = create_fann_test_data(30);
 
-    // Test all public methods of FannPredictor through NeuralPredictorTrait
+    // Test all public methods of NeuralPredictor through NeuralPredictorTrait
 
     // 1. predict (trait method)
     let _single_results = predictor.predict(&test_data, 3, None).await?;

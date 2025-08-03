@@ -19,14 +19,15 @@ use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 
 // Imports for DAA testing
-use crate::config::NeuralConfig;
-use crate::data::sector_mapper::{SectorMapper, SectorMapperConfig, SectorInfo, SectorId, MarketCapTier};
-use crate::data::TimeSeriesData;
-use crate::integration::daa_coordinator::{DaaCoordinator, DaaConfig, AutonomousDecision, TradingAction, RiskAssessment};
-use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
-use crate::neural::{NeuralPredictor, PredictionResult};
-use crate::strategies::{MarketContext, Position, Signal, TradingStrategy, StrategyConfig, StrategyError, PositionSide};
-use crate::utils::market_hours::MarketHours;
+use autonomous_platform::config::NeuralConfig;
+use autonomous_platform::data::sector_mapper::{SectorMapper, SectorMapperConfig, SectorInfo, SectorId, MarketCapTier};
+use autonomous_platform::data::TimeSeriesData;
+use autonomous_platform::integration::daa_coordinator::{DaaCoordinator, DaaConfig, AutonomousDecision, TradingAction, RiskAssessment};
+use autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker;
+use autonomous_platform::neural::{NeuralPredictor, PredictionResult};
+use autonomous_platform::strategies::{MarketContext, Position, Signal, TradingStrategy, StrategyConfig, StrategyError, PositionSide};
+use autonomous_platform::utils::market_hours::MarketHours;
+use crate::helpers::test_utils::create_test_market_hours;
 use async_trait::async_trait;
 
 // Mock SectorDAACoordinator for hierarchical testing
@@ -403,12 +404,11 @@ fn create_test_position(symbol: &str) -> Position {
 
 async fn create_test_daa_coordinator() -> Result<Arc<DaaCoordinator>> {
     let neural_config = create_test_neural_config();
-    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
+    let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await?);
     let (tx, _rx) = mpsc::channel(100);
-    let market_hours = Arc::new(MarketHours::default());
     
     let config = DaaConfig::default();
-    let coordinator = DaaCoordinator::new(config, neural_predictor, tx, market_hours)?;
+    let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours(, create_test_market_hours()));
     
     Ok(Arc::new(coordinator))
 }

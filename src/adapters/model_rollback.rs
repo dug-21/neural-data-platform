@@ -23,7 +23,7 @@ use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, warn};
 
 use super::errors::{AdapterError, HealthCheckResult, HealthMetrics};
-use super::health_monitor::{HealthChecker, HealthStatus};
+use super::HealthChecker;
 use crate::config::NeuralConfig;
 
 /// Rollback configuration

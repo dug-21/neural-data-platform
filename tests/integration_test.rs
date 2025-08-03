@@ -124,7 +124,7 @@ fn create_test_time_series(count: usize) -> Vec<TimeSeriesData> {
             high: base_price + (i as f64 * 10.0) + 50.0,
             low: base_price + (i as f64 * 10.0) - 50.0,
             close: base_price + (i as f64 * 10.0) + 25.0,
-            volume: 1000.0 + (i as f64 * 100.0),
+            volume: vec![1000.0 + (i as f64 * 100.0),
         });
     }
     

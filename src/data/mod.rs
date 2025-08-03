@@ -19,6 +19,9 @@ pub use storage::{
 };
 pub use sector_mapper::{SectorId, SectorInfo, SectorMapper};
 
+// Re-export DataPipeline for integration
+pub use crate::data_pipeline::DataPipeline;
+
 /// Time series data point - enhanced for vendor model integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeSeriesData {
@@ -29,6 +32,8 @@ pub struct TimeSeriesData {
     pub low: f64,
     pub close: f64,
     pub volume: Vec<f64>, // Changed to Vec for compatibility
+    #[serde(default)]
+    pub volume_value: f64, // Single volume value for compatibility
     pub indicators: HashMap<String, f64>,
     // Storage compatibility fields
     pub source: Option<String>,
@@ -79,12 +84,14 @@ impl TimeSeriesData {
             low: 0.0,
             close: 0.0,
             volume: vec![0.0],
+            volume_value: 0.0,
             indicators: HashMap::new(),
             source: None,
             entity: None,
             value: None,
             metadata: None,
             values: Vec::new(),
+            intervals: Vec::new(),
             timestamps: Vec::new(),
             metadata_map: HashMap::new(),
         }
@@ -146,7 +153,7 @@ impl TimeSeriesData {
             anyhow::bail!("Prices cannot be negative");
         }
 
-        if self.volume < 0.0 {
+        if self.volume_value < 0.0 || self.volume.iter().any(|&v| v < 0.0) {
             anyhow::bail!("Volume cannot be negative");
         }
         
@@ -239,7 +246,10 @@ impl TimeSeriesData {
             close: metadata
                 .and_then(|m| m.get("close").and_then(|v| v.as_f64()))
                 .unwrap_or(data.value),
-            volume: metadata
+            volume: vec![metadata
+                .and_then(|m| m.get("volume").and_then(|v| v.as_f64()))
+                .unwrap_or(0.0)],
+            volume_value: metadata
                 .and_then(|m| m.get("volume").and_then(|v| v.as_f64()))
                 .unwrap_or(0.0),
             indicators: metadata
@@ -253,9 +263,46 @@ impl TimeSeriesData {
             value: Some(data.value),
             metadata: data.metadata.clone(),
             values,
+            intervals: Vec::new(),
             timestamps,
             metadata_map,
         }
+    }
+
+    // Builder methods for easier initialization
+    
+    /// Set OHLC values in a single call
+    pub fn with_ohlc(mut self, open: f64, high: f64, low: f64, close: f64) -> Self {
+        self.open = open;
+        self.high = high;
+        self.low = low;
+        self.close = close;
+        self
+    }
+
+    /// Set volume data (both volume vec and volume_value)
+    pub fn with_volume(mut self, volume: f64) -> Self {
+        self.volume = vec![volume];
+        self.volume_value = volume;
+        self
+    }
+
+    /// Add an indicator value
+    pub fn with_indicator(mut self, name: String, value: f64) -> Self {
+        self.indicators.insert(name, value);
+        self
+    }
+
+    /// Set the source field
+    pub fn with_source(mut self, source: String) -> Self {
+        self.source = Some(source);
+        self
+    }
+
+    /// Set the entity field
+    pub fn with_entity(mut self, entity: String) -> Self {
+        self.entity = Some(entity);
+        self
     }
 }
 

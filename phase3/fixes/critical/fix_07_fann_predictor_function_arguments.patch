@@ -1,0 +1,21 @@
+# Fix 7: Fix FannPredictor::new function call arguments
+# Error: this function takes 3 arguments but 1 argument was supplied
+# Location: src/adapters/enhanced_neural_adapter.rs:213, src/neural/online_learning_manager.rs:106, src/neural/enhanced_predictor.rs:139
+
+# Need to fix all FannPredictor::new calls to include the missing arguments:
+# - Arc<SectorMapper>
+# - Arc<model_performance_tracker::ModelPerformanceTracker>
+
+# Fix 1: enhanced_neural_adapter.rs
+--- a/src/adapters/enhanced_neural_adapter.rs
++++ b/src/adapters/enhanced_neural_adapter.rs
+@@ -213,7 +213,7 @@ impl EnhancedNeuralAdapter {
+         // Initialize FANN predictor (always available as fallback)
+         let neural_config = config.neural.clone();
+-        let fann_predictor = Arc::new(FannPredictor::new(neural_config).map_err(|e| {
++        let fann_predictor = Arc::new(FannPredictor::new(&neural_config, sector_mapper.clone(), performance_tracker.clone()).map_err(|e| {
+             AdapterError::ModelInitialization {
+                 model: "FANN".to_string(),
+                 reason: e.to_string(),
+             }
+         })?)

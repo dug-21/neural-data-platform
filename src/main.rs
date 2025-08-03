@@ -423,7 +423,8 @@ async fn main() -> Result<()> {
                                         high,
                                         low,
                                         close,
-                                        volume,
+                                        volume: vec![volume],
+                                        volume_value: volume,
                                         indicators: HashMap::new(),
                                         source: Some("event_bus".to_string()),
                                         entity: Some(symbol.clone()),
@@ -434,6 +435,7 @@ async fn main() -> Result<()> {
                                         )),
                                         // Add required fields for vendor model integration
                                         values: vec![close],
+                                        intervals: vec![60000], // Default to 1-minute intervals
                                         timestamps: vec![chrono::DateTime::from_timestamp(timestamp, 0)
                                             .unwrap_or_else(chrono::Utc::now)],
                                         metadata_map: HashMap::new(),
@@ -503,7 +505,7 @@ async fn main() -> Result<()> {
                                             ask: latest.high, // Using high as ask approximation
                                             volume_24h: time_series_data
                                                 .iter()
-                                                .map(|d| d.volume)
+                                                .map(|d| d.volume_value)
                                                 .sum::<f64>(),
                                             volatility: volatility * 100.0, // Convert to percentage
                                             timestamp: latest.timestamp.timestamp(),

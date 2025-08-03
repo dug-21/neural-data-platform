@@ -8,7 +8,7 @@ use autonomous_platform::{
     data::{PlatformMetrics, QualityMetrics, TimeSeriesData},
     load_default_config, PlatformConfig, Result,
 };
-use chrono::{Duration, Utc};
+use chrono::{TimeDelta, Utc};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tokio::time::{interval, Duration as TokioDuration};
@@ -234,7 +234,8 @@ impl PerformanceMonitor {
 
             // Keep only recent alerts (last 100)
             if alerts.len() > 100 {
-                alerts.drain(0..alerts.len() - 100);
+                let drain_end = alerts.len().saturating_sub(100);
+                alerts.drain(0..drain_end);
             }
         }
 

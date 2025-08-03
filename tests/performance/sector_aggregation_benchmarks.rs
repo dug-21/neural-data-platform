@@ -122,26 +122,23 @@ fn create_market_data_batch(symbols: &[&str], base_price: f64, batch_size: usize
             let price_variation = (i as f64 * 0.01) - 0.5; // Small random variation
             let price = base_price + price_variation;
             
-            batch.push(TimeSeriesData {
-                symbol: symbol.to_string(),
-                timestamp: Utc::now() + chrono::Duration::seconds(i as i64),
-                open: price - 0.25,
-                high: price + 0.50,
-                low: price - 0.50,
-                close: price,
-                volume: 100_000.0 + (i as f64 * 1000.0),
-                indicators: HashMap::from([
-                    ("rsi".to_string(), 50.0 + (i as f64 % 50.0)),
-                    ("macd".to_string(), (i as f64 % 20.0) - 10.0),
-                ]),
-                source: Some("benchmark".to_string()),
-                entity: Some(symbol.to_string()),
-                value: Some(price),
-                metadata: None,
-                values: vec![price],
-                timestamps: vec![Utc::now()],
-                metadata_map: HashMap::new(),
-            });
+            let mut ts_data = TimeSeriesData::new(symbol.to_string(), Utc::now() + chrono::Duration::seconds(i as i64));
+            ts_data.open = price - 0.25;
+            ts_data.high = price + 0.50;
+            ts_data.low = price - 0.50;
+            ts_data.close = price;
+            ts_data.volume = vec![100_000.0 + (i as f64 * 1000.0)];
+            ts_data.volume_value = 100_000.0 + (i as f64 * 1000.0);
+            ts_data.indicators = HashMap::from([
+                ("rsi".to_string(), 50.0 + (i as f64 % 50.0)),
+                ("macd".to_string(), (i as f64 % 20.0) - 10.0),
+            ]);
+            ts_data.source = Some("benchmark".to_string());
+            ts_data.entity = Some(symbol.to_string());
+            ts_data.value = Some(price);
+            ts_data.values = vec![price];
+            ts_data.timestamps = vec![Utc::now()];
+            batch.push(ts_data);
         }
     }
     
@@ -481,23 +478,19 @@ fn benchmark_historical_data_processing(c: &mut Criterion) {
                 let mut period_data = Vec::new();
                 for symbol in &symbols {
                     let price = 100.0 + period as f64 * 0.1;
-                    period_data.push(TimeSeriesData {
-                        symbol: symbol.to_string(),
-                        timestamp: Utc::now() + chrono::Duration::seconds(period),
-                        open: price - 0.25,
-                        high: price + 0.50,
-                        low: price - 0.50,
-                        close: price,
-                        volume: 100_000.0,
-                        indicators: HashMap::new(),
-                        source: Some("historical".to_string()),
-                        entity: Some(symbol.to_string()),
-                        value: Some(price),
-                        metadata: None,
-                        values: vec![price],
-                        timestamps: vec![Utc::now()],
-                        metadata_map: HashMap::new(),
-                    });
+                    let mut ts_data = TimeSeriesData::new(symbol.to_string(), Utc::now() + chrono::Duration::seconds(period));
+                    ts_data.open = price - 0.25;
+                    ts_data.high = price + 0.50;
+                    ts_data.low = price - 0.50;
+                    ts_data.close = price;
+                    ts_data.volume = vec![100_000.0];
+                    ts_data.volume_value = 100_000.0;
+                    ts_data.source = Some("historical".to_string());
+                    ts_data.entity = Some(symbol.to_string());
+                    ts_data.value = Some(price);
+                    ts_data.values = vec![price];
+                    ts_data.timestamps = vec![Utc::now()];
+                    period_data.push(ts_data);
                 }
                 all_data.extend(period_data);
             }

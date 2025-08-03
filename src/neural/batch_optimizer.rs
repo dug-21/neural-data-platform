@@ -226,7 +226,7 @@ impl BatchOptimizer {
             features.push(((point.close - prev.close) / prev.close) as f32);
 
             // Volume features
-            features.push((point.volume.ln() / 1_000_000.0) as f32);
+            features.push((point.volume_value.ln() / 1_000_000.0) as f32);
 
             // Technical indicators
             features.push((point.indicators.get("rsi").copied().unwrap_or(50.0) / 100.0) as f32);

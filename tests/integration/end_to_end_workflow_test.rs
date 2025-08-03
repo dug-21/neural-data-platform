@@ -541,18 +541,17 @@ fn generate_realistic_market_data(symbol: &str, count: usize) -> Vec<TimeSeriesD
         let volume_mult = if i % 20 == 0 { 2.5 } else { 1.0 + (i as f64 * 0.1).cos() * 0.3 };
         let volume = base_volume * volume_mult;
         
-        data.push(TimeSeriesData {
-            timestamp: chrono::Utc::now().timestamp() + i as i64 * 60,
-            symbol: symbol.to_string(),
-            open: price * 0.999,
-            high: price * 1.002,
-            low: price * 0.998,
-            close: price,
-            volume,
-            bid: price * 0.9995,
-            ask: price * 1.0005,
-            indicators: generate_technical_indicators(price, volume, i),
-        });
+        let mut ts_data = TimeSeriesData::new(symbol.to_string(), chrono::Utc::now());
+        ts_data.timestamp = chrono::Utc::now(); // Update timestamp to i64 converted to DateTime
+        ts_data.open = price * 0.999;
+        ts_data.high = price * 1.002;
+        ts_data.low = price * 0.998;
+        ts_data.close = price;
+        ts_data.volume = vec![volume];
+        ts_data.volume_value = volume;
+        ts_data.indicators = generate_technical_indicators(price, volume, i);
+        // Note: bid/ask removed as they're not in the struct definition
+        data.push(ts_data);
     }
     
     data
@@ -565,18 +564,14 @@ fn generate_trending_market_data(symbol: &str, trend_strength: f64, count: usize
     for i in 0..count {
         price *= 1.0 + trend_strength / 100.0 + (i as f64 * 0.2).sin() * 0.002;
         
-        data.push(TimeSeriesData {
-            timestamp: chrono::Utc::now().timestamp() + i as i64 * 60,
-            symbol: symbol.to_string(),
-            open: price * 0.9995,
-            high: price * 1.001,
-            low: price * 0.999,
-            close: price,
-            volume: 1000000.0 * (1.0 + i as f64 / count as f64),
-            bid: price * 0.9998,
-            ask: price * 1.0002,
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new(symbol.to_string(), chrono::Utc::now());
+        ts_data.open = price * 0.9995;
+        ts_data.high = price * 1.001;
+        ts_data.low = price * 0.999;
+        ts_data.close = price;
+        ts_data.volume = vec![1000000.0 * (1.0 + i as f64 / count as f64)];
+        ts_data.volume_value = 1000000.0 * (1.0 + i as f64 / count as f64);
+        data.push(ts_data);
     }
     
     data
@@ -590,18 +585,14 @@ fn generate_volatile_market_data(symbol: &str, volatility: f64, count: usize) ->
         let change = (i as f64 * 0.8).sin() * volatility;
         price *= 1.0 + change;
         
-        data.push(TimeSeriesData {
-            timestamp: chrono::Utc::now().timestamp() + i as i64 * 60,
-            symbol: symbol.to_string(),
-            open: price * (1.0 - volatility / 2.0),
-            high: price * (1.0 + volatility),
-            low: price * (1.0 - volatility),
-            close: price,
-            volume: 2000000.0 * (1.0 + change.abs() * 5.0),
-            bid: price * (1.0 - volatility / 4.0),
-            ask: price * (1.0 + volatility / 4.0),
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new(symbol.to_string(), chrono::Utc::now());
+        ts_data.open = price * (1.0 - volatility / 2.0);
+        ts_data.high = price * (1.0 + volatility);
+        ts_data.low = price * (1.0 - volatility);
+        ts_data.close = price;
+        ts_data.volume = vec![2000000.0 * (1.0 + change.abs() * 5.0)];
+        ts_data.volume_value = 2000000.0 * (1.0 + change.abs() * 5.0);
+        data.push(ts_data);
     }
     
     data
@@ -614,18 +605,14 @@ fn generate_sideways_market_data(symbol: &str, noise_level: f64, count: usize) -
     for i in 0..count {
         let price = base_price * (1.0 + (i as f64 * 0.3).sin() * noise_level);
         
-        data.push(TimeSeriesData {
-            timestamp: chrono::Utc::now().timestamp() + i as i64 * 60,
-            symbol: symbol.to_string(),
-            open: price * 0.9998,
-            high: price * 1.0002,
-            low: price * 0.9998,
-            close: price,
-            volume: vec![800000.0],
-            bid: price * 0.9999,
-            ask: price * 1.0001,
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new(symbol.to_string(), chrono::Utc::now());
+        ts_data.open = price * 0.9998;
+        ts_data.high = price * 1.0002;
+        ts_data.low = price * 0.9998;
+        ts_data.close = price;
+        ts_data.volume = vec![800000.0];
+        ts_data.volume_value = 800000.0;
+        data.push(ts_data);
     }
     
     data
@@ -643,18 +630,15 @@ fn generate_gap_market_data(symbol: &str, gap_size: f64, count: usize) -> Vec<Ti
         
         price *= 1.0 + (i as f64 * 0.1).sin() * 0.001;
         
-        data.push(TimeSeriesData {
-            timestamp: chrono::Utc::now().timestamp() + i as i64 * 60,
-            symbol: symbol.to_string(),
-            open: price * 0.999,
-            high: price * 1.001,
-            low: price * 0.999,
-            close: price,
-            volume: if i == count / 4 { 5000000.0 } else { 1200000.0 },
-            bid: price * 0.9995,
-            ask: price * 1.0005,
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new(symbol.to_string(), chrono::Utc::now());
+        ts_data.open = price * 0.999;
+        ts_data.high = price * 1.001;
+        ts_data.low = price * 0.999;
+        ts_data.close = price;
+        let vol = if i == count / 4 { 5000000.0 } else { 1200000.0 };
+        ts_data.volume = vec![vol];
+        ts_data.volume_value = vol;
+        data.push(ts_data);
     }
     
     data
@@ -675,18 +659,15 @@ fn generate_crash_recovery_data(symbol: &str, crash_magnitude: f64, count: usize
             price *= 1.0 + recovery_factor / 100.0;
         }
         
-        data.push(TimeSeriesData {
-            timestamp: chrono::Utc::now().timestamp() + i as i64 * 60,
-            symbol: symbol.to_string(),
-            open: price * 0.995,
-            high: price * 1.005,
-            low: price * 0.990,
-            close: price,
-            volume: if i == count / 5 { 10000000.0 } else { 1500000.0 },
-            bid: price * 0.999,
-            ask: price * 1.001,
-            indicators: HashMap::new(),
-        });
+        let mut ts_data = TimeSeriesData::new(symbol.to_string(), chrono::Utc::now());
+        ts_data.open = price * 0.995;
+        ts_data.high = price * 1.005;
+        ts_data.low = price * 0.990;
+        ts_data.close = price;
+        let vol = if i == count / 5 { 10000000.0 } else { 1500000.0 };
+        ts_data.volume = vec![vol];
+        ts_data.volume_value = vol;
+        data.push(ts_data);
     }
     
     data
@@ -724,19 +705,8 @@ use crate::integration::health_monitoring_integration_test::{
     SystemHealthStatus, HealthStatus, PredictionResult
 };
 
-#[derive(Debug)]
-struct TimeSeriesData {
-    timestamp: i64,
-    symbol: String,
-    open: f64,
-    high: f64,
-    low: f64,
-    close: f64,
-    volume: f64,
-    bid: f64,
-    ask: f64,
-    indicators: HashMap<String, f64>,
-}
+// TimeSeriesData is imported from the main data module
+// This local definition is removed to avoid conflicts
 
 struct IntegratedTestSystem;
 

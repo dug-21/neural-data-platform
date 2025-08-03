@@ -8,7 +8,7 @@
 //! - Completion: Comprehensive adapter test coverage
 
 use mockall::predicate::*;
-use neural_trader::adapters::{
+use autonomous_platform::adapters::{
     redis::{RedisAdapter, RedisConfig},
     timescale::{TimescaleAdapter, TimescaleConfig},
     AdapterError, DataAdapter, MarketData, OrderBook,

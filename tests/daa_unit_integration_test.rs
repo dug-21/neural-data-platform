@@ -21,6 +21,9 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 
+// Import test utilities
+use crate::helpers::test_utils::create_test_market_hours;
+
 /// Mock trading strategy for testing
 struct MockStrategy {
     name: String,
@@ -92,12 +95,17 @@ fn create_test_time_series(symbol: &str, base_price: f64, count: usize) -> Vec<T
             high: price + 15.0,
             low: price - 15.0,
             close: price,
-            volume: 1000.0 + (i as f64 * 50.0),
+            volume: vec![1000.0 + (i as f64 * 50.0)],
+            volume_value: 1000.0 + (i as f64 * 50.0),
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some(symbol.to_string()),
             value: Some(price),
             metadata: None,
+            values: vec![price],
+            intervals: vec![i as u64],
+            timestamps: vec![now - chrono::Duration::minutes((count - i) as i64)],
+            metadata_map: HashMap::new(),
         });
     }
 
@@ -119,9 +127,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -146,9 +163,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
         let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
@@ -230,9 +256,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
         let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
@@ -323,9 +358,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
         let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
@@ -406,9 +450,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let mut config = DaaConfig::default();
@@ -461,14 +514,24 @@ mod daa_unit_tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(1000);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         // Spawn multiple concurrent tasks
@@ -526,9 +589,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
         let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
@@ -596,9 +668,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let mut config = DaaConfig::default();
@@ -648,9 +729,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
         let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
@@ -732,9 +822,18 @@ mod daa_unit_tests {
             max_concurrent_predictions: 5,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
         let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
 
@@ -782,14 +881,24 @@ mod integration_stress_tests {
             max_concurrent_predictions: 20,
             enable_model_monitoring: true,
             accuracy_threshold: 0.7,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
 
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(10000);
         let coordinator = Arc::new(DaaCoordinator::new(
             DaaConfig::default(),
             neural_predictor,
             tx,
+            create_test_market_hours(),
         ));
 
         let start = std::time::Instant::now();

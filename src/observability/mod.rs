@@ -8,6 +8,7 @@
 //! - Error tracking and alerting
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 // Simplified metrics for compilation
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
@@ -128,11 +129,13 @@ impl ObservabilitySystem {
         performance: &PerformanceSnapshot,
         error_rate: f64,
     ) -> HealthLevel {
-        if error_rate > 0.1 || performance.cpu_usage > 90.0 || performance.memory_usage > 95.0 {
+        if error_rate > 0.1 
+            || performance.cpu_usage.map_or(false, |cpu| cpu > 90.0) 
+            || performance.memory_usage.map_or(false, |mem| mem > 95.0) {
             HealthLevel::Critical
         } else if error_rate > 0.05
-            || performance.cpu_usage > 80.0
-            || performance.memory_usage > 85.0
+            || performance.cpu_usage.map_or(false, |cpu| cpu > 80.0)
+            || performance.memory_usage.map_or(false, |mem| mem > 85.0)
         {
             HealthLevel::Warning
         } else {
@@ -357,12 +360,37 @@ impl PerformanceTracker {
     pub async fn get_snapshot(&self) -> PerformanceSnapshot {
         let metrics = self.metrics.read().await;
         PerformanceSnapshot {
-            cpu_usage: metrics.cpu_usage,
-            memory_usage: metrics.memory_usage,
-            active_connections: metrics.active_connections,
-            requests_per_second: metrics.requests_per_second,
-            average_response_time: metrics.average_response_time,
-            cache_hit_rate: metrics.cache_hit_rate,
+            // Core neural trading fields (using defaults for observability context)
+            timestamp: chrono::Utc::now(),
+            accuracy: 0.0,  // Not applicable for observability
+            confidence: 0.0,  // Not applicable for observability
+            price_error: 0.0,  // Not applicable for observability
+            sharpe_ratio: None,
+            max_drawdown: None,
+            volatility: 0.0,
+            model_agreement: 0.0,
+            consecutive_failures: 0,
+            trading_volume: 0.0,
+            profit_loss: 0.0,
+            event_count: 0,
+            window_duration: chrono::TimeDelta::seconds(0),
+            
+            // Extended compatibility fields
+            latency_ms: None,
+            error_rate: None,
+            recent_predictions: None,
+            symbol: None,
+            trading_performance: None,
+            accuracy_metrics: None,
+            data_type_metrics: None,
+            
+            // Observability-specific fields (populated)
+            cpu_usage: Some(metrics.cpu_usage),
+            memory_usage: Some(metrics.memory_usage),
+            active_connections: Some(metrics.active_connections),
+            requests_per_second: Some(metrics.requests_per_second),
+            average_response_time: Some(chrono::TimeDelta::from_std(metrics.average_response_time).unwrap_or(chrono::TimeDelta::zero())),
+            cache_hit_rate: Some(metrics.cache_hit_rate),
         }
     }
 
@@ -472,15 +500,8 @@ pub struct PerformanceMetrics {
     pub cache_hit_rate: f64,
 }
 
-#[derive(Debug, Clone)]
-pub struct PerformanceSnapshot {
-    pub cpu_usage: f64,
-    pub memory_usage: f64,
-    pub active_connections: u32,
-    pub requests_per_second: f64,
-    pub average_response_time: Duration,
-    pub cache_hit_rate: f64,
-}
+// Use unified PerformanceSnapshot from neural module
+pub use crate::neural::PerformanceSnapshot;
 
 #[derive(Debug, Clone)]
 pub struct ErrorContext {

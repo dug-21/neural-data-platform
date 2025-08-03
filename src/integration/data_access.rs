@@ -264,10 +264,17 @@ impl DataAccessLayer {
                         .and_then(|v| v.as_f64())
                         .unwrap_or(data_point.value),
                     close: data_point.value,
-                    volume: metadata
+                    volume: vec![metadata
+                        .get("volume")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0)],
+                    volume_value: metadata
                         .get("volume")
                         .and_then(|v| v.as_f64())
                         .unwrap_or(0.0),
+                    intervals: vec![1000], // Default 1-second intervals
+                    timestamps: vec![data_point.timestamp],
+                    values: vec![data_point.value],
                     indicators: metadata
                         .get("indicators")
                         .and_then(|v| v.as_object())
@@ -281,9 +288,6 @@ impl DataAccessLayer {
                     entity: Some(data_point.entity.clone()),
                     value: Some(data_point.value),
                     metadata: data_point.metadata.clone(),
-                    // Required fields for vendor model integration
-                    values: vec![data_point.value],
-                    timestamps: vec![data_point.timestamp],
                     metadata_map: HashMap::new(),
                 });
             }
@@ -323,7 +327,7 @@ impl DataAccessLayer {
                     PriceInfo {
                         price: latest_data.close,
                         timestamp: latest_data.timestamp,
-                        volume: latest_data.volume,
+                        volume: latest_data.volume_value,
                         source: "cache".to_string(),
                     },
                 );
@@ -488,15 +492,16 @@ impl DataAccessLayer {
                 high: price_info.price,
                 low: price_info.price,
                 close: price_info.price,
-                volume: price_info.volume,
+                volume: vec![price_info.volume],
+                volume_value: price_info.volume,
+                intervals: vec![1000], // Default 1-second intervals
+                timestamps: vec![price_info.timestamp],
+                values: vec![price_info.price],
                 indicators: HashMap::new(),
                 source: Some("price_feed".to_string()),
                 entity: Some(symbol.clone()),
                 value: Some(price_info.price),
                 metadata: None,
-                // Required fields for vendor model integration
-                values: vec![price_info.price],
-                timestamps: vec![price_info.timestamp],
                 metadata_map: HashMap::new(),
             });
         }
@@ -560,6 +565,7 @@ impl DataAccessLayer {
                 low: stat.min_value.unwrap_or(0.0),
                 close: stat.avg_value.unwrap_or(0.0),
                 volume: vec![1000.0], // Default volume for aggregated data
+                volume_value: 1000.0,
                 indicators,
                 source: Some("aggregated_stats".to_string()),
                 entity: Some(stat.entity.clone()),
@@ -567,6 +573,7 @@ impl DataAccessLayer {
                 metadata: None,
                 // Required fields for vendor model integration
                 values: vec![stat.avg_value.unwrap_or(0.0)],
+                intervals: vec![],
                 timestamps: vec![stat.bucket],
                 metadata_map: HashMap::new(),
             });
@@ -790,7 +797,7 @@ impl DataAccessLayer {
                 "high" => time_series.iter().map(|d| d.high).collect(),
                 "low" => time_series.iter().map(|d| d.low).collect(),
                 "close" => time_series.iter().map(|d| d.close).collect(),
-                "volume" => time_series.iter().map(|d| d.volume).collect(),
+                "volume" => time_series.iter().map(|d| d.volume_value).collect(),
                 // Technical indicators from metadata
                 indicator => time_series
                     .iter()
@@ -930,8 +937,8 @@ impl DataAccessLayer {
                     let data_len = data.len();
                     for i in 19..data_len {
                         let avg_volume: f64 =
-                            data[i - 19..=i].iter().map(|d| d.volume).sum::<f64>() / 20.0;
-                        let current_volume = data[i].volume;
+                            data[i - 19..=i].iter().map(|d| d.volume_value).sum::<f64>() / 20.0;
+                        let current_volume = data[i].volume_value;
                         if avg_volume > 0.0 {
                             data[i]
                                 .indicators

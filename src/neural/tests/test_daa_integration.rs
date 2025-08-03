@@ -8,11 +8,12 @@
 //! - Confidence-based consensus mechanisms
 
 use super::super::enhanced_predictor::*;
-use super::super::fann::{FannPredictor, FannModelConfig, ModelPerformance, MarketRegime, NeuralError};
+// // use super::super::fann::{FannPredictor, FannModelConfig, ModelPerformance, MarketRegime, NeuralError};
 use super::super::{NeuralPredictorTrait, PredictionResult};
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::integration::daa_coordinator::{DaaConfig, DaaCoordinator, MarketContext};
+use crate::integration::daa_coordinator::{DaaConfig, DaaCoordinator};
+use crate::strategies::MarketContext;
 
 use anyhow::Result;
 use approx::{assert_abs_diff_eq, assert_relative_eq};
@@ -123,6 +124,13 @@ mod daa_neural_integration_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = Arc::new(EnhancedNeuralPredictor::new(neural_config)?);
 
@@ -191,6 +199,13 @@ mod daa_neural_integration_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -244,6 +259,13 @@ mod daa_neural_integration_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -345,6 +367,13 @@ mod daa_neural_integration_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -442,6 +471,13 @@ mod performance_feedback_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -579,6 +615,13 @@ mod performance_feedback_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -690,6 +733,13 @@ mod edge_case_integration_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -742,6 +792,13 @@ mod edge_case_integration_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = EnhancedNeuralPredictor::new(neural_config)?;
 
@@ -811,6 +868,13 @@ mod edge_case_integration_tests {
             max_retries: 3,
             error_threshold: 0.05,
             lookback_window: 24,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
         };
         let enhanced_predictor = Arc::new(EnhancedNeuralPredictor::new(neural_config)?);
 

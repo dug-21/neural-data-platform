@@ -131,7 +131,7 @@ mod tests {
             auth: crate::config::AuthConfig::default(),
             encryption: crate::config::EncryptionConfig::default(),
             ensemble: crate::config::EnsembleConfig::default(),
-            monitoring: crate::config::MonitoringConfig::default(),
+            // Remove duplicate monitoring field - it's defined below
             feature_flags: crate::config::FeatureFlags::default(),
             database: DatabaseConfig {
                 url: "postgres://user:pass@localhost:5432/testdb".to_string(),
@@ -160,8 +160,8 @@ mod tests {
                 input_size: 10,
                 learning_rate: 0.001,
                 output_size: 1,
-                max_epochs: 100,
-                batch_size: 32,
+                prediction_horizon: 1,
+                normalization_method: "standard".to_string(),
                 enable_model_monitoring: true,
                 accuracy_threshold: 0.85,
                 use_real_models: false,

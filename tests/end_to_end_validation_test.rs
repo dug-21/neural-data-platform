@@ -152,7 +152,7 @@ fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) ->
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
         price: current_price,
-        volume: 1000.0 + (sequence as f64 * 10.0),
+        volume: vec![1000.0 + (sequence as f64 * 10.0),
         bid: current_price - (current_price * 0.001),
         ask: current_price + (current_price * 0.001),
         source: "validation_feed".to_string(),

@@ -2,9 +2,9 @@
 
 use futures::StreamExt;
 use mockall::predicate::*;
-use neural_trader::adapters::{
+use autonomous_platform::adapters::{
     redis::{RedisAdapter, RedisConfig},
-    AdapterError, DataAdapter, MarketData, OrderBook,
+    AdapterError, DataAdapter, MarketData, OrderBook, OrderBookEntry,
 };
 
 #[cfg(test)]
@@ -37,8 +37,16 @@ mod tests {
         OrderBook {
             symbol: "BTC/USD".to_string(),
             timestamp: 1640995200,
-            bids: vec![(48000.0, 1.5), (47900.0, 2.0), (47800.0, 1.0)],
-            asks: vec![(48100.0, 1.2), (48200.0, 2.5), (48300.0, 1.8)],
+            bids: vec![
+                OrderBookEntry { price: 48000.0, quantity: 1.5, timestamp: 1640995200 },
+                OrderBookEntry { price: 47900.0, quantity: 2.0, timestamp: 1640995200 },
+                OrderBookEntry { price: 47800.0, quantity: 1.0, timestamp: 1640995200 },
+            ],
+            asks: vec![
+                OrderBookEntry { price: 48100.0, quantity: 1.2, timestamp: 1640995200 },
+                OrderBookEntry { price: 48200.0, quantity: 2.5, timestamp: 1640995200 },
+                OrderBookEntry { price: 48300.0, quantity: 1.8, timestamp: 1640995200 },
+            ],
         }
     }
 

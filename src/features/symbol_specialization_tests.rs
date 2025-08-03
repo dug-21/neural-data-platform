@@ -58,7 +58,7 @@ mod tests {
         let layer = SymbolSpecializationLayer::new(
             SectorId::Technology,
             shared_extractor,
-            specialization_config,
+            specialization_config.clone(),
         ).await;
         
         assert!(layer.is_ok(), "Failed to create SymbolSpecializationLayer");
@@ -84,7 +84,7 @@ mod tests {
         let layer = SymbolSpecializationLayer::new(
             SectorId::Technology,
             shared_extractor,
-            specialization_config,
+            specialization_config.clone(),
         ).await.expect("Failed to create SymbolSpecializationLayer");
         
         let sector_data = create_sector_data();
@@ -135,7 +135,7 @@ mod tests {
         let layer = SymbolSpecializationLayer::new(
             SectorId::Technology,
             shared_extractor,
-            specialization_config,
+            specialization_config.clone(),
         ).await.expect("Failed to create SymbolSpecializationLayer");
         
         let sector_data = create_sector_data();
@@ -193,7 +193,7 @@ mod tests {
         let layer = SymbolSpecializationLayer::new(
             SectorId::Technology,
             shared_extractor,
-            specialization_config,
+            specialization_config.clone(),
         ).await.expect("Failed to create SymbolSpecializationLayer");
         
         let sector_data = create_sector_data();
@@ -245,7 +245,7 @@ mod tests {
         let layer = SymbolSpecializationLayer::new(
             SectorId::Technology,
             shared_extractor,
-            specialization_config,
+            specialization_config.clone(),
         ).await.expect("Failed to create SymbolSpecializationLayer");
         
         // Create training data
@@ -297,7 +297,7 @@ mod tests {
         let layer = SymbolSpecializationLayer::new(
             SectorId::Technology,
             shared_extractor,
-            specialization_config,
+            specialization_config.clone(),
         ).await.expect("Failed to create SymbolSpecializationLayer");
         
         let sector_data = create_sector_data();

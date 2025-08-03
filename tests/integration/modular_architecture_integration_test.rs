@@ -7,7 +7,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use neural_trader::{
+use autonomous_platform::{
     adapters::enhanced_neural_adapter::{EnhancedNeuralAdapter, EnhancedNeuralConfig},
     config::NeuralConfig,
     data::TimeSeriesData,
@@ -78,6 +78,13 @@ async fn test_neural_predictor_to_enhanced_adapter_flow() -> Result<()> {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.1,
+        // New required fields
+        input_size: 10,
+        output_size: 1,
+        hidden_layers: vec![20, 10],
+        learning_rate: 0.01,
+        prediction_horizon: None,
+        normalization_method: None,
     };
 
     let predictor = NeuralPredictor::new(config)?;
@@ -141,6 +148,13 @@ async fn test_enhanced_neural_adapter_standalone() -> Result<()> {
             model_timeout_seconds: 30,
             max_retries: 3,
             error_threshold: 0.1,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
         },
         use_real_models: false,
         enable_health_monitoring: false,

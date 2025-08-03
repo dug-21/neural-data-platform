@@ -188,7 +188,7 @@ impl<'a> AdvancedIndicators<'a> {
         
         for d in &recent {
             let typical_price = (d.high + d.low + d.close) / 3.0;
-            price_volumes.push((typical_price, d.volume));
+            price_volumes.push((typical_price, d.volume_value));
         }
         
         // Sort by price
@@ -626,7 +626,7 @@ pub struct SwingPoint {
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SwingType {
     High,
     Low,
@@ -652,14 +652,13 @@ mod tests {
             let trend = i as f64 * 0.1;
             let noise = (i as f64 / 5.0).sin() * 2.0;
             
-            data.push(TimeSeriesData {
-                timestamp: DateTime::<Utc>::from_timestamp(1640995200 + i * 60, 0).unwrap(),
-                open: base_price + trend + noise,
-                high: base_price + trend + noise + 2.0,
-                low: base_price + trend + noise - 2.0,
-                close: base_price + trend + noise + 0.5,
-                volume: vec![1000.0 + i as f64 * 10.0],
-            });
+            let mut ts_data = TimeSeriesData::new("TEST".to_string(), DateTime::<Utc>::from_timestamp(1640995200 + i * 60, 0).unwrap());
+            ts_data.open = base_price + trend + noise;
+            ts_data.high = base_price + trend + noise + 2.0;
+            ts_data.low = base_price + trend + noise - 2.0;
+            ts_data.close = base_price + trend + noise + 0.5;
+            ts_data.volume = vec![1000.0 + i as f64 * 10.0];
+            data.push(ts_data);
         }
         data
     }

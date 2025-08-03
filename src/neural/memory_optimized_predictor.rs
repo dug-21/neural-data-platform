@@ -8,12 +8,12 @@
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Duration};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Mutex};
 use tracing::{debug, info, warn};
 
 use crate::data::{TimeSeriesData, SectorId};
@@ -80,7 +80,7 @@ pub struct CompressedModel {
 }
 
 /// Memory usage tracker per symbol
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolMemoryUsage {
     pub symbol: String,
     pub sector_id: String,
@@ -95,7 +95,7 @@ pub struct SymbolMemoryUsage {
 /// Memory-optimized neural predictor
 pub struct MemoryOptimizedPredictor {
     config: MemoryOptimizedConfig,
-    performance_optimizer: Arc<PerformanceOptimizer>,
+    performance_optimizer: Arc<Mutex<PerformanceOptimizer>>,
     
     // Sector-based organization for memory efficiency
     sector_extractors: Arc<DashMap<String, Arc<SharedFeatureExtractor>>>,
@@ -141,7 +141,7 @@ impl MemoryOptimizedPredictor {
             ..Default::default()
         };
         
-        let performance_optimizer = Arc::new(PerformanceOptimizer::new(opt_config).await?);
+        let performance_optimizer = Arc::new(Mutex::new(PerformanceOptimizer::new(opt_config).await?));
         
         // Initialize concurrency control
         let prediction_semaphore = Arc::new(
@@ -164,14 +164,16 @@ impl MemoryOptimizedPredictor {
     }
     
     /// Start the optimization engine
-    pub async fn start(&mut self) -> Result<()> {
-        self.performance_optimizer.start().await?;
+    pub async fn start(&self) -> Result<()> {
+        // Lock the performance optimizer and start it
+        let mut optimizer = self.performance_optimizer.lock().await;
+        optimizer.start().await?;
         
         // Start memory monitoring task
         self.start_memory_monitor().await?;
         
         info!("✅ Memory-Optimized Predictor started successfully");
-        Ok()
+        Ok(())
     }
     
     /// Get or create shared feature extractor for sector
@@ -250,7 +252,8 @@ impl MemoryOptimizedPredictor {
     
     /// Check prediction cache
     fn check_prediction_cache(&self, cache_key: &str) -> Option<PredictionResult> {
-        if let Some((prediction, timestamp)) = self.prediction_cache.get(cache_key) {
+        if let Some(entry) = self.prediction_cache.get(cache_key) {
+            let (prediction, timestamp) = entry.value();
             let age = Utc::now() - *timestamp;
             if age.num_seconds() < self.config.feature_cache_ttl_seconds as i64 {
                 debug!("Cache hit for key: {}", cache_key);
@@ -277,9 +280,14 @@ impl MemoryOptimizedPredictor {
         let sector_info = self.sector_mapper.get_sector(symbol)
             .unwrap_or_else(|_| crate::data::SectorInfo {
                 id: "unknown".to_string(),
+                sector_id: crate::data::sector_mapper::SectorId::Technology,
                 name: "Unknown".to_string(),
-                symbols: vec![],
-                description: "".to_string(),
+                symbols: vec![symbol.to_string()],
+                description: "Unknown sector symbol".to_string(),
+                sub_sector: None,
+                market_cap_tier: crate::data::sector_mapper::MarketCapTier::MidCap,
+                weight_in_sector: 0.01,
+                correlation_group: None,
             });
         
         self.symbol_memory_usage
@@ -334,7 +342,7 @@ impl MemoryOptimizedPredictor {
                               avg_usage_per_symbol, config.memory_limit_per_symbol_mb);
                         
                         // Trigger garbage collection
-                        if let Ok(gc_result) = performance_optimizer.force_gc().await {
+                        if let Ok(gc_result) = performance_optimizer.lock().await.force_gc().await {
                             info!("🧹 Emergency GC: freed {:.2}MB from {} resources",
                                   gc_result.freed_memory_mb, gc_result.evicted_resources);
                         }

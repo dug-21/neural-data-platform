@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use metrics::{counter, histogram};
+use metrics::histogram;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;

@@ -1,7 +1,7 @@
 //! Unit tests for TimescaleDB adapter
 
 use mockall::predicate::*;
-use neural_trader::adapters::{
+use autonomous_platform::adapters::{
     timescale::{TimescaleAdapter, TimescaleConfig},
     AdapterError, DataAdapter, MarketData,
 };

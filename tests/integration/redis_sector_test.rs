@@ -106,14 +106,16 @@ fn create_test_aggregator_with_redis(mock_cache: Arc<MockRedisCache>) -> SectorA
 }
 
 fn create_test_market_data(symbol: &str, price: f64, volume: f64, timestamp_offset: i64) -> TimeSeriesData {
+    let timestamp = Utc::now() + chrono::Duration::seconds(timestamp_offset);
     TimeSeriesData {
         symbol: symbol.to_string(),
-        timestamp: Utc::now() + chrono::Duration::seconds(timestamp_offset),
+        timestamp,
         open: price - 0.5,
         high: price + 1.0,
         low: price - 1.0,
         close: price,
-        volume,
+        volume: volume],
+        volume_value: volume,
         indicators: HashMap::from([
             ("rsi".to_string(), 50.0),
             ("macd".to_string(), 0.5),
@@ -123,9 +125,15 @@ fn create_test_market_data(symbol: &str, price: f64, volume: f64, timestamp_offs
         source: Some("redis_test".to_string()),
         entity: Some("integration_test".to_string()),
         value: Some(price),
-        metadata: Some(HashMap::from([
-            ("exchange".to_string(), "NASDAQ".to_string()),
-        ])),
+        metadata: Some(serde_json::json!({
+            "exchange": "NASDAQ"
+        })),
+        values: vec![price],
+        intervals: vec![timestamp.timestamp() as u64],
+        timestamps: vec![timestamp],
+        metadata_map: HashMap::from([
+            ("exchange".to_string(), serde_json::json!("NASDAQ")),
+        ]),
     }
 }
 

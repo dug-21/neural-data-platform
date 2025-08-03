@@ -39,8 +39,8 @@ impl SharedMemoryPool {
 
     pub async fn allocate(&self, size: usize) -> Result<MemoryAllocation> {
         let units = (size + 1023) / 1024; // Round up to KB
-        let permits = self.allocation_semaphore
-            .acquire_many(units as u32)
+        let permits = Arc::clone(&self.allocation_semaphore)
+            .acquire_many_owned(units as u32)
             .await
             .context("Failed to acquire memory permits")?;
         
@@ -49,7 +49,7 @@ impl SharedMemoryPool {
         
         Ok(MemoryAllocation {
             size,
-            permits: Some(permits),
+            permits: Some(permits),  // permits is already OwnedSemaphorePermit
         })
     }
 
@@ -63,6 +63,15 @@ impl SharedMemoryPool {
 pub struct MemoryAllocation {
     size: usize,
     permits: Option<tokio::sync::OwnedSemaphorePermit>,
+}
+
+impl std::fmt::Debug for MemoryAllocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MemoryAllocation")
+            .field("size", &self.size)
+            .field("permits", &self.permits.is_some())
+            .finish()
+    }
 }
 
 impl Drop for MemoryAllocation {
@@ -197,6 +206,7 @@ impl Default for SharedFeatureConfig {
 }
 
 /// Main shared feature extractor for a sector
+#[derive(Debug)]
 pub struct SharedFeatureExtractor {
     sector_id: SectorId,
     // Removed base_models field - not needed for feature extraction
@@ -612,12 +622,11 @@ impl SharedFeatureExtractor {
         symbol_data: &TimeSeriesData,
         sector_data: &HashMap<String, TimeSeriesData>,
     ) -> Result<f64> {
-        let symbol_volume = symbol_data.volume.iter().sum::<f64>() / symbol_data.volume.len() as f64;
+        let symbol_volume = symbol_data.volume_value;
         
         let mut sector_volumes = Vec::new();
         for (_, data) in sector_data {
-            let avg_vol = data.volume.iter().sum::<f64>() / data.volume.len() as f64;
-            sector_volumes.push(avg_vol);
+            sector_volumes.push(data.volume_value);
         }
         
         let sector_avg_volume = sector_volumes.iter().sum::<f64>() / sector_volumes.len() as f64;
@@ -697,7 +706,7 @@ impl SharedFeatureExtractor {
 
     /// Get memory usage statistics
     pub async fn get_memory_stats(&self) -> Result<(usize, usize)> {
-        SHARED_MEMORY_POOL.get_usage().await.into()
+        Ok(SHARED_MEMORY_POOL.get_usage().await)
     }
 }
 

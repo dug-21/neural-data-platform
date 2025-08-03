@@ -100,6 +100,13 @@ pub enum MarketCapTier {
 pub struct SectorInfo {
     pub id: String, // Using String for flexibility instead of enum
     pub sector_id: SectorId,
+    // Missing fields that are used in the code
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub symbols: Vec<String>,
+    #[serde(default)]
+    pub description: String,
     pub sub_sector: Option<String>,
     pub market_cap_tier: MarketCapTier,
     pub weight_in_sector: f64, // 0.0 to 1.0
@@ -201,6 +208,9 @@ impl SectorMapper {
         self.add_symbol_mapping("AAPL", SectorInfo {
             id: "technology".to_string(),
             sector_id: SectorId::Technology,
+            name: "Apple Inc.".to_string(),
+            symbols: vec!["AAPL".to_string()],
+            description: "Consumer electronics and software".to_string(),
             sub_sector: Some("Consumer Electronics".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.22,
@@ -210,6 +220,9 @@ impl SectorMapper {
         self.add_symbol_mapping("MSFT", SectorInfo {
             id: "technology".to_string(),
             sector_id: SectorId::Technology,
+            name: "Microsoft Corporation".to_string(),
+            symbols: vec!["MSFT".to_string()],
+            description: "Software, cloud services, and productivity solutions".to_string(),
             sub_sector: Some("Software".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.21,
@@ -219,6 +232,9 @@ impl SectorMapper {
         self.add_symbol_mapping("GOOGL", SectorInfo {
             id: "technology".to_string(),
             sector_id: SectorId::Technology,
+            name: "Alphabet Inc.".to_string(),
+            symbols: vec!["GOOGL".to_string()],
+            description: "Internet services, search, and cloud platforms".to_string(),
             sub_sector: Some("Internet Services".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.10,
@@ -229,6 +245,9 @@ impl SectorMapper {
         self.add_symbol_mapping("JPM", SectorInfo {
             id: "financial".to_string(),
             sector_id: SectorId::Financial,
+            name: "JPMorgan Chase & Co.".to_string(),
+            symbols: vec!["JPM".to_string()],
+            description: "Investment banking and financial services".to_string(),
             sub_sector: Some("Banking".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.13,
@@ -238,6 +257,9 @@ impl SectorMapper {
         self.add_symbol_mapping("BAC", SectorInfo {
             id: "financial".to_string(),
             sector_id: SectorId::Financial,
+            name: "Bank of America Corporation".to_string(),
+            symbols: vec!["BAC".to_string()],
+            description: "Consumer and commercial banking services".to_string(),
             sub_sector: Some("Banking".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.09,
@@ -247,6 +269,9 @@ impl SectorMapper {
         self.add_symbol_mapping("WFC", SectorInfo {
             id: "financial".to_string(),
             sector_id: SectorId::Financial,
+            name: "Wells Fargo & Company".to_string(),
+            symbols: vec!["WFC".to_string()],
+            description: "Diversified financial services and banking".to_string(),
             sub_sector: Some("Banking".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.07,
@@ -256,6 +281,9 @@ impl SectorMapper {
         self.add_symbol_mapping("GS", SectorInfo {
             id: "financial".to_string(),
             sector_id: SectorId::Financial,
+            name: "The Goldman Sachs Group, Inc.".to_string(),
+            symbols: vec!["GS".to_string()],
+            description: "Investment banking and securities trading".to_string(),
             sub_sector: Some("Investment Banking".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.06,
@@ -266,6 +294,9 @@ impl SectorMapper {
         self.add_symbol_mapping("JNJ", SectorInfo {
             id: "healthcare".to_string(),
             sector_id: SectorId::Healthcare,
+            name: "Johnson & Johnson".to_string(),
+            symbols: vec!["JNJ".to_string()],
+            description: "Pharmaceuticals, medical devices, and consumer health".to_string(),
             sub_sector: Some("Pharmaceuticals".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.12,
@@ -275,6 +306,9 @@ impl SectorMapper {
         self.add_symbol_mapping("PFE", SectorInfo {
             id: "healthcare".to_string(),
             sector_id: SectorId::Healthcare,
+            name: "Pfizer Inc.".to_string(),
+            symbols: vec!["PFE".to_string()],
+            description: "Pharmaceutical research and development".to_string(),
             sub_sector: Some("Pharmaceuticals".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.08,
@@ -284,6 +318,9 @@ impl SectorMapper {
         self.add_symbol_mapping("UNH", SectorInfo {
             id: "healthcare".to_string(),
             sector_id: SectorId::Healthcare,
+            name: "UnitedHealth Group Incorporated".to_string(),
+            symbols: vec!["UNH".to_string()],
+            description: "Healthcare services and health insurance".to_string(),
             sub_sector: Some("Health Insurance".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.10,
@@ -294,6 +331,9 @@ impl SectorMapper {
         self.add_symbol_mapping("XOM", SectorInfo {
             id: "energy".to_string(),
             sector_id: SectorId::Energy,
+            name: "Exxon Mobil Corporation".to_string(),
+            symbols: vec!["XOM".to_string()],
+            description: "Oil and gas exploration and production".to_string(),
             sub_sector: Some("Oil & Gas".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.15,
@@ -303,6 +343,9 @@ impl SectorMapper {
         self.add_symbol_mapping("CVX", SectorInfo {
             id: "energy".to_string(),
             sector_id: SectorId::Energy,
+            name: "Chevron Corporation".to_string(),
+            symbols: vec!["CVX".to_string()],
+            description: "Integrated oil and gas company".to_string(),
             sub_sector: Some("Oil & Gas".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.12,
@@ -313,6 +356,9 @@ impl SectorMapper {
         self.add_symbol_mapping("AMZN", SectorInfo {
             id: "consumer_discretionary".to_string(),
             sector_id: SectorId::ConsumerDiscretionary,
+            name: "Amazon.com, Inc.".to_string(),
+            symbols: vec!["AMZN".to_string()],
+            description: "E-commerce, cloud computing, and digital services".to_string(),
             sub_sector: Some("E-commerce".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.20,
@@ -322,6 +368,9 @@ impl SectorMapper {
         self.add_symbol_mapping("TSLA", SectorInfo {
             id: "consumer_discretionary".to_string(),
             sector_id: SectorId::ConsumerDiscretionary,
+            name: "Tesla, Inc.".to_string(),
+            symbols: vec!["TSLA".to_string()],
+            description: "Electric vehicles and energy storage solutions".to_string(),
             sub_sector: Some("Electric Vehicles".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.15,
@@ -332,6 +381,9 @@ impl SectorMapper {
         self.add_symbol_mapping("PG", SectorInfo {
             id: "consumer_staples".to_string(),
             sector_id: SectorId::ConsumerStaples,
+            name: "The Procter & Gamble Company".to_string(),
+            symbols: vec!["PG".to_string()],
+            description: "Consumer goods and personal care products".to_string(),
             sub_sector: Some("Personal Care".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.14,
@@ -342,6 +394,9 @@ impl SectorMapper {
         self.add_symbol_mapping("BA", SectorInfo {
             id: "industrials".to_string(),
             sector_id: SectorId::Industrials,
+            name: "The Boeing Company".to_string(),
+            symbols: vec!["BA".to_string()],
+            description: "Aerospace, defense, and commercial aircraft".to_string(),
             sub_sector: Some("Aerospace".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.12,
@@ -352,6 +407,9 @@ impl SectorMapper {
         self.add_symbol_mapping("DOW", SectorInfo {
             id: "materials".to_string(),
             sector_id: SectorId::Materials,
+            name: "Dow Inc.".to_string(),
+            symbols: vec!["DOW".to_string()],
+            description: "Chemical manufacturing and materials science".to_string(),
             sub_sector: Some("Chemicals".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.11,
@@ -362,6 +420,9 @@ impl SectorMapper {
         self.add_symbol_mapping("NEE", SectorInfo {
             id: "utilities".to_string(),
             sector_id: SectorId::Utilities,
+            name: "NextEra Energy, Inc.".to_string(),
+            symbols: vec!["NEE".to_string()],
+            description: "Electric utility and clean energy solutions".to_string(),
             sub_sector: Some("Electric Utilities".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.13,
@@ -372,6 +433,9 @@ impl SectorMapper {
         self.add_symbol_mapping("AMT", SectorInfo {
             id: "real_estate".to_string(),
             sector_id: SectorId::RealEstate,
+            name: "American Tower Corporation".to_string(),
+            symbols: vec!["AMT".to_string()],
+            description: "Wireless communication infrastructure REIT".to_string(),
             sub_sector: Some("REITs".to_string()),
             market_cap_tier: MarketCapTier::LargeCap,
             weight_in_sector: 0.12,
@@ -411,6 +475,9 @@ impl SectorMapper {
                     id: self.config.default_sector.clone(),
                     sector_id: SectorId::from_str(&self.config.default_sector)
                         .unwrap_or(SectorId::Technology),
+                    name: "Unknown Company".to_string(),
+                    symbols: vec![symbol.to_string()],
+                    description: "Company with unknown sector classification".to_string(),
                     sub_sector: None,
                     market_cap_tier: MarketCapTier::MidCap,
                     weight_in_sector: 0.01,

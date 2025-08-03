@@ -135,6 +135,7 @@ impl VendorFormatConverter {
                 low: pred as f64,
                 close: pred as f64,
                 volume: vec![0.0],
+                volume_value: 0.0,
                 indicators: HashMap::new(),
                 source: Some("vendor_neural_model".to_string()),
                 entity: base_data.entity.clone(),
@@ -149,6 +150,7 @@ impl VendorFormatConverter {
                 })),
                 // Enhanced fields for vendor model integration
                 values: vec![pred as f64], // Single prediction value
+                intervals: vec![],
                 timestamps: vec![timestamp], // Single prediction timestamp
                 metadata_map: HashMap::from([
                     ("type".to_string(), serde_json::json!("neural_forecast")),
@@ -220,7 +222,7 @@ impl VendorFormatConverter {
                 features[[sample_idx, feature_offset + 1]] = point.high.to_f32_safe()?;
                 features[[sample_idx, feature_offset + 2]] = point.low.to_f32_safe()?;
                 features[[sample_idx, feature_offset + 3]] = point.close.to_f32_safe()?;
-                features[[sample_idx, feature_offset + 4]] = point.volume.to_f32_safe()?;
+                features[[sample_idx, feature_offset + 4]] = point.volume_value.to_f32_safe()?;
 
                 // Indicator features
                 let mut indicator_idx = 5;
@@ -405,12 +407,17 @@ mod tests {
                 high: 51000.0 + i as f64 * 100.0,
                 low: 49500.0 + i as f64 * 100.0,
                 close: 50500.0 + i as f64 * 100.0,
-                volume: 1000.0 + i as f64 * 10.0,
+                volume: vec![1000.0 + i as f64 * 10.0],
+                volume_value: 1000.0 + i as f64 * 10.0,
                 indicators: indicators.clone(),
                 source: Some("test".to_string()),
                 entity: None,
                 value: None,
                 metadata: None,
+                values: vec![50500.0 + i as f64 * 100.0],
+                intervals: vec![i as u64],
+                timestamps: vec![Utc::now() + chrono::Duration::hours(i)],
+                metadata_map: HashMap::new(),
             })
             .collect()
     }

@@ -172,7 +172,7 @@ impl SectorAggregator {
                 timestamp: Utc::now(),
                 weighted_price: 0.0,
                 weighted_change: 0.0,
-                weighted_volume: vec![0.0],
+                weighted_volume: 0.0,
                 advancing_count: 0,
                 declining_count: 0,
                 unchanged_count: 0,
@@ -295,7 +295,7 @@ impl SectorAggregator {
         // Update symbol cache
         symbol_cache.insert(
             symbol.clone(),
-            (data.close, data.timestamp, data.volume),
+            (data.close, data.timestamp, data.volume_value),
         );
         
         // Get current aggregation for the sector
@@ -345,7 +345,7 @@ impl SectorAggregator {
         };
         
         aggregation.weighted_change = (aggregation.weighted_change * (1.0 - weight)) + (price_change * weight);
-        aggregation.weighted_volume = (aggregation.weighted_volume * (1.0 - weight)) + (data.volume * weight);
+        aggregation.weighted_volume = (aggregation.weighted_volume * (1.0 - weight)) + (data.volume_value * weight);
         
         // Update breadth indicators
         Self::update_breadth_indicators(aggregation, symbol_cache).await;

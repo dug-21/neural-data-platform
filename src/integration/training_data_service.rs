@@ -270,7 +270,7 @@ impl TrainingDataService {
             indicators.insert("price_change".to_string(), price_change);
 
             // Volume average
-            let volume_avg = window_data.iter().map(|d| d.volume).sum::<f64>() / window as f64;
+            let volume_avg = window_data.iter().map(|d| d.volume_value).sum::<f64>() / window as f64;
             indicators.insert("volume_avg".to_string(), volume_avg);
 
             // Volatility (simple standard deviation)
@@ -291,7 +291,11 @@ impl TrainingDataService {
             high: latest.high,
             low: latest.low,
             close: latest.close,
-            volume: latest.volume,
+            volume: latest.volume.clone(),
+            volume_value: latest.volume_value,
+            intervals: vec![1000], // Default 1-second intervals
+            timestamps: vec![latest.timestamp],
+            values: vec![latest.close],
             indicators,
             source: Some("online".to_string()),
             entity: Some(symbol.to_string()),
@@ -300,9 +304,6 @@ impl TrainingDataService {
                 "window_size": window,
                 "data_points": data.len()
             })),
-            // Required fields for vendor model integration
-            values: vec![latest.close],
-            timestamps: vec![latest.timestamp],
             metadata_map: HashMap::new(),
         })
     }
@@ -326,10 +327,10 @@ impl TrainingDataService {
                 )));
             }
 
-            if point.volume < 0.0 || point.volume.is_nan() || point.volume.is_infinite() {
+            if point.volume_value < 0.0 || point.volume_value.is_nan() || point.volume_value.is_infinite() {
                 return Err(ValidationError::InvalidValues(format!(
                     "Invalid volume at index {}: {}",
-                    i, point.volume
+                    i, point.volume_value
                 )));
             }
 
@@ -437,7 +438,7 @@ impl TrainingDataService {
             let mut feature_vec = vec![
                 current.close,
                 if config.include_volume {
-                    current.volume
+                    current.volume_value
                 } else {
                     0.0
                 },
@@ -475,9 +476,9 @@ impl TrainingDataService {
                 };
 
                 // Volume ratio
-                let avg_volume = window.iter().map(|d| d.volume).sum::<f64>() / window.len() as f64;
+                let avg_volume = window.iter().map(|d| d.volume_value).sum::<f64>() / window.len() as f64;
                 let volume_ratio = if avg_volume > 0.0 {
-                    current.volume / avg_volume
+                    current.volume_value / avg_volume
                 } else {
                     1.0
                 };
@@ -545,7 +546,7 @@ impl TrainingDataService {
                 sequence.push(vec![
                     point.close,
                     if config.include_volume {
-                        point.volume
+                        point.volume_value
                     } else {
                         0.0
                     },

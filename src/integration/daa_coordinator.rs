@@ -4,7 +4,7 @@
 //! for fully autonomous trading decisions based on neural feedback.
 
 use anyhow::{Context, Result, anyhow};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Datelike, Timelike};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
@@ -20,6 +20,120 @@ use crate::neural::{
 };
 use crate::strategies::{MarketContext, Position, Signal, TradingStrategy};
 use crate::utils::market_hours::MarketHours;
+use serde::{Deserialize, Serialize};
+
+/// Data availability and quality assessment for enhanced decision making
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataAvailability {
+    /// Data completeness score (0.0 to 1.0)
+    pub completeness: f64,
+    /// Data freshness score (0.0 to 1.0) 
+    pub freshness: f64,
+    /// Data quality score (0.0 to 1.0)
+    pub quality: f64,
+    /// Number of data sources available
+    pub source_count: usize,
+    /// Market data coverage percentage
+    pub market_coverage: f64,
+    /// Cross-validation consistency score
+    pub consistency: f64,
+    /// Latency assessment (milliseconds)
+    pub latency_ms: f64,
+    /// Timestamp of assessment
+    pub assessment_time: DateTime<Utc>,
+}
+
+impl Default for DataAvailability {
+    fn default() -> Self {
+        Self {
+            completeness: 1.0,
+            freshness: 1.0,
+            quality: 1.0,
+            source_count: 1,
+            market_coverage: 1.0,
+            consistency: 1.0,
+            latency_ms: 50.0,
+            assessment_time: Utc::now(),
+        }
+    }
+}
+
+impl DataAvailability {
+    /// Calculate overall data availability score
+    pub fn overall_score(&self) -> f64 {
+        // Weighted combination of all factors
+        let weights = [0.25, 0.20, 0.25, 0.10, 0.10, 0.10]; // completeness, freshness, quality, sources, coverage, consistency
+        let scores = [
+            self.completeness,
+            self.freshness,
+            self.quality,
+            (self.source_count as f64 / 5.0).min(1.0), // normalize source count
+            self.market_coverage,
+            self.consistency,
+        ];
+        
+        weights.iter().zip(scores.iter())
+            .map(|(w, s)| w * s)
+            .sum::<f64>()
+    }
+    
+    /// Check if data quality meets minimum threshold
+    pub fn meets_threshold(&self, threshold: f64) -> bool {
+        self.overall_score() >= threshold
+    }
+}
+
+/// Enhanced decision with data context awareness
+#[derive(Debug, Clone)]
+pub struct EnhancedDecision {
+    /// Base autonomous decision (preserves all existing logic)
+    pub base_decision: AutonomousDecision,
+    /// Data availability assessment
+    pub data_availability: DataAvailability,
+    /// Data-adjusted confidence score
+    pub data_adjusted_confidence: f64,
+    /// Market timing optimization score
+    pub timing_score: f64,
+    /// Enhanced reasoning including data context
+    pub enhanced_reasoning: Vec<String>,
+}
+
+/// Market timing analysis result
+#[derive(Debug, Clone)]
+pub struct MarketTimingResult {
+    /// Overall timing score (0.0 to 1.0)
+    pub timing_score: f64,
+    /// Current market session
+    pub market_session: MarketSession,
+    /// Volume pattern analysis
+    pub volume_pattern_score: f64,
+    /// Liquidity assessment
+    pub liquidity_score: f64,
+    /// Timing recommendation
+    pub recommendation: TimingRecommendation,
+}
+
+/// Market session classification
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MarketSession {
+    PreMarket,
+    Opening,
+    Regular,
+    Lunch,
+    Closing,
+    AfterHours,
+    Weekend,
+}
+
+/// Timing recommendation based on market conditions
+#[derive(Debug, Clone)]
+pub enum TimingRecommendation {
+    Optimal,
+    Good,
+    Acceptable,
+    Poor,
+    Avoid,
+}
 
 /// Simplified confidence breakdown for DAA decisions
 #[derive(Debug, Clone, Default)]
@@ -660,7 +774,7 @@ impl DaaCoordinator {
 
         // Simple check using our fields
         let needs_retraining = *self.needs_retraining.read().await;
-        if needs_retraining && self.check_market_timing() {
+        if needs_retraining && self.check_market_timing().await {
             info!(
                 "DAA triggering autonomous retraining due to low performance"
             );
@@ -711,6 +825,16 @@ impl DaaCoordinator {
                 reasoning: vec![format!("Retraining required with urgency {:.3}", urgency)],
                 // priority set below based on input parameter
                 estimated_duration: chrono::Duration::minutes(60),
+                // Add missing MCP compatibility fields
+                estimated_training_time_minutes: Some(60),
+                priority_numeric: Some(match priority {
+                    crate::daa::training_scheduler::JobPriority::Critical => 255,
+                    crate::daa::training_scheduler::JobPriority::High => 200,
+                    _ => 100,
+                }),
+                target_symbols: vec!["BTCUSD".to_string(), "ETHUSD".to_string()],
+                triggered_by: Some("performance_threshold".to_string()),
+                training_parameters: None,
                 performance_snapshot: crate::daa::autonomous_training::PerformanceSnapshot {
                     timestamp: Utc::now(),
                     accuracy: metrics.accuracy,
@@ -724,14 +848,26 @@ impl DaaCoordinator {
                     volatility: 0.02,
                     model_agreement: metrics.accuracy,
                     consecutive_failures: 0,
-                    trading_volume: vec![0.0],
+                    trading_volume: 0.0,
                     profit_loss: 0.0,
+                    data_type_metrics: None,
+                    event_count: 1,
+                    window_duration: chrono::Duration::minutes(5),
+                    symbol: String::new(),
+                    trading_performance: None,
+                    accuracy_metrics: None,
+                    cpu_usage: 55.0,
+                    memory_usage: 700.0,
+                    active_connections: 12,
+                    requests_per_second: 40.0,
+                    average_response_time: 28.0,
+                    cache_hit_rate: 0.88,
                 },
-                priority: match priority {
+                priority: Some(match priority {
                     crate::daa::training_scheduler::JobPriority::Critical => crate::daa::autonomous_training::TrainingPriority::Critical,
                     crate::daa::training_scheduler::JobPriority::High => crate::daa::autonomous_training::TrainingPriority::High,
                     _ => crate::daa::autonomous_training::TrainingPriority::Medium,
-                },
+                }),
                 affected_models: vec!["all".to_string()],
             };
 
@@ -999,8 +1135,20 @@ impl DaaCoordinator {
                 volatility: 0.02, // Default value
                 model_agreement: confidence,
                 consecutive_failures: if accuracy < 0.5 { 3 } else { 0 },
-                trading_volume: vec![0.0],
+                trading_volume: 0.0,
                 profit_loss: metrics.total_pnl,
+                data_type_metrics: None,
+                event_count: 50,
+                window_duration: chrono::Duration::hours(1),
+                symbol: "ADAPTIVE".to_string(),
+                trading_performance: None,
+                accuracy_metrics: None,
+                cpu_usage: 55.0,
+                memory_usage: 700.0,
+                active_connections: 12,
+                requests_per_second: 40.0,
+                average_response_time: 28.0,
+                cache_hit_rate: 0.88,
             };
             
             info!("Triggering training evaluation for model {} with accuracy {}", model_name, accuracy);
@@ -1031,8 +1179,20 @@ impl DaaCoordinator {
             volatility: 0.02, // Would be calculated from market data
             model_agreement: 0.8, // Would be calculated from ensemble
             consecutive_failures: 0,
-            trading_volume: vec![0.0],
+            trading_volume: 0.0,
             profit_loss: metrics.total_pnl,
+            data_type_metrics: None,
+            event_count: 50,
+            window_duration: chrono::Duration::hours(1),
+            symbol: "PERFORMANCE".to_string(),
+            trading_performance: None,
+            accuracy_metrics: None,
+            cpu_usage: 55.0,
+            memory_usage: 700.0,
+            active_connections: 12,
+            requests_per_second: 40.0,
+            average_response_time: 28.0,
+            cache_hit_rate: 0.88,
         })
     }
 
@@ -1058,8 +1218,20 @@ impl DaaCoordinator {
                 volatility: divergence_score * 0.1, // Approximate volatility from divergence
                 model_agreement,
                 consecutive_failures: 0,
-                trading_volume: vec![0.0],
+                trading_volume: 0.0,
                 profit_loss: metrics.total_pnl,
+                data_type_metrics: None,
+                event_count: 50,
+                window_duration: chrono::Duration::hours(1),
+                symbol: "DIVERGENCE".to_string(),
+                trading_performance: None,
+                accuracy_metrics: None,
+                cpu_usage: 55.0,
+                memory_usage: 700.0,
+                active_connections: 12,
+                requests_per_second: 40.0,
+                average_response_time: 28.0,
+                cache_hit_rate: 0.88,
             };
             
             info!("Model divergence triggering training evaluation (divergence: {})", divergence_score);
@@ -1094,6 +1266,18 @@ impl DaaCoordinator {
                 consecutive_failures: 0, // Would be tracked separately
                 trading_volume: market_context.volume_24h,
                 profit_loss: metrics.total_pnl,
+                data_type_metrics: None,
+                event_count: 50,
+                window_duration: chrono::Duration::hours(1),
+                symbol: "AGENTS".to_string(),
+                trading_performance: None,
+                accuracy_metrics: None,
+                cpu_usage: 55.0,
+                memory_usage: 700.0,
+                active_connections: 12,
+                requests_per_second: 40.0,
+                average_response_time: 28.0,
+                cache_hit_rate: 0.88,
             };
 
             // Evaluate training need
@@ -1139,8 +1323,20 @@ impl DaaCoordinator {
                     volatility: 0.02,
                     model_agreement: accuracy,
                     consecutive_failures: if accuracy < 0.5 { 3 } else { 0 },
-                    trading_volume: vec![0.0],
+                    trading_volume: 0.0,
                     profit_loss: 0.0,
+                    data_type_metrics: None,
+                    event_count: 50,
+                    window_duration: chrono::Duration::hours(1),
+                    symbol: "MONITOR".to_string(),
+                    trading_performance: None,
+                    accuracy_metrics: None,
+                    cpu_usage: 55.0,
+                    memory_usage: 700.0,
+                    active_connections: 12,
+                    requests_per_second: 40.0,
+                    average_response_time: 28.0,
+                    cache_hit_rate: 0.88,
                 };
                 let _ = training_engine.evaluate_training_need(snapshot).await;
             }
@@ -1170,7 +1366,7 @@ impl DaaCoordinator {
     }
     
     /// Simple method to check if market is open for training
-    pub fn check_market_timing(&self) -> bool {
+    pub async fn check_market_timing(&self) -> bool {
         // Use market_hours to determine if it's a good time for training
         // Implement market hours check using the market hours utilities
         use crate::utils::market_hours::{MarketHours, Exchange};
@@ -1179,13 +1375,271 @@ impl DaaCoordinator {
         let market_hours = MarketHours::new();
         let now = Utc::now();
         
-        // Check if any major exchanges are open (NYSE, NASDAQ)
-        let nyse_open = market_hours.is_market_open(Exchange::NYSE, now);
-        let nasdaq_open = market_hours.is_market_open(Exchange::NASDAQ, now);
+        // Check if any major exchanges are open (NYSE, NASDAQ)  
+        let nyse_open = market_hours.is_market_open(Exchange::NYSE, now).await;
+        let nasdaq_open = market_hours.is_market_open(Exchange::NASDAQ, now).await;
         
         // Training is allowed during market hours for real-time adaptation
         // but can also run outside market hours for batch processing
         nyse_open || nasdaq_open
+    }
+
+    /// **NEW EXTENSION METHOD**: Evaluate decision with data context while preserving Byzantine consensus
+    /// 
+    /// CRITICAL: This method preserves the existing 70% consensus threshold and 60/40 neural/strategy
+    /// voting weights by calling the existing make_decision() method first, then enhancing it
+    /// with data context evaluation WITHOUT modifying the core voting logic.
+    pub async fn evaluate_with_data_context(
+        &self,
+        market_context: &MarketContext,
+        current_position: Option<&Position>,
+        historical_data: &[TimeSeriesData],
+        data_availability: DataAvailability,
+    ) -> Result<EnhancedDecision> {
+        info!("🔍 Evaluating decision with data context - preserving Byzantine consensus");
+        
+        // CRITICAL: Use existing make_decision to preserve Byzantine consensus mechanisms
+        // This ensures the 70% consensus threshold and 60/40 neural/strategy voting weights remain intact
+        let base_decision = self.make_decision(market_context, current_position, historical_data)
+            .await
+            .context("Failed to get base DAA decision with preserved consensus")?;
+        
+        debug!("✅ Base decision preserves Byzantine consensus: confidence={:.3}, neural_consensus={} signals", 
+               base_decision.confidence, base_decision.neural_consensus.len());
+        
+        // Enhance with data context evaluation WITHOUT changing core voting logic
+        let timing_result = self.check_enhanced_market_timing(market_context, &data_availability).await?;
+        
+        // Calculate data quality impact on the already-consensus-validated decision
+        let data_adjusted_confidence = self.apply_data_quality_adjustments(
+            base_decision.confidence,
+            &data_availability,
+        ).await?;
+        
+        // Create enhanced reasoning while preserving original reasoning
+        let mut enhanced_reasoning = base_decision.reasoning.clone();
+        enhanced_reasoning.extend(self.generate_data_context_reasoning(
+            &data_availability,
+            &timing_result,
+        ).await);
+        
+        let enhanced_decision = EnhancedDecision {
+            base_decision,
+            data_availability,
+            data_adjusted_confidence,
+            timing_score: timing_result.timing_score,
+            enhanced_reasoning,
+        };
+        
+        info!("🎯 Enhanced decision completed: base_confidence={:.3} → data_adjusted={:.3}, timing_score={:.3}",
+              enhanced_decision.base_decision.confidence,
+              enhanced_decision.data_adjusted_confidence,
+              enhanced_decision.timing_score);
+        
+        Ok(enhanced_decision)
+    }
+
+    /// **NEW EXTENSION METHOD**: Enhanced market timing check with data context
+    pub async fn check_enhanced_market_timing(
+        &self,
+        market_context: &MarketContext,
+        data_availability: &DataAvailability,
+    ) -> Result<MarketTimingResult> {
+        debug!("⏰ Performing enhanced market timing analysis");
+        
+        // Determine current market session
+        let current_session = self.determine_market_session().await;
+        
+        // Calculate session-based timing score
+        let session_score = match current_session {
+            MarketSession::PreMarket => 0.7,
+            MarketSession::Opening => 0.9,
+            MarketSession::Regular => 1.0,
+            MarketSession::Lunch => 0.8,
+            MarketSession::Closing => 0.9,
+            MarketSession::AfterHours => 0.6,
+            MarketSession::Weekend => 0.5,
+        };
+        
+        // Analyze volume patterns
+        let volume_pattern_score = self.analyze_volume_patterns(market_context).await;
+        
+        // Calculate liquidity score based on data availability
+        let liquidity_score = self.calculate_liquidity_score(market_context, data_availability).await;
+        
+        // Combined timing score with data quality consideration
+        let data_quality_factor = data_availability.overall_score();
+        let timing_score = (session_score * 0.4 + volume_pattern_score * 0.3 + liquidity_score * 0.3)
+            * data_quality_factor // Adjust for data quality
+            .max(0.0)
+            .min(1.0);
+        
+        // Generate timing recommendation
+        let recommendation = match timing_score {
+            score if score >= 0.8 => TimingRecommendation::Optimal,
+            score if score >= 0.7 => TimingRecommendation::Good,
+            score if score >= 0.6 => TimingRecommendation::Acceptable,
+            score if score >= 0.4 => TimingRecommendation::Poor,
+            _ => TimingRecommendation::Avoid,
+        };
+        
+        Ok(MarketTimingResult {
+            timing_score,
+            market_session: current_session,
+            volume_pattern_score,
+            liquidity_score,
+            recommendation,
+        })
+    }
+
+    /// Apply data quality adjustments while preserving consensus mechanisms
+    async fn apply_data_quality_adjustments(
+        &self,
+        base_confidence: f64,
+        data_availability: &DataAvailability,
+    ) -> Result<f64> {
+        let quality_score = data_availability.overall_score();
+        
+        // Calculate adjustment factor based on data quality
+        let quality_adjustment = match quality_score {
+            score if score >= 0.9 => 1.0,      // Excellent quality - no adjustment
+            score if score >= 0.8 => 0.95,     // Good quality - slight reduction
+            score if score >= 0.7 => 0.85,     // Fair quality - moderate reduction
+            score if score >= 0.6 => 0.70,     // Poor quality - significant reduction
+            _ => 0.50,                          // Critical quality - major reduction
+        };
+        
+        // CRITICAL: Apply adjustments WITHOUT modifying the base consensus logic
+        // The base_confidence already incorporates the Byzantine consensus (70% threshold, 60/40 weights)
+        let quality_adjusted = base_confidence * quality_adjustment;
+        
+        // Apply maximum reduction limits to prevent excessive adjustments
+        let max_reduction = 0.3; // Maximum 30% reduction due to data quality
+        let min_allowed = base_confidence * (1.0 - max_reduction);
+        
+        let final_confidence = quality_adjusted.max(min_allowed).min(1.0);
+        
+        debug!("🔧 Data quality adjustment: {:.3} → {:.3} (quality_factor={:.3}, min_allowed={:.3})",
+               base_confidence, final_confidence, quality_adjustment, min_allowed);
+        
+        Ok(final_confidence)
+    }
+
+    /// Determine current market session
+    async fn determine_market_session(&self) -> MarketSession {
+        use chrono::Timelike;
+        let now = Utc::now();
+        let hour = now.hour();
+        let weekday = now.weekday();
+        
+        match weekday {
+            chrono::Weekday::Sat | chrono::Weekday::Sun => MarketSession::Weekend,
+            _ => match hour {
+                0..=8 => MarketSession::PreMarket,
+                9..=10 => MarketSession::Opening,
+                11..=12 => MarketSession::Regular,
+                13..=14 => MarketSession::Lunch,
+                15..=16 => MarketSession::Regular,
+                17..=18 => MarketSession::Closing,
+                _ => MarketSession::AfterHours,
+            }
+        }
+    }
+
+    /// Analyze volume patterns for timing assessment
+    async fn analyze_volume_patterns(&self, market_context: &MarketContext) -> f64 {
+        let current_volume = market_context.volume_24h;
+        
+        // Simple volume analysis - could be enhanced with historical data
+        let volume_score = if current_volume > 1_000_000.0 {
+            1.0 // High volume
+        } else if current_volume > 100_000.0 {
+            0.7 // Medium volume
+        } else if current_volume > 10_000.0 {
+            0.5 // Low volume
+        } else {
+            0.2 // Very low volume
+        };
+        
+        volume_score
+    }
+
+    /// Calculate liquidity score based on market conditions and data availability
+    async fn calculate_liquidity_score(
+        &self,
+        market_context: &MarketContext,
+        data_availability: &DataAvailability,
+    ) -> f64 {
+        // Base liquidity from spread
+        let spread = (market_context.ask - market_context.bid) / market_context.current_price;
+        let spread_score = (1.0 - spread * 100.0).max(0.0).min(1.0);
+        
+        // Volume-based liquidity
+        let volume_score = (market_context.volume_24h / 1_000_000.0)
+            .min(1.0);
+        
+        // Data availability impact on liquidity assessment
+        let data_reliability = data_availability.overall_score();
+        
+        // Combined liquidity score
+        (spread_score * 0.4 + volume_score * 0.4 + data_reliability * 0.2)
+            .max(0.0)
+            .min(1.0)
+    }
+
+    /// Generate enhanced reasoning with data context
+    async fn generate_data_context_reasoning(
+        &self,
+        data_availability: &DataAvailability,
+        timing_result: &MarketTimingResult,
+    ) -> Vec<String> {
+        let mut reasoning = Vec::new();
+        
+        reasoning.push(format!(
+            "📊 Data Quality Assessment: {:.3} (completeness={:.2}, freshness={:.2}, quality={:.2})",
+            data_availability.overall_score(),
+            data_availability.completeness,
+            data_availability.freshness,
+            data_availability.quality
+        ));
+        
+        reasoning.push(format!(
+            "⏰ Market Timing: {:.3} ({:?} session, {:?})",
+            timing_result.timing_score,
+            timing_result.market_session,
+            timing_result.recommendation
+        ));
+        
+        if data_availability.latency_ms > 100.0 {
+            reasoning.push(format!(
+                "⚠️ High data latency: {:.1}ms (may affect decision quality)",
+                data_availability.latency_ms
+            ));
+        }
+        
+        if data_availability.source_count < 2 {
+            reasoning.push("⚠️ Limited data sources - single point of failure risk".to_string());
+        }
+        
+        if timing_result.liquidity_score < 0.5 {
+            reasoning.push("📉 Low liquidity conditions detected - consider reducing position size".to_string());
+        }
+        
+        reasoning.push(format!(
+            "🔍 Enhanced Analysis: volume_pattern={:.2}, liquidity={:.2}, session_weight={:.2}",
+            timing_result.volume_pattern_score,
+            timing_result.liquidity_score,
+            match timing_result.market_session {
+                MarketSession::Regular => 1.0,
+                MarketSession::Opening | MarketSession::Closing => 0.9,
+                MarketSession::Lunch => 0.8,
+                MarketSession::PreMarket => 0.7,
+                MarketSession::AfterHours => 0.6,
+                MarketSession::Weekend => 0.5,
+            }
+        ));
+        
+        reasoning
     }
 }
 
@@ -1751,7 +2205,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -1788,7 +2242,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -1848,7 +2302,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let mut config = DaaConfig::default();
@@ -1895,7 +2349,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -1961,7 +2415,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -2032,7 +2486,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -2097,7 +2551,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -2149,7 +2603,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -2197,7 +2651,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let mut config = DaaConfig::default();
@@ -2245,7 +2699,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, mut rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -2306,7 +2760,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -2362,7 +2816,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
@@ -2408,7 +2862,7 @@ mod tests {
             max_retries: 3,
             error_threshold: 0.05,
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();

@@ -9,7 +9,6 @@ use chrono::Utc;
 use autonomous_platform::adapters::{
     daa_service::{DAAMessage, DAAServiceAdapter, TradingAction},
     integration_bridge::{BridgeBuilder, IntegrationBridge},
-    neuro_divergent::NeuroDivergentAdapter,
 };
 use autonomous_platform::data::TimeSeriesData;
 use autonomous_platform::strategies::momentum::MomentumStrategy;
@@ -39,30 +38,28 @@ async fn main() -> anyhow::Result<()> {
             high: price + 100.0,
             low: price - 100.0,
             close: price,
-            volume: 1000.0 + (i as f64 * 5.0),
+            volume: vec![1000.0 + (i as f64 * 5.0)],
+            volume_value: 1000.0 + (i as f64 * 5.0),
             indicators,
             source: Some("example".to_string()),
             entity: Some("BTC/USD".to_string()),
             value: Some(price),
             metadata: None,
+            values: vec![price],
+            intervals: vec![i as u64],
+            timestamps: vec![Utc::now() - chrono::Duration::minutes(50 - i)],
+            metadata_map: HashMap::new(),
         });
     }
 
-    // 2. Convert to neuro-divergent format
-    println!("Converting to neuro-divergent format...");
-    let df = NeuroDivergentAdapter::to_neuro_divergent_df(&data)?;
-    println!(
-        "Created DataFrame with {} rows and {} columns",
-        df.height(),
-        df.width()
-    );
-    println!("Columns: {:?}\n", df.get_column_names());
-
-    // 3. Prepare model input
-    println!("Preparing model input...");
-    let (features, targets) = NeuroDivergentAdapter::prepare_model_input(&data, 20, 5)?;
-    println!("Features shape: {:?}", features.shape());
-    println!("Targets shape: {:?}\n", targets.shape());
+    // 2. Data format conversion (commented out - neuro_divergent adapter not available)
+    println!("Data conversion step skipped - using raw time series data");
+    println!("Working with {} data points", data.len());
+    
+    // 3. Basic data preparation
+    println!("Basic data preparation...");
+    let recent_data = &data[data.len().saturating_sub(20)..]; // Use last 20 points
+    println!("Using {} recent data points for analysis", recent_data.len());
 
     // 4. Create DAA analysis request
     println!("Creating DAA analysis request...");
@@ -75,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Request type: {}\n", daa_request.message_type);
 
     // 5. Simulate DAA trading decision
-    let mock_daa_decision = neural_trader::adapters::daa_service::DAATradingDecision {
+    let mock_daa_decision = autonomous_platform::adapters::daa_service::DAATradingDecision {
         action: TradingAction::Buy,
         symbol: "BTC/USD".to_string(),
         quantity: 0.1,
@@ -86,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
             "RSI showing oversold conditions".to_string(),
             "Volume increasing".to_string(),
         ],
-        risk_assessment: neural_trader::adapters::daa_service::RiskAssessment {
+        risk_assessment: autonomous_platform::adapters::daa_service::RiskAssessment {
             risk_score: 0.3,
             max_drawdown: 0.05,
             position_size_recommendation: 0.1,
@@ -126,23 +123,16 @@ async fn main() -> anyhow::Result<()> {
         println!("    - {}", reason);
     }
 
-    // 10. Convert predictions back to time series
-    println!("\nConverting predictions to time series format...");
+    // 10. Simple prediction display (neuro_divergent conversion commented out)
+    println!("\nDisplaying mock predictions...");
     let predictions = vec![51000.0, 51200.0, 51100.0, 51300.0, 51500.0];
-    let predicted_series = NeuroDivergentAdapter::predictions_to_timeseries(
-        &predictions,
-        data.last().unwrap().timestamp,
-        "BTC/USD",
-        300, // 5 minute intervals
-    );
-
-    println!("Generated {} prediction points", predicted_series.len());
-    for (i, pred) in predicted_series.iter().take(3).enumerate() {
+    
+    println!("Generated {} prediction points", predictions.len());
+    for (i, pred) in predictions.iter().take(3).enumerate() {
         println!(
-            "  T+{}: ${:.2} at {}",
+            "  T+{}: ${:.2}",
             i + 1,
-            pred.close,
-            pred.timestamp.format("%H:%M:%S")
+            pred
         );
     }
 

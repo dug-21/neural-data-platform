@@ -264,7 +264,7 @@ fn test_edge_cases() {
         high: 60000.0,  // 20% spike
         low: 40000.0,   // 20% drop
         close: 45000.0, // 10% down
-        volume: vec![10000.0], // 10x normal volume
+        volume: 10000.0, // 10x normal volume
     };
     
     let volatility = (extreme_market.high - extreme_market.low) / extreme_market.close;

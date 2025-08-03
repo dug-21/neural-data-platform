@@ -80,6 +80,24 @@ pub struct ComponentHealth {
     pub metadata: HashMap<String, String>,
 }
 
+impl ComponentHealth {
+    pub fn new(component_type: ComponentType) -> Self {
+        Self {
+            component_type,
+            status: HealthStatus::Unknown,
+            last_check: SystemTime::now(),
+            response_time_ms: None,
+            error_message: None,
+            consecutive_failures: 0,
+            metadata: HashMap::new(),
+        }
+    }
+    
+    pub fn add_metadata(&mut self, key: String, value: String) {
+        self.metadata.insert(key, value);
+    }
+}
+
 /// System-wide health information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemHealth {

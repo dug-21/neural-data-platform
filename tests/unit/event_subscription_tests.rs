@@ -10,8 +10,8 @@ use tokio::sync::broadcast;
 use tokio::time::{timeout, Duration};
 
 // Import the actual event bus implementation
-use neural_trader::integration::event_bus::{EventBus, EventBusConfig, SubscriberInfo};
-use neural_trader::neural::monitoring::{
+use autonomous_platform::integration::event_bus::{EventBus, EventBusConfig, SubscriberInfo};
+use autonomous_platform::neural::monitoring::{
     PerformanceChannel, PerformanceEvent, PerformanceEventBuilder,
     PerformanceSource, PerformanceEventType, EventPriority, AlertType, AlertSeverity,
 };

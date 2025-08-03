@@ -38,7 +38,7 @@ fn create_test_market_data(symbol: &str, timestamp: i64, price: f64) -> MarketDa
         high: price + 10.0,
         low: price - 10.0,
         close: price,
-        volume: 1000.0 + (timestamp % 1000) as f64,
+        volume: vec![1000.0 + (timestamp % 1000) as f64,
     }
 }
 
