@@ -151,7 +151,7 @@ mod model_instantiation_tests {
         // from Any back to a Box<dyn Trait>. The actual implementation should handle this properly.
         // For now, we verify the types are compatible
         assert!(
-            std::any::TypeId::of::<EmergencyModel>() != std::any::TypeId::of::<Box<dyn BaseModel<f32>>>(),
+            std::any::TypeId::of::<EmergencyModel>() != std::any::TypeId::of::<Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>(),
             "Type IDs should be different for concrete vs trait object"
         );
     }
