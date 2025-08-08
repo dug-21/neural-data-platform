@@ -24,8 +24,8 @@ use autonomous_platform::streaming::event_bus::{EventBusIntegration, MarketEvent
 use autonomous_platform::adapters::redis::{RedisAdapter, RedisConfig};
 use autonomous_platform::adapters::DataAdapter;
 
-// Import MarketHours
-use autonomous_platform::utils::market_hours::MarketHours;
+// Import MarketHours and Exchange
+use autonomous_platform::utils::market_hours::{MarketHours, Exchange};
 
 // Import health monitoring
 use autonomous_platform::monitoring::health::{
@@ -460,12 +460,23 @@ async fn main() -> Result<()> {
     // Setup graceful shutdown handler
     let shutdown_signal = Arc::new(AtomicBool::new(false));
     let shutdown_clone = Arc::clone(&shutdown_signal);
+    let neural_shutdown = neural_predictor.clone();
 
     // Spawn shutdown signal handler with MCP server panic fix
     tokio::spawn(async move {
         match signal::ctrl_c().await {
             Ok(()) => {
                 info!("Received shutdown signal (Ctrl+C)");
+                
+                // Save checkpoints before shutdown
+                info!("💾 Saving model checkpoints before shutdown...");
+                for model_name in ["MLP", "NHITS", "DeepAR", "TCN", "Transformer"].iter() {
+                    match neural_shutdown.save_checkpoint(model_name).await {
+                        Ok(_) => info!("✅ Saved checkpoint for {}", model_name),
+                        Err(e) => error!("❌ Failed to save checkpoint for {}: {}", model_name, e),
+                    }
+                }
+                
                 shutdown_clone.store(true, Ordering::Relaxed);
             }
             Err(err) => {
@@ -487,6 +498,39 @@ async fn main() -> Result<()> {
             }
             info!("DAA Decision: {:?}", decision);
             // Here decisions would be executed via trading adapters
+        }
+    });
+    
+    // Start hourly checkpoint saving during market hours
+    let neural_checkpoint = neural_predictor.clone();
+    let market_hours_checkpoint = market_hours.clone();
+    let checkpoint_signal = shutdown_signal.clone();
+    tokio::spawn(async move {
+        info!("Starting hourly checkpoint saving during market hours...");
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // 1 hour
+        
+        loop {
+            interval.tick().await;
+            if checkpoint_signal.load(Ordering::Relaxed) {
+                break;
+            }
+            
+            // Check if any major exchange is open
+            let now = chrono::Utc::now();
+            let nyse_open = market_hours_checkpoint.is_market_open(Exchange::NYSE, now).await;
+            let nasdaq_open = market_hours_checkpoint.is_market_open(Exchange::NASDAQ, now).await;
+            
+            if nyse_open || nasdaq_open {
+                info!("⏰ Performing hourly checkpoint save during market hours");
+                for model_name in ["MLP", "NHITS", "DeepAR", "TCN", "Transformer"].iter() {
+                    match neural_checkpoint.save_checkpoint(model_name).await {
+                        Ok(_) => info!("✅ Saved hourly checkpoint for {}", model_name),
+                        Err(e) => warn!("⚠️ Failed to save hourly checkpoint for {}: {}", model_name, e),
+                    }
+                }
+            } else {
+                debug!("Markets closed - skipping hourly checkpoint");
+            }
         }
     });
 

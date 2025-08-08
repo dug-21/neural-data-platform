@@ -243,11 +243,21 @@ impl OnlineLearningManager {
             }
         }
 
-        // Update status
-        {
+        // Update status and check if we should save checkpoints
+        let should_save = {
             let mut status = self.status.write().await;
             status.total_samples_processed += 1;
             status.last_update = Utc::now();
+            
+            // Save checkpoint every 100 samples processed
+            status.total_samples_processed % 100 == 0
+        };
+        
+        if should_save {
+            info!("💾 Auto-saving checkpoints after processing 100 samples");
+            if let Err(e) = self.save_checkpoints().await {
+                warn!("Failed to save checkpoints: {}", e);
+            }
         }
 
         debug!("📊 Processed sample for online learning: symbol={}, price={:.2}", 
