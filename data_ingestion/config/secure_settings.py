@@ -92,6 +92,16 @@ class SecureSettings(BaseSettings):
     batch_size: int = Field(1000, alias="BATCH_SIZE")
     processing_interval_seconds: int = Field(60, alias="PROCESSING_INTERVAL_SECONDS")
     
+    # Phase 2: Channel migration settings (INTERFACE_CONTRACT compliance)
+    enable_legacy_channel: bool = Field(True, alias="ENABLE_LEGACY_CHANNEL")
+    redis_channel_prefix: str = Field("market", alias="REDIS_CHANNEL_PREFIX")
+    redis_dual_publish: bool = Field(True, alias="REDIS_DUAL_PUBLISH")
+    
+    # Redis connection and performance settings
+    redis_max_connections: int = Field(50, alias="REDIS_MAX_CONNECTIONS")
+    redis_publish_timeout: int = Field(5, alias="REDIS_PUBLISH_TIMEOUT")
+    redis_decode_responses: bool = Field(True, alias="REDIS_DECODE_RESPONSES")
+    
     # Define which fields are secrets
     _secret_fields = {
         'iex_cloud_api_key', 'alpha_vantage_api_key', 'polygon_api_key',

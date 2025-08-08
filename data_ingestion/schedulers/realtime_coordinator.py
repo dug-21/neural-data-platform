@@ -10,6 +10,8 @@ from config import get_settings
 from utils.logging import get_logger
 from utils.metrics import metrics
 from utils.health_tracker import health_tracker
+from utils.channel_validator import ChannelValidator, CircuitBreaker, CircuitBreakerOpenError
+from utils.enhanced_retry import CircuitBreakerRetryIntegration, RetryConfig, RedisConnectionError, RedisTimeoutError
 
 
 logger = get_logger(__name__)
@@ -37,6 +39,22 @@ class RealtimeCoordinator:
         # Callbacks
         self.data_callbacks: List[Callable] = []
         self.error_callbacks: List[Callable] = []
+        
+        # Channel management
+        self.channel_validator = ChannelValidator()
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=self.settings.redis_max_connections // 10,  # Dynamic threshold
+            recovery_timeout=30
+        )
+        
+        # Enhanced retry integration
+        retry_config = RetryConfig(
+            max_attempts=3,
+            base_delay_ms=100,
+            max_delay_ms=5000,
+            backoff_multiplier=2.0
+        )
+        self.retry_integration = CircuitBreakerRetryIntegration(self.circuit_breaker, retry_config)
         
         # Control
         self._running = False
@@ -241,12 +259,32 @@ class RealtimeCoordinator:
                 # Keep time field for backward compatibility
             
             # Publish to Redis channels
-            # Symbol-specific channel
+            # Symbol-specific channel (existing - keeping unchanged)
             channel = f"market_data:{cleaned['symbol']}"
             await self.redis.publish(channel, json.dumps(cleaned, default=str))
             
-            # Unified market updates channel - use market_data with timestamp
-            await self.redis.publish("market:updates", json.dumps(market_data, default=str))
+            # Phase 2A: Dual publishing implementation per INTERFACE_CONTRACT
+            symbol = cleaned['symbol'].upper()  # Ensure uppercase per contract
+            
+            # 1. PRIMARY: Per-symbol channel (NEW - INTERFACE_CONTRACT format)
+            symbol_channel = f"market:{symbol}"
+            if self.channel_validator.validate_channel_name(symbol_channel):
+                try:
+                    await self._publish_with_retry(symbol_channel, market_data, provider_name)
+                except Exception as e:
+                    self.logger.error(f"Failed to publish to {symbol_channel} after all retries: {e}")
+                    metrics.redis_publish_errors.labels(channel=symbol_channel, provider=provider_name).inc()
+            else:
+                self.logger.warning(f"Invalid channel format: {symbol_channel} for symbol: {symbol}")
+                metrics.channel_validation_errors.labels(provider=provider_name).inc()
+            
+            # 2. SECONDARY: Legacy unified channel (BACKWARD COMPATIBILITY)
+            if self.settings.enable_legacy_channel:
+                try:
+                    await self._publish_with_retry("market:updates", market_data, provider_name)
+                except Exception as e:
+                    self.logger.error(f"Failed to publish to market:updates after all retries: {e}")
+                    metrics.redis_publish_errors.labels(channel="market:updates", provider=provider_name).inc()
             
             # Update metrics
             metrics.data_points_processed.labels(
@@ -304,6 +342,49 @@ class RealtimeCoordinator:
             except Exception as e:
                 self.logger.error(f"Monitor error: {e}")
                 await asyncio.sleep(30)
+    
+    async def _publish_with_retry(self, channel: str, data: Dict[str, Any], provider: str):
+        """
+        Publish message with enhanced retry logic and circuit breaker protection.
+        
+        Args:
+            channel: Redis channel name
+            data: Message data to publish
+            provider: Provider name for metrics
+        """
+        async def _do_publish():
+            # Convert data to JSON with proper error handling
+            try:
+                message = json.dumps(data, default=str)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"Failed to serialize data: {e}")
+            
+            # Attempt Redis publish
+            try:
+                result = await self.redis.publish(channel, message)
+                return result
+            except Exception as e:
+                # Classify the error for retry logic
+                if "connection" in str(e).lower() or "timeout" in str(e).lower():
+                    raise RedisConnectionError(f"Redis connection/timeout error: {e}")
+                else:
+                    # Other errors are also retryable for now
+                    raise RedisConnectionError(f"Redis error: {e}")
+        
+        try:
+            result = await self.retry_integration.execute_with_retry_and_circuit_breaker(
+                _do_publish, channel
+            )
+            
+            # Success metrics
+            metrics.redis_publishes.labels(channel=channel, provider=provider).inc()
+            return result
+            
+        except Exception as e:
+            # Final failure after all retries
+            self.logger.error(f"Publishing to {channel} failed after all retry attempts: {e}")
+            metrics.redis_publish_errors.labels(channel=channel, provider=provider).inc()
+            raise
     
     def add_data_callback(self, callback: Callable):
         """Add callback for processed data."""
