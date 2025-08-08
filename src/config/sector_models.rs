@@ -5,6 +5,15 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+/// Individual sector model definition for factory creation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectorModelDefinition {
+    pub model_type: String,
+    pub sector: String,
+    pub parameters: Option<HashMap<String, Value>>,
+}
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -513,7 +522,7 @@ impl SectorModelsConfig {
     }
     
     /// Get all models for a sector
-    pub fn models_for_sector<'a>(&'a self, sector_name: &'a str) -> impl Iterator<Item = (&String, &ModelConfig)> + 'a {
+    pub fn models_for_sector<'a>(&'a self, sector_name: &'a str) -> impl Iterator<Item = (&String, &ModelConfig)> + '_ {
         self.models.iter().filter(move |(_, model)| model.sector == sector_name)
     }
     

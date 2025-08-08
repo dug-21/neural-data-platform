@@ -60,6 +60,7 @@ anyhow = "1.0"
 # Logging and metrics
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+log = "0.4"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 prometheus = "0.13"
@@ -70,6 +71,7 @@ sha2 = "0.10"
 
 # System monitoring
 sysinfo = "0.30"
+num_cpus = "1.16"
 
 # Data processing
 chrono = { version = "0.4", features = ["serde"] }

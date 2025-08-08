@@ -126,12 +126,20 @@ pub struct EventSerializer {
     compression_enabled: bool,
 }
 
+// Explicit Send + Sync implementations for EventSerializer
+unsafe impl Send for EventSerializer {}
+unsafe impl Sync for EventSerializer {}
+
 /// Event router for filtering and routing events
 #[derive(Debug, Clone)]
 pub struct EventRouter {
     filter_rules: HashMap<String, String>,
     routing_rules: HashMap<String, Vec<String>>,
 }
+
+// Explicit Send + Sync implementations for EventRouter
+unsafe impl Send for EventRouter {}
+unsafe impl Sync for EventRouter {}
 
 /// Batch processing configuration
 #[derive(Debug, Clone)]

@@ -5,8 +5,10 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::signal;
-use tracing::{error, info, warn, Level};
+use tokio::time::Duration as TokioDuration;
+use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber;
 
 // Import existing DAA components
@@ -346,8 +348,108 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         info!("Starting Redis market data streaming...");
 
-        // Subscribe to market data channel
-        match redis_clone.subscribe_market_data("market:updates").await {
+        // PHASE 2: Multi-channel subscription with fair processing
+        // Check if multi-channel mode is enabled via environment variable
+        let enable_multi_channel = std::env::var("ENABLE_MULTI_CHANNEL")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase() == "true";
+
+        if enable_multi_channel {
+            info!("Multi-channel mode enabled - starting symbol-specific subscriptions");
+            
+            // Multi-channel subscription for fair processing
+            let symbols = vec!["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"];
+            let mut subscription_handles = Vec::new();
+            
+            for symbol in symbols {
+                let channel = format!("market:{}", symbol);
+                let redis_for_symbol = redis_clone.clone();
+                let event_bus_for_symbol = event_bus_clone.clone();
+                let signal_for_symbol = stream_signal.clone();
+                let symbol_name = symbol.to_string();
+                
+                info!("Starting subscription for symbol {} on channel {}", symbol, channel);
+                
+                let handle = tokio::spawn(async move {
+                    match redis_for_symbol.subscribe_market_data(&channel).await {
+                        Ok(mut stream) => {
+                            info!("Successfully subscribed to channel {}", channel);
+                            
+                            while let Some(result) = stream.next().await {
+                                if signal_for_symbol.load(Ordering::Relaxed) {
+                                    break;
+                                }
+                                
+                                match result {
+                                    Ok(market_data) => {
+                                        // Fair processing check - simple version
+                                        // In full implementation, this would use FairProcessingScheduler
+                                        
+                                        // Convert to EventBus format
+                                        let market_event = MarketEvent {
+                                            symbol: symbol_name.clone(),
+                                            timestamp: chrono::Utc::now(),
+                                            event_type: "market_update".to_string(),
+                                            price: market_data.close,
+                                            volume: market_data.volume,
+                                            bid: market_data.low,
+                                            ask: market_data.high,
+                                            spread: market_data.high - market_data.low,
+                                            order_book_depth: None,
+                                            sequence_number: market_data.timestamp as u64,
+                                            source: format!("redis:{}", channel),
+                                            quality_score: 0.95,
+                                            metadata: Some(serde_json::json!({
+                                                "open": market_data.open,
+                                                "high": market_data.high,
+                                                "low": market_data.low,
+                                                "close": market_data.close,
+                                                "channel": channel,
+                                                "symbol": symbol_name
+                                            })),
+                                        };
+                                        
+                                        // Publish to event bus
+                                        if let Err(e) = event_bus_for_symbol.publish_market_event(market_event).await {
+                                            error!("Failed to publish market event for {}: {}", symbol_name, e);
+                                        } else {
+                                            debug!("Published market event for {} from channel {}", symbol_name, channel);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("Error receiving data from channel {}: {}", channel, e);
+                                        // In production, implement reconnection logic here
+                                    }
+                                }
+                            }
+                            
+                            info!("Subscription for {} stopped", symbol_name);
+                        }
+                        Err(e) => {
+                            error!("Failed to subscribe to channel {}: {}", channel, e);
+                        }
+                    }
+                });
+                
+                subscription_handles.push(handle);
+            }
+            
+            // Keep all subscriptions alive until shutdown
+            while !stream_signal.load(Ordering::Relaxed) {
+                tokio::time::sleep(TokioDuration::from_secs(1)).await;
+            }
+            
+            // Shutdown all subscriptions
+            info!("Shutting down all symbol subscriptions");
+            for handle in subscription_handles {
+                handle.abort();
+            }
+            
+        } else {
+            info!("Legacy single-channel mode - subscribing to market:updates");
+            
+            // Legacy single-channel subscription
+            match redis_clone.subscribe_market_data("market:updates").await {
             Ok(mut stream) => {
                 info!("Subscribed to Redis market data channel");
 
@@ -370,7 +472,7 @@ async fn main() -> Result<()> {
                                 spread: market_data.high - market_data.low,
                                 order_book_depth: None,
                                 sequence_number: market_data.timestamp as u64,
-                                source: "redis".to_string(),
+                                source: "redis_legacy".to_string(),
                                 quality_score: 0.95,
                                 metadata: Some(serde_json::json!({
                                     "open": market_data.open,
@@ -381,8 +483,7 @@ async fn main() -> Result<()> {
                             };
 
                             // Publish to event bus
-                            if let Err(e) = event_bus_clone.publish_market_event(market_event).await
-                            {
+                            if let Err(e) = event_bus_clone.publish_market_event(market_event).await {
                                 error!("Failed to publish market event: {}", e);
                             }
                         }
@@ -394,6 +495,7 @@ async fn main() -> Result<()> {
             }
             Err(e) => {
                 error!("Failed to subscribe to Redis market data: {}", e);
+            }
             }
         }
 
@@ -684,7 +786,7 @@ async fn main() -> Result<()> {
             }
 
             // Sleep for a short interval before next iteration
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            tokio::time::sleep(TokioDuration::from_millis(1000)).await;
         }
     });
 
@@ -700,7 +802,7 @@ async fn main() -> Result<()> {
         }
 
         // Sleep briefly to prevent busy waiting
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        tokio::time::sleep(TokioDuration::from_millis(100)).await;
     }
 
     // Gracefully shutdown health monitoring

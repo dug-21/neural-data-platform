@@ -90,6 +90,8 @@ pub mod strategies;
 pub mod streaming;
 pub mod types; // Shared type definitions
 pub mod utils;
+pub mod multi_channel;
+pub mod helpers;
 
 // Re-export commonly used types
 pub use anyhow::Result;

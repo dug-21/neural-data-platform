@@ -21,7 +21,7 @@ pub use neural::{NeuralConfig, TrainingConfig, EnsembleConfig};
 pub use database::{DatabaseConfig, RedisConfig, BackupConfig};
 pub use monitoring::{MonitoringConfig, ObservabilityConfig, LoggingConfig, AlertsConfig, PerformanceConfig};
 pub use security::{SecurityConfig, CircuitBreakerConfig, GracefulShutdownConfig, AuthConfig, EncryptionConfig};
-pub use sector_models::{SectorModelsConfig, SectorConfig, ModelConfig, PerformanceThresholds, DAACoordinationConfig};
+pub use sector_models::{SectorModelsConfig, SectorConfig, ModelConfig, PerformanceThresholds, DAACoordinationConfig, SectorModelDefinition};
 
 // Re-export types defined in this module
 // Structs are already defined as pub in this module, no need for use statement
