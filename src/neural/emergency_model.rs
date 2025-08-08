@@ -1,30 +1,13 @@
 use anyhow::Result;
 use std::fmt::Debug;
+use std::sync::Arc;
 
-/// Architecture information for model introspection
-#[derive(Debug, Clone)]
-pub struct ModelArchitectureInfo {
-    pub input_size: usize,
-    pub output_size: usize,
-    pub hidden_layers: Vec<usize>,
-    pub activation_function: String,
-    pub parameter_count: Option<usize>,
-}
+use crate::neural::typed_storage::ModelArchitectureInfo;
 
-impl Default for ModelArchitectureInfo {
-    fn default() -> Self {
-        Self {
-            input_size: 60,
-            output_size: 1,
-            hidden_layers: vec![128, 64, 32],
-            activation_function: "ReLU".to_string(),
-            parameter_count: None,
-        }
-    }
-}
 
 /// Emergency model implementation for Phase 1 stabilization
 /// Uses Simple Moving Average (SMA) for basic predictions
+#[derive(Debug, Clone)]
 pub struct EmergencyModel {
     model_type: String,
     sector: String,
@@ -42,7 +25,7 @@ impl EmergencyModel {
 }
 
 /// Minimal BaseModel trait implementation for emergency stabilization
-pub trait BaseModel<T>: Send + Sync + std::fmt::Debug {
+pub trait BaseModel<T, State = (), Config = ()>: Send + Sync + std::fmt::Debug {
     type State;
     type Config;
     
@@ -98,11 +81,7 @@ impl BaseModel<f32> for EmergencyModel {
     }
 }
 
-impl Debug for EmergencyModel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EmergencyModel({}, {})", self.model_type, self.sector)
-    }
-}
+// Debug trait is now derived above
 
 /// Factory for creating emergency models
 pub struct EmergencyModelFactory;

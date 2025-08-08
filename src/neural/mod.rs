@@ -29,6 +29,8 @@ pub mod sector_aggregator;
 pub mod model_factory;
 pub mod emergency_model;
 pub mod fallback_system;
+pub mod typed_storage;
+pub mod migration_layer;
 
 // Phase 3: Real-time training extensions
 pub mod realtime_training;
