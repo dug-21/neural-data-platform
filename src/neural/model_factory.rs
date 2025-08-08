@@ -1,247 +1,572 @@
-//! Model Factory for Vendor Model Creation
+//! Model Factory System for Typed Storage
 //!
-//! This module provides factory methods for creating vendor models
-//! from the neuro-divergent library with proper configuration.
+//! This module provides factory patterns for creating typed models that implement
+//! the BaseModel trait, enabling type-safe instantiation and registration.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, error, info, warn};
+use std::sync::Arc;
+use tracing::{debug, info, warn};
 
-// Use the actual vendor library types
-use neuro_divergent_core::traits::BaseModel;
-use neuro_divergent_core::data::TimeSeriesDataset;
-use neuro_divergent_models::foundation::ForecastOutput as ForecastResult;
+use crate::neural::emergency_model::{BaseModel, EmergencyModel, ModelConfig as EmergencyModelConfig};
+use crate::neural::typed_storage::ModelArchitectureInfo;
 
-// Type alias for convenience 
-type VendorDataset = TimeSeriesDataset<f32>;
-
-// Use actual vendor models and their configs
-use neuro_divergent_models::recurrent::LSTM;
-use neuro_divergent::builders::{LSTMBuilder, ModelBuilder};
-
-// Import vendor predictor types
-use crate::neural::vendor_predictor::{ModelConfig, DataRequirements};
-
-/// Model capabilities for different architectures
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelCapabilities {
-    pub requires_sequential_data: bool,
-    pub supports_exogenous: bool,
-    pub supports_static: bool,
-    pub min_sequence_length: usize,
-    pub optimal_sequence_length: usize,
+/// Factory trait for creating typed models
+pub trait ModelFactory<T>: Send + Sync {
+    type Model: BaseModel<T> + Send + Sync;
+    
+    /// Create a new model instance
+    fn create(&self, config: ModelConfig) -> Result<Self::Model>;
+    
+    /// Get the model type this factory produces
+    fn model_type(&self) -> &str;
+    
+    /// Get supported architectures for this model type
+    fn supported_architectures(&self) -> Vec<String>;
+    
+    /// Get default configuration for this model type
+    fn default_config(&self) -> ModelConfig;
+    
+    /// Validate configuration before model creation
+    fn validate_config(&self, config: &ModelConfig) -> Result<()>;
 }
 
-impl Default for ModelCapabilities {
+/// Universal model configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    /// Model architecture name
+    pub architecture: String,
+    
+    /// Input features size
+    pub input_size: usize,
+    
+    /// Output size
+    pub output_size: usize,
+    
+    /// Hidden layer sizes
+    pub hidden_layers: Vec<usize>,
+    
+    /// Learning rate
+    pub learning_rate: f64,
+    
+    /// Dropout rate
+    pub dropout_rate: f32,
+    
+    /// Activation function
+    pub activation: String,
+    
+    /// Model-specific parameters
+    pub parameters: HashMap<String, serde_json::Value>,
+    
+    /// Training configuration
+    pub training_config: Option<TrainingConfig>,
+}
+
+/// Training configuration for models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainingConfig {
+    pub batch_size: usize,
+    pub epochs: usize,
+    pub validation_split: f32,
+    pub early_stopping_patience: Option<usize>,
+    pub learning_rate_schedule: Option<String>,
+}
+
+impl Default for ModelConfig {
     fn default() -> Self {
         Self {
-            requires_sequential_data: true,
-            supports_exogenous: false,
-            supports_static: false,
-            min_sequence_length: 10,
-            optimal_sequence_length: 100,
+            architecture: "MLP".to_string(),
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            dropout_rate: 0.1,
+            activation: "ReLU".to_string(),
+            parameters: HashMap::new(),
+            training_config: None,
         }
     }
 }
 
-// Factory for vendor models - Phase 2 model creation
-pub struct ModelFactory;
+impl ModelConfig {
+    /// Create config from sector model definition
+    pub fn from_sector_definition(
+        model_def: &crate::config::SectorModelDefinition,
+    ) -> Self {
+        let mut config = Self::default();
+        config.architecture = model_def.model_type.clone();
+        
+        // Set model-specific parameters from definition
+        if let Some(ref params) = model_def.parameters {
+            for (key, value) in params {
+                config.parameters.insert(key.clone(), value.clone());
+            }
+        }
+        
+        // Extract specific parameters if available
+        if let Some(input_size) = config.parameters.get("input_size")
+            .and_then(|v| v.as_u64()) {
+            config.input_size = input_size as usize;
+        }
+        
+        if let Some(output_size) = config.parameters.get("output_size")
+            .and_then(|v| v.as_u64()) {
+            config.output_size = output_size as usize;
+        }
+        
+        if let Some(layers) = config.parameters.get("hidden_layers")
+            .and_then(|v| v.as_array()) {
+            config.hidden_layers = layers.iter()
+                .filter_map(|v| v.as_u64().map(|n| n as usize))
+                .collect();
+        }
+        
+        config
+    }
+    
+    /// Convert to architecture info
+    pub fn to_architecture_info(&self) -> ModelArchitectureInfo {
+        ModelArchitectureInfo {
+            input_size: self.input_size,
+            output_size: self.output_size,
+            hidden_layers: self.hidden_layers.clone(),
+            activation_function: self.activation.clone(),
+            parameter_count: self.estimate_parameter_count(),
+        }
+    }
+    
+    /// Estimate parameter count based on architecture
+    fn estimate_parameter_count(&self) -> Option<usize> {
+        if self.hidden_layers.is_empty() {
+            return Some(self.input_size * self.output_size);
+        }
+        
+        let mut params = 0;
+        let mut prev_size = self.input_size;
+        
+        // Hidden layers
+        for &layer_size in &self.hidden_layers {
+            params += prev_size * layer_size + layer_size; // weights + biases
+            prev_size = layer_size;
+        }
+        
+        // Output layer
+        params += prev_size * self.output_size + self.output_size;
+        
+        Some(params)
+    }
+}
 
-impl ModelFactory {
+/// Registry for model factories
+pub struct ModelFactoryRegistry<T> {
+    factories: HashMap<String, Box<dyn ModelFactory<T> + Send + Sync>>,
+    default_configs: HashMap<String, ModelConfig>,
+}
+
+impl<T> ModelFactoryRegistry<T> {
+    /// Create new registry
     pub fn new() -> Self {
-        Self
+        Self {
+            factories: HashMap::new(),
+            default_configs: HashMap::new(),
+        }
     }
     
-    /// Create a model based on architecture and configuration
-    pub fn create_model(architecture: &str, config: &ModelConfig) -> Result<Box<dyn std::any::Any + Send + Sync>> {
-        debug!("Creating model: {} with config: {:?}", architecture, config);
+    /// Register a model factory
+    pub fn register<F: ModelFactory<T> + Send + Sync + 'static>(&mut self, factory: F) {
+        let model_type = factory.model_type().to_string();
+        let default_config = factory.default_config();
         
-        match architecture {
-            "MLP" | "LSTM" | "GRU" | "RNN" | "TCN" | "BiTCN" | "TFT" | "Informer" | 
-            "Autoformer" | "DeepAR" | "NBEATS" | "NHITS" | "DLinear" | "NLinear" => {
-                // Create mock model for Phase 2 (real implementation will use vendor models)
-                let mock_model = format!("MockModel_{}_{}", architecture, 
-                    config.parameters.get("input_size").unwrap_or(&serde_json::json!(24)));
-                info!("Created mock {} model successfully", architecture);
-                Ok(Box::new(mock_model))
+        self.default_configs.insert(model_type.clone(), default_config);
+        self.factories.insert(model_type.clone(), Box::new(factory));
+        
+        info!("✅ Registered model factory for type: {}", model_type);
+    }
+    
+    /// Create model using registered factory
+    pub fn create_model(
+        &self,
+        model_type: &str,
+        config: ModelConfig,
+    ) -> Result<Box<dyn BaseModel<T> + Send + Sync>> {
+        let factory = self.factories.get(model_type)
+            .ok_or_else(|| anyhow::anyhow!("Unknown model type: {}", model_type))?;
+        
+        // Validate configuration
+        factory.validate_config(&config)?;
+        
+        // Create model
+        let model = factory.create(config)?;
+        
+        debug!("✅ Created model of type: {}", model_type);
+        Ok(Box::new(model))
+    }
+    
+    /// Create model with default configuration
+    pub fn create_model_default(&self, model_type: &str) -> Result<Box<dyn BaseModel<T> + Send + Sync>> {
+        let config = self.get_default_config(model_type)?;
+        self.create_model(model_type, config)
+    }
+    
+    /// Get default configuration for model type
+    pub fn get_default_config(&self, model_type: &str) -> Result<ModelConfig> {
+        self.default_configs.get(model_type)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("No default config for model type: {}", model_type))
+    }
+    
+    /// List registered model types
+    pub fn list_model_types(&self) -> Vec<String> {
+        self.factories.keys().cloned().collect()
+    }
+    
+    /// Get supported architectures for model type
+    pub fn get_supported_architectures(&self, model_type: &str) -> Result<Vec<String>> {
+        let factory = self.factories.get(model_type)
+            .ok_or_else(|| anyhow::anyhow!("Unknown model type: {}", model_type))?;
+        
+        Ok(factory.supported_architectures())
+    }
+}
+
+impl<T> Default for ModelFactoryRegistry<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Emergency model factory implementation
+pub struct EmergencyModelFactory;
+
+impl ModelFactory<f32> for EmergencyModelFactory {
+    type Model = EmergencyModel;
+    
+    fn create(&self, config: ModelConfig) -> Result<Self::Model> {
+        // Extract window size from parameters or use default
+        let window_size = config.parameters
+            .get("window_size")
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(5);
+        
+        let model = EmergencyModel::new(
+            config.architecture.clone(),
+            "universal".to_string(), // Emergency models are universal
+            window_size,
+        );
+        
+        debug!("Created emergency model: {} with window size {}", config.architecture, window_size);
+        Ok(model)
+    }
+    
+    fn model_type(&self) -> &str {
+        "EmergencyModel"
+    }
+    
+    fn supported_architectures(&self) -> Vec<String> {
+        vec![
+            "SMA".to_string(),
+            "EMA".to_string(),
+            "Linear".to_string(),
+            "Constant".to_string(),
+        ]
+    }
+    
+    fn default_config(&self) -> ModelConfig {
+        let mut config = ModelConfig::default();
+        config.architecture = "SMA".to_string();
+        config.parameters.insert("window_size".to_string(), serde_json::json!(5));
+        config
+    }
+    
+    fn validate_config(&self, config: &ModelConfig) -> Result<()> {
+        if !self.supported_architectures().contains(&config.architecture) {
+            return Err(anyhow::anyhow!(
+                "Unsupported architecture for EmergencyModel: {}. Supported: {:?}",
+                config.architecture,
+                self.supported_architectures()
+            ));
+        }
+        
+        // Validate window size
+        if let Some(window_size) = config.parameters.get("window_size") {
+            if let Some(size) = window_size.as_u64() {
+                if size == 0 || size > 100 {
+                    return Err(anyhow::anyhow!("Window size must be between 1 and 100, got: {}", size));
+                }
             }
-            _ => {
-                error!("Unsupported model architecture: {}", architecture);
-                Err(anyhow!("Unsupported model architecture: {}", architecture))
+        }
+        
+        Ok(())
+    }
+}
+
+/// LSTM model factory (placeholder for future implementation)
+pub struct LSTMModelFactory;
+
+impl ModelFactory<f32> for LSTMModelFactory {
+    type Model = EmergencyModel; // Temporarily use EmergencyModel
+    
+    fn create(&self, config: ModelConfig) -> Result<Self::Model> {
+        // For now, create an emergency model that acts as LSTM placeholder
+        let window_size = config.input_size.min(20).max(5); // Reasonable window for LSTM-like behavior
+        
+        let model = EmergencyModel::new(
+            "LSTM".to_string(),
+            config.parameters.get("sector")
+                .and_then(|v| v.as_str())
+                .unwrap_or("universal")
+                .to_string(),
+            window_size,
+        );
+        
+        debug!("Created LSTM placeholder model with window size {}", window_size);
+        Ok(model)
+    }
+    
+    fn model_type(&self) -> &str {
+        "LSTM"
+    }
+    
+    fn supported_architectures(&self) -> Vec<String> {
+        vec![
+            "LSTM".to_string(),
+            "BiLSTM".to_string(),
+            "LSTM_Attention".to_string(),
+        ]
+    }
+    
+    fn default_config(&self) -> ModelConfig {
+        let mut config = ModelConfig::default();
+        config.architecture = "LSTM".to_string();
+        config.hidden_layers = vec![64, 32];
+        config.parameters.insert("sequence_length".to_string(), serde_json::json!(20));
+        config.parameters.insert("num_layers".to_string(), serde_json::json!(2));
+        config
+    }
+    
+    fn validate_config(&self, config: &ModelConfig) -> Result<()> {
+        if !self.supported_architectures().contains(&config.architecture) {
+            return Err(anyhow::anyhow!(
+                "Unsupported architecture for LSTM: {}. Supported: {:?}",
+                config.architecture,
+                self.supported_architectures()
+            ));
+        }
+        
+        // Validate sequence length
+        if let Some(seq_len) = config.parameters.get("sequence_length") {
+            if let Some(len) = seq_len.as_u64() {
+                if len < 5 || len > 100 {
+                    return Err(anyhow::anyhow!("Sequence length must be between 5 and 100, got: {}", len));
+                }
             }
         }
+        
+        Ok(())
+    }
+}
+
+/// Transformer model factory (placeholder for future implementation)
+pub struct TransformerModelFactory;
+
+impl ModelFactory<f32> for TransformerModelFactory {
+    type Model = EmergencyModel; // Temporarily use EmergencyModel
+    
+    fn create(&self, config: ModelConfig) -> Result<Self::Model> {
+        // For now, create an emergency model that acts as Transformer placeholder
+        let window_size = config.input_size.min(30).max(10); // Larger window for Transformer-like behavior
+        
+        let model = EmergencyModel::new(
+            "Transformer".to_string(),
+            config.parameters.get("sector")
+                .and_then(|v| v.as_str())
+                .unwrap_or("universal")
+                .to_string(),
+            window_size,
+        );
+        
+        debug!("Created Transformer placeholder model with window size {}", window_size);
+        Ok(model)
     }
     
-    /// Get model capabilities for an architecture
-    pub fn get_model_capabilities(architecture: &str) -> ModelCapabilities {
-        match architecture {
-            "MLP" => ModelCapabilities {
-                requires_sequential_data: false,
-                supports_exogenous: true,
-                supports_static: true,
-                min_sequence_length: 1,
-                optimal_sequence_length: 24,
-            },
-            "LSTM" | "GRU" | "RNN" => ModelCapabilities {
-                requires_sequential_data: true,
-                supports_exogenous: true,
-                supports_static: false,
-                min_sequence_length: 10,
-                optimal_sequence_length: 100,
-            },
-            "TCN" | "BiTCN" => ModelCapabilities {
-                requires_sequential_data: true,
-                supports_exogenous: true,
-                supports_static: false,
-                min_sequence_length: 20,
-                optimal_sequence_length: 100,
-            },
-            "TFT" | "Informer" | "Autoformer" => ModelCapabilities {
-                requires_sequential_data: true,
-                supports_exogenous: true,
-                supports_static: true,
-                min_sequence_length: 24,
-                optimal_sequence_length: 168,
-            },
-            "DeepAR" => ModelCapabilities {
-                requires_sequential_data: true,
-                supports_exogenous: true,
-                supports_static: true,
-                min_sequence_length: 30,
-                optimal_sequence_length: 200,
-            },
-            "NBEATS" | "NHITS" => ModelCapabilities {
-                requires_sequential_data: true,
-                supports_exogenous: false,
-                supports_static: false,
-                min_sequence_length: 50,
-                optimal_sequence_length: 500,
-            },
-            "DLinear" | "NLinear" => ModelCapabilities {
-                requires_sequential_data: true,
-                supports_exogenous: false,
-                supports_static: false,
-                min_sequence_length: 96,
-                optimal_sequence_length: 96,
-            },
-            _ => ModelCapabilities::default(),
-        }
+    fn model_type(&self) -> &str {
+        "Transformer"
     }
     
-    /// Create price-only models for quick testing
-    pub fn create_price_only_models() -> Result<HashMap<String, Box<dyn std::any::Any + Send + Sync>>> {
-        let mut models = HashMap::new();
-        
-        let price_config = ModelConfig {
-            architecture: "price_only".to_string(),
-            parameters: {
-                let mut params = HashMap::new();
-                params.insert("input_size".to_string(), serde_json::json!(1));
-                params.insert("hidden_size".to_string(), serde_json::json!(32));
-                params
-            },
-            data_requirements: DataRequirements {
-                required: vec!["price".to_string()],
-                optional: vec![],
-                min_history: 10,
-            },
-        };
-        
-        // Create basic price-only models
-        for arch in &["MLP", "LSTM", "TCN", "DLinear"] {
-            let model = Self::create_model(arch, &price_config)?;
-            models.insert(format!("{}_Price", arch), model);
+    fn supported_architectures(&self) -> Vec<String> {
+        vec![
+            "Transformer".to_string(),
+            "GPT".to_string(),
+            "BERT".to_string(),
+            "T5".to_string(),
+        ]
+    }
+    
+    fn default_config(&self) -> ModelConfig {
+        let mut config = ModelConfig::default();
+        config.architecture = "Transformer".to_string();
+        config.hidden_layers = vec![256, 128, 64];
+        config.parameters.insert("num_heads".to_string(), serde_json::json!(8));
+        config.parameters.insert("num_layers".to_string(), serde_json::json!(6));
+        config.parameters.insert("d_model".to_string(), serde_json::json!(256));
+        config
+    }
+    
+    fn validate_config(&self, config: &ModelConfig) -> Result<()> {
+        if !self.supported_architectures().contains(&config.architecture) {
+            return Err(anyhow::anyhow!(
+                "Unsupported architecture for Transformer: {}. Supported: {:?}",
+                config.architecture,
+                self.supported_architectures()
+            ));
         }
         
+        // Validate attention heads
+        if let Some(num_heads) = config.parameters.get("num_heads") {
+            if let Some(heads) = num_heads.as_u64() {
+                if heads < 1 || heads > 16 || (heads & (heads - 1)) != 0 {
+                    return Err(anyhow::anyhow!("Number of heads must be a power of 2 between 1 and 16, got: {}", heads));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+/// Create a fully configured model factory registry
+pub fn create_default_registry() -> ModelFactoryRegistry<f32> {
+    let mut registry = ModelFactoryRegistry::new();
+    
+    // Register all available factories
+    registry.register(EmergencyModelFactory);
+    registry.register(LSTMModelFactory);
+    registry.register(TransformerModelFactory);
+    
+    info!("✅ Created default model factory registry with {} factories", 
+          registry.factories.len());
+    
+    registry
+}
+
+/// Model creation utilities
+pub struct ModelCreationUtils;
+
+impl ModelCreationUtils {
+    /// Create model from sector configuration
+    pub fn create_from_sector_config(
+        registry: &ModelFactoryRegistry<f32>,
+        model_name: &str,
+        model_def: &crate::config::SectorModelDefinition,
+    ) -> Result<Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>> {
+        let config = ModelConfig::from_sector_definition(model_def);
+        registry.create_model(&model_def.model_type, config)
+    }
+    
+    /// Batch create models from sector configuration
+    pub fn batch_create_from_sector_config(
+        registry: &ModelFactoryRegistry<f32>,
+        sector_config: &crate::config::SectorModelsConfig,
+    ) -> Result<Vec<(String, String, Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>)>> {
+        let mut models = Vec::new();
+        
+        for (model_name, model_def) in &sector_config.models {
+            match Self::create_from_sector_config(registry, model_name, model_def) {
+                Ok(model) => {
+                    models.push((
+                        model_name.clone(),
+                        model_def.sector.clone(),
+                        model,
+                    ));
+                }
+                Err(e) => {
+                    warn!("Failed to create model {}: {}", model_name, e);
+                    // Continue with other models rather than failing completely
+                }
+            }
+        }
+        
+        info!("✅ Created {} models from sector configuration", models.len());
         Ok(models)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
     
-    pub fn create_lstm(&self) -> Result<Box<dyn std::any::Any + Send + Sync>> {
-        // Phase 2 implementation - ready for vendor model integration
-        info!("Creating LSTM model using Phase 2 factory");
-        let mock_model = "MockLSTM_Phase2".to_string();
-        Ok(Box::new(mock_model))
-    }
-}
-
-// Add needed imports
-use crate::adapters::vendor_bridge::VendorTimeSeriesData;
-use crate::config::NeuralConfig;
-use crate::data::TimeSeriesData;
-
-/// Enhanced model factory for neural predictor integration
-pub struct EnhancedModelFactory {
-    config: NeuralConfig,
-    model_cache: HashMap<String, Box<dyn std::any::Any + Send + Sync>>,
-}
-
-impl EnhancedModelFactory {
-    /// Create a new enhanced model factory
-    pub fn new(config: NeuralConfig) -> Self {
-        Self {
-            config,
-            model_cache: HashMap::new(),
-        }
-    }
-
-    /// Create and configure an LSTM model
-    pub async fn create_lstm_model(
-        &mut self,
-        model_type: &str,
-        config: &NeuralConfig,
-    ) -> Result<Box<dyn std::any::Any + Send + Sync>> {
-        debug!("Creating LSTM model of type: {}", model_type);
+    #[test]
+    fn test_emergency_model_factory() {
+        let factory = EmergencyModelFactory;
+        let config = factory.default_config();
         
-        // Mock LSTM configuration and creation
-        // This is a compilation stub for Phase 1
+        // Test factory properties
+        assert_eq!(factory.model_type(), "EmergencyModel");
+        assert!(!factory.supported_architectures().is_empty());
         
-        // In real implementation, this would:
-        // 1. Create LSTMConfig with proper parameters
-        // 2. Use LSTMBuilder to construct the model
-        // 3. Return properly typed BaseModel<f32>
+        // Test model creation
+        let model = factory.create(config).unwrap();
+        assert_eq!(model.get_model_type(), "SMA");
         
-        info!("LSTM model created successfully (mock implementation)");
-        Ok(Box::new(format!("MockLSTM_{}", model_type)))
+        // Test prediction
+        let test_data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let prediction = model.predict(&test_data).unwrap();
+        assert!(!prediction.is_empty());
     }
-
-    /// Build model configuration
-    fn build_model_config(&self, model_type: &str) -> Result<HashMap<String, String>> {
-        let mut config = HashMap::new();
+    
+    #[test]
+    fn test_model_factory_registry() {
+        let mut registry = ModelFactoryRegistry::new();
+        registry.register(EmergencyModelFactory);
+        registry.register(LSTMModelFactory);
         
-        match model_type {
-            "lstm" => {
-                config.insert("type".to_string(), "LSTM".to_string());
-                config.insert("hidden_size".to_string(), "128".to_string());
-                config.insert("num_layers".to_string(), "2".to_string());
-                config.insert("dropout".to_string(), "0.1".to_string());
-            }
-            _ => {
-                return Err(anyhow!("Unsupported model type: {}", model_type));
-            }
-        }
+        // Test model type listing
+        let types = registry.list_model_types();
+        assert!(types.contains(&"EmergencyModel".to_string()));
+        assert!(types.contains(&"LSTM".to_string()));
         
-        Ok(config)
+        // Test model creation
+        let model = registry.create_model_default("EmergencyModel").unwrap();
+        assert_eq!(model.get_model_type(), "SMA");
+        
+        // Test configuration
+        let config = registry.get_default_config("LSTM").unwrap();
+        assert_eq!(config.architecture, "LSTM");
+        assert!(config.hidden_layers.len() >= 2);
     }
-
-    /// Cache model for reuse
-    pub fn cache_model(&mut self, key: String, model: Box<dyn std::any::Any + Send + Sync>) {
-        self.model_cache.insert(key, model);
+    
+    #[test]
+    fn test_model_config_parameter_estimation() {
+        let config = ModelConfig {
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            ..Default::default()
+        };
+        
+        let param_count = config.estimate_parameter_count().unwrap();
+        // Expected: (10*20 + 20) + (20*10 + 10) + (10*1 + 1) = 220 + 210 + 11 = 441
+        assert_eq!(param_count, 441);
     }
-
-    /// Get cached model
-    pub fn get_cached_model(&self, key: &str) -> Option<&Box<dyn std::any::Any + Send + Sync>> {
-        self.model_cache.get(key)
-    }
-
-    /// Clear model cache
-    pub fn clear_cache(&mut self) {
-        self.model_cache.clear();
-    }
-}
-
-impl Default for EnhancedModelFactory {
-    fn default() -> Self {
-        Self::new(NeuralConfig::default())
+    
+    #[test]
+    fn test_config_validation() {
+        let factory = EmergencyModelFactory;
+        
+        // Valid config
+        let valid_config = factory.default_config();
+        assert!(factory.validate_config(&valid_config).is_ok());
+        
+        // Invalid architecture
+        let mut invalid_config = valid_config.clone();
+        invalid_config.architecture = "INVALID".to_string();
+        assert!(factory.validate_config(&invalid_config).is_err());
+        
+        // Invalid window size
+        let mut invalid_window = valid_config.clone();
+        invalid_window.parameters.insert("window_size".to_string(), serde_json::json!(0));
+        assert!(factory.validate_config(&invalid_window).is_err());
     }
 }

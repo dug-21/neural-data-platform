@@ -1,137 +1,129 @@
-# Phase 4 Architecture: Neural Engine Dashboard Integration
+# Phase 4 Architecture: Grafana Dashboard and Observability Stack
 
 ## 🏗️ Executive Architecture Overview
 
-Phase 4 integrates neural engine monitoring with the **EXISTING** Grafana and Prometheus infrastructure. This architecture follows the **INTEGRATION_FIRST_MANDATE** by extending the current monitoring stack at `docker/production/grafana/dashboards/` rather than creating new infrastructure.
+Phase 4 introduces a comprehensive observability and monitoring architecture that extends the existing neural-trader infrastructure with advanced Grafana dashboards, real-time monitoring, and intelligent alerting systems. This architecture follows the **INTEGRATION_FIRST_MANDATE** by building upon the existing `src/observability/`, `src/monitoring/`, and `src/data_pipeline/` modules.
 
-### 🔍 Existing Infrastructure Discovery
+### 🎯 Architecture Principles
 
-**Confirmed Existing Components:**
-- ✅ **Grafana Instance**: Running on port 3000
-- ✅ **Prometheus Instance**: Running on port 9090 (fixed from backup showing 9093)
-- ✅ **Existing Dashboards**: trading-operations, infrastructure-monitoring, market-data-realtime, operational-overview, performance-monitoring
-- ✅ **Dashboard Location**: `docker/production/grafana/dashboards/`
-- ✅ **Auto-Provisioning**: Dashboard updates via Docker volume mounts
+1. **EXTEND, DON'T REPLACE**: All monitoring capabilities extend existing systems
+2. **VENDOR MODEL COMPATIBILITY**: Support 27+ neural architectures from vendor/ruv-fann
+3. **DAA PRESERVATION**: Maintain autonomous trading decision-making
+4. **REAL-TIME FIRST**: <100ms latency for critical monitoring paths
+5. **MULTI-SCOPE AWARENESS**: Support symbol/sector/market/geographic scopes
 
-### 🎯 Revised Architecture Principles
-
-1. **INTEGRATION ONLY**: NO new infrastructure - extend existing Grafana/Prometheus
-2. **DASHBOARD EXTENSION**: Add neural-specific JSON dashboards to existing location
-3. **METRICS INTEGRATION**: Expose neural metrics via existing Prometheus endpoints
-4. **VENDOR MODEL COMPATIBILITY**: Support 27+ neural architectures from vendor/ruv-fann
-5. **DAA PRESERVATION**: Maintain autonomous trading decision-making
-
-## 📊 Integration Architecture (NO NEW INFRASTRUCTURE)
+## 📊 High-Level System Architecture
 
 ```mermaid
 graph TB
-    subgraph "EXISTING Infrastructure (docker/production/)"
-        GRAFANA[Grafana:3000<br/>🔵 EXISTING]
-        PROMETHEUS[Prometheus:9090<br/>🔵 EXISTING]
-        DASHBOARDS[Dashboard Files<br/>🔵 EXISTING<br/>docker/production/grafana/dashboards/]
+    subgraph "Phase 4 Observability Stack"
+        GRAFANA[Grafana Dashboards]
+        PROMETHEUS[Prometheus TSDB]
+        ALERT_MGR[Alert Manager]
+        DATA_VIZ[Data Visualization Engine]
     end
     
     subgraph "Existing Neural Trader Core"
-        DAA[DAA Coordinator]
+        DAA[DAA Coordinator]Error: Agent type 'analyst' not found. Available agents: general-purpose, repo-architect, 
+     issue-tracker, project-board-sync, github-modes, code-review-swarm, workflow-automation, 
+     multi-repo-swarm, pr-manager, sync-coordinator, release-swarm, release-manager, swarm-pr, 
+     swarm-issue, base-template-generator, adaptive-coordinator, mesh-coordinator, 
+     hierarchical-coordinator, refinement, pseudocode, architecture, specification, 
+     byzantine-coordinator, quorum-manager, security-manager, gossip-coordinator, 
+     performance-benchmarker, raft-manager, crdt-synchronizer, swarm-memory-manager, 
+     collective-intelligence-coordinator, consensus-builder, production-validator, 
+     code-analyzer, researcher, reviewer, tester, planner, coder, perf-analyzer, 
+     task-orchestrator, sparc-coder, memory-coordinator, migration-planner, sparc-coord, 
+     smart-agent, swarm-init, tdd-london-swarm, ml-developer, cicd-engineer, mobile-dev, 
+     api-docs, system-architect, backend-dev
+
         NEURAL[Neural Engine]
         DATA_PIPE[Data Pipeline]
         REDIS[Redis Channels]
-        HEALTH_MON[Health Monitor]
-        PERF_MON[Performance Monitor]
     end
     
-    subgraph "Phase 4: Neural Metrics Integration"
-        NEURAL_METRICS[Neural Metrics Exporter<br/>📊 NEW COMPONENT]
-        NEURAL_HEALTH[Neural Health Checker<br/>📊 NEW COMPONENT]
-        DASHBOARD_JSON[Neural Dashboard JSONs<br/>📄 NEW FILES]
+    subgraph "Extended Monitoring Layer"
+        METRICS_EXT[Extended Metrics Collector]
+        HEALTH_EXT[Enhanced Health Monitor] 
+        PERF_TRACK[Performance Tracker]
+        DATA_TYPE_MON[Data Type Monitor]
     end
     
-    %% Integration flow (NO NEW SERVICES)
-    NEURAL --> NEURAL_METRICS
-    DAA --> NEURAL_METRICS
-    DATA_PIPE --> NEURAL_METRICS
+    subgraph "New Phase 4 Components"
+        GRAFANA_ADAPTER[Grafana Data Adapter]
+        DASHBOARD_GEN[Dashboard Generator]
+        ALERT_ROUTER[Alert Router]
+        VIZ_ENGINE[Visualization Engine]
+    end
     
-    NEURAL --> NEURAL_HEALTH
-    HEALTH_MON --> NEURAL_HEALTH
+    %% Data flow connections
+    DAA --> METRICS_EXT
+    NEURAL --> METRICS_EXT
+    DATA_PIPE --> DATA_TYPE_MON
+    REDIS --> PERF_TRACK
     
-    NEURAL_METRICS --> PROMETHEUS
-    NEURAL_HEALTH --> PROMETHEUS
+    METRICS_EXT --> PROMETHEUS
+    HEALTH_EXT --> PROMETHEUS
+    PERF_TRACK --> PROMETHEUS
+    DATA_TYPE_MON --> PROMETHEUS
     
-    DASHBOARD_JSON --> DASHBOARDS
-    DASHBOARDS --> GRAFANA
-    PROMETHEUS --> GRAFANA
+    PROMETHEUS --> GRAFANA_ADAPTER
+    GRAFANA_ADAPTER --> GRAFANA
+    GRAFANA --> DASHBOARD_GEN
+    PROMETHEUS --> ALERT_MGR
+    ALERT_MGR --> ALERT_ROUTER
     
-    style GRAFANA fill:#e1f5fe
-    style PROMETHEUS fill:#e1f5fe
-    style DASHBOARDS fill:#e1f5fe
-    style NEURAL_METRICS fill:#fff3e0
-    style NEURAL_HEALTH fill:#fff3e0
-    style DASHBOARD_JSON fill:#f3e5f5
+    VIZ_ENGINE --> DATA_VIZ
+    DATA_VIZ --> GRAFANA
 ```
 
-## 🔧 Integration Components (NO NEW INFRASTRUCTURE)
+## 🔧 Component Architecture Detailed Design
 
-### 1. Neural Metrics Integration
+### 1. Extended Observability System Architecture
 
-**CRITICAL**: Phase 4 adds ONLY neural-specific metrics to existing Prometheus, NO new infrastructure.
+#### 1.1 Enhanced Metrics Collection Extension
 
-#### 1.1 Neural Metrics Exporter Integration
-
-**File**: `src/neural/prometheus_integration.rs`
+**File**: `src/observability/metrics_extensions.rs`
 
 ```rust
-/// Integration layer to expose neural engine metrics to existing Prometheus
-pub struct NeuralPrometheusIntegration {
-    // Use EXISTING PrometheusExporter - no new instances
-    existing_exporter: Arc<PrometheusExporter>,
+/// Extension to existing PrometheusExporter with Phase 4 capabilities
+pub struct ObservabilityExtensions {
+    // Existing system integration
+    base_exporter: Arc<PrometheusExporter>,
     
-    // Neural-specific metric collectors
-    neural_model_metrics: NeuralModelMetricsCollector,
-    real_time_training_metrics: RealTimeTrainingMetricsCollector,
-    data_type_discovery_metrics: DataTypeDiscoveryMetricsCollector,
+    // Phase 4 extensions
+    neural_model_metrics: NeuralModelMetricsTracker,
+    data_type_metrics: DataTypeMetricsTracker, 
+    trading_performance_metrics: TradingPerformanceTracker,
+    real_time_training_metrics: RealTimeTrainingTracker,
 }
 
-impl NeuralPrometheusIntegration {
-    /// Integrate with existing PrometheusExporter (NO NEW SERVICE)
-    pub async fn integrate_with_existing(
-        existing_exporter: Arc<PrometheusExporter>
+impl ObservabilityExtensions {
+    /// Create extension that wraps existing PrometheusExporter
+    pub async fn extend_existing(
+        base_exporter: Arc<PrometheusExporter>
     ) -> Result<Self> {
-        Ok(Self {
-            existing_exporter,
-            neural_model_metrics: NeuralModelMetricsCollector::new(),
-            real_time_training_metrics: RealTimeTrainingMetricsCollector::new(),
-            data_type_discovery_metrics: DataTypeDiscoveryMetricsCollector::new(),
-        })
+        // Extend existing metrics, don't replace
     }
     
-    /// Expose neural model metrics to existing Prometheus instance
-    pub async fn expose_neural_model_metrics(
+    /// Track neural model performance across 27+ architectures
+    pub async fn track_neural_model_performance(
         &self,
         model_type: &str,  // "LSTM", "TCN", "GRU", etc.
         symbol: &str,
         performance: &PerformanceSnapshot
     ) -> Result<()> {
-        // Add to existing Prometheus metrics registry
-        self.existing_exporter.record_gauge(
-            "neural_model_accuracy",
-            performance.accuracy,
-            &[("model_type", model_type), ("symbol", symbol)]
-        ).await
+        // Integration with existing performance tracking
     }
     
-    /// Expose data type discovery metrics to existing Prometheus
-    pub async fn expose_data_type_metrics(
+    /// Monitor data type discovery and utilization
+    pub async fn track_data_type_usage(
         &self,
         data_type: &DataType,
         scope: &DataScope,
         utilization_metrics: &DataUtilizationMetrics
     ) -> Result<()> {
-        // Integrate with existing metrics collection
-        self.existing_exporter.record_counter(
-            "data_types_discovered_total",
-            1,
-            &[("data_type", &data_type.name), ("scope", &scope.to_string())]
-        ).await
+        // Extend existing data pipeline monitoring
     }
 }
 ```
@@ -177,108 +169,116 @@ impl HealthMonitorExtensions {
 }
 ```
 
-### 2. Dashboard Integration (JSON FILES ONLY)
+### 2. Grafana Dashboard Architecture
 
-**CRITICAL**: Phase 4 creates ONLY JSON dashboard files in existing location `docker/production/grafana/dashboards/`
+#### 2.1 Dashboard Configuration System
 
-#### 2.1 Neural Dashboard JSON Files
+**File**: `src/observability/grafana/dashboard_config.rs`
 
-**Files to Create:**
-- `docker/production/grafana/dashboards/neural-model-performance.json`
-- `docker/production/grafana/dashboards/neural-real-time-training.json`  
-- `docker/production/grafana/dashboards/neural-data-types.json`
+```rust
+/// Grafana dashboard configuration for neural trading system
+pub struct GrafanaDashboardConfig {
+    /// Neural model performance dashboard
+    pub neural_performance: NeuralPerformanceDashboard,
+    
+    /// Trading performance dashboard  
+    pub trading_performance: TradingPerformanceDashboard,
+    
+    /// Data type utilization dashboard
+    pub data_utilization: DataUtilizationDashboard,
+    
+    /// System health overview dashboard
+    pub system_health: SystemHealthDashboard,
+    
+    /// Real-time training monitoring dashboard
+    pub real_time_training: RealTimeTrainingDashboard,
+}
 
-**Integration Pattern:**
-```bash
-# Existing auto-provisioning will detect new JSON files
-# NO CODE NEEDED - Grafana automatically loads JSON files from volume mount
-docker/production/grafana/dashboards/
-├── trading-operations.json           # 🔵 EXISTING
-├── infrastructure-monitoring.json    # 🔵 EXISTING  
-├── market-data-realtime.json        # 🔵 EXISTING
-├── operational-overview.json        # 🔵 EXISTING
-├── performance-monitoring.json      # 🔵 EXISTING
-├── neural-model-performance.json    # 🆕 NEW DASHBOARD
-├── neural-real-time-training.json   # 🆕 NEW DASHBOARD
-└── neural-data-types.json           # 🆕 NEW DASHBOARD
-```
+pub struct NeuralPerformanceDashboard {
+    /// Panels for each of the 27+ neural architectures
+    pub model_performance_panels: HashMap<String, ModelPerformancePanel>,
+    
+    /// Comparative analysis panels
+    pub model_comparison_panels: Vec<ComparisonPanel>,
+    
+    /// Prediction accuracy over time
+    pub accuracy_time_series: TimeSeriesPanel,
+    
+    /// Model ensemble performance
+    pub ensemble_performance: EnsemblePanel,
+}
 
-#### 2.2 Dashboard JSON Structure Template
-
-**Example: neural-model-performance.json**
-```json
-{
-  "dashboard": {
-    "id": null,
-    "title": "Neural Model Performance",
-    "tags": ["neural", "trading", "performance"],
-    "timezone": "browser",
-    "panels": [
-      {
-        "id": 1,
-        "title": "Model Accuracy by Type",
-        "type": "timeseries",
-        "targets": [
-          {
-            "expr": "neural_model_accuracy{model_type=~\".*\"}",
-            "legendFormat": "{{model_type}} - {{symbol}}"
-          }
-        ]
-      },
-      {
-        "id": 2,
-        "title": "Prediction Latency",
-        "type": "histogram",
-        "targets": [
-          {
-            "expr": "neural_prediction_latency_histogram",
-            "legendFormat": "{{model_type}} Latency"
-          }
-        ]
-      }
-    ],
-    "refresh": "5s",
-    "time": {
-      "from": "now-1h",
-      "to": "now"
+impl GrafanaDashboardConfig {
+    /// Generate dashboard JSON for Grafana API
+    pub fn generate_dashboard_json(&self) -> Result<serde_json::Value> {
+        // Create Grafana dashboard configuration
     }
-  }
+    
+    /// Update dashboard configuration based on detected data types
+    pub async fn update_for_data_types(
+        &mut self,
+        discovered_types: &[DataType]
+    ) -> Result<()> {
+        // Dynamic dashboard generation based on runtime discovery
+    }
 }
 ```
 
-**NO RUST CODE NEEDED**: JSON files auto-loaded by existing Grafana provisioning
+#### 2.2 Data Source Integration
 
-### 3. Prometheus Metrics Integration (EXISTING ENDPOINT)
+**File**: `src/observability/grafana/data_sources.rs`
 
-**CRITICAL**: Neural metrics exposed via existing Prometheus at `localhost:9090`
+```rust
+/// Grafana data source configuration
+pub struct GrafanaDataSources {
+    /// Prometheus data source for metrics
+    pub prometheus: PrometheusDataSource,
+    
+    /// Redis data source for real-time data
+    pub redis: RedisDataSource,
+    
+    /// TimescaleDB for historical analysis
+    pub timescale: TimescaleDataSource,
+}
 
-#### 3.1 Neural Metrics Schema
+pub struct PrometheusDataSource {
+    /// Connection to extended Prometheus metrics
+    pub endpoint: String,
+    pub auth_config: AuthConfig,
+    
+    /// Metric queries for neural models
+    pub neural_queries: NeuralMetricQueries,
+    
+    /// Trading performance queries
+    pub trading_queries: TradingMetricQueries,
+    
+    /// System health queries
+    pub health_queries: HealthMetricQueries,
+}
 
-**New Metrics to Add to Existing Prometheus:**
-```promql
-# Neural Model Performance Metrics  
-neural_model_accuracy{model_type="LSTM|TCN|GRU|...", symbol="AAPL|MSFT|...", version="v1"}
-neural_model_latency_seconds{model_type="LSTM|TCN|GRU|...", symbol="AAPL|MSFT|..."}
-neural_prediction_count_total{model_type="LSTM|TCN|GRU|...", symbol="AAPL|MSFT|..."}
-
-# Real-time Training Metrics
-neural_training_events_total{model_type="LSTM|TCN|GRU|...", trigger="performance|time|data"}
-neural_training_duration_seconds{model_type="LSTM|TCN|GRU|...", symbol="AAPL|MSFT|..."}
-neural_model_improvement_ratio{model_type="LSTM|TCN|GRU|...", symbol="AAPL|MSFT|..."}
-
-# Data Type Discovery Metrics
-data_types_discovered_total{data_type="price|volume|news|...", scope="symbol|sector|market"}
-data_type_utilization_count{data_type="price|volume|news|...", model_count="5"}
-data_routing_latency_seconds{scope="symbol|sector|market|geographic"}
+impl PrometheusDataSource {
+    /// Create queries for 27+ neural model types
+    pub fn create_neural_model_queries() -> NeuralMetricQueries {
+        // Generate Prometheus queries for each model type
+        // accuracy_rate{model_type="LSTM", symbol="AAPL"}
+        // prediction_latency{model_type="TCN", symbol="MSFT"}
+        // etc.
+    }
+    
+    /// Create trading performance queries
+    pub fn create_trading_queries() -> TradingMetricQueries {
+        // profit_loss{symbol="AAPL", strategy="neural_enhanced"}
+        // trade_success_rate{model_ensemble="mixed"}
+        // risk_adjusted_return{timeframe="1h"}
+    }
+}
 ```
 
-#### 3.2 Integration with Existing Prometheus Configuration
+### 3. Real-Time Monitoring Pipeline Architecture
 
-**Existing Prometheus** at `docker/production/configs/prometheus/prometheus.yml` will automatically scrape neural metrics from existing neural-trader service at `localhost:9092/metrics`
+#### 3.1 Streaming Metrics Pipeline
 
-## 🏗️ Integration Points with Existing Systems
-
-### 1. DAA Autonomous System Integration (PRESERVE EXISTING)
+**File**: `src/observability/streaming/metrics_pipeline.rs`
 
 ```rust
 /// Real-time metrics streaming pipeline
@@ -1105,71 +1105,62 @@ sequenceDiagram
     Dashboard->>Dashboard: Show new data type metrics
 ```
 
-## 📋 Implementation Roadmap (INTEGRATION FIRST APPROACH)
+## 📋 Implementation Roadmap
 
-### Phase 4.1: Neural Metrics Integration (Week 1)
-1. **Extend existing PrometheusExporter** with neural model metrics (`src/neural/prometheus_integration.rs`)
-2. **Add neural metrics endpoints** to existing service at port 9092
-3. **Test metrics scraping** - verify existing Prometheus collects neural metrics
-4. **Create first dashboard JSON** - `neural-model-performance.json`
+### Phase 4.1: Core Observability Extensions (Week 1)
+1. Extend existing PrometheusExporter with neural model metrics
+2. Enhance HealthMonitor with neural-specific checks
+3. Create basic Grafana dashboard templates
+4. Implement streaming metrics pipeline
 
-### Phase 4.2: Dashboard JSON Files (Week 2)  
-1. **Create dashboard JSON files** in `docker/production/grafana/dashboards/`:
-   - `neural-model-performance.json` - Model accuracy, latency, throughput
-   - `neural-real-time-training.json` - Training events, improvements 
-   - `neural-data-types.json` - Data type discovery, utilization
-2. **Test dashboard auto-loading** - verify existing Grafana provisions dashboards
-3. **Validate dashboard queries** - ensure metrics display correctly
+### Phase 4.2: Advanced Dashboards (Week 2)
+1. Deploy neural model performance dashboard
+2. Create trading performance visualization
+3. Implement data type discovery monitoring
+4. Add system health overview dashboard
 
-### Phase 4.3: Enhanced Neural Health Monitoring (Week 3)
-1. **Extend existing HealthMonitor** with neural-specific checks
-2. **Add neural health metrics** to existing Prometheus endpoints
-3. **Update infrastructure-monitoring.json** to include neural health panels
-4. **Test health monitoring** - verify alerts work with existing Alert Manager
+### Phase 4.3: Intelligent Alerting (Week 3)
+1. Configure alert rules and thresholds
+2. Implement alert correlation engine
+3. Create notification channels
+4. Test alert-to-action workflows
 
-### Phase 4.4: Production Integration Testing (Week 4)
-1. **Integration testing** - full neural metrics → Prometheus → Grafana flow
-2. **Performance validation** - ensure <50ms metric collection latency
-3. **Dashboard user testing** - validate dashboard usability for operations
-4. **Alert threshold tuning** - calibrate neural performance alerts
+### Phase 4.4: Advanced Analytics (Week 4)
+1. Add real-time training monitoring
+2. Implement multi-scope routing verification
+3. Create predictive health analytics
+4. Add performance optimization recommendations
 
-### Phase 4.5: Documentation and Deployment (Week 5)
-1. **Update monitoring documentation** - document new neural dashboards
-2. **Create dashboard user guide** - how to interpret neural metrics
-3. **Production deployment** - deploy to existing infrastructure
-4. **Monitoring activation** - enable 24/7 neural performance monitoring
+### Phase 4.5: Production Deployment (Week 5)
+1. Load testing and performance validation
+2. Production deployment with monitoring
+3. Dashboard user training and documentation
+4. 24/7 monitoring activation
 
-## 🎯 Success Criteria (INTEGRATION FIRST)
+## 🎯 Success Criteria
 
-### Technical Requirements (EXTEND EXISTING)
-- ✅ **NO NEW INFRASTRUCTURE**: Only JSON dashboard files + neural metrics integration
-- ✅ **Existing Prometheus Integration**: Neural metrics exposed via port 9092
-- ✅ **Existing Grafana Integration**: Dashboards auto-provisioned from volume mount
-- ✅ **<50ms metric collection latency**: Using existing PrometheusExporter
-- ✅ **Support for 27+ neural architectures**: Metrics for all vendor models
-- ✅ **Zero service disruption**: No new containers, no new ports, no downtime
+### Technical Requirements
+- ✅ All monitoring extends existing systems (no duplicates)
+- ✅ <50ms latency for critical metrics collection
+- ✅ <200ms dashboard refresh times
+- ✅ Support for 27+ neural model architectures
+- ✅ Dynamic dashboard generation for new data types
+- ✅ 99.9% uptime for monitoring systems
+- ✅ Integration with existing DAA autonomous systems
 
-### Business Requirements (SAME MONITORING STACK)
-- ✅ **Real-time neural model visibility**: Via existing Grafana at port 3000
-- ✅ **Neural performance monitoring**: Accuracy, latency, training events
-- ✅ **Data type discovery tracking**: New data types and utilization patterns
-- ✅ **Operations team dashboard access**: Same Grafana interface, new neural tabs
-- ✅ **Historical analysis**: Using existing Prometheus TSDB retention
-- ✅ **Alert integration**: Using existing Alert Manager configuration
+### Business Requirements
+- ✅ Real-time visibility into neural model performance
+- ✅ Immediate alerting on trading performance degradation
+- ✅ Data type discovery and utilization tracking
+- ✅ System health overview for operations team
+- ✅ Historical performance analysis capabilities
+- ✅ Predictive alerting for potential issues
 
-### Integration Requirements (INTEGRATION_FIRST_MANDATE)
-- ✅ **Zero disruption to trading**: No changes to neural engine core operations
-- ✅ **DAA autonomy preserved**: Monitoring observes, doesn't interfere
-- ✅ **Redis compatibility**: Uses existing channels for real-time data
-- ✅ **Existing monitoring extension**: Builds on current health/performance systems
-- ✅ **Docker volume compatibility**: JSON files loaded automatically
-- ✅ **Prometheus scraping**: Uses existing scrape configuration
+### Integration Requirements
+- ✅ Zero disruption to existing neural trading operations
+- ✅ Preservation of DAA autonomous decision-making
+- ✅ Compatibility with existing Redis pub/sub channels
+- ✅ Integration with existing health monitoring systems
+- ✅ Seamless extension of observability infrastructure
 
-### Implementation Success Criteria
-- ✅ **Files Created**: 3 JSON dashboard files only
-- ✅ **Code Changes**: Neural metrics integration in existing PrometheusExporter
-- ✅ **Infrastructure Changes**: None (zero new containers/services)
-- ✅ **Deployment Complexity**: Simple file addition to existing volume mount
-- ✅ **Rollback Safety**: Remove JSON files to rollback
-
-**INTEGRATION FIRST APPROACH ACHIEVED**: Phase 4 extends existing monitoring infrastructure without creating any new services, containers, or infrastructure components.
+This architecture ensures that Phase 4 builds comprehensive observability and monitoring capabilities on top of the existing neural-trader infrastructure while maintaining all autonomous trading capabilities and extending rather than replacing existing systems.

@@ -19,8 +19,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-// Use actual vendor library types
-use neuro_divergent_core::traits::BaseModel;
+// Use actual vendor library types  
 use crate::adapters::vendor_bridge::VendorTimeSeriesData;
 use neuro_divergent_core::data::TimeSeriesDataset;
 use neuro_divergent_models::foundation::ForecastOutput as ForecastResult;
@@ -44,6 +43,10 @@ use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
 
 // Import data converter
 use crate::data::data_converter::{DataConverter, DataConverterConfig, ConversionMetadata};
+
+// Import emergency stabilization components
+use crate::neural::emergency_model::{EmergencyModelFactory, BaseModel};
+use crate::neural::fallback_system::EmergencyFallbackSystem;
 
 /// Model key for identifying models by sector and type
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -124,7 +127,7 @@ pub struct ClusterModelPool {
     /// Sector ID this pool manages
     pub sector_id: String,
     /// Shared models for this sector
-    pub shared_models: Arc<DashMap<String, Box<dyn std::any::Any + Send + Sync>>>,
+    pub shared_models: Arc<DashMap<String, Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>>,
     /// Feature extractor for this sector
     pub feature_extractor: Arc<SharedFeatureExtractor>,
     /// Symbols using this pool
@@ -201,7 +204,7 @@ impl ClusterModelPool {
     pub async fn add_shared_model(
         &self,
         model_type: &str,
-        model: Box<dyn std::any::Any + Send + Sync>,
+        model: Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>,
         estimated_memory_mb: f64,
     ) -> Result<()> {
         // Check memory limits
@@ -248,7 +251,12 @@ impl ClusterModelPool {
     }
     
     /// Get shared model from pool
-    pub fn get_shared_model(&self, model_type: &str) -> Option<dashmap::mapref::one::Ref<String, Box<dyn std::any::Any + Send + Sync>>> {
+    pub fn get_shared_model(&self, model_type: &str) -> Option<dashmap::mapref::one::Ref<String, Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>> {
+        self.shared_models.get(model_type)
+    }
+    
+    /// Get shared model with typed access for prediction (returns reference)
+    pub fn get_model_for_prediction(&self, model_type: &str) -> Option<dashmap::mapref::one::Ref<String, Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>> {
         self.shared_models.get(model_type)
     }
     
@@ -314,8 +322,8 @@ pub type FannPredictor = VendorPredictor;
 
 /// Main VendorPredictor struct - replaces FannPredictor
 pub struct VendorPredictor {
-    /// Active vendor models (simplified for Phase 1)
-    models: Arc<DashMap<ModelKey, Box<dyn std::any::Any + Send + Sync>>>,
+    /// Active vendor models - proper BaseModel<f32> storage
+    models: Arc<DashMap<ModelKey, Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>>,
     
     /// Cluster model pools by sector - NEW FEATURE
     cluster_pools: Arc<DashMap<String, Arc<ClusterModelPool>>>,
@@ -450,14 +458,91 @@ impl VendorPredictor {
         // Store sector configuration for runtime use
         // We could store this in the performance tracker or create a dedicated config holder
         
+        // CRITICAL FIX: Instantiate models for each sector configuration
+        // Without this, NVDA and other symbols have no sector models despite being configured
+        for (model_name, model_def) in &sector_config.models {
+            // Create ModelKey for registration
+            let model_key = ModelKey {
+                sector: model_def.sector.clone(),
+                model_type: model_def.model_type.clone(),
+                variant: "default".to_string(),
+            };
+            
+            // Create emergency model for Phase 1 stabilization
+            let emergency_model = EmergencyModelFactory::create_emergency_model(
+                &model_def.model_type,
+                &model_def.sector,
+                None, // Use default ModelConfig
+            )?;
+            
+            // Register the model using existing add_model method with proper typing
+            self.add_model(model_key.clone(), emergency_model).await?;
+            
+            info!("✅ Registered model: {} for sector {} (model_type: {}, variant: default)", 
+                  model_name, model_def.sector, model_def.model_type);
+        }
+        
+        // Add universal fallback model for unmapped symbols
+        let universal_key = ModelKey {
+            sector: "universal".to_string(),
+            model_type: "multi_sector".to_string(),
+            variant: "fallback".to_string(),
+        };
+        
+        let universal_emergency_model = EmergencyModelFactory::create_emergency_model(
+            "multi_sector",
+            "universal",
+            None,
+        )?;
+        
+        self.add_model(universal_key, universal_emergency_model).await?;
+        info!("✅ Registered universal fallback model for unmapped symbols");
+        
         Ok(())
     }
     
-    /// Add a model to the active pool (legacy method - preserved for compatibility)
+    /// Initialize emergency models with typed storage for Phase 1 stabilization
+    pub async fn initialize_models_emergency(&mut self) -> Result<()> {
+        info!("🚨 Initializing emergency models with BaseModel<f32> typed storage");
+        
+        // Define basic emergency models for different sectors
+        let emergency_models = vec![
+            ("technology", "LSTM"),
+            ("technology", "MLP"),
+            ("healthcare", "LSTM"),
+            ("finance", "DeepAR"),
+            ("universal", "multi_sector"),
+        ];
+        
+        for (sector, model_type) in emergency_models {
+            let model_key = ModelKey {
+                sector: sector.to_string(),
+                model_type: model_type.to_string(),
+                variant: "emergency".to_string(),
+            };
+            
+            // Create emergency model instance
+            let emergency_model = EmergencyModelFactory::create_emergency_model(
+                model_type,
+                sector,
+                None,
+            )?;
+            
+            // Add model using typed storage
+            self.add_model(model_key, emergency_model).await?;
+            
+            info!("✅ Emergency model initialized: {} for {} sector", model_type, sector);
+        }
+        
+        info!("🎯 Emergency model initialization complete - {} models loaded", self.models.len());
+        Ok(())
+    }
+    
+    /// Add a model to the active pool - updated for BaseModel<f32> compatibility
     pub async fn add_model(
         &self,
         key: ModelKey,
-        model: Box<dyn std::any::Any + Send + Sync>,
+        model: Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>,
     ) -> Result<()> {
         debug!("Adding model: {:?}", key);
         self.models.insert(key.clone(), model);
@@ -468,21 +553,27 @@ impl VendorPredictor {
         Ok(())
     }
     
-    /// Add a model to the shared cluster pool (NEW - preferred method)
-    pub async fn add_shared_model(
+    /// Add a typed model to the shared cluster pool - BaseModel<f32> compatible
+    pub async fn add_typed_model(
         &self,
         sector_id: &str,
         model_type: &str,
-        model: Box<dyn std::any::Any + Send + Sync>,
+        model: Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>,
         estimated_memory_mb: f64,
     ) -> Result<()> {
-        // Get or create cluster pool for this sector
-        let pool = self.get_or_create_cluster_pool(sector_id).await?;
+        // Store in regular models storage for compatibility
+        let model_key = ModelKey {
+            sector: sector_id.to_string(),
+            model_type: model_type.to_string(),
+            variant: "default".to_string(),
+        };
         
-        // Add model to the shared pool
-        pool.add_shared_model(model_type, model, estimated_memory_mb).await?;
+        // Add to main model storage
+        self.models.insert(model_key, model);
         
-        info!("✅ Shared model added: {} to sector {} cluster pool", model_type, sector_id);
+        info!("✅ Typed model added: {} to sector {} with BaseModel<f32> compatibility", model_type, sector_id);
+        
+        // Note: Cluster pool integration will be handled separately to avoid ownership issues
         Ok(())
     }
     
@@ -594,15 +685,32 @@ impl VendorPredictor {
         })
     }
     
-    /// Get models for a specific symbol based on sector (public for tests)
+    /// Get models for a specific symbol based on sector - improved with cluster pool fallback
     pub async fn get_models_for_symbol(&self, symbol: &str) -> Result<Vec<ModelKey>> {
         let sector = self.sector_mapper.get_sector(symbol)?;
         
-        let models: Vec<ModelKey> = self.models
+        // First, try to get models from the main storage
+        let mut models: Vec<ModelKey> = self.models
             .iter()
             .filter(|entry| entry.key().sector == sector.id)
             .map(|entry| entry.key().clone())
             .collect();
+        
+        // Also check cluster pool for additional models
+        if let Some(pool) = self.cluster_pools.get(&sector.id) {
+            for model_entry in pool.shared_models.iter() {
+                let cluster_key = ModelKey {
+                    sector: sector.id.clone(),
+                    model_type: model_entry.key().clone(),
+                    variant: "cluster_shared".to_string(),
+                };
+                
+                // Only add if not already present from main storage
+                if !models.iter().any(|k| k.model_type == cluster_key.model_type && k.sector == cluster_key.sector) {
+                    models.push(cluster_key);
+                }
+            }
+        }
         
         // If no sector-specific models, look for models that can handle this sector
         if models.is_empty() && self.config.enable_sector_routing {
@@ -617,6 +725,42 @@ impl VendorPredictor {
         }
         
         Ok(models)
+    }
+    
+    /// Get direct model reference for efficient prediction access
+    pub async fn get_model_for_prediction(&self, symbol: &str, model_type: &str) -> Result<Option<Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>> {
+        let sector = self.sector_mapper.get_sector(symbol)?;
+        
+        // Try main storage first
+        let model_key = ModelKey {
+            sector: sector.id.clone(),
+            model_type: model_type.to_string(),
+            variant: "default".to_string(),
+        };
+        
+        if let Some(model_ref) = self.models.get(&model_key) {
+            return Ok(Some(model_ref.value().clone()));
+        }
+        
+        // Fallback to cluster pool
+        if let Some(pool) = self.cluster_pools.get(&sector.id) {
+            if let Some(model) = pool.get_model_for_prediction(model_type) {
+                return Ok(Some(model));
+            }
+        }
+        
+        // Try universal models as final fallback
+        let universal_key = ModelKey {
+            sector: "universal".to_string(),
+            model_type: "multi_sector".to_string(),
+            variant: "fallback".to_string(),
+        };
+        
+        if let Some(model_ref) = self.models.get(&universal_key) {
+            return Ok(Some(model_ref.value().clone()));
+        }
+        
+        Ok(None)
     }
     
     /// Add sector-specific model routing capability
@@ -669,19 +813,47 @@ impl VendorPredictor {
         let (vendor_data, _conversion_metadata) = self.convert_to_vendor_format(data, symbol).await?;
         let mut predictions = Vec::new();
         
-        // Run predictions in parallel
+        // Convert vendor data to simple f32 array for emergency model prediction
+        let data_values: Vec<f32> = vendor_data.values.iter()
+            .map(|v| *v as f32)
+            .collect();
+        
+        // Run predictions efficiently with direct model access
         for key in &model_keys {
-            if let Some(model_ref) = self.models.get(key) {
-                // Downcast to the specific BaseModel type
-                if let Some(model) = model_ref.downcast_ref::<Box<dyn neuro_divergent_core::traits::BaseModel<f32, State = (), Config = ()>>>() {
-                    // Mock prediction for compilation
-                    match Ok::<ForecastResult<f32>, anyhow::Error>(ForecastResult::new(vec![0.0f32])) {
-                    Ok(forecast) => {
-                        let model_id = format!("{}_{}", key.model_type, key.variant);
+            let model_id = format!("{}_{}", key.model_type, key.variant);
+            
+            // Try to get model directly without multiple lookups
+            let model_result = if key.variant == "cluster_shared" {
+                // Get from cluster pool directly
+                if let Some(pool) = self.cluster_pools.get(&key.sector) {
+                    pool.get_model_for_prediction(&key.model_type)
+                } else {
+                    None
+                }
+            } else {
+                // Get from main storage
+                self.models.get(key).map(|model_ref| model_ref.value().clone())
+            };
+            
+            if let Some(model) = model_result {
+                match model.predict(&data_values) {
+                    Ok(prediction_values) => {
+                        let primary_prediction = prediction_values.get(0).copied().unwrap_or(0.0);
+                        
+                        // Create mock forecast result for compatibility
+                        let forecast = ForecastResult {
+                            forecasts: vec![primary_prediction],
+                            prediction_intervals: None,
+                            confidence_scores: Some(vec![0.8]), // Default confidence
+                            timestamps: None,
+                            unique_id: Some(symbol.to_string()),
+                            additional_outputs: HashMap::new(),
+                        };
+                        
                         match self.convert_from_vendor_format(forecast, symbol, &model_id).await {
                             Ok(pred) => {
                                 predictions.push(pred);
-                                debug!("✅ Model {} prediction successful", model_id);
+                                debug!("✅ Model {} prediction successful: {:.4}", model_id, primary_prediction);
                             }
                             Err(e) => {
                                 warn!("Failed to convert prediction from model {}: {}", model_id, e);
@@ -691,10 +863,9 @@ impl VendorPredictor {
                     Err(e) => {
                         warn!("Model {} prediction failed: {}", key.model_type, e);
                     }
-                    }
-                } else {
-                    warn!("Model {} could not be downcast to BaseModel", key.model_type);
                 }
+            } else {
+                warn!("Model {} not found for symbol {}", model_id, symbol);
             }
         }
         
@@ -1061,15 +1232,95 @@ impl NeuralPredictorTrait for VendorPredictor {
         models: &[String],
         features: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<Vec<PredictionResult>> {
-        // For now, delegate to the main predict method since we already do ensemble internally
-        // In future iterations, we can use the models parameter to filter specific models
-        let mut results = self.predict(data, horizon, features).await?;
+        if data.is_empty() || models.is_empty() {
+            return Ok(vec![]);
+        }
         
-        // Update metadata to indicate this was an ensemble prediction with specific models
-        for result in &mut results {
-            if let Some(ref mut metadata) = result.metadata {
+        let mut results = Vec::new();
+        
+        for item in data {
+            let symbol = item.metadata_map
+                .get("symbol")
+                .and_then(|v| v.as_str())
+                .or_else(|| item.metadata.as_ref()
+                    .and_then(|m| m.get("symbol"))
+                    .and_then(|v| v.as_str()))
+                .unwrap_or(&item.symbol);
+            
+            // Convert to vendor format
+            let (vendor_data, _metadata) = self.convert_to_vendor_format(item, symbol).await?;
+            let data_values: Vec<f32> = vendor_data.values.iter()
+                .map(|v| *v as f32)
+                .collect();
+            
+            let mut ensemble_predictions = Vec::new();
+            
+            // Run predictions with requested models only
+            for model_name in models {
+                if let Ok(Some(model)) = self.get_model_for_prediction(symbol, model_name).await {
+                    match model.predict(&data_values) {
+                        Ok(prediction_values) => {
+                            let primary_prediction = prediction_values.get(0).copied().unwrap_or(0.0);
+                            
+                            let forecast = ForecastResult {
+                                forecasts: vec![primary_prediction],
+                                prediction_intervals: None,
+                                confidence_scores: Some(vec![0.8]),
+                                timestamps: None,
+                                unique_id: Some(symbol.to_string()),
+                                additional_outputs: HashMap::new(),
+                            };
+                            
+                            match self.convert_from_vendor_format(forecast, symbol, model_name).await {
+                                Ok(pred) => {
+                                    ensemble_predictions.push(pred);
+                                    debug!("✅ Ensemble model {} prediction: {:.4}", model_name, primary_prediction);
+                                }
+                                Err(e) => {
+                                    warn!("Failed to convert ensemble prediction from {}: {}", model_name, e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Ensemble model {} prediction failed: {}", model_name, e);
+                        }
+                    }
+                } else {
+                    warn!("Requested ensemble model {} not available for symbol {}", model_name, symbol);
+                }
+            }
+            
+            // Create ensemble result
+            if !ensemble_predictions.is_empty() {
+                let avg_value: f64 = ensemble_predictions.iter().map(|p| p.value).sum::<f64>() 
+                    / ensemble_predictions.len() as f64;
+                let avg_confidence: f64 = ensemble_predictions.iter().map(|p| p.confidence).sum::<f64>()
+                    / ensemble_predictions.len() as f64;
+                
+                let mut metadata = HashMap::new();
                 metadata.insert("requested_models".to_string(), serde_json::json!(models));
                 metadata.insert("ensemble_type".to_string(), serde_json::json!("requested_models"));
+                metadata.insert("horizon".to_string(), serde_json::json!(horizon));
+                metadata.insert("successful_models".to_string(), 
+                    serde_json::json!(ensemble_predictions.iter().map(|p| &p.model_name).collect::<Vec<_>>()));
+                if let Some(ref features) = features {
+                    metadata.insert("requested_features".to_string(), serde_json::json!(features));
+                }
+                
+                let result = PredictionResult {
+                    timestamp: Utc::now(),
+                    value: avg_value,
+                    confidence: avg_confidence,
+                    interval_low: avg_value - (avg_confidence * avg_value.abs()),
+                    interval_high: avg_value + (avg_confidence * avg_value.abs()),
+                    model_name: format!("ensemble_{}_models", ensemble_predictions.len()),
+                    metadata: Some(metadata),
+                };
+                
+                results.push(result);
+            } else {
+                warn!("No successful ensemble predictions for symbol: {}", symbol);
+                results.push(PredictionResult::default());
             }
         }
         

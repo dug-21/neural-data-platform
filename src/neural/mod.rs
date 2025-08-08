@@ -27,6 +27,8 @@ pub mod vendor_predictor;
 pub mod memory_optimized_predictor;
 pub mod sector_aggregator;
 pub mod model_factory;
+pub mod emergency_model;
+pub mod fallback_system;
 
 // Phase 3: Real-time training extensions
 pub mod realtime_training;
