@@ -1,0 +1,294 @@
+# SHARED PHASE 2 CONFIGURATION
+# CRITICAL: Both Python (data-ingestion) and Rust (neural-trader) services MUST use identical values
+
+# Service Identification
+service_name: "neural-trader-phase2"
+version: "2.0.0"
+environment: "production"
+
+# Symbol Configuration - BOTH SERVICES MUST USE IDENTICAL LIST
+symbols:
+  # Technology Sector (XLK)
+  - AAPL    # Apple Inc.
+  - MSFT    # Microsoft Corporation
+  - GOOGL   # Alphabet Inc. Class A
+  - META    # Meta Platforms Inc.
+  - NVDA    # NVIDIA Corporation
+  - AMZN    # Amazon.com Inc.
+  
+  # Financial Sector (XLF) 
+  - JPM     # JPMorgan Chase & Co.
+  - BAC     # Bank of America Corp.
+  - WFC     # Wells Fargo & Company
+  - C       # Citigroup Inc.
+  - GS      # Goldman Sachs Group Inc.
+  
+  # Energy Sector (XLE)
+  - XOM     # Exxon Mobil Corporation
+  - CVX     # Chevron Corporation
+  - COP     # ConocoPhillips
+  - EOG     # EOG Resources Inc.
+  - PSX     # Phillips 66
+
+# Redis Configuration - BOTH SERVICES MUST USE IDENTICAL SETTINGS
+redis:
+  host: "redis-cluster"
+  port: 6379
+  database: 0
+  channel_pattern: "market:{symbol}"    # CRITICAL: Exact format required
+  legacy_channel: "market:updates"     # For migration phase only
+  
+  # Connection Pool Settings - IDENTICAL VALUES REQUIRED
+  connection_pool:
+    max_connections: 10
+    min_connections: 2
+    idle_timeout_seconds: 300
+    connection_timeout_seconds: 5
+    command_timeout_seconds: 10
+    retry_on_timeout: true
+    
+  # Publishing Settings (Python)
+  publishing:
+    max_retries: 3
+    retry_delay_ms: 100
+    batch_size: 100
+    batch_timeout_ms: 50
+    
+  # Subscription Settings (Rust)
+  subscription:
+    max_reconnect_attempts: 5
+    reconnect_delay_ms: 1000
+    message_buffer_size: 10000
+    consumer_timeout_ms: 5000
+
+# Message Schema Validation - BOTH SERVICES MUST IMPLEMENT
+message_schema:
+  version: "2.0"
+  required_fields:
+    - symbol          # String, uppercase, 1-5 chars
+    - timestamp       # ISO 8601 UTC format
+    - price           # Float64, positive
+    - volume          # Uint64, non-negative
+    - bid             # Float64, positive  
+    - ask             # Float64, positive
+    - spread          # Float64, non-negative (ask - bid)
+    - market_session  # String, enum: regular|pre|after
+    - sequence_number # Uint64, monotonic increasing
+    - quality_score   # Float64, 0.0-1.0 range
+    - source          # String, lowercase identifier
+    
+  optional_fields:
+    - metadata        # Object/HashMap, flexible structure
+    
+  field_validations:
+    symbol: "^[A-Z]{1,5}$"
+    timestamp: "RFC3339"
+    price: "> 0.0"
+    volume: ">= 0"
+    bid: "> 0.0"
+    ask: "> 0.0"
+    spread: ">= 0.0"
+    market_session: "^(regular|pre|after)$"
+    sequence_number: "monotonic_increase"
+    quality_score: "0.0 <= x <= 1.0"
+    source: "^[a-z_]+$"
+
+# Circuit Breaker Configuration - IDENTICAL IMPLEMENTATION REQUIRED
+circuit_breaker:
+  # Failure threshold before opening circuit
+  failure_threshold: 5
+  
+  # Time to wait before attempting recovery (seconds)
+  recovery_timeout_seconds: 30
+  
+  # Maximum calls allowed in half-open state
+  half_open_max_calls: 3
+  
+  # Success threshold to close circuit from half-open
+  success_threshold: 2
+  
+  # Per-channel circuit breaker state tracking
+  per_channel_state: true
+  
+  # Circuit breaker metrics collection
+  metrics_enabled: true
+  metrics_interval_seconds: 60
+
+# Retry Logic Configuration - IDENTICAL IMPLEMENTATION REQUIRED
+retry:
+  # Maximum number of retry attempts
+  max_attempts: 3
+  
+  # Base delay between retries (milliseconds)
+  base_delay_ms: 100
+  
+  # Maximum delay between retries (milliseconds)  
+  max_delay_ms: 5000
+  
+  # Exponential backoff multiplier
+  backoff_multiplier: 2.0
+  
+  # Jitter to prevent thundering herd
+  jitter_enabled: true
+  jitter_max_ms: 50
+
+# Performance Targets - BOTH SERVICES MUST MEET
+performance:
+  # Throughput requirements
+  throughput:
+    messages_per_second_per_symbol: 10000
+    total_system_messages_per_second: 100000
+    batch_processing_enabled: true
+    
+  # Latency requirements (milliseconds)
+  latency:
+    publishing_max_ms: 5         # Python publishing latency
+    consumption_max_ms: 10       # Rust consumption latency  
+    end_to_end_max_ms: 15       # Total pipeline latency
+    
+  # Resource limits
+  resources:
+    max_memory_gb: 2.0          # For 50+ symbols
+    max_cpu_percent: 50.0       # During peak hours
+    max_disk_io_mb_per_sec: 100
+    
+  # Reliability targets  
+  reliability:
+    availability_percent: 99.9   # During market hours
+    error_rate_max_percent: 0.1  # Message failures
+    recovery_time_max_seconds: 30
+
+# Migration Strategy - COORDINATED PHASES
+migration:
+  # Phase 2A: Dual Publishing/Subscription
+  phase_2a:
+    duration_days: 2
+    python_actions:
+      - "Continue publishing to market:updates"
+      - "Start publishing to market:{symbol} channels" 
+      - "Monitor dual publishing metrics"
+    rust_actions:
+      - "Continue subscribing to market:updates"
+      - "Start subscribing to market:{symbol} channels"
+      - "Implement deduplication logic"
+      - "Monitor dual subscription metrics"
+    
+  # Phase 2B: Validation & Testing  
+  phase_2b:
+    duration_days: 1
+    coordinated_testing:
+      - "Message format compatibility validation"
+      - "High-frequency load testing"
+      - "Error handling verification"  
+      - "Performance benchmark validation"
+      - "Circuit breaker coordination testing"
+    
+  # Phase 2C: Legacy Cutover
+  phase_2c:
+    duration_days: 1
+    cutover_sequence:
+      - "T+0: Rust stops market:updates subscription"
+      - "T+1hr: Validate symbol-only consumption"
+      - "T+2hr: Python stops market:updates publishing"
+      - "T+3hr: Final validation and monitoring"
+
+# Monitoring & Observability - BOTH SERVICES IMPLEMENT
+monitoring:
+  # Metrics collection
+  metrics:
+    collection_interval_seconds: 10
+    retention_days: 7
+    export_format: "prometheus"
+    
+  # Key performance indicators
+  kpis:
+    - "messages_published_per_second"
+    - "messages_consumed_per_second"  
+    - "message_processing_latency_ms"
+    - "error_rate_percent"
+    - "circuit_breaker_state_changes"
+    - "redis_connection_pool_utilization"
+    
+  # Health checks
+  health_checks:
+    interval_seconds: 30
+    timeout_seconds: 10
+    endpoints:
+      python: "/health"
+      rust: "/health"
+      
+  # Alerting thresholds
+  alerts:
+    error_rate_threshold_percent: 1.0
+    latency_threshold_ms: 20
+    throughput_threshold_percent: 80  # Of target
+    circuit_breaker_open_alert: true
+
+# Security Configuration
+security:
+  # Redis authentication (if enabled)
+  redis_auth:
+    enabled: false
+    username: ""  
+    password: ""
+    
+  # SSL/TLS (if required)
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+    ca_file: ""
+    
+  # Data validation
+  input_validation:
+    enabled: true
+    sanitize_symbols: true
+    validate_numeric_ranges: true
+    reject_malformed_timestamps: true
+
+# Environment-Specific Overrides
+environments:
+  development:
+    redis:
+      host: "localhost"
+      port: 6379
+    performance:
+      throughput:
+        messages_per_second_per_symbol: 1000
+    monitoring:
+      collection_interval_seconds: 60
+      
+  testing:
+    symbols: ["AAPL", "MSFT", "GOOGL"]  # Limited for testing
+    redis:
+      host: "redis-test"
+      port: 6380
+    circuit_breaker:
+      failure_threshold: 2  # Faster failure for testing
+      
+  production:
+    # Use default values above
+    monitoring:
+      alerts:
+        pagerduty_enabled: true
+        slack_notifications: true
+
+# Configuration Validation
+validation:
+  # Both services must validate configuration on startup
+  required_validations:
+    - "All symbols match ^[A-Z]{1,5}$ pattern"
+    - "Redis connection successful"  
+    - "Circuit breaker thresholds > 0"
+    - "Performance targets achievable"
+    - "All required fields present"
+    
+  # Configuration checksum for consistency
+  checksum: "AUTO_GENERATED"  # Services compute and compare
+  
+# Version Control
+config_version: "2.0.0"
+last_updated: "2025-08-08T01:53:06Z"
+compatible_service_versions:
+  data_ingestion_min: "2.0.0"
+  neural_trader_min: "2.0.0"
