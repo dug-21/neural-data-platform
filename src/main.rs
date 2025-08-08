@@ -5,16 +5,17 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::signal;
 use tokio::time::Duration as TokioDuration;
 use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber;
+use sqlx;
+use chrono;
 
 // Import existing DAA components
 use autonomous_platform::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
 use autonomous_platform::integration::daa_coordinator::{DaaConfig, DaaCoordinator, TradingAction};
-use autonomous_platform::integration::data_access::DataAccessLayer;
+use autonomous_platform::integration::data_access::{DataAccessLayer, Timeframe};
 use autonomous_platform::neural::NeuralPredictor;
 use autonomous_platform::strategies::{Position, PositionSide, StrategyConfig, StrategyFactory};
 use autonomous_platform::streaming::event_bus::{EventBusIntegration, MarketEvent};
@@ -31,6 +32,143 @@ use autonomous_platform::monitoring::health::{
     AsyncHealthMonitor, HealthServer, HealthServerConfig, HealthMonitorConfig,
     ComponentType
 };
+
+/// Load initial historical data from the database and populate the event bus
+async fn load_initial_historical_data(
+    data_access: &Arc<DataAccessLayer>,
+    event_bus: &Arc<EventBusIntegration>,
+) -> Result<usize> {
+    let symbols = vec!["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"];
+    let mut total_loaded = 0;
+
+    for symbol in symbols {
+        // Get the latest 100 data points for each symbol
+        match data_access.get_market_data(symbol, Timeframe::Hourly).await {
+            Ok(market_data) => {
+                for data_point in market_data.into_iter().take(100) {
+                    // Convert to MarketEvent format
+                    let market_event = MarketEvent {
+                        symbol: data_point.symbol.clone(),
+                        timestamp: data_point.timestamp,
+                        event_type: "historical_data".to_string(),
+                        price: data_point.close,
+                        volume: data_point.volume_value,
+                        bid: data_point.low,
+                        ask: data_point.high,
+                        spread: data_point.high - data_point.low,
+                        order_book_depth: None,
+                        sequence_number: data_point.timestamp.timestamp() as u64,
+                        source: "historical_load".to_string(),
+                        quality_score: 0.90,
+                        metadata: Some(serde_json::json!({
+                            "open": data_point.open,
+                            "high": data_point.high,
+                            "low": data_point.low,
+                            "close": data_point.close,
+                            "symbol": data_point.symbol
+                        })),
+                    };
+
+                    // Publish to event bus
+                    if let Err(e) = event_bus.publish_market_event(market_event).await {
+                        warn!("Failed to publish historical market event for {}: {}", symbol, e);
+                    } else {
+                        total_loaded += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Failed to load historical data for {}: {}", symbol, e);
+            }
+        }
+    }
+
+    Ok(total_loaded)
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct HistoricalMarketData {
+    pub bucket: chrono::DateTime<chrono::Utc>,
+    pub symbol: String,
+    pub open: Option<f64>,
+    pub high: Option<f64>,
+    pub low: Option<f64>,
+    pub close: Option<f64>,
+    pub volume: Option<f64>,
+}
+
+/// Load historical data from TimescaleDB continuous aggregate and publish to event bus
+async fn load_historical_data(
+    storage: &Arc<TimescaleDBStorage>,
+    event_bus: &Arc<EventBusIntegration>,
+) -> Result<usize> {
+    let end_time = chrono::Utc::now();
+    let start_time = end_time - chrono::Duration::hours(4);
+
+    info!("Querying market_data_1h from {} to {}", start_time.format("%Y-%m-%d %H:%M:%S UTC"), end_time.format("%Y-%m-%d %H:%M:%S UTC"));
+
+    // Query the continuous aggregate market_data_1h for last 4 hours
+    let rows = sqlx::query_as::<_, HistoricalMarketData>(
+        r#"
+        SELECT 
+            bucket,
+            symbol,
+            open,
+            high,
+            low,
+            close,
+            volume::float8 as volume
+        FROM market_data_1h
+        WHERE bucket >= $1 AND bucket <= $2
+        ORDER BY bucket DESC, symbol
+        "#,
+    )
+    .bind(start_time)
+    .bind(end_time)
+    .fetch_all(&storage.pool)
+    .await?;
+
+    let mut loaded_count = 0;
+
+    for row in rows {
+        let symbol = row.symbol.clone();
+        let market_event = MarketEvent {
+            symbol: row.symbol,
+            timestamp: row.bucket,
+            event_type: "historical_market_update".to_string(),
+            price: row.close.unwrap_or(0.0),
+            volume: row.volume.unwrap_or(0.0),
+            bid: row.low.unwrap_or(row.close.unwrap_or(0.0)),
+            ask: row.high.unwrap_or(row.close.unwrap_or(0.0)),
+            spread: (row.high.unwrap_or(0.0) - row.low.unwrap_or(0.0)),
+            order_book_depth: None,
+            sequence_number: row.bucket.timestamp() as u64,
+            source: "historical_timescaledb".to_string(),
+            quality_score: 0.90, // Historical data has slightly lower quality score
+            metadata: Some(serde_json::json!({
+                "open": row.open,
+                "high": row.high,
+                "low": row.low,
+                "close": row.close,
+                "volume": row.volume,
+                "data_type": "historical",
+                "source": "market_data_1h",
+                "bucket": row.bucket.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+            })),
+        };
+
+        // Publish to event bus
+        if let Err(e) = event_bus.publish_market_event(market_event).await {
+            error!("Failed to publish historical market event for {}: {}", symbol, e);
+        } else {
+            loaded_count += 1;
+            debug!("Published historical data point for {} at {}", symbol, row.bucket);
+        }
+    }
+
+    info!("Historical data loading completed - processed {} rows from market_data_1h", loaded_count);
+    Ok(loaded_count)
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -278,6 +416,17 @@ async fn main() -> Result<()> {
             .await
             .context("Failed to initialize event bus")?,
     );
+
+    // Load historical data on startup
+    info!("Loading historical data from market_data_1h...");
+    match load_historical_data(&storage, &event_bus).await {
+        Ok(count) => {
+            info!("✅ Successfully loaded {} historical data points", count);
+        }
+        Err(e) => {
+            warn!("Failed to load historical data: {}", e);
+        }
+    }
 
     info!("All DAA components initialized successfully");
 

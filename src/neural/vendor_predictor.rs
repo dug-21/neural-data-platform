@@ -11,10 +11,12 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
+use bincode;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -1019,13 +1021,86 @@ impl VendorPredictor {
         Ok(())
     }
     
-    pub async fn save_checkpoint(&self, _model_name: &str) -> Result<()> {
-        debug!("Save checkpoint requested - not yet implemented");
+    pub async fn save_checkpoint(&self, model_name: &str) -> Result<()> {
+        debug!("Save checkpoint requested for model: {}", model_name);
+        
+        // Create path to /opt/neural-trader/models/{model_name}.bin
+        let models_dir = PathBuf::from("/opt/neural-trader/models");
+        
+        // Ensure the directory exists
+        tokio::fs::create_dir_all(&models_dir).await?;
+        
+        let checkpoint_path = models_dir.join(format!("{}.bin", model_name));
+        
+        // Create a serializable representation of the models
+        let mut model_data = Vec::new();
+        for entry in self.models.iter() {
+            let key = entry.key();
+            // Since BaseModel doesn't implement Serialize directly, we'll save metadata
+            let model_info = HashMap::from([
+                ("sector".to_string(), serde_json::json!(key.sector)),
+                ("model_type".to_string(), serde_json::json!(key.model_type)),
+                ("variant".to_string(), serde_json::json!(key.variant)),
+                ("timestamp".to_string(), serde_json::json!(Utc::now().to_rfc3339())),
+            ]);
+            model_data.push(model_info);
+        }
+        
+        // Serialize using bincode
+        let serialized_data = bincode::serialize(&model_data)?;
+        
+        // Write to disk using tokio::fs::write
+        tokio::fs::write(&checkpoint_path, serialized_data).await?;
+        
+        // Log success
+        info!("✅ Successfully saved checkpoint for model '{}' to: {}", 
+              model_name, checkpoint_path.display());
+        info!("💾 Checkpoint contains {} model configurations", model_data.len());
+        
         Ok(())
     }
     
-    pub async fn load_checkpoint(&self, _model_name: &str) -> Result<()> {
-        debug!("Load checkpoint requested - not yet implemented");
+    pub async fn load_checkpoint(&self, model_name: &str) -> Result<()> {
+        debug!("Load checkpoint requested for model: {}", model_name);
+        
+        // Create path to /opt/neural-trader/models/{model_name}.bin
+        let models_dir = PathBuf::from("/opt/neural-trader/models");
+        let checkpoint_path = models_dir.join(format!("{}.bin", model_name));
+        
+        // Check if file exists
+        if !checkpoint_path.exists() {
+            warn!("Checkpoint file does not exist: {}", checkpoint_path.display());
+            return Err(anyhow::anyhow!("Checkpoint file not found: {}", checkpoint_path.display()));
+        }
+        
+        // Read file with tokio::fs::read
+        let file_data = tokio::fs::read(&checkpoint_path).await?;
+        
+        // Deserialize with bincode
+        let model_data: Vec<HashMap<String, serde_json::Value>> = bincode::deserialize(&file_data)?;
+        
+        // Log success and information about loaded models
+        info!("✅ Successfully loaded checkpoint for model '{}' from: {}", 
+              model_name, checkpoint_path.display());
+        info!("💾 Checkpoint contains {} model configurations", model_data.len());
+        
+        // Log details of loaded model configurations
+        for (idx, model_info) in model_data.iter().enumerate() {
+            if let (Some(sector), Some(model_type), Some(variant)) = (
+                model_info.get("sector"),
+                model_info.get("model_type"), 
+                model_info.get("variant")
+            ) {
+                info!("📋 Model {}: sector={}, type={}, variant={}", 
+                      idx + 1, sector, model_type, variant);
+            }
+        }
+        
+        // Note: Since BaseModel doesn't implement Serialize/Deserialize directly,
+        // this checkpoint only contains metadata. Actual model restoration would
+        // require recreating models from scratch and loading separate weight files.
+        debug!("Checkpoint loaded successfully - contains model metadata only");
+        
         Ok(())
     }
     
