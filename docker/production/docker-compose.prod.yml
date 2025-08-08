@@ -72,12 +72,14 @@ services:
       - ENABLE_SECTOR_MODELS=${ENABLE_SECTOR_MODELS}
       - ENABLE_REALTIME_ADAPTATION=${ENABLE_REALTIME_ADAPTATION}
       - ENABLE_DATA_DISCOVERY=${ENABLE_DATA_DISCOVERY}
-      # Configuration Paths
+      - ENABLE_MULTI_CHANNEL=${ENABLE_MULTI_CHANNEL}
+      - NEURAL_USE_REAL_MODELS=${NEURAL_USE_REAL_MODELS}
+      # Configuration Paths (using relative paths from WORKDIR)
       - SECTOR_CONFIG_PATH=${SECTOR_CONFIG_PATH}
       - AUTONOMOUS_TRAINING_CONFIG=${AUTONOMOUS_TRAINING_CONFIG}
       - DATA_REQUIREMENTS_CONFIG=${DATA_REQUIREMENTS_CONFIG}
     volumes:
-      - neural_trader_data:/var/lib/neural-trader
+      # - neural_trader_persistence:/opt/neural-trader
       - neural_trader_logs:/var/log/neural-trader
     networks:
       - neural_trader_internal
@@ -271,7 +273,7 @@ volumes:
     driver: local
   grafana_data:
     driver: local
-  neural_trader_data:
+  neural_trader_persistence:
     driver: local
   neural_trader_logs:
     driver: local
