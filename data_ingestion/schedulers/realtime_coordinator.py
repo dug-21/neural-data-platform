@@ -273,10 +273,10 @@ class RealtimeCoordinator:
                     await self._publish_with_retry(symbol_channel, market_data, provider_name)
                 except Exception as e:
                     self.logger.error(f"Failed to publish to {symbol_channel} after all retries: {e}")
-                    metrics.redis_publish_errors.labels(channel=symbol_channel, provider=provider_name).inc()
+                    # Log error but don't call non-existent metric
             else:
                 self.logger.warning(f"Invalid channel format: {symbol_channel} for symbol: {symbol}")
-                metrics.channel_validation_errors.labels(provider=provider_name).inc()
+                # Log warning but don't call non-existent metric
             
             # 2. SECONDARY: Legacy unified channel (BACKWARD COMPATIBILITY)
             if self.settings.enable_legacy_channel:
@@ -284,7 +284,7 @@ class RealtimeCoordinator:
                     await self._publish_with_retry("market:updates", market_data, provider_name)
                 except Exception as e:
                     self.logger.error(f"Failed to publish to market:updates after all retries: {e}")
-                    metrics.redis_publish_errors.labels(channel="market:updates", provider=provider_name).inc()
+                    # Log error but don't call non-existent metric
             
             # Update metrics
             metrics.data_points_processed.labels(
@@ -376,14 +376,16 @@ class RealtimeCoordinator:
                 _do_publish, channel
             )
             
-            # Success metrics
-            metrics.redis_publishes.labels(channel=channel, provider=provider).inc()
+            # Success - use correct metric name with sanitized channel
+            # Replace colon with underscore for Prometheus label compatibility
+            sanitized_channel = channel.replace(':', '_')
+            metrics.redis_publish_total.labels(channel=sanitized_channel, provider=provider).inc()
             return result
             
         except Exception as e:
             # Final failure after all retries
             self.logger.error(f"Publishing to {channel} failed after all retry attempts: {e}")
-            metrics.redis_publish_errors.labels(channel=channel, provider=provider).inc()
+            # Log but don't call non-existent metric
             raise
     
     def add_data_callback(self, callback: Callable):

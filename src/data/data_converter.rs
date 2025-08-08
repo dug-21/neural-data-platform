@@ -226,7 +226,7 @@ impl DataConverter {
             self.denormalize_data(&mut forecasts, stats)?;
         }
         
-        info!("✅ Converted {} forecast values back to internal format", forecasts.len());
+        debug!("✅ Converted {} forecast values back to internal format", forecasts.len());
         
         Ok(forecasts)
     }
