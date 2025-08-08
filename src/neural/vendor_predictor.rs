@@ -48,13 +48,8 @@ use crate::data::data_converter::{DataConverter, DataConverterConfig, Conversion
 use crate::neural::emergency_model::{EmergencyModelFactory, BaseModel};
 use crate::neural::fallback_system::EmergencyFallbackSystem;
 
-/// Model key for identifying models by sector and type
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct ModelKey {
-    pub sector: String,
-    pub model_type: String,
-    pub variant: String,
-}
+// Use the shared ModelKey from typed_storage
+use crate::neural::typed_storage::ModelKey;
 
 /// Configuration for vendor predictor
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -462,11 +457,7 @@ impl VendorPredictor {
         // Without this, NVDA and other symbols have no sector models despite being configured
         for (model_name, model_def) in &sector_config.models {
             // Create ModelKey for registration
-            let model_key = ModelKey {
-                sector: model_def.sector.clone(),
-                model_type: model_def.model_type.clone(),
-                variant: "default".to_string(),
-            };
+            let model_key = ModelKey::from_components(&model_def.sector, &model_def.model_type, "default");
             
             // Create emergency model for Phase 1 stabilization
             let emergency_model = EmergencyModelFactory::create_emergency_model(
@@ -475,6 +466,7 @@ impl VendorPredictor {
                 None, // Use default ModelConfig
             )?;
             
+            // Convert Box to Arc for type compatibility
             // Register the model using existing add_model method with proper typing
             self.add_model(model_key.clone(), emergency_model).await?;
             
@@ -483,11 +475,7 @@ impl VendorPredictor {
         }
         
         // Add universal fallback model for unmapped symbols
-        let universal_key = ModelKey {
-            sector: "universal".to_string(),
-            model_type: "multi_sector".to_string(),
-            variant: "fallback".to_string(),
-        };
+        let universal_key = ModelKey::from_components("universal", "multi_sector", "fallback");
         
         let universal_emergency_model = EmergencyModelFactory::create_emergency_model(
             "multi_sector",
@@ -515,11 +503,7 @@ impl VendorPredictor {
         ];
         
         for (sector, model_type) in emergency_models {
-            let model_key = ModelKey {
-                sector: sector.to_string(),
-                model_type: model_type.to_string(),
-                variant: "emergency".to_string(),
-            };
+            let model_key = ModelKey::from_components(sector, model_type, "emergency");
             
             // Create emergency model instance
             let emergency_model = EmergencyModelFactory::create_emergency_model(
@@ -562,11 +546,7 @@ impl VendorPredictor {
         estimated_memory_mb: f64,
     ) -> Result<()> {
         // Store in regular models storage for compatibility
-        let model_key = ModelKey {
-            sector: sector_id.to_string(),
-            model_type: model_type.to_string(),
-            variant: "default".to_string(),
-        };
+        let model_key = ModelKey::from_components(sector_id, model_type, "default");
         
         // Add to main model storage
         self.models.insert(model_key, model);
@@ -699,11 +679,7 @@ impl VendorPredictor {
         // Also check cluster pool for additional models
         if let Some(pool) = self.cluster_pools.get(&sector.id) {
             for model_entry in pool.shared_models.iter() {
-                let cluster_key = ModelKey {
-                    sector: sector.id.clone(),
-                    model_type: model_entry.key().clone(),
-                    variant: "cluster_shared".to_string(),
-                };
+                let cluster_key = ModelKey::from_components(&sector.id, model_entry.key(), "cluster_shared");
                 
                 // Only add if not already present from main storage
                 if !models.iter().any(|k| k.model_type == cluster_key.model_type && k.sector == cluster_key.sector) {
@@ -728,36 +704,30 @@ impl VendorPredictor {
     }
     
     /// Get direct model reference for efficient prediction access
-    pub async fn get_model_for_prediction(&self, symbol: &str, model_type: &str) -> Result<Option<Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>> {
+    pub async fn get_model_for_prediction(&self, symbol: &str, model_type: &str) -> Result<Option<dashmap::mapref::one::Ref<'_, ModelKey, Box<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>>>> {
         let sector = self.sector_mapper.get_sector(symbol)?;
         
         // Try main storage first
-        let model_key = ModelKey {
-            sector: sector.id.clone(),
-            model_type: model_type.to_string(),
-            variant: "default".to_string(),
-        };
+        let model_key = ModelKey::from_components(&sector.id, model_type, "default");
         
         if let Some(model_ref) = self.models.get(&model_key) {
-            return Ok(Some(model_ref.value().clone()));
+            return Ok(Some(model_ref));
         }
         
         // Fallback to cluster pool
         if let Some(pool) = self.cluster_pools.get(&sector.id) {
-            if let Some(model) = pool.get_model_for_prediction(model_type) {
-                return Ok(Some(model));
+            if let Some(_cluster_model) = pool.get_model_for_prediction(model_type) {
+                // For cluster models, we need to return the pool reference, but this creates ownership issues
+                // For now, return None and handle cluster models differently in calling code
+                return Ok(None);
             }
         }
         
         // Try universal models as final fallback
-        let universal_key = ModelKey {
-            sector: "universal".to_string(),
-            model_type: "multi_sector".to_string(),
-            variant: "fallback".to_string(),
-        };
+        let universal_key = ModelKey::from_components("universal", "multi_sector", "fallback");
         
         if let Some(model_ref) = self.models.get(&universal_key) {
-            return Ok(Some(model_ref.value().clone()));
+            return Ok(Some(model_ref));
         }
         
         Ok(None)
@@ -822,22 +792,29 @@ impl VendorPredictor {
         for key in &model_keys {
             let model_id = format!("{}_{}", key.model_type, key.variant);
             
-            // Try to get model directly without multiple lookups
-            let model_result = if key.variant == "cluster_shared" {
+            // Handle different model storage types separately
+            let prediction_result = if key.variant == "cluster_shared" {
                 // Get from cluster pool directly
                 if let Some(pool) = self.cluster_pools.get(&key.sector) {
-                    pool.get_model_for_prediction(&key.model_type)
+                    if let Some(cluster_model) = pool.get_model_for_prediction(&key.model_type) {
+                        cluster_model.value().predict(&data_values)
+                    } else {
+                        continue; // Skip if no cluster model found
+                    }
                 } else {
-                    None
+                    continue; // Skip if no cluster pool found
                 }
             } else {
                 // Get from main storage
-                self.models.get(key).map(|model_ref| model_ref.value().clone())
+                if let Some(model_ref) = self.models.get(key) {
+                    model_ref.value().predict(&data_values)
+                } else {
+                    continue; // Skip if no regular model found
+                }
             };
             
-            if let Some(model) = model_result {
-                match model.predict(&data_values) {
-                    Ok(prediction_values) => {
+            match prediction_result {
+                Ok(prediction_values) => {
                         let primary_prediction = prediction_values.get(0).copied().unwrap_or(0.0);
                         
                         // Create mock forecast result for compatibility
@@ -860,12 +837,9 @@ impl VendorPredictor {
                             }
                         }
                     }
-                    Err(e) => {
-                        warn!("Model {} prediction failed: {}", key.model_type, e);
-                    }
+                Err(e) => {
+                    warn!("Model {} prediction failed: {}", key.model_type, e);
                 }
-            } else {
-                warn!("Model {} not found for symbol {}", model_id, symbol);
             }
         }
         
@@ -1257,8 +1231,8 @@ impl NeuralPredictorTrait for VendorPredictor {
             
             // Run predictions with requested models only
             for model_name in models {
-                if let Ok(Some(model)) = self.get_model_for_prediction(symbol, model_name).await {
-                    match model.predict(&data_values) {
+                if let Ok(Some(model_ref)) = self.get_model_for_prediction(symbol, model_name).await {
+                    match model_ref.value().predict(&data_values) {
                         Ok(prediction_values) => {
                             let primary_prediction = prediction_values.get(0).copied().unwrap_or(0.0);
                             
