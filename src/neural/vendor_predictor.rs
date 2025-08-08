@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -867,13 +867,41 @@ impl VendorPredictor {
         ensemble_metadata.insert("individual_values".to_string(), 
             serde_json::json!(predictions.iter().map(|p| p.value).collect::<Vec<_>>()));
         
+        // Create a more descriptive model name
+        let sector = self.sector_mapper.get_sector(symbol)
+            .map(|s| s.id.clone())
+            .unwrap_or_else(|_| "unknown".to_string());
+        
+        // Extract unique model types from the predictions
+        let model_types: Vec<String> = predictions.iter()
+            .map(|p| {
+                // Try to extract model type from model_name (e.g., "lstm_default" -> "lstm")
+                p.model_name.split('_').next().unwrap_or("model").to_string()
+            })
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        
+        // Create descriptive name with sector and model types
+        let model_name = if model_types.len() == 1 {
+            format!("{}_{}_ensemble_{}", 
+                model_types[0], 
+                sector,
+                predictions.len())
+        } else {
+            format!("mixed_{}_{}_ensemble_{}", 
+                sector,
+                model_types.join("+"),
+                predictions.len())
+        };
+        
         let result = PredictionResult {
             timestamp: Utc::now(),
             value: avg_value,
             confidence: avg_confidence,
             interval_low: avg_value - (avg_confidence * avg_value.abs()),
             interval_high: avg_value + (avg_confidence * avg_value.abs()),
-            model_name: format!("ensemble_{}_models", predictions.len()),
+            model_name,
             metadata: Some(ensemble_metadata),
         };
         
