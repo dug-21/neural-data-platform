@@ -8,8 +8,9 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -19,7 +20,8 @@ pub struct EventBusIntegration {
     pub daa_access: Arc<DataAccessLayer>,
     event_serializer: EventSerializer,
     event_router: Arc<RwLock<EventRouter>>,
-    published_events: Arc<RwLock<HashMap<String, Vec<DaaEvent>>>>,
+    // CRITICAL FIX: Changed from HashMap<String, Vec<DaaEvent>> to VecDeque for memory management
+    published_events: Arc<RwLock<HashMap<String, VecDeque<DaaEvent>>>>,
     daa_agents: Arc<RwLock<HashMap<String, mpsc::Sender<DaaEvent>>>>,
     batch_config: Arc<RwLock<BatchConfig>>,
     retry_config: Arc<RwLock<RetryConfig>>,
@@ -27,6 +29,11 @@ pub struct EventBusIntegration {
     error_stats: Arc<RwLock<ErrorStats>>,
     memory_storage: Arc<RwLock<HashMap<String, Value>>>,
     is_monitoring_enabled: Arc<RwLock<bool>>,
+    
+    // New fields for memory management
+    max_events_per_type: usize,      // Default: 1000
+    event_ttl: Duration,              // Default: 5 minutes
+    last_cleanup: Arc<RwLock<Instant>>,
 }
 
 /// Market event from streaming pipeline
@@ -187,6 +194,10 @@ impl EventBusIntegration {
             error_stats: Arc::new(RwLock::new(ErrorStats::default())),
             memory_storage: Arc::new(RwLock::new(HashMap::new())),
             is_monitoring_enabled: Arc::new(RwLock::new(false)),
+            // Initialize memory management fields
+            max_events_per_type: 1000,  // Prevent unbounded growth
+            event_ttl: Duration::from_secs(300),  // 5 minutes TTL
+            last_cleanup: Arc::new(RwLock::new(Instant::now())),
         })
     }
 
@@ -214,13 +225,20 @@ impl EventBusIntegration {
         // Convert to DAA format
         let daa_event = self.convert_market_to_daa(&event).await?;
 
-        // Store published event
+        // Store published event with memory management
         {
             let mut published = self.published_events.write().await;
-            published
+            let events = published
                 .entry("market".to_string())
-                .or_insert_with(Vec::new)
-                .push(daa_event.clone());
+                .or_insert_with(VecDeque::new);
+            
+            // Add new event
+            events.push_back(daa_event.clone());
+            
+            // Enforce memory limit - remove old events if over limit
+            while events.len() > self.max_events_per_type {
+                events.pop_front();
+            }
         }
 
         // Update performance metrics
@@ -238,13 +256,20 @@ impl EventBusIntegration {
         // Convert to DAA format
         let daa_event = self.convert_news_to_daa(&event).await?;
 
-        // Store published event
+        // Store published event with memory management
         {
             let mut published = self.published_events.write().await;
-            published
+            let events = published
                 .entry("news".to_string())
-                .or_insert_with(Vec::new)
-                .push(daa_event.clone());
+                .or_insert_with(VecDeque::new);
+            
+            // Add new event
+            events.push_back(daa_event.clone());
+            
+            // Enforce memory limit - remove old events if over limit
+            while events.len() > self.max_events_per_type {
+                events.pop_front();
+            }
         }
 
         // Update performance metrics
@@ -262,13 +287,20 @@ impl EventBusIntegration {
         // Convert to DAA format
         let daa_event = self.convert_quality_to_daa(&event).await?;
 
-        // Store published event
+        // Store published event with memory management
         {
             let mut published = self.published_events.write().await;
-            published
+            let events = published
                 .entry("quality".to_string())
-                .or_insert_with(Vec::new)
-                .push(daa_event.clone());
+                .or_insert_with(VecDeque::new);
+            
+            // Add new event
+            events.push_back(daa_event.clone());
+            
+            // Enforce memory limit - remove old events if over limit
+            while events.len() > self.max_events_per_type {
+                events.pop_front();
+            }
         }
 
         // Update performance metrics
@@ -289,13 +321,20 @@ impl EventBusIntegration {
         // Convert to DAA format
         let daa_event = self.convert_system_to_daa(&event).await?;
 
-        // Store published event
+        // Store published event with memory management
         {
             let mut published = self.published_events.write().await;
-            published
+            let events = published
                 .entry("system".to_string())
-                .or_insert_with(Vec::new)
-                .push(daa_event.clone());
+                .or_insert_with(VecDeque::new);
+            
+            // Add new event
+            events.push_back(daa_event.clone());
+            
+            // Enforce memory limit - remove old events if over limit
+            while events.len() > self.max_events_per_type {
+                events.pop_front();
+            }
         }
 
         // Update performance metrics
@@ -349,7 +388,10 @@ impl EventBusIntegration {
     /// Get published events by type
     pub async fn get_published_events(&self, event_type: &str) -> Result<Vec<DaaEvent>> {
         let published = self.published_events.read().await;
-        Ok(published.get(event_type).cloned().unwrap_or_default())
+        Ok(published
+            .get(event_type)
+            .map(|deque| deque.iter().cloned().collect())
+            .unwrap_or_default())
     }
 
     /// Get routed events (events that passed filtering)
