@@ -6,11 +6,13 @@
 //! Test Coverage:
 //! - Enhanced Neural Predictor (85%+ coverage)
 //! - FANN-based Neural Predictor
+//! - ETF-based Sector Model Architecture
 //! - DAA Integration Tests  
 //! - Performance Benchmarks and Stress Tests
 
 pub mod test_daa_integration;
 pub mod test_enhanced_predictor;
+pub mod test_etf_architecture;
 pub mod test_fann_predictor;
 pub mod test_feature_flag;
 pub mod test_performance_benchmarks;

@@ -204,6 +204,7 @@ impl Default for SymbolSpecializationConfig {
 }
 
 /// Main Symbol Specialization Layer
+#[derive(Debug, Clone)]
 pub struct SymbolSpecializationLayer {
     /// Sector ID this specialization belongs to
     sector_id: SectorId,

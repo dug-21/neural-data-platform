@@ -92,6 +92,7 @@ pub mod types; // Shared type definitions
 pub mod utils;
 pub mod multi_channel;
 pub mod helpers;
+pub mod validation;
 
 // Re-export commonly used types
 pub use anyhow::Result;

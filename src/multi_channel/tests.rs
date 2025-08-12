@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::multi_channel::{FairProcessingScheduler, ProcessingPriority, SymbolStats, WorkItem, MultiChannelConfig};
     use std::time::Duration;
     use tokio::time::timeout;
 
@@ -15,8 +16,8 @@ mod tests {
             0.20 // 20% max
         );
         
-        assert_eq!(scheduler.max_symbol_percentage, 0.20);
-        assert_eq!(scheduler.fairness_window, Duration::from_secs(60));
+        assert_eq!(scheduler.get_max_symbol_percentage(), 0.20);
+        assert_eq!(scheduler.get_fairness_window(), Duration::from_secs(60));
     }
 
     #[tokio::test]
@@ -74,7 +75,7 @@ mod tests {
             high: 152.0,
             low: 149.0,
             close: 151.0,
-            volume: 1000,
+            volume: 1000.0,
         };
 
         let work_item = WorkItem {

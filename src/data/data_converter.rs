@@ -159,7 +159,7 @@ impl DataConverter {
         
         // Step 5: Add time-based features if enabled
         if self.config.enable_feature_engineering && !data.timestamps.is_empty() {
-            let time_features = self.add_time_features(&data.timestamps)?;
+            let _time_features = self.add_time_features(&data.timestamps)?;
             // For now, we'll just track that time features were computed
             features_added.extend(self.config.time_features.clone());
         }

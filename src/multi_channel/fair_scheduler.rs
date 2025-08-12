@@ -298,6 +298,16 @@ impl FairProcessingScheduler {
         self.symbol_queues.clear();
         tracing::warn!("All processing queues cleared");
     }
+    
+    /// Get maximum symbol percentage (for testing)
+    pub fn get_max_symbol_percentage(&self) -> f64 {
+        self.max_symbol_percentage
+    }
+    
+    /// Get fairness window duration (for testing)
+    pub fn get_fairness_window(&self) -> Duration {
+        self.fairness_window
+    }
 }
 
 #[cfg(test)]

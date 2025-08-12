@@ -53,7 +53,7 @@ impl HealthChecker for DatabaseHealthChecker {
                 metadata.insert("response_time_ms".to_string(), response_time_ms.to_string());
 
                 // Get connection pool stats
-                let pool_options = self.pool.options();
+                let _pool_options = self.pool.options();
                 let pool_size: u32 = 10; // Simplified pool size since get_max_connections() is not available
                 let pool_stats: u32 = self.pool.size();
                 
@@ -158,7 +158,6 @@ impl HealthChecker for RedisHealthChecker {
                 let ping_result: Result<redis::RedisResult<String>, _> = tokio::time::timeout(
                     self.timeout,
                     async {
-                        use redis::AsyncCommands;
                         conn.get("__ping__").await
                     }
                 ).await;
@@ -346,7 +345,7 @@ pub struct HealthCheckerFactory;
 
 impl HealthCheckerFactory {
     /// Create a database health checker
-    pub fn create_database_checker(connection_string: &str) -> Result<Box<dyn HealthChecker>> {
+    pub fn create_database_checker(_connection_string: &str) -> Result<Box<dyn HealthChecker>> {
         // In real implementation, this would create a proper connection pool
         // For now, we'll return a placeholder
         todo!("Implement actual database connection")
