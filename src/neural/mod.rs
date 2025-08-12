@@ -14,7 +14,7 @@ use crate::data::TimeSeriesData;
 // Internal modules - temporarily public for compilation
 // REMOVED: fann_predictor_legacy_deprecated - was causing 131 compilation errors
 // pub mod fann; // New modular FANN architecture (DISABLED - missing implementation)
-mod fann_model_adapter;
+pub(crate) mod fann_model_adapter;
 mod streaming_connector;
 mod online_validator;
 mod online_learning_manager;

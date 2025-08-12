@@ -9,10 +9,97 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, mpsc};
-use futures::StreamExt;
+// use futures::StreamExt; // Unused for now
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::{AdapterError, MarketData};
+
+/// Load enabled symbols from environment variable TRADING_SYMBOLS_PRIMARY
+/// Returns None if environment variable is not set or invalid
+fn load_enabled_symbols_from_env() -> Option<Vec<String>> {
+    use std::env;
+    
+    if let Ok(symbols_env) = env::var("TRADING_SYMBOLS_PRIMARY") {
+        let symbols: Vec<String> = symbols_env
+            .split(',')
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        
+        if !symbols.is_empty() {
+            tracing::info!("Loaded {} enabled symbols from TRADING_SYMBOLS_PRIMARY: {:?}", symbols.len(), symbols);
+            return Some(symbols);
+        }
+    }
+    
+    // Try to load from sector configuration if available
+    if let Ok(symbols) = load_sector_aware_symbols() {
+        tracing::info!("Loaded {} symbols from sector configuration", symbols.len());
+        return Some(symbols);
+    }
+    
+    None
+}
+
+/// Load symbols from sector configuration with memory optimization
+fn load_sector_aware_symbols() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    use std::fs;
+    use std::path::Path;
+    
+    let config_path = "neural-trader-config/sector_models.toml";
+    
+    if !Path::new(config_path).exists() {
+        return Err("Sector configuration file not found".into());
+    }
+    
+    let content = fs::read_to_string(config_path)?;
+    let config: toml::Value = content.parse()?;
+    
+    let mut symbols = Vec::new();
+    
+    // Extract high-priority symbols from sectors
+    if let Some(sectors) = config.get("sectors").and_then(|s| s.as_table()) {
+        // Sort sectors by weight to prioritize important ones
+        let mut sector_entries: Vec<_> = sectors.iter().collect();
+        sector_entries.sort_by(|a, b| {
+            let weight_a = a.1.get("sector_weight").and_then(|w| w.as_float()).unwrap_or(0.0);
+            let weight_b = b.1.get("sector_weight").and_then(|w| w.as_float()).unwrap_or(0.0);
+            weight_b.partial_cmp(&weight_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        for (_sector_name, sector_data) in sector_entries {
+            if let Some(sector_symbols) = sector_data.get("symbols").and_then(|s| s.as_array()) {
+                let sector_weight = sector_data
+                    .get("sector_weight")
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(0.0);
+                
+                // Only include sectors with meaningful weight
+                if sector_weight >= 0.05 {  // 5% minimum sector weight
+                    let max_symbols = if sector_weight >= 0.15 { 3 } else { 2 }; // Top sectors get more symbols
+                    
+                    for (i, symbol) in sector_symbols.iter().enumerate() {
+                        if i >= max_symbols { break; }
+                        if let Some(symbol_str) = symbol.as_str() {
+                            symbols.push(symbol_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Ensure reasonable symbol count for memory constraints
+    symbols.sort();
+    symbols.dedup();
+    symbols.truncate(16);  // Limit to 16 symbols for memory efficiency
+    
+    if symbols.is_empty() {
+        return Err("No valid symbols found in sector configuration".into());
+    }
+    
+    Ok(symbols)
+}
 use crate::adapters::redis::RedisAdapter;
 use crate::streaming::event_bus::EventBusIntegration;
 
@@ -53,14 +140,22 @@ pub struct MultiChannelConfig {
 
 impl Default for MultiChannelConfig {
     fn default() -> Self {
-        Self {
-            enabled_symbols: vec![
+        // Load symbols from environment or configuration, fallback to primary symbols
+        let enabled_symbols = load_enabled_symbols_from_env().unwrap_or_else(|| {
+            vec![
                 "AAPL".to_string(), 
                 "NVDA".to_string(), 
                 "MSFT".to_string(),
                 "GOOGL".to_string(), 
-                "TSLA".to_string()
-            ],
+                "TSLA".to_string(),
+                "AMZN".to_string(),
+                "META".to_string(),
+                "DDOG".to_string()
+            ]
+        });
+        
+        Self {
+            enabled_symbols,
             max_concurrent_subscriptions: 100,
             worker_pool_size: None, // Auto-detect CPU cores
             worker_queue_size: 1000,

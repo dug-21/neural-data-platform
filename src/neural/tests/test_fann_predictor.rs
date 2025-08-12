@@ -131,7 +131,7 @@ mod fann_initialization_tests {
     #[traced_test]
     async fn test_fann_predictor_basic_initialization() -> Result<()> {
         let config = create_fann_test_config();
-        let predictor = NeuralPredictor::new(config.clone())?;
+        let predictor = VendorPredictor::new(config.clone()).await?;
 
         // Verify model configurations are created for all specified models
         let model_configs = predictor.get_model_configs();

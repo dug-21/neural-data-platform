@@ -10,7 +10,7 @@
 //! Maps individual symbols to sectors for efficient model sharing
 //! and provides sector-level feature aggregation.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow, Context};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -57,7 +57,7 @@ impl SectorId {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "technology" | "tech" => Some(SectorId::Technology),
-            "financial" | "finance" | "financials" => Some(SectorId::Financial),
+            "financial" | "finance" | "financials" | "financial_services" => Some(SectorId::Financial),
             "healthcare" | "health" => Some(SectorId::Healthcare),
             "energy" => Some(SectorId::Energy),
             "consumer_discretionary" | "consumer" => Some(SectorId::ConsumerDiscretionary),
@@ -95,6 +95,12 @@ pub enum MarketCapTier {
     SmallCap,   // < $2B
 }
 
+impl Default for MarketCapTier {
+    fn default() -> Self {
+        MarketCapTier::LargeCap
+    }
+}
+
 /// Sector information for a symbol
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectorInfo {
@@ -111,6 +117,22 @@ pub struct SectorInfo {
     pub market_cap_tier: MarketCapTier,
     pub weight_in_sector: f64, // 0.0 to 1.0
     pub correlation_group: Option<String>,
+}
+
+impl Default for SectorInfo {
+    fn default() -> Self {
+        Self {
+            id: "technology".to_string(),
+            sector_id: SectorId::Technology,
+            name: "Technology".to_string(),
+            symbols: Vec::new(),
+            description: "Technology sector".to_string(),
+            sub_sector: None,
+            market_cap_tier: MarketCapTier::LargeCap,
+            weight_in_sector: 0.0,
+            correlation_group: None,
+        }
+    }
 }
 
 /// Sector ETF mapping
@@ -465,6 +487,9 @@ impl SectorMapper {
     
     /// Get sector for a symbol
     pub fn get_sector(&self, symbol: &str) -> Result<SectorInfo> {
+        // PRODUCTION VALIDATION: Ensure only real trading symbols are processed
+        self.validate_trading_symbol(symbol)?;
+        
         self.symbol_sectors
             .get(symbol)
             .map(|entry| entry.clone())
@@ -494,6 +519,32 @@ impl SectorMapper {
             })
     }
     
+    /// Validate that input is a trading symbol, not a model type
+    fn validate_trading_symbol(&self, input: &str) -> Result<()> {
+        // Check for common model architecture names that should never be symbols
+        let model_architectures = [
+            "Transformer", "LSTM", "GRU", "RNN", "CNN", "MLP", "TCN", "DeepAR", 
+            "NHITS", "ARIMA", "Prophet", "XGBoost", "LightGBM", "RandomForest",
+            "EmergencyModel", "FallbackModel", "BaseModel", "EnsembleModel"
+        ];
+        
+        if model_architectures.contains(&input) {
+            return Err(anyhow!(
+                "CRITICAL ERROR: Model architecture '{}' passed to sector_mapper. \
+                 This should be a trading symbol (AAPL, NVDA, XLF, etc.), not a model type!",
+                input
+            ));
+        }
+        
+        // Basic format validation for trading symbols (1-5 uppercase letters)
+        if !input.chars().all(|c| c.is_ascii_uppercase()) || input.len() > 5 || input.is_empty() {
+            warn!("Input '{}' does not match standard trading symbol format", input);
+        }
+        
+        debug!("✅ Trading symbol '{}' validated for sector mapping", input);
+        Ok(())
+    }
+    
     /// Get all symbols in a sector
     pub fn get_symbols_in_sector(&self, sector: &SectorId) -> Vec<String> {
         self.symbol_sectors
@@ -512,8 +563,86 @@ impl SectorMapper {
     pub async fn load_from_config(&mut self, config_path: &Path) -> Result<()> {
         info!("Loading sector mappings from: {:?}", config_path);
         
-        // This would load from a TOML or JSON file
-        // For now, we're using hardcoded defaults
+        // Read the TOML file
+        let config_str = tokio::fs::read_to_string(config_path).await
+            .context(format!("Failed to read config file: {:?}", config_path))?;
+        
+        // Parse the TOML
+        let config: toml::Value = toml::from_str(&config_str)
+            .context("Failed to parse TOML configuration")?;
+        
+        // Get the sectors table
+        let sectors = config.get("sectors")
+            .and_then(|s| s.as_table())
+            .ok_or_else(|| anyhow!("Missing 'sectors' section in config"))?;
+        
+        let mut loaded_count = 0;
+        
+        // Process each sector
+        for (sector_key, sector_value) in sectors {
+            let sector_table = sector_value.as_table()
+                .ok_or_else(|| anyhow!("Invalid sector configuration for {}", sector_key))?;
+            
+            // Parse sector ID
+            let sector_id = SectorId::from_str(sector_key)
+                .ok_or_else(|| anyhow!("Unknown sector ID: {}", sector_key))?;
+            
+            // Get ETF representative
+            if let Some(etf) = sector_table.get("etf_representative")
+                .and_then(|e| e.as_str()) {
+                
+                // Add ETF to sector_etfs mapping
+                self.sector_etfs.insert(sector_id, etf.to_string());
+                
+                // Add ETF to symbol_sectors mapping
+                let etf_info = SectorInfo {
+                    id: sector_key.to_string(),
+                    sector_id,
+                    name: format!("{} Sector ETF", 
+                        sector_table.get("sector_name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or(sector_key)),
+                    symbols: vec![etf.to_string()],
+                    description: format!("Sector ETF for {}",
+                        sector_table.get("description")
+                            .and_then(|d| d.as_str())
+                            .unwrap_or("sector")),
+                    sub_sector: Some("ETF".to_string()),
+                    market_cap_tier: MarketCapTier::LargeCap,
+                    weight_in_sector: 1.0, // ETF represents entire sector
+                    correlation_group: Some(format!("{}_ETF", sector_key.to_uppercase())),
+                };
+                self.add_symbol_mapping(etf, etf_info);
+                loaded_count += 1;
+            }
+            
+            // Get individual symbols
+            if let Some(symbols) = sector_table.get("symbols")
+                .and_then(|s| s.as_array()) {
+                
+                let total_symbols = symbols.len() as f64;
+                for (idx, symbol_value) in symbols.iter().enumerate() {
+                    if let Some(symbol) = symbol_value.as_str() {
+                        let symbol_info = SectorInfo {
+                            id: sector_key.to_string(),
+                            sector_id,
+                            name: symbol.to_string(), // Would need company names from another source
+                            symbols: vec![symbol.to_string()],
+                            description: format!("Company in {} sector", sector_key),
+                            sub_sector: None,
+                            market_cap_tier: MarketCapTier::LargeCap, // Default, could be configured
+                            weight_in_sector: 1.0 / total_symbols, // Equal weight default
+                            correlation_group: None,
+                        };
+                        self.add_symbol_mapping(symbol, symbol_info);
+                        loaded_count += 1;
+                    }
+                }
+            }
+        }
+        
+        info!("✅ Loaded {} symbol mappings from config file", loaded_count);
+        info!("📊 Total symbols in mapping: {}", self.symbol_sectors.len());
         
         Ok(())
     }

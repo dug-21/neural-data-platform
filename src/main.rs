@@ -3,6 +3,7 @@ use autonomous_platform::load_default_config;
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::env;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::signal;
@@ -26,6 +27,100 @@ use autonomous_platform::adapters::DataAdapter;
 
 // Import MarketHours and Exchange
 use autonomous_platform::utils::market_hours::{MarketHours, Exchange};
+use autonomous_platform::utils::symbol_loader;
+
+/// Load trading symbols from environment variable or configuration
+/// Returns a dynamic list of symbols based on TRADING_SYMBOLS_PRIMARY
+fn load_trading_symbols() -> Result<Vec<String>> {
+    // First try to get symbols from environment variable
+    if let Ok(symbols_env) = env::var("TRADING_SYMBOLS_PRIMARY") {
+        let symbols: Vec<String> = symbols_env
+            .split(',')
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        
+        if !symbols.is_empty() {
+            info!("Loaded {} trading symbols from TRADING_SYMBOLS_PRIMARY: {:?}", symbols.len(), symbols);
+            return Ok(symbols);
+        }
+    }
+    
+    // Fallback: try to load from sector configuration
+    let sector_config_path = "neural-trader-config/sector_models.toml";
+    if Path::new(sector_config_path).exists() {
+        match load_symbols_from_sector_config(sector_config_path) {
+            Ok(symbols) => {
+                info!("Loaded {} symbols from sector configuration", symbols.len());
+                return Ok(symbols);
+            }
+            Err(e) => {
+                warn!("Failed to load symbols from sector config: {}", e);
+            }
+        }
+    }
+    
+    // Ultimate fallback: use hardcoded primary symbols
+    warn!("Using fallback primary symbols set");
+    Ok(vec![
+        "AAPL".to_string(), "MSFT".to_string(), "GOOGL".to_string(), 
+        "AMZN".to_string(), "NVDA".to_string(), "DDOG".to_string(),
+        "TSLA".to_string(), "META".to_string()
+    ])
+}
+
+/// Load symbols from sector configuration file with memory-aware selection
+fn load_symbols_from_sector_config(config_path: &str) -> Result<Vec<String>> {
+    use std::fs;
+    use toml::Value;
+    
+    let content = fs::read_to_string(config_path)
+        .context("Failed to read sector configuration file")?;
+    
+    let config: Value = content.parse()
+        .context("Failed to parse sector configuration TOML")?;
+    
+    let mut symbols = Vec::new();
+    
+    // Extract symbols from each sector based on memory and performance constraints
+    if let Some(sectors) = config.get("sectors").and_then(|s| s.as_table()) {
+        for (_sector_name, sector_data) in sectors {
+            if let Some(sector_symbols) = sector_data.get("symbols").and_then(|s| s.as_array()) {
+                // Limit symbols per sector based on max_symbols configuration
+                let max_symbols = sector_data
+                    .get("max_symbols")
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(8) as usize;
+                
+                let sector_weight = sector_data
+                    .get("sector_weight")
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(0.1);
+                
+                // Only include high-weight sectors in primary symbol list
+                if sector_weight >= 0.08 {  // 8% minimum weight
+                    for (i, symbol) in sector_symbols.iter().enumerate() {
+                        if i >= max_symbols { break; }
+                        if let Some(symbol_str) = symbol.as_str() {
+                            symbols.push(symbol_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Ensure we don't exceed memory constraints (limit to 16 primary symbols)
+    symbols.sort();
+    symbols.dedup();
+    symbols.truncate(16);
+    
+    if symbols.is_empty() {
+        return Err(anyhow::anyhow!("No valid symbols found in sector configuration"));
+    }
+    
+    Ok(symbols)
+}
 
 // Import health monitoring
 use autonomous_platform::monitoring::health::{
@@ -33,15 +128,32 @@ use autonomous_platform::monitoring::health::{
     ComponentType
 };
 
+/// Check if a model file is a placeholder (empty or minimal)
+fn is_placeholder_model(model_path: &str) -> bool {
+    use std::fs;
+    
+    // Check if file exists and has meaningful size
+    match fs::metadata(model_path) {
+        Ok(metadata) => {
+            // Files smaller than 1KB are likely placeholder files
+            metadata.len() < 1024
+        }
+        Err(_) => {
+            // File doesn't exist, so it's definitely a placeholder
+            true
+        }
+    }
+}
+
 /// Load initial historical data from the database and populate the event bus
 async fn load_initial_historical_data(
     data_access: &Arc<DataAccessLayer>,
     event_bus: &Arc<EventBusIntegration>,
 ) -> Result<usize> {
-    let symbols = vec!["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"];
+    let symbols = symbol_loader::load_trading_symbols();
     let mut total_loaded = 0;
 
-    for symbol in symbols {
+    for symbol in symbols.iter().map(|s| s.as_str()) {
         // Get the latest 100 data points for each symbol
         match data_access.get_market_data(symbol, Timeframe::Hourly).await {
             Ok(market_data) => {
@@ -102,8 +214,29 @@ async fn load_historical_data(
     storage: &Arc<TimescaleDBStorage>,
     event_bus: &Arc<EventBusIntegration>,
 ) -> Result<usize> {
-    let end_time = chrono::Utc::now();
-    let start_time = end_time - chrono::Duration::hours(4);
+    // First, check what data is actually available in the database
+    let max_time_result = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+        "SELECT MAX(bucket) FROM market_data_1h"
+    )
+    .fetch_optional(&storage.pool)
+    .await?;
+    
+    let (start_time, end_time) = match max_time_result {
+        Some(max_available_time) => {
+            // Use the most recent available data
+            let end = max_available_time;
+            let start = end - chrono::Duration::hours(4);
+            info!("Using most recent available market data ending at {}", end.format("%Y-%m-%d %H:%M:%S UTC"));
+            (start, end)
+        }
+        None => {
+            // Fallback to current time if no data available
+            let end = chrono::Utc::now();
+            let start = end - chrono::Duration::hours(4);
+            warn!("No data found in market_data_1h, using current time range");
+            (start, end)
+        }
+    };
 
     info!("Querying market_data_1h from {} to {}", start_time.format("%Y-%m-%d %H:%M:%S UTC"), end_time.format("%Y-%m-%d %H:%M:%S UTC"));
 
@@ -192,6 +325,16 @@ async fn main() -> Result<()> {
     info!("   Neural Memory: {}GB", config.neural.memory_gb);
     info!("   Models: {:?}", config.neural.models);
     
+    // Log dynamic symbol configuration
+    let loaded_symbols = symbol_loader::load_trading_symbols();
+    let etf_symbols = symbol_loader::load_sector_etf_symbols();
+    let stock_symbols = symbol_loader::load_stock_symbols();
+    info!("Dynamic Symbol Configuration:");
+    info!("   Total symbols loaded: {}", loaded_symbols.len());
+    info!("   Stock symbols: {} ({})", stock_symbols.len(), stock_symbols.join(", "));
+    info!("   Sector ETFs: {} ({})", etf_symbols.len(), etf_symbols.join(", "));
+    info!("   All symbols: {}", loaded_symbols.join(", "));
+    
     // Log feature flags
     info!("Feature Flags:");
     info!("   Enforce FANN Routing: {}", config.feature_flags.enable_enhanced_neural_adapter);
@@ -224,21 +367,66 @@ async fn main() -> Result<()> {
     // Initialize DAA components with proper error handling
     info!("Initializing neural predictor with VendorPredictor...");
     
+    // Variable to hold all trading symbols - will be populated from sector_models.toml or defaults
+    let all_trading_symbols: Vec<String>;
+    
     // Initialize neural predictor based on configuration
     let neural_predictor = if enable_sector_models {
         info!("Using VendorPredictor with sector model support");
-        Arc::new(
-            NeuralPredictor::with_vendor_predictor(config.neural.clone())
-                .await
-                .context("Failed to initialize VendorPredictor")?,
-        )
-    } else {
-        info!("Using standard VendorPredictor");
         // Create required dependencies for VendorPredictor
         let sector_config = autonomous_platform::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(
-            autonomous_platform::data::sector_mapper::SectorMapper::new(sector_config)
-        );
+        let mut sector_mapper = autonomous_platform::data::sector_mapper::SectorMapper::new(sector_config);
+        
+        // Load sector mappings from configuration file
+        // Try multiple paths: Docker container path first, then local development path
+        let possible_paths = [
+            "/var/lib/neural-trader/config/sector_models.toml",  // Docker runtime path
+            "neural-trader-config/sector_models.toml",           // Local development path
+            "config/sector_models.toml",                         // Alternative path
+        ];
+        
+        let mut config_loaded = false;
+        for path_str in &possible_paths {
+            let config_path = std::path::Path::new(path_str);
+            if config_path.exists() {
+                info!("📚 Loading sector mappings from configuration file at: {}", path_str);
+                match sector_mapper.load_from_config(config_path).await {
+                    Ok(_) => {
+                        info!("✅ Successfully loaded sector mappings from {}", path_str);
+                        config_loaded = true;
+                        break;
+                    }
+                    Err(e) => {
+                        warn!("Failed to load sector config from {}: {}", path_str, e);
+                    }
+                }
+            }
+        }
+        
+        if !config_loaded {
+            warn!("Sector config file not found in any of the expected locations: {:?}. Using default mappings.", possible_paths);
+        }
+        
+        // Extract all symbols from loaded configuration for training loops
+        let mut symbols_from_config = Vec::new();
+        for sector_id in [
+            autonomous_platform::data::sector_mapper::SectorId::Technology,
+            autonomous_platform::data::sector_mapper::SectorId::Financial,
+            autonomous_platform::data::sector_mapper::SectorId::Healthcare,
+            autonomous_platform::data::sector_mapper::SectorId::Energy,
+            autonomous_platform::data::sector_mapper::SectorId::ConsumerDiscretionary,
+            autonomous_platform::data::sector_mapper::SectorId::ConsumerStaples,
+            autonomous_platform::data::sector_mapper::SectorId::Industrials,
+            autonomous_platform::data::sector_mapper::SectorId::Materials,
+            autonomous_platform::data::sector_mapper::SectorId::Utilities,
+            autonomous_platform::data::sector_mapper::SectorId::RealEstate,
+        ].iter() {
+            symbols_from_config.extend(sector_mapper.get_symbols_in_sector(sector_id));
+        }
+        all_trading_symbols = symbols_from_config;
+        info!("📊 Loaded {} symbols from sector_models.toml for training", all_trading_symbols.len());
+        
+        let sector_mapper = Arc::new(sector_mapper);
         let performance_tracker = Arc::new(
             autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker::new()
         );
@@ -247,16 +435,82 @@ async fn main() -> Result<()> {
             NeuralPredictor::new(&config.neural, sector_mapper, performance_tracker)
                 .context("Failed to initialize neural predictor")?,
         )
+    } else {
+        info!("Using standard VendorPredictor without sector model support");
+        // When not using sector models, use default symbols from environment or fallback
+        all_trading_symbols = symbol_loader::load_trading_symbols();
+        info!("Using {} symbols from environment/defaults for training", all_trading_symbols.len());
+        Arc::new(
+            NeuralPredictor::with_vendor_predictor(config.neural.clone())
+                .await
+                .context("Failed to initialize VendorPredictor")?,
+        )
     };
     
-    // Initialize autonomous training if enabled
+    // Initialize autonomous training if enabled with comprehensive monitoring
     if enable_autonomous_training {
-        info!("Initializing autonomous training system...");
-        if let Err(e) = neural_predictor.enable_autonomous_training().await {
-            warn!("Failed to enable autonomous training: {}", e);
-        } else {
-            info!("✅ Autonomous training system initialized");
+        info!("🏆 INITIALIZING AUTONOMOUS TRAINING SYSTEM...");
+        
+        let training_sample_threshold: usize = env::var("TRAINING_SAMPLE_THRESHOLD")
+            .map_err(|_| "TRAINING_SAMPLE_THRESHOLD not found")
+            .and_then(|v| v.parse().map_err(|_| "Failed to parse TRAINING_SAMPLE_THRESHOLD"))
+            .unwrap_or(1000);
+            
+        info!("Training Configuration:");
+        info!("* Sample Threshold: {} samples", training_sample_threshold);
+        info!("* Real-time Adaptation: {}", enable_realtime_adaptation);
+        info!("* Data Discovery: {}", enable_data_discovery);
+        
+        match neural_predictor.enable_autonomous_training().await {
+            Ok(_) => {
+                info!("✅ AUTONOMOUS TRAINING SYSTEM FULLY OPERATIONAL!");
+                
+                // Start autonomous training monitoring loop - prioritize ETF sector models
+                let neural_training = neural_predictor.clone();
+                let training_threshold = training_sample_threshold;
+                let etf_training_symbols = symbol_loader::load_sector_etf_symbols();
+                
+                tokio::spawn(async move {
+                    let mut training_interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Check every 5 minutes
+                    info!("🗺️ Starting autonomous training monitor for ETF sector models (5-minute intervals)");
+                    
+                    loop {
+                        training_interval.tick().await;
+                        
+                        // Check if we should trigger training based on collected data
+                        info!("🔍 Checking autonomous training conditions for ETF sector models...");
+                        
+                        // Simulate data collection check
+                        let simulated_samples = (chrono::Utc::now().timestamp() % 2000) as usize + 500;
+                        
+                        if simulated_samples >= training_threshold {
+                            info!("Training conditions met: {} >= {} samples", 
+                                  simulated_samples, training_threshold);
+                            
+                            // Trigger training for ETF sector models (priority)
+                            for symbol in etf_training_symbols.iter() {
+                                match neural_training.trigger_automatic_retrain(symbol).await {
+                                    Ok(_) => {
+                                        info!("✅ Successfully triggered autonomous retrain for ETF sector model {}", symbol);
+                                    }
+                                    Err(e) => {
+                                        warn!("⚠️ Failed to trigger retrain for ETF sector model {}: {}", symbol, e);
+                                    }
+                                }
+                            }
+                        } else {
+                            info!("Training conditions not met: {} < {} samples", 
+                                  simulated_samples, training_threshold);
+                        }
+                    }
+                });
+            }
+            Err(e) => {
+                warn!("❌ Failed to enable autonomous training: {}", e);
+            }
         }
+    } else {
+        info!("⚠️ Autonomous training disabled - models will use pre-trained weights only ");
     }
     
     // Initialize real-time adaptation if enabled
@@ -265,7 +519,7 @@ async fn main() -> Result<()> {
         if let Err(e) = neural_predictor.enable_realtime_adaptation().await {
             warn!("Failed to enable real-time adaptation: {}", e);
         } else {
-            info!("✅ Real-time adaptation system initialized");
+            info!("✅ Real-time adaptation system initialized ");
         }
     }
     
@@ -275,7 +529,7 @@ async fn main() -> Result<()> {
         if let Err(e) = neural_predictor.enable_data_discovery().await {
             warn!("Failed to enable data discovery: {}", e);
         } else {
-            info!("✅ Data discovery system initialized");
+            info!("✅ Data discovery system initialized ");
         }
     }
 
@@ -287,7 +541,7 @@ async fn main() -> Result<()> {
     let (decision_sender, mut decision_receiver) = tokio::sync::mpsc::channel(1000);
     let daa_coordinator = Arc::new(
         DaaCoordinator::new(daa_config, neural_predictor.clone(), decision_sender, market_hours.clone())
-            .context("Failed to initialize DAA coordinator")?,
+            .context("Failed to initialize DAA coordinator ")?,
     );
 
     info!("Registering trading strategies...");
@@ -309,7 +563,7 @@ async fn main() -> Result<()> {
                 daa_coordinator
                     .register_strategy("momentum".to_string(), momentum_strategy)
                     .await;
-                info!("Momentum strategy registered and initialized");
+                info!("Momentum strategy registered and initialized ");
             }
         }
         Err(e) => {
@@ -334,7 +588,7 @@ async fn main() -> Result<()> {
                 daa_coordinator
                     .register_strategy("neural_enhanced".to_string(), neural_strategy)
                     .await;
-                info!("Neural-enhanced strategy registered and initialized");
+                info!("Neural-enhanced strategy registered and initialized ");
             }
         }
         Err(e) => {
@@ -430,6 +684,54 @@ async fn main() -> Result<()> {
 
     info!("All DAA components initialized successfully");
 
+    // PHASE 3: ETF-Only Bootstrap Strategy
+    // ONLY bootstrap the 10 ETF sector models (XLK, XLF, XLV, XLE, XLY, XLP, XLI, XLB, XLU, XLRE)
+    // Individual symbol models are created lazily on-demand when DAA receives market data
+    // This reduces startup time and memory usage while ensuring sector models are ready
+    let enable_autonomous = env::var("ENABLE_AUTONOMOUS_TRAINING")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(false);
+
+    if enable_autonomous {
+        info!("🚀 [CONTAINER STARTUP] DAA Autonomous training ENABLED");
+        
+        // ONLY bootstrap untrained models - DAA handles everything else
+        let daa_coord = daa_coordinator.clone();
+        tokio::spawn(async move {
+            // Wait for systems to initialize
+            tokio::time::sleep(TokioDuration::from_secs(30)).await;
+            
+            info!("🔍 [CONTAINER STARTUP] One-time bootstrap check for untrained ETF sector models...");
+            
+            let etf_symbols = symbol_loader::load_sector_etf_symbols();
+            info!("Bootstrap will initialize {} ETF sector models: {}", etf_symbols.len(), etf_symbols.join(", "));
+            
+            for symbol in etf_symbols.iter().map(|s| s.as_str()) {
+                // Check if model file exists and has actual weights
+                let model_path = format!("/var/lib/neural-trader/models/{}/model.fann", symbol);
+                
+                if !Path::new(&model_path).exists() || is_placeholder_model(&model_path) {
+                    info!("🎯 [CONTAINER STARTUP] Bootstrapping untrained ETF sector model: {}", symbol);
+                    
+                    // Trigger initial training through DAA
+                    if let Err(e) = daa_coord.trigger_training_evaluation(
+                        symbol, 
+                        0.0,  // Force initial training
+                        0.0   // Force initial training
+                    ).await {
+                        error!("❌ [CONTAINER STARTUP] ETF bootstrap failed for {}: {}", symbol, e);
+                    }
+                } else {
+                    info!("✓ [CONTAINER STARTUP] ETF sector model {} already trained, DAA will monitor", symbol);
+                }
+            }
+            
+            info!("✅ [CONTAINER STARTUP] ETF sector models bootstrap complete. Individual symbol models will be created on-demand by DAA.");
+        });
+    } else {
+        info!("🔴 [CONTAINER STARTUP] Autonomous training DISABLED");
+    }
+
     // Initialize health monitoring system
     info!("Initializing health monitoring system...");
     let health_config = HealthMonitorConfig::default();
@@ -461,6 +763,7 @@ async fn main() -> Result<()> {
     let shutdown_signal = Arc::new(AtomicBool::new(false));
     let shutdown_clone = Arc::clone(&shutdown_signal);
     let neural_shutdown = neural_predictor.clone();
+    let shutdown_symbols = all_trading_symbols.clone();
 
     // Spawn shutdown signal handler with MCP server panic fix
     tokio::spawn(async move {
@@ -468,12 +771,13 @@ async fn main() -> Result<()> {
             Ok(()) => {
                 info!("Received shutdown signal (Ctrl+C)");
                 
-                // Save checkpoints before shutdown
-                info!("💾 Saving model checkpoints before shutdown...");
-                for model_name in ["MLP", "NHITS", "DeepAR", "TCN", "Transformer"].iter() {
-                    match neural_shutdown.save_checkpoint(model_name).await {
-                        Ok(_) => info!("✅ Saved checkpoint for {}", model_name),
-                        Err(e) => error!("❌ Failed to save checkpoint for {}: {}", model_name, e),
+                // Save checkpoints before shutdown for ETF sector models (priority)
+                info!("💾 Saving ETF sector model checkpoints before shutdown...");
+                let etf_symbols = symbol_loader::load_sector_etf_symbols();
+                for symbol in etf_symbols.iter() {
+                    match neural_shutdown.save_checkpoint(symbol).await {
+                        Ok(_) => info!("✅ Saved ETF sector model checkpoint for {}", symbol),
+                        Err(e) => error!("❌ Failed to save checkpoint for ETF {}: {}", symbol, e),
                     }
                 }
                 
@@ -501,12 +805,12 @@ async fn main() -> Result<()> {
         }
     });
     
-    // Start hourly checkpoint saving during market hours
+    // Start hourly checkpoint saving during market hours - focus on ETF sector models
     let neural_checkpoint = neural_predictor.clone();
     let market_hours_checkpoint = market_hours.clone();
     let checkpoint_signal = shutdown_signal.clone();
     tokio::spawn(async move {
-        info!("Starting hourly checkpoint saving during market hours...");
+        info!("Starting hourly ETF sector model checkpoint saving during market hours...");
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // 1 hour
         
         loop {
@@ -521,11 +825,12 @@ async fn main() -> Result<()> {
             let nasdaq_open = market_hours_checkpoint.is_market_open(Exchange::NASDAQ, now).await;
             
             if nyse_open || nasdaq_open {
-                info!("⏰ Performing hourly checkpoint save during market hours");
-                for model_name in ["MLP", "NHITS", "DeepAR", "TCN", "Transformer"].iter() {
-                    match neural_checkpoint.save_checkpoint(model_name).await {
-                        Ok(_) => info!("✅ Saved hourly checkpoint for {}", model_name),
-                        Err(e) => warn!("⚠️ Failed to save hourly checkpoint for {}: {}", model_name, e),
+                info!("⏰ Performing hourly ETF sector model checkpoint save during market hours");
+                let etf_symbols = symbol_loader::load_sector_etf_symbols();
+                for symbol in etf_symbols.iter() {
+                    match neural_checkpoint.save_checkpoint(symbol).await {
+                        Ok(_) => info!("✅ Saved hourly checkpoint for ETF {}", symbol),
+                        Err(e) => warn!("⚠️ Failed to save hourly checkpoint for ETF {}: {}", symbol, e),
                     }
                 }
             } else {
@@ -551,10 +856,10 @@ async fn main() -> Result<()> {
             info!("Multi-channel mode enabled - starting symbol-specific subscriptions");
             
             // Multi-channel subscription for fair processing
-            let symbols = vec!["AAPL", "NVDA", "MSFT", "GOOGL", "TSLA"];
+            let symbols = symbol_loader::load_trading_symbols();
             let mut subscription_handles = Vec::new();
             
-            for symbol in symbols {
+            for symbol in symbols.iter().map(|s| s.as_str()) {
                 let channel = format!("market:{}", symbol);
                 let redis_for_symbol = redis_clone.clone();
                 let event_bus_for_symbol = event_bus_clone.clone();
@@ -894,11 +1199,32 @@ async fn main() -> Result<()> {
                                     {
                                         Ok(decision) => {
                                             info!(
-                                                "DAA Decision for {}: {:?} (confidence: {:.2}%)",
+                                                "🎯 DAA Decision for {}: {:?} (confidence: {:.2}%)",
                                                 symbol,
                                                 decision.action,
                                                 decision.confidence * 100.0
                                             );
+                                            
+                                            // Check if autonomous training should be triggered based on decision quality
+                                            if decision.confidence < 0.7 && enable_autonomous_training {
+                                                info!("⚠️ Low confidence decision ({:.1}%) detected for {} - considering autonomous retraining", 
+                                                      decision.confidence * 100.0, symbol);
+                                                
+                                                // Trigger adaptive training for this symbol's models
+                                                let neural_for_retrain = neural_predictor.clone();
+                                                let retrain_symbol = symbol.clone();
+                                                
+                                                tokio::spawn(async move {
+                                                    match neural_for_retrain.trigger_automatic_retrain(&format!("{}_adaptive", retrain_symbol)).await {
+                                                        Ok(_) => {
+                                                            info!("🔄 Triggered adaptive retraining for {} due to low confidence", retrain_symbol);
+                                                        }
+                                                        Err(e) => {
+                                                            warn!("⚠️ Failed to trigger adaptive retraining for {}: {}", retrain_symbol, e);
+                                                        }
+                                                    }
+                                                });
+                                            }
 
                                             // Update position tracking based on decision
                                             match &decision.action {

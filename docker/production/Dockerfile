@@ -58,7 +58,7 @@ RUN apt-get update && apt-get install -y \
 RUN groupadd -r neural && useradd -r -g neural neural
 
 # Create necessary directories
-RUN mkdir -p /opt/neural-trader/{models,backup,exports,logs,config} \
+RUN mkdir -p /opt/neural-trader/{models,checkpoints,backup,exports,logs,config} \
     && chown -R neural:neural /opt/neural-trader
 
 # Copy the binary

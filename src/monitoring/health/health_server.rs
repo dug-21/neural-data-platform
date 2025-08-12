@@ -353,7 +353,7 @@ fn format_system_time_as_iso8601(time: SystemTime) -> String {
     format!("2024-01-01T00:00:{}Z", datetime % 60)
 }
 
-fn format_instant_as_iso8601(instant: Instant) -> String {
+fn format_instant_as_iso8601(_instant: Instant) -> String {
     // Convert instant to system time (approximation)
     let now = SystemTime::now();
     format_system_time_as_iso8601(now)

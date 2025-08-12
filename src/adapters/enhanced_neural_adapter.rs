@@ -34,8 +34,7 @@ use crate::data::TimeSeriesData;
 use crate::neural::{
     NeuralPredictorTrait, PredictionResult,
 };
-// Ensure trait is in scope for method calls
-use crate::neural::NeuralPredictorTrait as _;
+// Trait is already imported above
 use crate::data::SectorMapper;
 use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
 // Phase 3B: Removed monitoring imports - architectural layer not allowed

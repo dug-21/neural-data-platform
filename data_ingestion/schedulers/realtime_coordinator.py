@@ -2,6 +2,7 @@
 import asyncio
 from typing import List, Dict, Any, Set, Optional, Callable
 import json
+from datetime import datetime
 
 from providers import PROVIDERS, BaseProvider
 from processors import DataValidator, DataCleaner, DataTransformer
@@ -105,6 +106,24 @@ class RealtimeCoordinator:
             return
         
         self.logger.info(f"Subscribing to {len(valid_symbols)} symbols: {valid_symbols}")
+        
+        # Initialize Redis channels for ALL subscribed symbols immediately
+        # This ensures channels exist even if WebSocket data hasn't arrived yet
+        for symbol in valid_symbols:
+            channel = f"market:{symbol}"
+            if self.channel_validator.validate_channel_name(channel):
+                # Publish an initialization message to create the channel
+                try:
+                    init_msg = {
+                        "type": "channel_init", 
+                        "symbol": symbol,
+                        "timestamp": datetime.now().isoformat(),
+                        "message": "Channel initialized for symbol tracking"
+                    }
+                    await self.redis.publish(channel, json.dumps(init_msg))
+                    self.logger.info(f"Initialized Redis channel: {channel}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to initialize channel {channel}: {e}")
         
         # Don't create streaming tasks here - wait for start() to be called
         # The tasks will be created when _running is True

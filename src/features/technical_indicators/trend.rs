@@ -105,7 +105,7 @@ impl<'a> TrendIndicators<'a> {
         data: &[TimeSeriesData],
         fast: usize,
         slow: usize,
-        signal: usize,
+        _signal: usize,
     ) -> Result<(f64, f64, f64)> {
         let fast_ema = self.calculate_ema(data, fast)?;
         let slow_ema = self.calculate_ema(data, slow)?;

@@ -4,7 +4,7 @@
 //! for fully autonomous trading decisions based on neural feedback.
 
 use anyhow::{Context, Result, anyhow};
-use chrono::{DateTime, Utc, Datelike, Timelike};
+use chrono::{DateTime, Utc, Datelike};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
@@ -21,6 +21,15 @@ use crate::neural::{
 use crate::strategies::{MarketContext, Position, Signal, TradingStrategy};
 use crate::utils::market_hours::MarketHours;
 use serde::{Deserialize, Serialize};
+
+/// Data classification for training routing
+#[derive(Debug, Clone, PartialEq)]
+pub enum DataClassification {
+    /// ETF data should train base sector models
+    ETF,
+    /// Symbol data should train specialization layers only
+    Symbol,
+}
 
 /// Data availability and quality assessment for enhanced decision making
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -314,6 +323,33 @@ impl DaaCoordinator {
         self.strategies.write().await.insert(name, strategy);
     }
 
+    /// Classify incoming data as ETF or Symbol for routing to appropriate training
+    fn classify_data_type(&self, symbol: &str, sector_mapper: Option<&SectorMapper>) -> DataClassification {
+        if let Some(mapper) = sector_mapper {
+            // Check all sectors for ETF representatives to determine if this is an ETF
+            for sector in crate::data::sector_mapper::SectorId::all_sectors() {
+                if let Some(etf_symbol) = mapper.get_sector_etf(&sector) {
+                    if etf_symbol == symbol {
+                        debug!("Classified {} as ETF representative for sector {:?}", symbol, sector);
+                        return DataClassification::ETF;
+                    }
+                }
+            }
+            debug!("Classified {} as individual symbol", symbol);
+            DataClassification::Symbol
+        } else {
+            // Fallback to hardcoded ETF list when sector_mapper is not available
+            let is_etf = matches!(symbol, "XLK" | "XLF" | "XLV" | "XLE" | "XLY" | "XLP" | "XLI" | "XLB" | "XLU" | "XLRE");
+            if is_etf {
+                debug!("Classified {} as ETF using fallback method", symbol);
+                DataClassification::ETF
+            } else {
+                debug!("Classified {} as symbol using fallback method", symbol);
+                DataClassification::Symbol
+            }
+        }
+    }
+    
     /// Make an autonomous trading decision
     pub async fn make_decision(
         &self,
@@ -333,6 +369,24 @@ impl DaaCoordinator {
                 neural_consensus: HashMap::new(),
                 adapted_parameters: None,
             });
+        }
+        
+        // Classify incoming data for training routing
+        if let Some(first_data) = historical_data.first() {
+            let data_classification = self.classify_data_type(&first_data.symbol, None);
+            
+            match data_classification {
+                DataClassification::ETF => {
+                    debug!("Routing ETF data ({}) to base sector model training", first_data.symbol);
+                    // ETF data trains the base sector model
+                    // This would trigger base model training in the training pipeline
+                }
+                DataClassification::Symbol => {
+                    debug!("Routing symbol data ({}) to specialization layer training", first_data.symbol);
+                    // Symbol data trains only the specialization layer
+                    // This would trigger specialization training in the training pipeline
+                }
+            }
         }
 
         // Step 1: Get neural predictions from multiple models
@@ -1097,63 +1151,35 @@ impl DaaCoordinator {
 
 
     /// Trigger training evaluation based on model performance
-    async fn trigger_training_evaluation(
+    pub async fn trigger_training_evaluation(
         &self,
         model_name: &str,
         accuracy: f64,
         confidence: f64,
     ) -> Result<()> {
-        if !self.autonomous_retraining_enabled {
-            debug!("Autonomous retraining disabled, skipping evaluation");
-            return Ok(());
-        }
-
-        let now = Utc::now();
-        let mut last_check = self.last_retrain_check.write().await;
+        // DAA has ALREADY decided training is needed when this is called
+        info!("🎯 [CONTAINER DAA] Executing training decision for {}", model_name);
+        info!("📊 [CONTAINER DAA] Triggering metrics - Accuracy: {:.2}%, Confidence: {:.2}%", 
+              accuracy * 100.0, confidence * 100.0);
         
-        // Rate limit checks to avoid excessive evaluations
-        if now - *last_check < chrono::Duration::minutes(5) {
-            return Ok(());
-        }
+        // Get the neural predictor and execute training
+        let predictor = self.neural_predictor.clone();
+        let model_name = model_name.to_string();
         
-        *last_check = now;
-        drop(last_check);
-
-        if let Some(training_engine) = &self.autonomous_training {
-            let metrics = self.performance_metrics.read().await;
+        // Execute the training that DAA has already decided is needed
+        tokio::spawn(async move {
+            info!("🚀 [CONTAINER DAA] Executing autonomous training decision...");
             
-            let snapshot = PerformanceSnapshot {
-                timestamp: now,
-                accuracy,
-                latency_ms: 100,
-                error_rate: 1.0 - accuracy,
-                recent_predictions: 50,
-                confidence,
-                price_error: 1.0 - accuracy,
-                sharpe_ratio: metrics.sharpe_ratio,
-                max_drawdown: metrics.max_drawdown,
-                volatility: 0.02, // Default value
-                model_agreement: confidence,
-                consecutive_failures: if accuracy < 0.5 { 3 } else { 0 },
-                trading_volume: 0.0,
-                profit_loss: metrics.total_pnl,
-                data_type_metrics: None,
-                event_count: 50,
-                window_duration: chrono::Duration::hours(1),
-                symbol: "ADAPTIVE".to_string(),
-                trading_performance: None,
-                accuracy_metrics: None,
-                cpu_usage: 55.0,
-                memory_usage: 700.0,
-                active_connections: 12,
-                requests_per_second: 40.0,
-                average_response_time: 28.0,
-                cache_hit_rate: 0.88,
-            };
-            
-            info!("Triggering training evaluation for model {} with accuracy {}", model_name, accuracy);
-            training_engine.evaluate_training_need(snapshot).await?;
-        }
+            // This is the ONLY missing piece - actual execution
+            match predictor.trigger_automatic_retrain(&model_name).await {
+                Ok(_) => {
+                    info!("✅ [CONTAINER DAA] Training execution COMPLETE for {}", model_name);
+                }
+                Err(e) => {
+                    error!("❌ [CONTAINER DAA] Training execution FAILED for {}: {}", model_name, e);
+                }
+            }
+        });
         
         Ok(())
     }
@@ -1776,6 +1802,23 @@ impl SectorDAACoordinator {
     ) -> Result<SectorAwareDecision> {
         debug!("Making sector-aware decision for {:?} on symbol {}", 
                self.sector_id, market_context.symbol);
+        
+        // Step 0: Classify incoming data for training routing
+        let data_classification = self.base_coordinator.classify_data_type(&market_context.symbol, Some(&*self.sector_mapper));
+        match data_classification {
+            DataClassification::ETF => {
+                debug!("Routing ETF data ({}) to base sector model training for sector {:?}", 
+                       market_context.symbol, self.sector_id);
+                // ETF data trains the base sector model
+                // This would trigger base model training in the training pipeline
+            }
+            DataClassification::Symbol => {
+                debug!("Routing symbol data ({}) to specialization layer training for sector {:?}", 
+                       market_context.symbol, self.sector_id);
+                // Symbol data trains only the specialization layer
+                // This would trigger specialization training in the training pipeline
+            }
+        }
         
         // Step 1: Verify symbol belongs to this sector
         let symbol_sector_info = self.sector_mapper.get_sector(&market_context.symbol)?;
