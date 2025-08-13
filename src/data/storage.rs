@@ -250,6 +250,9 @@ impl TimescaleDBStorage {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<Vec<TimeSeriesData>> {
+        // Calculate the duration in days for proper minute data limit calculation
+        let duration_days = (end - start).num_days().max(1); // Ensure at least 1 day
+        
         // First try market_data_1h (hourly aggregated data)
         let hourly_results = sqlx::query(
             r#"
@@ -292,27 +295,64 @@ impl TimescaleDBStorage {
             });
         }
 
-        // If no hourly data, try market_data_1m (minute data) as fallback
-        if results.is_empty() {
-            let minute_results = sqlx::query(
+        log::info!("Found {} records from market_data_1h for symbol {} between {} and {}", 
+                  results.len(), symbol, start.format("%Y-%m-%d"), end.format("%Y-%m-%d"));
+
+        // Calculate expected hourly records for the requested time period
+        // Assuming ~8 hours of trading per day (typical market hours)
+        let expected_hourly_records = duration_days * 8; // 8 trading hours per day
+        let sufficient_data_threshold = (expected_hourly_records as f64 * 0.5) as usize; // At least 50% coverage
+
+        // If no hourly data or insufficient hourly data, fall back to raw market_data table
+        // This is the main table where historical data lives (130,593+ records)
+        // Ensure we have meaningful data for training (minimum 100 records)
+        let minimum_records_for_training = 100;
+        if results.is_empty() || results.len() < sufficient_data_threshold || results.len() < minimum_records_for_training {
+            if !results.is_empty() {
+                log::info!("Hourly data insufficient ({} < {} expected), supplementing with raw data", 
+                          results.len(), sufficient_data_threshold);
+            }
+            // Calculate appropriate limit for raw data based on the requested duration
+            // Raw data can be high-frequency (potentially minute-level or tick-level)
+            // Formula: days * estimated records per day (assume ~390 minutes trading day * records)
+            // Add buffer for different market hours and data density variations
+            let estimated_records_per_day = 400; // Conservative estimate
+            let raw_data_limit = (duration_days * estimated_records_per_day) as i64;
+            let buffered_limit = (raw_data_limit as f64 * 1.5) as i64; // 50% buffer
+            
+            // Cap the limit at reasonable maximum to prevent memory issues
+            let final_limit = buffered_limit.min(500000); // Maximum ~1250 days of data
+            
+            log::info!("Falling back to raw market_data table for symbol {} with limit {} (duration: {} days)", 
+                      symbol, final_limit, duration_days);
+            
+            let raw_results = sqlx::query(
                 r#"
-                SELECT bucket as timestamp, symbol, open, high, low, close, volume::float8 as volume
-                FROM market_data_1m
+                SELECT timestamp, symbol, open, high, low, close, volume
+                FROM market_data
                 WHERE symbol = $1 
-                  AND bucket >= $2 
-                  AND bucket <= $3
-                ORDER BY bucket ASC
-                LIMIT 1000
+                  AND timestamp >= $2 
+                  AND timestamp <= $3
+                ORDER BY timestamp ASC
+                LIMIT $4
             "#,
             )
             .bind(symbol)
             .bind(start)
             .bind(end)
+            .bind(final_limit)
             .fetch_all(&self.pool)
             .await;
 
-            if let Ok(minute_rows) = minute_results {
-                for row in minute_rows {
+            if let Ok(raw_rows) = raw_results {
+                log::info!("Retrieved {} raw records from market_data table for symbol {}", 
+                          raw_rows.len(), symbol);
+                
+                // If we already have some hourly data, we need to be careful about duplicates
+                // and potentially prefer raw data over aggregated data for better granularity
+                let mut raw_data = Vec::new();
+                
+                for row in raw_rows {
                     let timestamp: DateTime<Utc> = row.get("timestamp");
                     let symbol: String = row.get("symbol");
                     let open: f64 = row.get("open");
@@ -321,11 +361,11 @@ impl TimescaleDBStorage {
                     let close: f64 = row.get("close");
                     let volume: f64 = row.get("volume");
 
-                    results.push(TimeSeriesData {
+                    raw_data.push(TimeSeriesData {
                         timestamp,
-                        source: "market_data_1m".to_string(),
+                        source: "market_data".to_string(), // Source indicates raw data table
                         entity: symbol,
-                        value: close,
+                        value: close, // Use close price as the main value
                         metadata: Some(serde_json::json!({
                             "open": open,
                             "high": high,
@@ -335,8 +375,24 @@ impl TimescaleDBStorage {
                         })),
                     });
                 }
+                
+                // If we had insufficient hourly data, replace it with raw data for better coverage
+                if results.is_empty() {
+                    results = raw_data;
+                } else {
+                    // Supplement existing hourly data with raw data
+                    // Raw data provides higher granularity and fills gaps
+                    log::info!("Replacing {} hourly records with {} raw records for better data coverage", 
+                              results.len(), raw_data.len());
+                    results = raw_data; // Use raw data for higher fidelity
+                }
+            } else {
+                log::warn!("Failed to retrieve raw data for symbol {} from market_data table - no historical data available", symbol);
             }
         }
+
+        log::info!("Final result: {} total records for symbol {} covering requested period", 
+                  results.len(), symbol);
 
         Ok(results)
     }
