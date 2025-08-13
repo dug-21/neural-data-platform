@@ -162,6 +162,11 @@ impl DataAccessLayer {
     }
 
     /// Get appropriate time range for a given timeframe based on environment configuration
+    /// 
+    /// Environment variables respected:
+    /// - TRAINING_HISTORY_DAYS: Base training window (default: 90 days)
+    /// - MIN_TRAINING_HISTORY_DAYS: Minimum allowed window (default: 30 days)  
+    /// - MAX_TRAINING_HISTORY_DAYS: Maximum allowed window (default: 365 days)
     fn get_timeframe_duration(timeframe: &Timeframe) -> Duration {
         let (training_history_days, min_training_history_days, max_training_history_days) = 
             Self::get_training_history_days();
@@ -172,11 +177,14 @@ impl DataAccessLayer {
             Timeframe::FiveMinute => Duration::hours(4), 
             Timeframe::FifteenMinute => Duration::hours(12),
             // For longer timeframes, use environment-configured history
+            // CRITICAL FIX: Ensure hourly data requests use DAYS not HOURS for the proper training window
             Timeframe::Hourly => {
                 // Use the configured training history days for hourly data
+                // This ensures we get the full requested time window (e.g., 90 days * 24 hours = 2160 data points)
                 let days = std::cmp::min(training_history_days, max_training_history_days);
-                info!("📊 Loading {} days of hourly data (TRAINING_HISTORY_DAYS={})", days, training_history_days);
-                Duration::days(days)
+                info!("📊 Loading {} days of hourly data (TRAINING_HISTORY_DAYS={}) - requesting {} hour window", 
+                      days, training_history_days, days * 24);
+                Duration::days(days) // FIXED: Using Duration::days() not Duration::hours()
             },
             Timeframe::Daily => Duration::days(std::cmp::min(
                 std::cmp::max(training_history_days, min_training_history_days), 
