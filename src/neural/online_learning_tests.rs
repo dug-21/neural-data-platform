@@ -85,10 +85,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Create initial training data
         let initial_data = create_test_data(100, 1000.0);
@@ -112,10 +113,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Create initial training data
         let initial_data = create_test_data(100, 1000.0);
@@ -137,10 +139,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Test adaptive learning rate calculation
         let base_rate = 0.01;
@@ -158,10 +161,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train initial model
         let initial_data = create_test_data(100, 1000.0);
@@ -189,6 +193,8 @@ mod tests {
         let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
         let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
+        let data_access = Arc::new(crate::data::DataAccessLayer::new());
+        let training_data_service = Arc::new(crate::integration::training_data_service::TrainingDataService::new(data_access.clone()).unwrap());
         let predictor = Arc::new(VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap());
         
         // Train initial model
@@ -214,10 +220,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train model
         let training_data = create_test_data(100, 1000.0);
@@ -247,10 +254,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train model
         let training_data = create_test_data(100, 1000.0);
@@ -274,10 +282,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train model
         let training_data = create_test_data(50, 1000.0);
@@ -332,6 +341,8 @@ mod tests {
         let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
         let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
+        let data_access = Arc::new(crate::data::DataAccessLayer::new());
+        let training_data_service = Arc::new(crate::integration::training_data_service::TrainingDataService::new(data_access.clone()).unwrap());
         let predictor = Arc::new(VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap());
         
         let streaming_config = StreamingConfig {
@@ -363,10 +374,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train model
         let initial_data = create_test_data(100, 1000.0);
@@ -390,10 +402,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train model with initial data
         let training_data = create_test_data(200, 1000.0); // Enough data for retraining
@@ -411,10 +424,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train model
         let training_data = create_test_data(100, 1000.0);
@@ -440,10 +454,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train multiple models
         let training_data = create_test_data(100, 1000.0);
@@ -475,10 +490,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Test online learning with minimal data (should gracefully handle)
         let minimal_data = create_test_data(1, 1000.0);
@@ -503,6 +519,8 @@ mod tests {
         let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
         let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
+        let data_access = Arc::new(crate::data::DataAccessLayer::new());
+        let training_data_service = Arc::new(crate::integration::training_data_service::TrainingDataService::new(data_access.clone()).unwrap());
         let predictor = Arc::new(VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap());
         
         // 1. Initial training
@@ -552,10 +570,11 @@ mod tests {
         let _config = create_test_neural_config();
         // VendorPredictor::new requires sector_mapper and performance_tracker parameters
         // For tests, we'll create mock/default instances
-        let config = crate::data::sector_mapper::SectorMapperConfig::default();
-        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(config));
+        let neural_config = crate::config::neural::NeuralConfig::default();
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
         let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
-        let predictor = VendorPredictor::new(&config, sector_mapper, performance_tracker).unwrap();
+        let predictor = VendorPredictor::new(&neural_config, sector_mapper, performance_tracker).unwrap();
         
         // Train model
         let training_data = create_test_data(100, 1000.0);

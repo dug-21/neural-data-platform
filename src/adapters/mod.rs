@@ -55,6 +55,8 @@ pub use model_storage::{
     VersionIncrement,
 };
 
+// Market data types are defined below and automatically public
+
 /// Metadata for adapter configuration and runtime information
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AdapterMetadata {

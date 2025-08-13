@@ -9,8 +9,8 @@ tokio = { version = "1.38", features = ["full", "tracing"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 axum = { version = "0.7", features = ["http2", "ws", "json", "macros"] }
-tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate", "macros"] }
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "json"] }
 tracing = "0.1"

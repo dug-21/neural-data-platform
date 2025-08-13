@@ -4,7 +4,6 @@
 //! for production-ready neural trading systems.
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tracing::{debug, error, info, warn};

@@ -145,12 +145,22 @@ impl TimeSeriesData {
             anyhow::bail!("Symbol cannot be empty");
         }
 
+        // Validate OHLC relationships
         if self.high < self.low {
-            anyhow::bail!("High price cannot be less than low price");
+            anyhow::bail!("High price ({}) cannot be less than low price ({})", self.high, self.low);
         }
 
         if self.open < 0.0 || self.high < 0.0 || self.low < 0.0 || self.close < 0.0 {
-            anyhow::bail!("Prices cannot be negative");
+            anyhow::bail!("Prices cannot be negative: O={}, H={}, L={}, C={}", self.open, self.high, self.low, self.close);
+        }
+
+        // Additional OHLC validation
+        if self.open > self.high || self.open < self.low {
+            anyhow::bail!("Open price ({}) must be between high ({}) and low ({})", self.open, self.high, self.low);
+        }
+
+        if self.close > self.high || self.close < self.low {
+            anyhow::bail!("Close price ({}) must be between high ({}) and low ({})", self.close, self.high, self.low);
         }
 
         if self.volume_value < 0.0 || self.volume.iter().any(|&v| v < 0.0) {
@@ -158,8 +168,8 @@ impl TimeSeriesData {
         }
         
         // Validate enhanced fields
-        if self.values.len() != self.timestamps.len() {
-            anyhow::bail!("Values and timestamps must have the same length");
+        if !self.values.is_empty() && !self.timestamps.is_empty() && self.values.len() != self.timestamps.len() {
+            anyhow::bail!("Values and timestamps must have the same length: {} vs {}", self.values.len(), self.timestamps.len());
         }
 
         Ok(())
@@ -173,7 +183,8 @@ impl TimeSeriesData {
             "high": self.high,
             "low": self.low,
             "close": self.close,
-            "volume": self.volume,
+            "volume": if self.volume.is_empty() { self.volume_value } else { self.volume[0] },
+            "volume_array": self.volume,
             "indicators": self.indicators,
             "values": self.values,
             "timestamps": self.timestamps,
@@ -303,6 +314,62 @@ impl TimeSeriesData {
     pub fn with_entity(mut self, entity: String) -> Self {
         self.entity = Some(entity);
         self
+    }
+
+    /// Create from OHLCV data
+    pub fn from_ohlcv(
+        symbol: String, 
+        timestamp: DateTime<Utc>, 
+        open: f64, 
+        high: f64, 
+        low: f64, 
+        close: f64, 
+        volume: f64
+    ) -> anyhow::Result<Self> {
+        let mut data = Self::new(symbol, timestamp);
+        data.open = open;
+        data.high = high;
+        data.low = low;
+        data.close = close;
+        data.volume = vec![volume];
+        data.volume_value = volume;
+        data.value = Some(close);  // Use close as default value
+        
+        // Validate before returning
+        data.validate()?;
+        
+        Ok(data)
+    }
+
+    /// Convert from adapters::MarketData to TimeSeriesData
+    pub fn from_market_data(market_data: &crate::adapters::MarketData) -> anyhow::Result<Self> {
+        use chrono::{DateTime, Utc};
+        
+        let timestamp = DateTime::from_timestamp(market_data.timestamp, 0)
+            .unwrap_or_else(|| Utc::now());
+        
+        Self::from_ohlcv(
+            market_data.symbol.clone(),
+            timestamp,
+            market_data.open,
+            market_data.high,
+            market_data.low,
+            market_data.close,
+            market_data.volume,
+        )
+    }
+
+    /// Convert to adapters::MarketData
+    pub fn to_market_data(&self) -> crate::adapters::MarketData {
+        crate::adapters::MarketData {
+            symbol: self.symbol.clone(),
+            timestamp: self.timestamp.timestamp(),
+            open: self.open,
+            high: self.high,
+            low: self.low,
+            close: self.close,
+            volume: if self.volume.is_empty() { self.volume_value } else { self.volume[0] },
+        }
     }
 }
 

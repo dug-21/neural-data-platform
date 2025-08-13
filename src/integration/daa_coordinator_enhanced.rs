@@ -898,7 +898,10 @@ mod tests {
             error_threshold: 0.05,
         };
         
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
+        let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
+        let neural_predictor = Arc::new(NeuralPredictor::new(&neural_config, sector_mapper, performance_tracker).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
         let market_hours = Arc::new(MarketHours::default());
         

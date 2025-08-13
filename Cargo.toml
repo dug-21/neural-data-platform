@@ -118,6 +118,11 @@ clap = { version = "4.0", features = ["derive"] }
 
 # Web framework and HTTP
 axum = { version = "0.7", features = ["http2", "query", "tracing"] }
+tower = { version = "0.5" }
+tower-http = { version = "0.6" }
+http = "1.1"
+hyper = { version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
 
 # Macros for collections
 maplit = "1.0"

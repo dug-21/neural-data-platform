@@ -1,13 +1,25 @@
-//! Sector Mapping and Aggregation System
+//! Sector Mapper - Single Source of Truth for Sector Hierarchy
 //!
-//! INTEGRATION-FIRST IMPLEMENTATION:
-//! - Extends existing TimeSeriesData with sector information
-//! - Integrates with Redis cache and TimescaleDB storage
-//! - Works with DataAccessLayer and TrainingDataService
-//! - Maintains compatibility with vendor models via BaseModel<T>
-//! - Memory efficient: <50MB per symbol with 100+ symbol support
+//! ============================================================
+//! CRITICAL: SECTOR HIERARCHY DEFINITION
+//! ============================================================
+//! This module is the SINGLE SOURCE OF TRUTH for:
+//!   • Training pipeline (TrainingCoordinator)
+//!   • Trading decisions (DAACoordinator)
+//!   • Model organization (ClusterModelPool)
 //!
-//! Maps individual symbols to sectors for efficient model sharing
+//! ETF Representatives (DO NOT CHANGE):
+//!   Technology → XLK
+//!   Financial → XLF
+//!   Healthcare → XLV
+//!   Energy → XLE
+//!   Consumer Discretionary → XLY
+//!   Consumer Staples → XLP
+//!   Industrials → XLI
+//!   Materials → XLB
+//!   Utilities → XLU
+//!   Real Estate → XLRE
+//! ============================================================
 //! and provides sector-level feature aggregation.
 
 use anyhow::{Result, anyhow, Context};

@@ -80,6 +80,10 @@ services:
       # Training Env Config
       - ENABLE_AUTONOMOUS_TRAINING=${ENABLE_AUTONOMOUS_TRAINING}
       - TRAINING_SAMPLE_THRESHOLD=${TRAINING_SAMPLE_THRESHOLD}
+      # Training data window configuration
+      - TRAINING_HISTORY_DAYS=90  # Use 90 days of historical data for training
+      - MIN_TRAINING_HISTORY_DAYS=30
+      - MAX_TRAINING_HISTORY_DAYS=365
     volumes:
       # - neural_trader_persistence:/opt/neural-trader
       - neural_trader_logs:/var/log/neural-trader
@@ -149,7 +153,7 @@ services:
       - "127.0.0.1:8002:8001"  # Data ingestion API
     volumes:
       - data_ingestion_logs:/var/log/data-ingestion
-      # - /Volumes/OneTouch/trader/polygon_data:/data
+      - /Volumes/OneTouch/trader/polygon_data:/data
     networks:
       - neural_trader_internal
       - monitoring

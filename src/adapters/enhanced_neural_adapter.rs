@@ -17,11 +17,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
-use super::errors::{AdapterError, CircuitBreakerState, ErrorSeverity};
+use super::errors::AdapterError;
 use super::errors::{HealthCheckResult, HealthMetrics};
-use super::fallback_manager::{
-    FallbackManager, FallbackResult, FallbackStrategy, UltimateFallbackStrategy,
-};
+use super::fallback_manager::{FallbackManager, FallbackStrategy};
 use super::health_monitor::{
     HealthChecker, HealthMonitor, HealthMonitorConfig
 };

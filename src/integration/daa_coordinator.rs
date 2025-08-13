@@ -357,9 +357,11 @@ impl DaaCoordinator {
         current_position: Option<&Position>,
         historical_data: &[TimeSeriesData],
     ) -> Result<AutonomousDecision> {
+        let now = Utc::now();
+        
         if !self.config.enabled {
             return Ok(AutonomousDecision {
-                timestamp: Utc::now(),
+                timestamp: now,
                 action: TradingAction::Hold {
                     reason: "DAA disabled".to_string(),
                 },
@@ -371,28 +373,20 @@ impl DaaCoordinator {
             });
         }
         
-        // Classify incoming data for training routing
-        if let Some(first_data) = historical_data.first() {
-            let data_classification = self.classify_data_type(&first_data.symbol, None);
-            
-            match data_classification {
-                DataClassification::ETF => {
-                    debug!("Routing ETF data ({}) to base sector model training", first_data.symbol);
-                    // ETF data trains the base sector model
-                    // This would trigger base model training in the training pipeline
-                }
-                DataClassification::Symbol => {
-                    debug!("Routing symbol data ({}) to specialization layer training", first_data.symbol);
-                    // Symbol data trains only the specialization layer
-                    // This would trigger specialization training in the training pipeline
-                }
-            }
+        // Use existing check_market_timing() method to determine if markets are open
+        let markets_open = self.check_market_timing().await;
+        
+        if markets_open {
+            debug!("Market hours active - prioritizing trading decisions for {}", market_context.symbol);
+        } else {
+            debug!("Markets closed - processing trading decisions for {}", market_context.symbol);
         }
+        
+        // NOTE: Training routing is handled separately via check_and_trigger_retraining
+        // which runs on a schedule, not during every trading decision
 
         // Step 1: Get neural predictions from multiple models
-        let neural_signals = self
-            .get_neural_consensus(market_context, historical_data)
-            .await?;
+        let neural_signals = self.get_neural_consensus(market_context, historical_data).await?;
 
         // Step 2: Get strategy signals
         let strategy_signals = self
@@ -402,8 +396,8 @@ impl DaaCoordinator {
         // Step 3: Assess risk
         let risk_assessment = self.assess_risk(market_context, current_position).await?;
 
-        // Step 4: Synthesize decision
-        let decision = self
+        // Step 4: Synthesize decision with market hours context
+        let mut decision = self
             .synthesize_decision(
                 neural_signals,
                 strategy_signals,
@@ -412,6 +406,17 @@ impl DaaCoordinator {
                 current_position,
             )
             .await?;
+        
+        // Enhance decision confidence during market hours
+        if markets_open {
+            // Boost confidence slightly during market hours when more data is available
+            decision.confidence = (decision.confidence * 1.05).min(1.0);
+            decision.reasoning.push(format!(
+                "Decision made during active market hours (confidence boosted from {:.2}% to {:.2}%)",
+                decision.confidence / 1.05 * 100.0,
+                decision.confidence * 100.0
+            ));
+        }
 
         // Step 5: Adapt parameters if enabled
         let adapted_params = if self.config.enable_adaptation {
@@ -424,9 +429,17 @@ impl DaaCoordinator {
         self.update_metrics(&decision).await;
         self.decision_history.write().await.push(decision.clone());
 
-        // Step 7: Send decision through channel
+        // Step 7: Send decision through channel with market hours context
         if let Err(e) = self.decision_sender.send(decision.clone()).await {
             error!("Failed to send decision: {}", e);
+        } else {
+            if markets_open {
+                info!("📈 TRADING DECISION SENT during market hours for {}: {:?} (confidence: {:.1}%)", 
+                      market_context.symbol, decision.action, decision.confidence * 100.0);
+            } else {
+                info!("📚 TRAINING FOCUS MODE - Decision generated during off-hours for {}: {:?} (confidence: {:.1}%)", 
+                       market_context.symbol, decision.action, decision.confidence * 100.0);
+            }
         }
 
         Ok(AutonomousDecision {
@@ -443,8 +456,9 @@ impl DaaCoordinator {
     ) -> Result<HashMap<String, f64>> {
         let mut consensus = HashMap::new();
 
-        // Check if retraining is needed before making predictions
-        self.check_and_trigger_retraining().await?;
+        // NOTE: Removed retraining check from prediction path
+        // Retraining is handled separately on a schedule (hourly)
+        // to avoid interference with real-time trading decisions
 
         // Get predictions with confidence analysis
         match self
@@ -703,11 +717,13 @@ impl DaaCoordinator {
             risk_assessment.portfolio_risk
         ));
 
-        // Make final decision
+        // Make final decision with enhanced logging
         let action = if current_position.is_some() {
             // We have a position - check for exit
             if combined_signal < -0.3 || risk_assessment.position_risk > 0.05 {
                 let pos = current_position.unwrap();
+                info!("🔴 [DAA DECISION] SELL Signal for {} - Combined: {:.3}, Risk: {:.3}", 
+                      market_context.symbol, combined_signal, risk_assessment.position_risk);
                 TradingAction::Sell {
                     symbol: market_context.symbol.clone(),
                     size: pos.size,
@@ -718,12 +734,15 @@ impl DaaCoordinator {
                 }
             } else if risk_assessment.market_risk > 0.1 {
                 // Adjust stop loss in volatile markets
+                info!("🔧 [DAA DECISION] ADJUST Position for {} - Market Risk: {:.3}", 
+                      market_context.symbol, risk_assessment.market_risk);
                 TradingAction::AdjustPosition {
                     symbol: market_context.symbol.clone(),
                     new_stop_loss: Some(market_context.current_price * 0.97),
                     new_take_profit: None,
                 }
             } else {
+                debug!("⏸️ [DAA DECISION] HOLD Position for {} - No exit signal", market_context.symbol);
                 TradingAction::Hold {
                     reason: "Position maintained - no clear exit signal".to_string(),
                 }
@@ -731,6 +750,8 @@ impl DaaCoordinator {
         } else {
             // No position - check for entry
             if combined_signal > 0.3 && risk_adjusted_confidence > self.config.min_confidence {
+                info!("🟢 [DAA DECISION] BUY Signal for {} - Combined: {:.3}, Confidence: {:.3}", 
+                      market_context.symbol, combined_signal, risk_adjusted_confidence);
                 TradingAction::Buy {
                     symbol: market_context.symbol.clone(),
                     size: risk_assessment.volatility_adjusted_size,
@@ -738,6 +759,8 @@ impl DaaCoordinator {
                     take_profit: Some(market_context.current_price * 1.03),
                 }
             } else {
+                debug!("⏸️ [DAA DECISION] HOLD (No Entry) for {} - Signal: {:.3}, Confidence: {:.3}", 
+                       market_context.symbol, combined_signal, risk_adjusted_confidence);
                 TradingAction::Hold {
                     reason: format!(
                         "Entry criteria not met: signal={:.3}, confidence={:.3}",
@@ -1150,16 +1173,35 @@ impl DaaCoordinator {
     
 
 
-    /// Trigger training evaluation based on model performance
+    /// Trigger training evaluation based on model performance with market hours awareness
     pub async fn trigger_training_evaluation(
         &self,
         model_name: &str,
         accuracy: f64,
         confidence: f64,
     ) -> Result<()> {
+        let now = Utc::now();
+        
+        // Check if major markets are open using the coordinator's market_hours instance
+        use crate::utils::market_hours::Exchange;
+        let nyse_open = self.market_hours.is_market_open(Exchange::NYSE, now).await;
+        let nasdaq_open = self.market_hours.is_market_open(Exchange::NASDAQ, now).await;
+        let markets_open = nyse_open || nasdaq_open;
+        
+        if markets_open {
+            info!(
+                "🚫 [MARKET HOURS] Deferring training for {} until after-hours to prioritize trading (NYSE: {}, NASDAQ: {})",
+                model_name, nyse_open, nasdaq_open
+            );
+            info!("📊 [MARKET HOURS] Training metrics deferred - Accuracy: {:.2}%, Confidence: {:.2}%", 
+                  accuracy * 100.0, confidence * 100.0);
+            // TODO: Queue training for later execution during off-hours
+            return Ok(());
+        }
+        
         // DAA has ALREADY decided training is needed when this is called
-        info!("🎯 [CONTAINER DAA] Executing training decision for {}", model_name);
-        info!("📊 [CONTAINER DAA] Triggering metrics - Accuracy: {:.2}%, Confidence: {:.2}%", 
+        info!("🎯 [AFTER-HOURS] Executing training decision for {}", model_name);
+        info!("📊 [AFTER-HOURS] Triggering metrics - Accuracy: {:.2}%, Confidence: {:.2}%", 
               accuracy * 100.0, confidence * 100.0);
         
         // Get the neural predictor and execute training
@@ -1168,7 +1210,7 @@ impl DaaCoordinator {
         
         // Execute the training that DAA has already decided is needed
         tokio::spawn(async move {
-            info!("🚀 [CONTAINER DAA] Executing autonomous training decision...");
+            info!("🚀 [AFTER-HOURS] Executing autonomous training decision...");
             
             // This is the ONLY missing piece - actual execution
             match predictor.trigger_automatic_retrain(&model_name).await {
@@ -1405,9 +1447,38 @@ impl DaaCoordinator {
         let nyse_open = market_hours.is_market_open(Exchange::NYSE, now).await;
         let nasdaq_open = market_hours.is_market_open(Exchange::NASDAQ, now).await;
         
-        // Training is allowed during market hours for real-time adaptation
-        // but can also run outside market hours for batch processing
+        // FIXED: Training should be prioritized when markets are CLOSED
+        // Return true for training when markets are closed (off-hours)
+        let markets_closed = !(nyse_open || nasdaq_open);
+        
+        if markets_closed {
+            info!("📚 Markets CLOSED - Training priority mode active");
+        } else {
+            info!("📈 Markets OPEN - Trading priority mode active");
+        }
+        
+        markets_closed
+    }
+
+    /// Check if trading should be prioritized (returns true when markets are OPEN)
+    pub async fn should_prioritize_trading(&self) -> bool {
+        use crate::utils::market_hours::{MarketHours, Exchange};
+        use chrono::Utc;
+        
+        let market_hours = MarketHours::new();
+        let now = Utc::now();
+        
+        // Trading is prioritized when major exchanges are open
+        let nyse_open = market_hours.is_market_open(Exchange::NYSE, now).await;
+        let nasdaq_open = market_hours.is_market_open(Exchange::NASDAQ, now).await;
+        
         nyse_open || nasdaq_open
+    }
+    
+    /// Check if training should be prioritized (returns true when markets are CLOSED)
+    pub async fn should_prioritize_training(&self) -> bool {
+        // Training is prioritized during off-hours
+        !self.should_prioritize_trading().await
     }
 
     /// **NEW EXTENSION METHOD**: Evaluate decision with data context while preserving Byzantine consensus
@@ -1666,6 +1737,36 @@ impl DaaCoordinator {
         ));
         
         reasoning
+    }
+    
+    /// Start background training monitor - runs separately from trading decisions
+    pub async fn start_training_monitor(self: Arc<Self>) {
+        info!("🔧 [DAA] Starting background training monitor (checks every hour)");
+        
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // 1 hour
+            
+            loop {
+                interval.tick().await;
+                
+                // Only check for retraining periodically, not during trading
+                if let Err(e) = self.check_and_trigger_retraining().await {
+                    error!("Training monitor error: {}", e);
+                }
+                
+                // Log training status
+                let needs_retraining = *self.needs_retraining.read().await;
+                let last_accuracy = *self.last_performance_accuracy.read().await;
+                
+                if needs_retraining {
+                    info!("📊 [DAA TRAINING] Model performance below threshold (accuracy: {:.2}%)", 
+                          last_accuracy * 100.0);
+                } else {
+                    debug!("✅ [DAA TRAINING] Models performing well (accuracy: {:.2}%)", 
+                           last_accuracy * 100.0);
+                }
+            }
+        });
     }
 }
 
@@ -2056,6 +2157,7 @@ impl SectorDAACoordinator {
     pub fn get_sector_id(&self) -> SectorId {
         self.sector_id
     }
+    
     
     /// Get underlying base coordinator (for accessing core functionality)
     pub fn get_base_coordinator(&self) -> &Arc<DaaCoordinator> {

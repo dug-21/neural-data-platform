@@ -13,13 +13,18 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+// Import the required data types
+use crate::data::TimescaleDBStorage;
+use crate::integration::data_access::DataAccessLayer;
 use tracing::{debug, info, warn};
 
 use super::PredictionResult;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::FannPredictor;
+use crate::neural::VendorPredictor;
 use crate::neural::NeuralPredictorTrait;
+use crate::integration::training_data_service::TrainingDataService;
 
 /// Enhanced prediction result with confidence breakdown
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,7 +108,7 @@ pub struct RetrainingMetrics {
 /// Main enhanced neural predictor with Phase 6 capabilities
 pub struct EnhancedNeuralPredictor {
     /// Core FANN predictor for actual neural network operations
-    fann_predictor: FannPredictor,
+    fann_predictor: VendorPredictor,
     /// Performance tracking for retraining decisions
     performance_tracker: Arc<RwLock<PerformanceTracker>>,
     /// Configuration
@@ -135,13 +140,20 @@ struct DataQualityTracker {
 
 impl EnhancedNeuralPredictor {
     /// Create a new enhanced neural predictor
-    pub fn new(config: NeuralConfig) -> Result<Self> {
-        let fann_predictor = FannPredictor::new(
+    pub async fn new(config: NeuralConfig) -> Result<Self> {
+        // Initialize storage components
+        let storage = Arc::new(TimescaleDBStorage::new("postgresql://localhost/neural_trader").await?);
+        let cache = Arc::new(crate::data::cache::RedisCache::new("redis://127.0.0.1:6379").await?);
+        let data_access = Arc::new(DataAccessLayer::new(storage.clone(), cache.clone()).await?);
+        let training_data_service = Arc::new(TrainingDataService::new(storage, cache).await?);
+        let fann_predictor = VendorPredictor::new_with_services(
             &config, 
             Arc::new(crate::data::sector_mapper::SectorMapper::new(
                 crate::data::sector_mapper::SectorMapperConfig::default()
             )),
-            Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new())
+            Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new()),
+            data_access,
+            training_data_service
         )?;
 
         let performance_tracker = PerformanceTracker {
@@ -790,7 +802,7 @@ impl EnhancedNeuralPredictor {
     }
 
     /// Get the underlying FANN predictor for direct access
-    pub fn get_fann_predictor(&self) -> &FannPredictor {
+    pub fn get_fann_predictor(&self) -> &VendorPredictor {
         &self.fann_predictor
     }
 }
@@ -829,7 +841,7 @@ impl Default for EnhancedNeuralPredictor {
             error_threshold: 0.1,
             lookback_window: 24,
         };
-        Self::new(config).expect("Failed to create default enhanced predictor")
+        futures::executor::block_on(Self::new(config)).expect("Failed to create default enhanced predictor")
     }
 }
 
