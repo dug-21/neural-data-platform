@@ -128,8 +128,8 @@ impl MarketScheduler {
                 return false;
             }
             
-            // Convert to exchange local time
-            let local_time = self.timezone_converter.convert_to_exchange_time(time, exchange);
+            // Convert to exchange local time with DST adjustment
+            let local_time = self.timezone_converter.convert_with_dst(time, exchange);
             
             // Check if it's a trading day
             if !schedule.regular_hours.trading_days.contains(&local_time.weekday()) {
@@ -152,7 +152,7 @@ impl MarketScheduler {
                 return MarketSession::Closed;
             }
             
-            let local_time = self.timezone_converter.convert_to_exchange_time(time, exchange);
+            let local_time = self.timezone_converter.convert_with_dst(time, exchange);
             let weekday = local_time.weekday();
             
             if !schedule.regular_hours.trading_days.contains(&weekday) {
