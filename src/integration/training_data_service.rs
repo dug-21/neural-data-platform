@@ -425,6 +425,112 @@ impl TrainingDataService {
 
     // Private helper methods
 
+    /// Get market data specifically for training, bypassing cache to ensure fresh data
+    /// This prevents serving stale cached data that might have been limited to 7 days
+    async fn get_training_market_data(
+        &self,
+        symbol: &str,
+        timeframe: Timeframe,
+    ) -> Result<Vec<TimeSeriesData>> {
+        use crate::integration::data_access::DataAccessLayer;
+        
+        info!(
+            "🎯 [TRAINING DATA] Fetching fresh {} data for symbol {} (bypassing cache)",
+            format!("{:?}", timeframe),
+            symbol
+        );
+
+        // Calculate time range using environment-configured training window
+        let end_time = chrono::Utc::now();
+        let duration = match std::env::var("TRAINING_HISTORY_DAYS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok()) {
+            Some(days) => {
+                info!("📊 Using TRAINING_HISTORY_DAYS={} for training data query", days);
+                chrono::Duration::days(days)
+            }
+            None => {
+                info!("📊 Using default 90 days for training data query (TRAINING_HISTORY_DAYS not set)");
+                chrono::Duration::days(90) // Default: 90 days
+            }
+        };
+        
+        let start_time = end_time - duration;
+        
+        info!(
+            "🔍 [TRAINING DATA] Direct query: {} from {} to {} ({} days)",
+            symbol,
+            start_time.format("%Y-%m-%d %H:%M:%S UTC"),
+            end_time.format("%Y-%m-%d %H:%M:%S UTC"),
+            duration.num_days()
+        );
+
+        // Query directly from storage, bypassing cache
+        let raw_data = self
+            .data_access
+            .storage
+            .query_range(symbol, start_time, end_time)
+            .await
+            .with_context(|| format!("Failed to query training data for {}", symbol))?;
+
+        info!("✅ [TRAINING DATA] Retrieved {} raw data points for {}", raw_data.len(), symbol);
+
+        // Convert to TimeSeriesData format (similar to DataAccessLayer::get_market_data)
+        let mut time_series_data = Vec::new();
+        for data_point in raw_data {
+            // Extract OHLCV data from metadata if available
+            let (open, high, low, close, volume) = if let Some(metadata) = &data_point.metadata {
+                (
+                    metadata.get("open").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("high").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("low").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("close").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("volume").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                )
+            } else {
+                // Fallback to using value as close price
+                (data_point.value, data_point.value, data_point.value, data_point.value, 0.0)
+            };
+
+            time_series_data.push(TimeSeriesData {
+                symbol: data_point.entity.clone(),
+                timestamp: data_point.timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume: vec![volume],
+                volume_value: volume,
+                intervals: vec![1000], // Default 1-second intervals
+                timestamps: vec![data_point.timestamp],
+                values: vec![close],
+                indicators: data_point.metadata
+                    .as_ref()
+                    .and_then(|meta| meta.get("indicators"))
+                    .and_then(|v| v.as_object())
+                    .map(|obj| {
+                        obj.iter()
+                            .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f)))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                source: Some(data_point.source.clone()),
+                entity: Some(data_point.entity.clone()),
+                value: Some(close),
+                metadata: data_point.metadata.clone(),
+                metadata_map: std::collections::HashMap::new(),
+            });
+        }
+
+        info!(
+            "✅ [TRAINING DATA] Converted to {} TimeSeriesData points for {}",
+            time_series_data.len(),
+            symbol
+        );
+
+        Ok(time_series_data)
+    }
+
     async fn load_raw_data(
         &self,
         symbol: &str,
@@ -435,12 +541,10 @@ impl TrainingDataService {
         // Calculate required data size based on config
         let required_size = config.batch_size + config.sequence_length + config.feature_window;
 
-        // Load more data than needed to account for feature calculation
-        debug!("🔍 [DATA ISOLATION] Querying hourly data for symbol: {}", symbol);
-        let data = self
-            .data_access
-            .get_market_data(symbol, Timeframe::Hourly)
-            .await?;
+        // CRITICAL FIX: Bypass cache for training data to ensure we get the full 90-day window
+        // The regular get_market_data() might return cached data from when the system was misconfigured
+        debug!("🔍 [DATA ISOLATION] Querying hourly data for symbol: {} (bypassing cache for training)", symbol);
+        let data = self.get_training_market_data(symbol, Timeframe::Hourly).await?;
 
         // IMMEDIATE VALIDATION: Check data belongs to requested symbol
         if !data.is_empty() {
@@ -449,12 +553,9 @@ impl TrainingDataService {
         }
 
         if data.len() < required_size {
-            // Try to load more data from daily timeframe
-            debug!("🔍 [DATA ISOLATION] Insufficient hourly data, querying daily data for symbol: {}", symbol);
-            let daily_data = self
-                .data_access
-                .get_market_data(symbol, Timeframe::Daily)
-                .await?;
+            // Try to load more data from daily timeframe (also bypassing cache)
+            debug!("🔍 [DATA ISOLATION] Insufficient hourly data, querying daily data for symbol: {} (bypassing cache)", symbol);
+            let daily_data = self.get_training_market_data(symbol, Timeframe::Daily).await?;
                 
             // IMMEDIATE VALIDATION: Check daily data belongs to requested symbol
             if !daily_data.is_empty() {
