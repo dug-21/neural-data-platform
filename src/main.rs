@@ -736,7 +736,7 @@ async fn main() -> Result<()> {
             
             for symbol in etf_symbols.iter().map(|s| s.as_str()) {
                 // Check if model file exists and has actual weights
-                let model_path = format!("/var/lib/neural-trader/models/{}/model.fann", symbol);
+                let model_path = format!("/opt/neural-trader/sector-models/{}/model.fann", symbol);
                 
                 if !Path::new(&model_path).exists() || is_placeholder_model(&model_path) {
                     info!("🎯 [CONTAINER STARTUP] Bootstrapping untrained ETF sector model: {}", symbol);

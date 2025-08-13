@@ -85,7 +85,8 @@ services:
       - MIN_TRAINING_HISTORY_DAYS=30
       - MAX_TRAINING_HISTORY_DAYS=365
     volumes:
-      # - neural_trader_persistence:/opt/neural-trader
+      # Consolidated model storage under /opt/neural-trader
+      - neural_trader_models:/opt/neural-trader
       - neural_trader_logs:/var/log/neural-trader
     networks:
       - neural_trader_internal
@@ -280,6 +281,8 @@ volumes:
   grafana_data:
     driver: local
   neural_trader_persistence:
+    driver: local
+  neural_trader_models:
     driver: local
   neural_trader_logs:
     driver: local

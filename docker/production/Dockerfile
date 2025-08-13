@@ -59,13 +59,16 @@ RUN groupadd -r neural && useradd -r -g neural neural
 
 # Create necessary directories
 RUN mkdir -p /opt/neural-trader/{models,checkpoints,backup,exports,logs,config} \
-    && chown -R neural:neural /opt/neural-trader
+    && mkdir -p /var/lib/neural-trader/{models,config} \
+    && chown -R neural:neural /opt/neural-trader \
+    && chown -R neural:neural /var/lib/neural-trader
 
 # Copy the binary
 COPY --from=builder /app/target/release/neural-trader /usr/local/bin/neural-trader
 
 # Copy configuration files
 COPY docker/production/configs/ /opt/neural-trader/config/
+COPY neural-trader-config/ /var/lib/neural-trader/config/
 
 # Set ownership and permissions
 RUN chown neural:neural /usr/local/bin/neural-trader \
@@ -80,7 +83,7 @@ WORKDIR /opt/neural-trader
 # Environment variables for production
 ENV RUST_LOG=info
 ENV RUST_BACKTRACE=1
-ENV MODEL_STORAGE_PATH=/opt/neural-trader/models
+ENV MODEL_STORAGE_PATH=/opt/neural-trader/sector-models
 ENV MODEL_BACKUP_PATH=/opt/neural-trader/backup
 ENV LOG_LEVEL=info
 

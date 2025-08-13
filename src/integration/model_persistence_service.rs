@@ -159,7 +159,7 @@ pub struct ModelPersistenceConfig {
 impl Default for ModelPersistenceConfig {
     fn default() -> Self {
         Self {
-            model_storage_path: PathBuf::from("/opt/neural-trader/models"),
+            model_storage_path: PathBuf::from("/opt/neural-trader/sector-models"),
             rollback_config: RollbackConfig::default(),
             enable_auto_checkpointing: true,
             checkpoint_frequency: 100,

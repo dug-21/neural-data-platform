@@ -53,7 +53,7 @@ pub struct RollbackConfig {
 impl Default for RollbackConfig {
     fn default() -> Self {
         Self {
-            model_base_dir: PathBuf::from("/opt/neural-trader/models"),
+            model_base_dir: PathBuf::from("/opt/neural-trader/sector-models"),
             max_versions: 5,
             degradation_threshold: 10.0, // 10% performance drop triggers rollback
             evaluation_period: 300,       // 5 minutes
