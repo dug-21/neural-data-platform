@@ -31,6 +31,45 @@ pub enum DataClassification {
     Symbol,
 }
 
+/// Model availability status for intelligent training triggers
+#[derive(Debug, Clone)]
+pub struct ModelAvailabilityStatus {
+    /// Whether any trained models exist
+    pub has_any_models: bool,
+    /// List of available model paths
+    pub available_models: Vec<String>,
+    /// Total number of available models
+    pub total_count: usize,
+    /// Human-readable status message
+    pub status_message: String,
+}
+
+/// Model performance assessment for training decisions
+#[derive(Debug, Clone)]
+pub struct ModelPerformanceAssessment {
+    /// Current model accuracy (0.0 to 1.0)
+    pub current_accuracy: f64,
+    /// Performance level classification
+    pub performance_level: PerformanceLevel,
+    /// Whether immediate training is needed
+    pub needs_immediate_training: bool,
+    /// Detailed assessment description
+    pub assessment_details: String,
+}
+
+/// Performance level classification
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PerformanceLevel {
+    /// Above 80% accuracy - excellent
+    Good,
+    /// 65-80% accuracy - acceptable
+    Fair,
+    /// 50-65% accuracy - needs improvement
+    Poor,
+    /// Below 50% accuracy - critical
+    Critical,
+}
+
 /// Data availability and quality assessment for enhanced decision making
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataAvailability {
@@ -851,7 +890,8 @@ impl DaaCoordinator {
 
         // Simple check using our fields
         let needs_retraining = *self.needs_retraining.read().await;
-        if needs_retraining && self.check_market_timing().await {
+        // FIXED: Train when markets are CLOSED (check_market_timing returns TRUE when OPEN)
+        if needs_retraining && !self.check_market_timing().await {
             info!(
                 "DAA triggering autonomous retraining due to low performance"
             );
@@ -1173,7 +1213,7 @@ impl DaaCoordinator {
     
 
 
-    /// Trigger training evaluation based on model performance with market hours awareness
+    /// Trigger training evaluation with intelligent market hours override
     pub async fn trigger_training_evaluation(
         &self,
         model_name: &str,
@@ -1182,27 +1222,53 @@ impl DaaCoordinator {
     ) -> Result<()> {
         let now = Utc::now();
         
+        // 🧠 INTELLIGENT TRAINING TRIGGERS: Check if emergency training is needed
+        let models_available = self.check_model_availability().await?;
+        let performance_assessment = self.assess_model_performance().await?;
+        let emergency_override = self.should_trigger_emergency_training(
+            &models_available, 
+            &performance_assessment
+        ).await?;
+        
         // Check if major markets are open using the coordinator's market_hours instance
         use crate::utils::market_hours::Exchange;
         let nyse_open = self.market_hours.is_market_open(Exchange::NYSE, now).await;
         let nasdaq_open = self.market_hours.is_market_open(Exchange::NASDAQ, now).await;
         let markets_open = nyse_open || nasdaq_open;
         
-        if markets_open {
+        // 🚨 EMERGENCY OVERRIDE: Skip market hours check if emergency training needed
+        if emergency_override {
+            warn!("⚠️ EMERGENCY TRAINING OVERRIDE: Executing training during market hours due to critical conditions");
+            warn!("⚠️ Emergency conditions: models_available={}, performance={:?}", 
+                  models_available.has_any_models, performance_assessment.performance_level);
+        } else if markets_open {
             info!(
                 "🚫 [MARKET HOURS] Deferring training for {} until after-hours to prioritize trading (NYSE: {}, NASDAQ: {})",
                 model_name, nyse_open, nasdaq_open
             );
             info!("📊 [MARKET HOURS] Training metrics deferred - Accuracy: {:.2}%, Confidence: {:.2}%", 
                   accuracy * 100.0, confidence * 100.0);
+            info!("✅ Models exist with acceptable performance - following market hours schedule");
             // TODO: Queue training for later execution during off-hours
             return Ok(());
         }
         
-        // DAA has ALREADY decided training is needed when this is called
-        info!("🎯 [AFTER-HOURS] Executing training decision for {}", model_name);
-        info!("📊 [AFTER-HOURS] Triggering metrics - Accuracy: {:.2}%, Confidence: {:.2}%", 
-              accuracy * 100.0, confidence * 100.0);
+        // Enhanced logging for training decision execution
+        if emergency_override {
+            warn!("🚨 [EMERGENCY] Executing critical training decision for {}", model_name);
+            warn!("🚨 [EMERGENCY] Critical metrics - Accuracy: {:.2}%, Confidence: {:.2}%", 
+                  accuracy * 100.0, confidence * 100.0);
+            if !models_available.has_any_models {
+                warn!("⚠️ No models found - initiating emergency training");
+            } else {
+                warn!("⚠️ Model performance below threshold - prioritizing training over trading");
+            }
+        } else {
+            info!("🎯 [AFTER-HOURS] Executing training decision for {}", model_name);
+            info!("📊 [AFTER-HOURS] Triggering metrics - Accuracy: {:.2}%, Confidence: {:.2}%", 
+                  accuracy * 100.0, confidence * 100.0);
+            info!("✅ Models exist with acceptable performance - following market hours schedule");
+        }
         
         // Get the neural predictor and execute training
         let predictor = self.neural_predictor.clone();
@@ -1309,13 +1375,21 @@ impl DaaCoordinator {
         Ok(())
     }
 
-    /// Evaluate training need using autonomous training engine
+    /// Evaluate training need using autonomous training engine with intelligent triggers
     pub async fn evaluate_autonomous_training(
         &self,
         market_context: &MarketContext,
         historical_data: &[TimeSeriesData],
     ) -> Result<()> {
         if let Some(training_engine) = &self.autonomous_training {
+            // 🧠 INTELLIGENT TRAINING TRIGGERS: Check if models exist and performance
+            let models_available = self.check_model_availability().await?;
+            let performance_assessment = self.assess_model_performance().await?;
+            let emergency_training_needed = self.should_trigger_emergency_training(
+                &models_available, 
+                &performance_assessment
+            ).await?;
+
             // Calculate performance snapshot from current state
             let metrics = self.performance_metrics.read().await;
 
@@ -1348,10 +1422,23 @@ impl DaaCoordinator {
                 cache_hit_rate: 0.88,
             };
 
-            // Evaluate training need
-            let _training_decision = training_engine
-                .evaluate_training_need(performance_snapshot)
-                .await?;
+            // 🚨 EMERGENCY OVERRIDE: If no models or terrible performance, force training immediately
+            if emergency_training_needed {
+                warn!("⚠️ EMERGENCY TRAINING TRIGGERED: Models missing or poor performance detected");
+                warn!("⚠️ Emergency override: Bypassing market hours check for critical training");
+                
+                // Force training evaluation with emergency flag
+                let training_decision = training_engine
+                    .evaluate_training_need(performance_snapshot)
+                    .await?;
+                    
+                info!("🚨 Emergency training decision processed: bypassing normal market timing");
+            } else {
+                // Normal evaluation - respects market hours
+                let _training_decision = training_engine
+                    .evaluate_training_need(performance_snapshot)
+                    .await?;
+            }
 
             // Training decision is automatically sent to DAA via the engine's channel
         }
@@ -1433,10 +1520,10 @@ impl DaaCoordinator {
         }
     }
     
-    /// Simple method to check if market is open for training
+    /// Simple method to check if markets are open (returns TRUE when markets are OPEN)
+    /// FIXED: This method name was confusing - it should indicate market status, not training timing
     pub async fn check_market_timing(&self) -> bool {
-        // Use market_hours to determine if it's a good time for training
-        // Implement market hours check using the market hours utilities
+        // Returns TRUE when markets are OPEN (good for trading decisions)
         use crate::utils::market_hours::{MarketHours, Exchange};
         use chrono::Utc;
         
@@ -1447,17 +1534,16 @@ impl DaaCoordinator {
         let nyse_open = market_hours.is_market_open(Exchange::NYSE, now).await;
         let nasdaq_open = market_hours.is_market_open(Exchange::NASDAQ, now).await;
         
-        // FIXED: Training should be prioritized when markets are CLOSED
-        // Return true for training when markets are closed (off-hours)
-        let markets_closed = !(nyse_open || nasdaq_open);
+        // Return TRUE when markets are OPEN (for trading decisions)
+        let markets_open = nyse_open || nasdaq_open;
         
-        if markets_closed {
-            info!("📚 Markets CLOSED - Training priority mode active");
+        if markets_open {
+            debug!("📈 Markets OPEN - Trading priority mode active");
         } else {
-            info!("📈 Markets OPEN - Trading priority mode active");
+            debug!("📚 Markets CLOSED - Training priority mode active");
         }
         
-        markets_closed
+        markets_open
     }
 
     /// Check if trading should be prioritized (returns true when markets are OPEN)
@@ -1476,9 +1562,168 @@ impl DaaCoordinator {
     }
     
     /// Check if training should be prioritized (returns true when markets are CLOSED)
+    /// FIXED: Add emergency training override logic here
     pub async fn should_prioritize_training(&self) -> bool {
-        // Training is prioritized during off-hours
+        // First check if emergency training is needed (overrides market hours)
+        match self.check_model_availability().await {
+            Ok(models_available) => {
+                if !models_available.has_any_models {
+                    warn!("🚨 EMERGENCY: No models exist - prioritizing training over market hours");
+                    return true;
+                }
+            }
+            Err(e) => {
+                warn!("Error checking model availability: {}", e);
+            }
+        }
+
+        match self.assess_model_performance().await {
+            Ok(performance) => {
+                if matches!(performance.performance_level, PerformanceLevel::Critical) {
+                    warn!("🚨 EMERGENCY: Critical performance - prioritizing training over market hours");
+                    return true;
+                }
+            }
+            Err(e) => {
+                warn!("Error assessing model performance: {}", e);
+            }
+        }
+
+        // Normal case: Training is prioritized during off-hours only
         !self.should_prioritize_trading().await
+    }
+    
+    /// 🧠 INTELLIGENT TRAINING TRIGGERS: Check if any trained models are available
+    async fn check_model_availability(&self) -> Result<ModelAvailabilityStatus> {
+        let models_path = std::path::Path::new("./models");
+        let mut available_models = Vec::new();
+        let mut total_model_count = 0;
+        
+        if !models_path.exists() {
+            warn!("⚠️ Models directory ./models does not exist - NO MODELS AVAILABLE");
+            return Ok(ModelAvailabilityStatus {
+                has_any_models: false,
+                available_models: Vec::new(),
+                total_count: 0,
+                status_message: "Models directory not found".to_string(),
+            });
+        }
+        
+        // Check production and checkpoint models
+        let model_types = ["production", "checkpoints"];
+        for model_type in &model_types {
+            let type_path = models_path.join(model_type);
+            if type_path.exists() {
+                if let Ok(entries) = std::fs::read_dir(&type_path) {
+                    for entry in entries.flatten() {
+                        if entry.path().is_dir() {
+                            total_model_count += 1;
+                            if let Some(name) = entry.file_name().to_str() {
+                                available_models.push(format!("{}/{}", model_type, name));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        let has_models = total_model_count > 0;
+        let status_message = if has_models {
+            format!("Found {} trained models", total_model_count)
+        } else {
+            "No trained models found in models directory".to_string()
+        };
+        
+        if !has_models {
+            warn!("⚠️ NO TRAINED MODELS FOUND - Emergency training will be triggered");
+        } else {
+            info!("✅ Found {} trained models: {}", total_model_count, 
+                  available_models.iter().take(5).cloned().collect::<Vec<_>>().join(", "));
+        }
+        
+        Ok(ModelAvailabilityStatus {
+            has_any_models: has_models,
+            available_models,
+            total_count: total_model_count,
+            status_message,
+        })
+    }
+    
+    /// 📊 Assess current model performance for intelligent training triggers
+    async fn assess_model_performance(&self) -> Result<ModelPerformanceAssessment> {
+        let metrics = self.performance_metrics.read().await;
+        
+        // Define performance thresholds
+        const CRITICAL_ACCURACY_THRESHOLD: f64 = 0.5;  // Below 50% is critical
+        const POOR_ACCURACY_THRESHOLD: f64 = 0.65;     // Below 65% is poor
+        const GOOD_ACCURACY_THRESHOLD: f64 = 0.8;      // Above 80% is good
+        
+        let current_accuracy = metrics.avg_confidence;
+        let performance_level = if current_accuracy < CRITICAL_ACCURACY_THRESHOLD {
+            PerformanceLevel::Critical
+        } else if current_accuracy < POOR_ACCURACY_THRESHOLD {
+            PerformanceLevel::Poor
+        } else if current_accuracy < GOOD_ACCURACY_THRESHOLD {
+            PerformanceLevel::Fair
+        } else {
+            PerformanceLevel::Good
+        };
+        
+        let needs_training = matches!(performance_level, PerformanceLevel::Critical | PerformanceLevel::Poor);
+        
+        if needs_training {
+            warn!("⚠️ MODEL PERFORMANCE BELOW THRESHOLD: {:.1}% accuracy (threshold: {:.1}%)", 
+                  current_accuracy * 100.0, POOR_ACCURACY_THRESHOLD * 100.0);
+        } else {
+            info!("✅ Model performance acceptable: {:.1}% accuracy", current_accuracy * 100.0);
+        }
+        
+        Ok(ModelPerformanceAssessment {
+            current_accuracy,
+            performance_level,
+            needs_immediate_training: needs_training,
+            assessment_details: format!(
+                "Accuracy: {:.1}%, Performance: {:?}, Needs training: {}", 
+                current_accuracy * 100.0, performance_level, needs_training
+            ),
+        })
+    }
+    
+    /// 🚨 Determine if emergency training should override market hours
+    async fn should_trigger_emergency_training(
+        &self,
+        models_available: &ModelAvailabilityStatus,
+        performance: &ModelPerformanceAssessment,
+    ) -> Result<bool> {
+        // EMERGENCY CONDITION 1: No models exist at all
+        if !models_available.has_any_models {
+            warn!("🚨 EMERGENCY TRAINING TRIGGER: No models found - overriding market hours");
+            return Ok(true);
+        }
+        
+        // EMERGENCY CONDITION 2: Model performance is critically poor
+        if matches!(performance.performance_level, PerformanceLevel::Critical) {
+            warn!("🚨 EMERGENCY TRAINING TRIGGER: Critical performance ({:.1}%) - overriding market hours", 
+                  performance.current_accuracy * 100.0);
+            return Ok(true);
+        }
+        
+        // CONDITION 3: Poor performance during off-hours should still train
+        if performance.needs_immediate_training {
+            let markets_open = self.should_prioritize_trading().await;
+            if !markets_open {
+                info!("📋 Training recommended: Poor performance ({:.1}%) and markets closed", 
+                      performance.current_accuracy * 100.0);
+                return Ok(true);
+            } else {
+                info!("⏳ Training deferred: Poor performance but markets open - will train after hours");
+                return Ok(false);
+            }
+        }
+        
+        info!("✅ No emergency training needed: {} models available, performance: {:?}", 
+              models_available.total_count, performance.performance_level);
+        Ok(false)
     }
 
     /// **NEW EXTENSION METHOD**: Evaluate decision with data context while preserving Byzantine consensus
