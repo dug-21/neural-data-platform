@@ -84,7 +84,7 @@ fn load_config() -> Result<CliConfig> {
     // Default configuration
     Ok(CliConfig {
         model_base_dir: std::env::var("MODEL_BASE_DIR")
-            .unwrap_or_else(|_| "/opt/neural-trader/models".to_string()),
+            .unwrap_or_else(|_| "/opt/neural-trader/sector-models".to_string()),
         metadata_backup_path: std::env::var("METADATA_BACKUP_PATH")
             .unwrap_or_else(|_| "/opt/neural-trader/metadata".to_string()),
         max_model_versions: None,

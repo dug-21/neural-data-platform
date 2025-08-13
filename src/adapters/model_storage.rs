@@ -139,7 +139,7 @@ pub struct ModelStorageConfig {
 impl Default for ModelStorageConfig {
     fn default() -> Self {
         Self {
-            base_path: PathBuf::from("models"),
+            base_path: PathBuf::from("/opt/neural-trader/sector-models"),
             max_versions_per_model: 10,
             enable_compression: true,
             enable_encryption: false,
