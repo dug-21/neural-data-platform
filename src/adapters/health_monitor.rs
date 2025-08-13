@@ -16,7 +16,6 @@ use super::errors::{
     AdapterError, CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, ConsoleErrorReporter,
     ErrorMetrics, ErrorReporter, HealthCheckResult, HealthMetrics,
 };
-use crate::data::TimeSeriesData;
 
 /// Health monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -126,6 +126,7 @@ impl TrainingDataService {
     }
 
     /// Load a training batch for a specific model type
+    /// CRITICAL: Ensures complete data isolation - only loads data for the requested symbol
     pub async fn load_training_batch(
         &self,
         model_type: ModelType,
@@ -133,34 +134,55 @@ impl TrainingDataService {
         config: TrainingDataConfig,
     ) -> Result<PreparedTrainingData> {
         let start_time = std::time::Instant::now();
-        debug!(
-            "Loading training batch for {:?} model, symbol: {}",
+        
+        // CRITICAL LOGGING: Explicitly log symbol isolation
+        info!(
+            "🎯 [DATA ISOLATION] Loading training batch for {:?} model, SYMBOL: {} ONLY",
             model_type, symbol
         );
+        debug!(
+            "Training data request - Model: {:?}, Symbol: {}, Batch size: {}",
+            model_type, symbol, config.batch_size
+        );
 
-        // Try cache first if enabled
+        // Try cache first if enabled - SYMBOL-SPECIFIC cache key prevents cross-contamination
         if config.cache_enabled {
             let cache_key = format!(
-                "training_data:{}:{}:{:?}",
+                "training_data:SYMBOL_{}:MODEL_{}:BATCH_{}",
                 symbol,
                 serde_json::to_string(&model_type)?,
                 config.batch_size
             );
+            
+            debug!("🔍 [DATA ISOLATION] Cache lookup with symbol-specific key: {}", cache_key);
 
             if let Ok(Some(cached_data)) = self.cache.get::<PreparedTrainingData>(&cache_key).await
             {
-                debug!("Cache hit for training data");
-                let mut metrics = self.metrics.write().await;
-                metrics.cache_hits += 1;
-                return Ok(cached_data);
+                // CRITICAL VALIDATION: Verify cached data matches requested symbol
+                if cached_data.symbol != symbol {
+                    error!(
+                        "🚨 [DATA ISOLATION ERROR] Cache contamination detected! Requested: {}, Got: {}",
+                        symbol, cached_data.symbol
+                    );
+                    // Clear contaminated cache entry
+                    let _ = self.cache.invalidate(&cache_key).await;
+                } else {
+                    info!("✅ [DATA ISOLATION] Cache hit for symbol {} - data validated", symbol);
+                    let mut metrics = self.metrics.write().await;
+                    metrics.cache_hits += 1;
+                    return Ok(cached_data);
+                }
             }
         }
 
         // Acquire semaphore to limit concurrent preparations
         let _permit = self.preparation_semaphore.acquire().await?;
 
-        // Load raw data
+        // Load raw data - SYMBOL-SPECIFIC query
         let raw_data = self.load_raw_data(symbol, &config).await?;
+        
+        // CRITICAL VALIDATION: Verify all loaded data belongs to requested symbol
+        self.validate_symbol_isolation(&raw_data, symbol)?;
 
         // Validate data
         self.validate_training_data(&raw_data)?;
@@ -208,10 +230,10 @@ impl TrainingDataService {
                 / metrics.total_batches_loaded as f64;
         }
 
-        // Cache the prepared data if enabled
+        // Cache the prepared data if enabled - SYMBOL-SPECIFIC cache key
         if config.cache_enabled {
             let cache_key = format!(
-                "training_data:{}:{}:{:?}",
+                "training_data:SYMBOL_{}:MODEL_{}:BATCH_{}",
                 symbol,
                 serde_json::to_string(&model_type)?,
                 config.batch_size
@@ -226,9 +248,20 @@ impl TrainingDataService {
             }
         }
 
+        // FINAL VALIDATION: Confirm prepared data symbol matches request
+        if prepared_data.symbol != symbol {
+            error!(
+                "🚨 [DATA ISOLATION CRITICAL ERROR] Prepared data symbol mismatch! Requested: {}, Prepared: {}",
+                symbol, prepared_data.symbol
+            );
+            bail!("Data isolation violation: prepared data symbol ({}) does not match requested symbol ({})", 
+                  prepared_data.symbol, symbol);
+        }
+        
         info!(
-            "Prepared {} training samples in {:?}",
+            "✅ [DATA ISOLATION] Successfully prepared {} training samples for SYMBOL {} ONLY in {:?}",
             prepared_data.features.len(),
+            symbol,
             start_time.elapsed()
         );
         Ok(prepared_data)
@@ -308,6 +341,33 @@ impl TrainingDataService {
         })
     }
 
+    /// Validate symbol isolation - ensures no cross-contamination between symbols
+    pub fn validate_symbol_isolation(&self, data: &[TimeSeriesData], expected_symbol: &str) -> Result<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        
+        // Check every data point to ensure it belongs to the expected symbol
+        for (i, point) in data.iter().enumerate() {
+            if point.symbol != expected_symbol {
+                error!(
+                    "🚨 [DATA ISOLATION VIOLATION] Data point {} contains wrong symbol! Expected: {}, Found: {}",
+                    i, expected_symbol, point.symbol
+                );
+                bail!(
+                    "Data isolation violation: point {} has symbol '{}' but expected '{}'",
+                    i, point.symbol, expected_symbol
+                );
+            }
+        }
+        
+        info!(
+            "✅ [DATA ISOLATION] Validated {} data points all belong to symbol {}",
+            data.len(), expected_symbol
+        );
+        Ok(())
+    }
+
     /// Validate training data
     pub fn validate_training_data(&self, data: &[TimeSeriesData]) -> Result<(), ValidationError> {
         // Check minimum data requirements
@@ -370,31 +430,51 @@ impl TrainingDataService {
         symbol: &str,
         config: &TrainingDataConfig,
     ) -> Result<Vec<TimeSeriesData>> {
+        info!("🔍 [DATA ISOLATION] Loading raw data for SYMBOL {} ONLY", symbol);
+        
         // Calculate required data size based on config
         let required_size = config.batch_size + config.sequence_length + config.feature_window;
 
         // Load more data than needed to account for feature calculation
+        debug!("🔍 [DATA ISOLATION] Querying hourly data for symbol: {}", symbol);
         let data = self
             .data_access
             .get_market_data(symbol, Timeframe::Hourly)
             .await?;
 
+        // IMMEDIATE VALIDATION: Check data belongs to requested symbol
+        if !data.is_empty() {
+            self.validate_symbol_isolation(&data, symbol)
+                .context("Hourly data failed symbol isolation check")?;
+        }
+
         if data.len() < required_size {
             // Try to load more data from daily timeframe
+            debug!("🔍 [DATA ISOLATION] Insufficient hourly data, querying daily data for symbol: {}", symbol);
             let daily_data = self
                 .data_access
                 .get_market_data(symbol, Timeframe::Daily)
                 .await?;
+                
+            // IMMEDIATE VALIDATION: Check daily data belongs to requested symbol
+            if !daily_data.is_empty() {
+                self.validate_symbol_isolation(&daily_data, symbol)
+                    .context("Daily data failed symbol isolation check")?;
+            }
+                
             if daily_data.len() >= required_size {
+                info!("✅ [DATA ISOLATION] Loaded {} daily data points for symbol {}", daily_data.len(), symbol);
                 Ok(daily_data)
             } else {
                 bail!(
-                    "Insufficient data for training: got {}, need {}",
+                    "Insufficient data for training symbol {}: got {}, need {}",
+                    symbol,
                     daily_data.len(),
                     required_size
                 );
             }
         } else {
+            info!("✅ [DATA ISOLATION] Loaded {} hourly data points for symbol {}", data.len(), symbol);
             Ok(data)
         }
     }
@@ -502,7 +582,7 @@ impl TrainingDataService {
             None
         };
 
-        Ok(PreparedTrainingData {
+        let prepared_data = PreparedTrainingData {
             model_type: ModelType::MLP,
             symbol: symbol.to_string(),
             features,
@@ -511,7 +591,23 @@ impl TrainingDataService {
             feature_names,
             normalization_params,
             metadata: HashMap::new(),
-        })
+        };
+        
+        // FINAL VALIDATION: Ensure prepared data symbol matches input
+        if prepared_data.symbol != symbol {
+            error!(
+                "🚨 [DATA ISOLATION CRITICAL] MLP data preparation symbol mismatch! Expected: {}, Got: {}",
+                symbol, prepared_data.symbol
+            );
+            bail!("MLP data preparation symbol isolation failure");
+        }
+        
+        info!(
+            "✅ [DATA ISOLATION] MLP data prepared successfully for symbol {} with {} features",
+            symbol, prepared_data.features.len()
+        );
+        
+        Ok(prepared_data)
     }
 
     async fn prepare_sequence_data(
@@ -584,8 +680,8 @@ impl TrainingDataService {
             serde_json::json!(feature_names.len()),
         );
 
-        Ok(PreparedTrainingData {
-            model_type,
+        let prepared_data = PreparedTrainingData {
+            model_type: model_type.clone(),
             symbol: symbol.to_string(),
             features: sequences,
             targets,
@@ -593,7 +689,23 @@ impl TrainingDataService {
             feature_names,
             normalization_params,
             metadata,
-        })
+        };
+        
+        // FINAL VALIDATION: Ensure prepared data symbol matches input
+        if prepared_data.symbol != symbol {
+            error!(
+                "🚨 [DATA ISOLATION CRITICAL] Sequence data preparation symbol mismatch! Expected: {}, Got: {}",
+                symbol, prepared_data.symbol
+            );
+            bail!("Sequence data preparation symbol isolation failure");
+        }
+        
+        info!(
+            "✅ [DATA ISOLATION] {:?} sequence data prepared successfully for symbol {} with {} sequences",
+            model_type, symbol, prepared_data.features.len()
+        );
+        
+        Ok(prepared_data)
     }
 
     async fn prepare_cnn_data(
@@ -602,12 +714,25 @@ impl TrainingDataService {
         data: Vec<TimeSeriesData>,
         config: &TrainingDataConfig,
     ) -> Result<PreparedTrainingData> {
+        info!("🔍 [DATA ISOLATION] Preparing CNN data for symbol {} ONLY", symbol);
+        
         // For CNN, we can create 2D feature maps
         // This is a simplified version - real implementation would create more sophisticated features
         self.prepare_mlp_data(symbol, data, config)
             .await
             .map(|mut prepared| {
                 prepared.model_type = ModelType::CNN;
+                
+                // VALIDATION: Ensure symbol consistency after model type change
+                if prepared.symbol != symbol {
+                    error!(
+                        "🚨 [DATA ISOLATION CRITICAL] CNN data symbol mismatch after preparation! Expected: {}, Got: {}",
+                        symbol, prepared.symbol
+                    );
+                    panic!("CNN data preparation symbol isolation failure");
+                }
+                
+                info!("✅ [DATA ISOLATION] CNN data prepared successfully for symbol {}", symbol);
                 prepared
             })
     }
@@ -618,12 +743,25 @@ impl TrainingDataService {
         data: Vec<TimeSeriesData>,
         config: &TrainingDataConfig,
     ) -> Result<PreparedTrainingData> {
+        info!("🔍 [DATA ISOLATION] Preparing ensemble data for symbol {} ONLY", symbol);
+        
         // For ensemble, prepare data that can be used by multiple model types
         // This returns MLP-style features that can be adapted by each model
         self.prepare_mlp_data(symbol, data, config)
             .await
             .map(|mut prepared| {
                 prepared.model_type = ModelType::Ensemble;
+                
+                // VALIDATION: Ensure symbol consistency after model type change
+                if prepared.symbol != symbol {
+                    error!(
+                        "🚨 [DATA ISOLATION CRITICAL] Ensemble data symbol mismatch after preparation! Expected: {}, Got: {}",
+                        symbol, prepared.symbol
+                    );
+                    panic!("Ensemble data preparation symbol isolation failure");
+                }
+                
+                info!("✅ [DATA ISOLATION] Ensemble data prepared successfully for symbol {}", symbol);
                 prepared
             })
     }

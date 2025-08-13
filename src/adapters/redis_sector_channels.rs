@@ -17,16 +17,16 @@
 //! - Implements efficient message batching and compression
 
 use super::redis::{RedisAdapter, RedisConfig};
-use crate::data::sector_mapper::{SectorId, SectorInfo};
-use crate::adapters::{AdapterError, MarketData};
 use async_trait::async_trait;
-use redis::{AsyncCommands, streams::StreamRangeReply};
+use crate::data::sector_mapper::SectorId;
+use crate::adapters::{AdapterError, MarketData};
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, info, warn};
 use chrono::{DateTime, Utc};
 use flate2::{Compression, write::GzEncoder, read::GzDecoder};
 use std::io::{Write, Read};

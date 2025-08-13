@@ -4,14 +4,12 @@
 //! directly with the existing FannPredictor implementation.
 
 use anyhow::Result;
-use futures::future::join_all;
 use rayon::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
 
-use super::ensemble_types::EnsemblePrediction;
 use crate::neural::FannPredictor;
 use crate::data::TimeSeriesData;
 use crate::neural::{NeuralPredictorTrait, PredictionResult};

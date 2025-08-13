@@ -377,7 +377,7 @@ mod tests {
         // This would require mocking RedisAdapter and WorkerPool
         // In a full test suite, we'd create mock implementations
         
-        let stats = HashMap::new();
+        let stats: std::collections::HashMap<String, usize> = HashMap::new();
         assert!(stats.is_empty());
     }
 }

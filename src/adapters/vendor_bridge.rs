@@ -11,7 +11,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{RwLock, Semaphore};
-use tokio::task::JoinHandle;
 
 /// Global thread pool for CPU-intensive synchronous operations
 static SYNC_THREAD_POOL: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {

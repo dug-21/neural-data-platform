@@ -1,0 +1,3389 @@
+warning: method `update_step_size` is never used
+  --> vendor/ruv-fann/src/training/rprop.rs:98:8
+   |
+26 | impl<T: Float + Send> Rprop<T> {
+   | ------------------------------ method in this implementation
+...
+98 |     fn update_step_size(&self, step_size: T, gradient: T, previous_gradient: T) -> T {
+   |        ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: method `calculate_quickprop_delta` is never used
+  --> vendor/ruv-fann/src/training/quickprop.rs:84:8
+   |
+24 | impl<T: Float + Send> Quickprop<T> {
+   | ---------------------------------- method in this implementation
+...
+84 |     fn calculate_quickprop_delta(
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `train_single_candidate_parallel` is never used
+   --> vendor/ruv-fann/src/cascade.rs:918:8
+    |
+411 | impl<T: Float> CascadeTrainer<T> {
+    | -------------------------------- method in this implementation
+...
+918 |     fn train_single_candidate_parallel(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `train_candidates_parallel`, `train_single_candidate_with_data`, `calculate_candidate_correlation_with_data`, and `update_candidate_weights_simple` are never used
+    --> vendor/ruv-fann/src/cascade.rs:1013:8
+     |
+1008 | / impl<T: Float + Send + Sync> CascadeTrainer<T> 
+1009 | | where 
+1010 | |     T::FromStrRadixErr: Send + Sync,
+     | |____________________________________- methods in this implementation
+...
+1013 |       fn train_candidates_parallel(&mut self, candidates: &mut [CandidateNeuron<T>]) -> Result<(), RuvFannError> {
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1044 |       fn train_single_candidate_with_data(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1076 |       fn calculate_candidate_correlation_with_data(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1104 |       fn update_candidate_weights_simple(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `api_coverage` is never read
+   --> vendor/ruv-fann/src/integration.rs:626:5
+    |
+624 | pub struct FannCompatibilityValidator<T: Float> {
+    |            -------------------------- field in this struct
+625 |     compatibility_tests: Vec<CompatibilityTest<T>>,
+626 |     api_coverage: HashMap<String, bool>,
+    |     ^^^^^^^^^^^^
+
+warning: function `read_json_with_options` is never used
+  --> vendor/ruv-fann/src/io/json.rs:32:8
+   |
+32 | pub fn read_json_with_options<T, R>(reader: &mut R, pretty: bool) -> IoResult<T>
+   |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_json_with_options` is never used
+  --> vendor/ruv-fann/src/io/json.rs:51:8
+   |
+51 | pub fn write_json_with_options<T, W>(data: &T, writer: &mut W, pretty: bool) -> IoResult<()>
+   |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `pretty` and `include_null` are never read
+  --> vendor/ruv-fann/src/io/json.rs:70:9
+   |
+68 | pub struct JsonConfig {
+   |            ---------- fields in this struct
+69 |     /// Use pretty printing (indented, human-readable)
+70 |     pub pretty: bool,
+   |         ^^^^^^
+71 |     /// Include null values in serialization
+72 |     pub include_null: bool,
+   |         ^^^^^^^^^^^^
+   |
+   = note: `JsonConfig` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: associated functions `compact` and `pretty` are never used
+  --> vendor/ruv-fann/src/io/json.rs:85:12
+   |
+75 | impl JsonConfig {
+   | --------------- associated functions in this implementation
+...
+85 |     pub fn compact() -> Self {
+   |            ^^^^^^^
+...
+93 |     pub fn pretty() -> Self {
+   |            ^^^^^^
+
+warning: field `config` is never read
+   --> vendor/ruv-fann/src/io/json.rs:109:5
+    |
+108 | pub struct JsonReader {
+    |            ---------- field in this struct
+109 |     config: JsonConfig,
+    |     ^^^^^^
+
+warning: associated items `with_config` and `read` are never used
+   --> vendor/ruv-fann/src/io/json.rs:121:12
+    |
+112 | impl JsonReader {
+    | --------------- associated items in this implementation
+...
+121 |     pub fn with_config(config: JsonConfig) -> Self {
+    |            ^^^^^^^^^^^
+...
+126 |     pub fn read<T, R>(&self, reader: &mut R) -> IoResult<T>
+    |            ^^^^
+
+warning: field `config` is never read
+   --> vendor/ruv-fann/src/io/json.rs:143:5
+    |
+142 | pub struct JsonWriter {
+    |            ---------- field in this struct
+143 |     config: JsonConfig,
+    |     ^^^^^^
+
+warning: associated items `with_config` and `write` are never used
+   --> vendor/ruv-fann/src/io/json.rs:155:12
+    |
+146 | impl JsonWriter {
+    | --------------- associated items in this implementation
+...
+155 |     pub fn with_config(config: JsonConfig) -> Self {
+    |            ^^^^^^^^^^^
+...
+160 |     pub fn write<T, W>(&self, data: &T, writer: &mut W) -> IoResult<()>
+    |            ^^^^^
+
+warning: fields `little_endian` and `varint_encoding` are never read
+  --> vendor/ruv-fann/src/io/binary.rs:35:9
+   |
+33 | pub struct BinaryConfig {
+   |            ------------ fields in this struct
+34 |     /// Use little endian byte order
+35 |     pub little_endian: bool,
+   |         ^^^^^^^^^^^^^
+36 |     /// Use variable length encoding for integers
+37 |     pub varint_encoding: bool,
+   |         ^^^^^^^^^^^^^^^
+   |
+   = note: `BinaryConfig` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: associated functions `compact` and `fast` are never used
+  --> vendor/ruv-fann/src/io/binary.rs:50:12
+   |
+40 | impl BinaryConfig {
+   | ----------------- associated functions in this implementation
+...
+50 |     pub fn compact() -> Self {
+   |            ^^^^^^^
+...
+58 |     pub fn fast() -> Self {
+   |            ^^^^
+
+warning: field `config` is never read
+  --> vendor/ruv-fann/src/io/binary.rs:74:5
+   |
+73 | pub struct BinaryReader {
+   |            ------------ field in this struct
+74 |     config: BinaryConfig,
+   |     ^^^^^^
+
+warning: associated items `with_config`, `read`, and `read_with_limit` are never used
+   --> vendor/ruv-fann/src/io/binary.rs:86:12
+    |
+77  | impl BinaryReader {
+    | ----------------- associated items in this implementation
+...
+86  |     pub fn with_config(config: BinaryConfig) -> Self {
+    |            ^^^^^^^^^^^
+...
+91  |     pub fn read<T, R>(&self, reader: &mut R) -> IoResult<T>
+    |            ^^^^
+...
+100 |     pub fn read_with_limit<T, R>(&self, reader: &mut R, limit: u64) -> IoResult<T>
+    |            ^^^^^^^^^^^^^^^
+
+warning: field `config` is never read
+   --> vendor/ruv-fann/src/io/binary.rs:128:5
+    |
+127 | pub struct BinaryWriter {
+    |            ------------ field in this struct
+128 |     config: BinaryConfig,
+    |     ^^^^^^
+
+warning: associated items `with_config`, `write`, and `serialized_size` are never used
+   --> vendor/ruv-fann/src/io/binary.rs:140:12
+    |
+131 | impl BinaryWriter {
+    | ----------------- associated items in this implementation
+...
+140 |     pub fn with_config(config: BinaryConfig) -> Self {
+    |            ^^^^^^^^^^^
+...
+145 |     pub fn write<T, W>(&self, data: &T, writer: &mut W) -> IoResult<()>
+    |            ^^^^^
+...
+154 |     pub fn serialized_size<T>(&self, data: &T) -> IoResult<u64>
+    |            ^^^^^^^^^^^^^^^
+
+warning: function `serialized_size` is never used
+   --> vendor/ruv-fann/src/io/binary.rs:174:12
+    |
+174 |     pub fn serialized_size<T>(data: &T) -> IoResult<u64>
+    |            ^^^^^^^^^^^^^^^
+
+warning: function `validate_serializable` is never used
+   --> vendor/ruv-fann/src/io/binary.rs:183:12
+    |
+183 |     pub fn validate_serializable<T>(data: &T) -> IoResult<()>
+    |            ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `compress_bytes` is never used
+  --> vendor/ruv-fann/src/io/compression.rs:31:8
+   |
+31 | pub fn compress_bytes(data: &[u8]) -> IoResult<Vec<u8>> {
+   |        ^^^^^^^^^^^^^^
+
+warning: function `decompress_bytes` is never used
+  --> vendor/ruv-fann/src/io/compression.rs:39:8
+   |
+39 | pub fn decompress_bytes(data: &[u8]) -> IoResult<Vec<u8>> {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: fields `level` and `fast` are never read
+  --> vendor/ruv-fann/src/io/compression.rs:50:9
+   |
+48 | pub struct CompressionConfig {
+   |            ----------------- fields in this struct
+49 |     /// Compression level (0-9, where 9 is best compression)
+50 |     pub level: u32,
+   |         ^^^^^
+51 |     /// Use faster compression algorithm
+52 |     pub fast: bool,
+   |         ^^^^
+   |
+   = note: `CompressionConfig` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: associated functions `fast`, `best`, and `with_level` are never used
+  --> vendor/ruv-fann/src/io/compression.rs:65:12
+   |
+55 | impl CompressionConfig {
+   | ---------------------- associated functions in this implementation
+...
+65 |     pub fn fast() -> Self {
+   |            ^^^^
+...
+73 |     pub fn best() -> Self {
+   |            ^^^^
+...
+81 |     pub fn with_level(level: u32) -> Self {
+   |            ^^^^^^^^^^
+
+warning: associated items `new`, `get_ref`, `get_mut`, and `into_inner` are never used
+   --> vendor/ruv-fann/src/io/compression.rs:102:12
+    |
+100 | impl<R: Read> CompressedReader<R> {
+    | --------------------------------- associated items in this implementation
+101 |     /// Create a new compressed reader
+102 |     pub fn new(reader: R) -> Self {
+    |            ^^^
+...
+109 |     pub fn get_ref(&self) -> &GzDecoder<R> {
+    |            ^^^^^^^
+...
+114 |     pub fn get_mut(&mut self) -> &mut GzDecoder<R> {
+    |            ^^^^^^^
+...
+119 |     pub fn into_inner(self) -> GzDecoder<R> {
+    |            ^^^^^^^^^^
+
+warning: associated items `new`, `with_level`, `with_config`, `finish`, `get_ref`, and `get_mut` are never used
+   --> vendor/ruv-fann/src/io/compression.rs:137:12
+    |
+135 | impl<W: Write> CompressedWriter<W> {
+    | ---------------------------------- associated items in this implementation
+136 |     /// Create a new compressed writer with default compression
+137 |     pub fn new(writer: W) -> Self {
+    |            ^^^
+...
+144 |     pub fn with_level(writer: W, level: u32) -> Self {
+    |            ^^^^^^^^^^
+...
+151 |     pub fn with_config(writer: W, config: CompressionConfig) -> Self {
+    |            ^^^^^^^^^^^
+...
+164 |     pub fn finish(self) -> std::io::Result<W> {
+    |            ^^^^^^
+...
+169 |     pub fn get_ref(&self) -> &W {
+    |            ^^^^^^^
+...
+174 |     pub fn get_mut(&mut self) -> &mut W {
+    |            ^^^^^^^
+
+warning: function `compression_ratio` is never used
+   --> vendor/ruv-fann/src/io/compression.rs:194:12
+    |
+194 |     pub fn compression_ratio(original_size: usize, compressed_size: usize) -> f64 {
+    |            ^^^^^^^^^^^^^^^^^
+
+warning: function `space_savings` is never used
+   --> vendor/ruv-fann/src/io/compression.rs:203:12
+    |
+203 |     pub fn space_savings(original_size: usize, compressed_size: usize) -> f64 {
+    |            ^^^^^^^^^^^^^
+
+warning: function `test_compression` is never used
+   --> vendor/ruv-fann/src/io/compression.rs:212:12
+    |
+212 |     pub fn test_compression(data: &[u8]) -> IoResult<CompressionStats> {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: struct `CompressionStats` is never constructed
+   --> vendor/ruv-fann/src/io/compression.rs:225:16
+    |
+225 |     pub struct CompressionStats {
+    |                ^^^^^^^^^^^^^^^^
+    |
+    = note: `CompressionStats` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `buffer_size` is never read
+ --> vendor/ruv-fann/src/io/streaming.rs:8:5
+  |
+7 | pub struct TrainingDataStreamReader {
+  |            ------------------------ field in this struct
+8 |     buffer_size: usize,
+  |     ^^^^^^^^^^^
+
+warning: associated items `with_buffer_size`, `read_stream`, and `read_batches` are never used
+   --> vendor/ruv-fann/src/io/streaming.rs:20:12
+    |
+11  | impl TrainingDataStreamReader {
+    | ----------------------------- associated items in this implementation
+...
+20  |     pub fn with_buffer_size(buffer_size: usize) -> Self {
+    |            ^^^^^^^^^^^^^^^^
+...
+25  |     pub fn read_stream<R, F>(&self, reader: &mut R, callback: F) -> IoResult<StreamStats>
+    |            ^^^^^^^^^^^
+...
+105 |     pub fn read_batches<R, F>(&self, reader: &mut R, batch_size: usize, mut callback: F) -> IoResult<StreamStats>
+    |            ^^^^^^^^^^^^
+
+warning: struct `StreamStats` is never constructed
+   --> vendor/ruv-fann/src/io/streaming.rs:202:12
+    |
+202 | pub struct StreamStats {
+    |            ^^^^^^^^^^^
+    |
+    = note: `StreamStats` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `avg_bytes_per_sample` and `parameters_per_sample` are never used
+   --> vendor/ruv-fann/src/io/streaming.rs:211:12
+    |
+209 | impl StreamStats {
+    | ---------------- methods in this implementation
+210 |     /// Calculate average bytes per sample
+211 |     pub fn avg_bytes_per_sample(&self) -> f64 {
+    |            ^^^^^^^^^^^^^^^^^^^^
+...
+220 |     pub fn parameters_per_sample(&self) -> usize {
+    |            ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `buffer_size` is never read
+   --> vendor/ruv-fann/src/io/streaming.rs:228:5
+    |
+226 | pub struct BufferedStreamReader<R> {
+    |            -------------------- field in this struct
+227 |     inner: BufReader<R>,
+228 |     buffer_size: usize,
+    |     ^^^^^^^^^^^
+
+warning: associated items `new`, `with_capacity`, `buffer_size`, and `buffer_len` are never used
+   --> vendor/ruv-fann/src/io/streaming.rs:233:12
+    |
+231 | impl<R: Read> BufferedStreamReader<R> {
+    | ------------------------------------- associated items in this implementation
+232 |     /// Create a new buffered stream reader
+233 |     pub fn new(reader: R) -> Self {
+    |            ^^^
+...
+241 |     pub fn with_capacity(reader: R, capacity: usize) -> Self {
+    |            ^^^^^^^^^^^^^
+...
+249 |     pub fn buffer_size(&self) -> usize {
+    |            ^^^^^^^^^^^
+...
+254 |     pub fn buffer_len(&self) -> usize {
+    |            ^^^^^^^^^^
+
+warning: function `estimate_batch_memory` is never used
+   --> vendor/ruv-fann/src/io/streaming.rs:279:12
+    |
+279 |     pub fn estimate_batch_memory(
+    |            ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `optimal_batch_size` is never used
+   --> vendor/ruv-fann/src/io/streaming.rs:295:12
+    |
+295 |     pub fn optimal_batch_size(
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: `ruv-fann` (lib) generated 39 warnings
+vendor/ruv-fann/neuro-divergent/neuro-divergent-core/src/lib.rs:93:9: warning: ambiguous glob re-exports: the name `ValidationError` in the type namespace is first re-exported here
+vendor/ruv-fann/neuro-divergent/neuro-divergent-core/src/lib.rs:93:9: warning: ambiguous glob re-exports: the name `ValidationWarning` in the type namespace is first re-exported here
+vendor/ruv-fann/neuro-divergent/neuro-divergent-core/src/lib.rs:93:9: warning: ambiguous glob re-exports: the name `ScalingMethod` in the type namespace is first re-exported here
+vendor/ruv-fann/neuro-divergent/neuro-divergent-core/src/lib.rs:93:9: warning: ambiguous glob re-exports: the name `RollingStatistic` in the type namespace is first re-exported here
+vendor/ruv-fann/neuro-divergent/neuro-divergent-core/src/config.rs:379:5: warning: field `file_format` is never read
+vendor/ruv-fann/neuro-divergent/neuro-divergent-core/src/error.rs:197:5: warning: variants `Compatibility`, `Math`, `Parallel`, and `Serialization` are never constructed
+vendor/ruv-fann/neuro-divergent/neuro-divergent-core/src/integration.rs:38:5: warning: field `activation_mapper` is never read
+warning: `neuro-divergent-core` (lib) generated 7 warnings
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/forecasting.rs:9:36: warning: unused import: `TrainingMetrics`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/layers.rs:6:5: warning: unused import: `std::collections::HashMap`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/layers.rs:10:41: warning: unused import: `SequenceProcessor`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/layers.rs:11:5: warning: unused import: `crate::utils::math`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/rnn.rs:14:21: warning: unused import: `TimeSeriesSample`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/rnn.rs:21:57: warning: unused import: `validation`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/activations.rs:5:23: warning: unused import: `Array2`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/utils.rs:7:5: warning: unused import: `std::collections::HashMap`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/layers.rs:6:5: warning: unused import: `num_traits::Float`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/activations.rs:6:5: warning: unused import: `num_traits::Float`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/layers.rs:10:25: warning: unused import: `RecurrentState`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/forecasting.rs:36:9: warning: unused variable: `config`: help: if this is intentional, prefix it with an underscore: `_config`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/forecasting.rs:68:9: warning: unused variable: `config`: help: if this is intentional, prefix it with an underscore: `_config`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/layers.rs:65:17: warning: unused variable: `rng`: help: if this is intentional, prefix it with an underscore: `_rng`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/layers.rs:65:13: warning: variable does not need to be mutable
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/rnn.rs:540:44: warning: unused variable: `merge_mode`: help: if this is intentional, prefix it with an underscore: `_merge_mode`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/rnn.rs:553:21: warning: unused variable: `recurrent_layers`: help: if this is intentional, prefix it with an underscore: `_recurrent_layers`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/utils.rs:264:9: warning: unused variable: `name`: help: if this is intentional, prefix it with an underscore: `_name`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/utils.rs:276:9: warning: unused variable: `name_a`: help: if this is intentional, prefix it with an underscore: `_name_a`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/utils.rs:277:9: warning: unused variable: `name_b`: help: if this is intentional, prefix it with an underscore: `_name_b`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/forecasting.rs:16:5: warning: fields `frequency`, `local_scaler_type`, and `num_threads` are never read
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/recurrent/rnn.rs:35:5: warning: field `bidirectional` is never read
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/layers.rs:63:5: warning: field `activation` is never read
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/layers.rs:77:5: warning: fields `grad_gamma` and `grad_beta` are never read
+vendor/ruv-fann/neuro-divergent/neuro-divergent-models/src/layers.rs:114:5: warning: fields `grad_gamma` and `grad_beta` are never read
+warning: `neuro-divergent-models` (lib) generated 25 warnings (run `cargo fix --lib -p neuro-divergent-models` to apply 9 suggestions)
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/scheduler.rs:27:5: warning: unused import: `std::collections::VecDeque`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/scheduler.rs:29:13: warning: unused import: `TrainingError`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/lib.rs:50:9: warning: ambiguous glob re-exports: the name `QuantileLoss` in the type namespace is first re-exported here
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/lib.rs:50:9: warning: ambiguous glob re-exports: the name `PinballLoss` in the type namespace is first re-exported here
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/lib.rs:273:20: warning: unused import: `Rng`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/loss.rs:419:13: warning: unused variable: `two`: help: if this is intentional, prefix it with an underscore: `_two`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/optimizer.rs:843:14: warning: unused variable: `layer_idx`: help: if this is intentional, prefix it with an underscore: `_layer_idx`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/metrics.rs:632:25: warning: unused variable: `y_true`: help: if this is intentional, prefix it with an underscore: `_y_true`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/metrics.rs:632:39: warning: unused variable: `y_pred`: help: if this is intentional, prefix it with an underscore: `_y_pred`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/metrics.rs:710:25: warning: unused variable: `y_true`: help: if this is intentional, prefix it with an underscore: `_y_true`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/metrics.rs:710:39: warning: unused variable: `y_pred`: help: if this is intentional, prefix it with an underscore: `_y_pred`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/lib.rs:274:17: warning: unused variable: `rng`: help: if this is intentional, prefix it with an underscore: `_rng`
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/lib.rs:274:13: warning: variable does not need to be mutable
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/metrics.rs:621:5: warning: field `n_bins` is never read
+vendor/ruv-fann/neuro-divergent/neuro-divergent-training/src/metrics.rs:700:5: warning: field `alpha` is never read
+vendor/ruv-fann/neuro-divergent/src/builders.rs:29:5: warning: field `model_type` is never read
+vendor/ruv-fann/neuro-divergent/src/lib.rs:115:1: warning: missing documentation for a constant
+vendor/ruv-fann/neuro-divergent/src/lib.rs:116:1: warning: missing documentation for a constant
+vendor/ruv-fann/neuro-divergent/src/lib.rs:117:1: warning: missing documentation for a constant
+vendor/ruv-fann/neuro-divergent/src/neural_forecast.rs:21:1: warning: missing documentation for a trait
+vendor/ruv-fann/neuro-divergent/src/builders.rs:90:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:91:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:92:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:93:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:94:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:95:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:96:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:439:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:440:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:441:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:442:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:443:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:444:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:445:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:446:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:447:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:448:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:449:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:450:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:451:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:452:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:453:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:454:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:455:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:456:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:457:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:458:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:459:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:460:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:461:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:518:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:519:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:520:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:526:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:527:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:528:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:529:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:530:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/builders.rs:698:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:699:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:700:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:701:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:702:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:703:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:704:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:705:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:706:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:707:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:708:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:709:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:710:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:711:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:712:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:713:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:714:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:715:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:716:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/builders.rs:717:5: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/config.rs:16:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:18:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:20:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:22:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:24:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:28:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:30:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:32:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:34:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:36:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:38:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:42:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:44:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:46:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/config.rs:50:5: warning: missing documentation for a variant
+vendor/ruv-fann/neuro-divergent/src/utils.rs:523:9: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/utils.rs:524:9: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/utils.rs:525:9: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/utils.rs:529:9: warning: missing documentation for an associated function
+vendor/ruv-fann/neuro-divergent/src/utils.rs:537:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:541:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:545:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:549:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:553:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:557:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:575:9: warning: missing documentation for an associated function
+vendor/ruv-fann/neuro-divergent/src/utils.rs:582:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:586:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:590:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:594:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:613:9: warning: missing documentation for an associated function
+vendor/ruv-fann/neuro-divergent/src/utils.rs:617:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:624:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:628:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:632:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/utils.rs:636:9: warning: missing documentation for a method
+vendor/ruv-fann/neuro-divergent/src/errors.rs:65:15: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/errors.rs:69:16: warning: missing documentation for a struct field
+vendor/ruv-fann/neuro-divergent/src/lib.rs:145:5: warning: missing documentation for a function
+vendor/ruv-fann/neuro-divergent/src/lib.rs:156:5: warning: missing documentation for a function
+warning: `neuro-divergent-training` (lib) generated 15 warnings (run `cargo fix --lib -p neuro-divergent-training` to apply 4 suggestions)
+warning: `neuro-divergent` (lib) generated 103 warnings
+   Compiling autonomous-platform v0.1.0 (/workspaces/neural-trader)
+warning: unused import: `super::AdapterError`
+  --> src/adapters/daa_service.rs:13:5
+   |
+13 | use super::AdapterError;
+   |     ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `async_trait::async_trait`
+ --> src/adapters/fallback_manager.rs:6:5
+  |
+6 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+  --> src/adapters/fallback_manager.rs:12:22
+   |
+12 | use tracing::{debug, error, info, warn};
+   |                      ^^^^^
+
+warning: unused import: `FallbackConfig`
+  --> src/adapters/fallback_manager.rs:14:84
+   |
+14 | use super::errors::{AdapterError, DefaultErrorHandler, ErrorContext, ErrorHandler, FallbackConfig,
+   |                                                                                    ^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+  --> src/adapters/health_monitor.rs:13:22
+   |
+13 | use tracing::{debug, error, info, warn};
+   |                      ^^^^^
+
+warning: unused import: `async_trait::async_trait`
+  --> src/adapters/model_rollback.rs:11:5
+   |
+11 | use async_trait::async_trait;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `HealthCheckResult`
+  --> src/adapters/model_rollback.rs:25:21
+   |
+25 | use super::errors::{HealthCheckResult, HealthMetrics};
+   |                     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::errors::AdapterError`
+  --> src/adapters/model_storage.rs:21:5
+   |
+21 | use super::errors::AdapterError;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/adapters/neural/type_converter.rs:6:14
+  |
+6 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused import: `bail`
+ --> src/adapters/neural/vendor_conversion.rs:7:14
+  |
+7 | use anyhow::{bail, Context, Result};
+  |              ^^^^
+
+warning: unused imports: `DateTime` and `Utc`
+ --> src/adapters/neural/vendor_conversion.rs:8:14
+  |
+8 | use chrono::{DateTime, Utc};
+  |              ^^^^^^^^  ^^^
+
+warning: unused import: `Array1`
+ --> src/adapters/neural/vendor_conversion.rs:9:15
+  |
+9 | use ndarray::{Array1, Array2};
+  |               ^^^^^^
+
+warning: unused import: `RedisConfig`
+  --> src/adapters/redis_sector_channels.rs:19:34
+   |
+19 | use super::redis::{RedisAdapter, RedisConfig};
+   |                                  ^^^^^^^^^^^
+
+warning: unused import: `async_trait::async_trait`
+  --> src/adapters/redis_sector_channels.rs:20:5
+   |
+20 | use async_trait::async_trait;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `redis::AsyncCommands`
+  --> src/adapters/redis_sector_channels.rs:23:5
+   |
+23 | use redis::AsyncCommands;
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+  --> src/adapters/redis_sector_channels.rs:29:28
+   |
+29 | use tracing::{debug, info, warn};
+   |                            ^^^^
+
+warning: unused import: `DateTime`
+  --> src/adapters/redis_sector_channels.rs:30:14
+   |
+30 | use chrono::{DateTime, Utc};
+   |              ^^^^^^^^
+
+warning: unused import: `async_trait::async_trait`
+  --> src/adapters/redis_integration.rs:17:5
+   |
+17 | use async_trait::async_trait;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+  --> src/adapters/redis_integration.rs:20:34
+   |
+20 | use tracing::{debug, info, warn, error};
+   |                                  ^^^^^
+
+warning: unused imports: `DateTime` and `Utc`
+  --> src/agents/mod.rs:12:14
+   |
+12 | use chrono::{DateTime, Utc};
+   |              ^^^^^^^^  ^^^
+
+warning: unused imports: `DateTime` and `Utc`
+ --> src/agents/daa_bridge.rs:8:14
+  |
+8 | use chrono::{DateTime, Utc};
+  |              ^^^^^^^^  ^^^
+
+warning: unused imports: `Deserialize` and `Serialize`
+ --> src/agents/daa_bridge.rs:9:13
+  |
+9 | use serde::{Deserialize, Serialize};
+  |             ^^^^^^^^^^^  ^^^^^^^^^
+
+warning: elided lifetime has a name
+   --> src/config/sector_models.rs:525:91
+    |
+525 |     pub fn models_for_sector<'a>(&'a self, sector_name: &'a str) -> impl Iterator<Item = (&String, &ModelConfig)> + '_ {
+    |                              -- lifetime `'a` declared here                               ^ this elided lifetime gets resolved as `'a`
+    |
+    = note: `#[warn(elided_named_lifetimes)]` on by default
+
+warning: elided lifetime has a name
+   --> src/config/sector_models.rs:525:100
+    |
+525 |     pub fn models_for_sector<'a>(&'a self, sector_name: &'a str) -> impl Iterator<Item = (&String, &ModelConfig)> + '_ {
+    |                              -- lifetime `'a` declared here                                        ^ this elided lifetime gets resolved as `'a`
+
+warning: elided lifetime has a name
+   --> src/config/sector_models.rs:525:117
+    |
+525 |     pub fn models_for_sector<'a>(&'a self, sector_name: &'a str) -> impl Iterator<Item = (&String, &ModelConfig)> + '_ {
+    |                              -- lifetime `'a` declared here                                                         ^^ this elided lifetime gets resolved as `'a`
+
+warning: unused imports: `DateTime` and `Utc`
+  --> src/daa/autonomous_training.rs:41:14
+   |
+41 | use chrono::{DateTime, Utc};
+   |              ^^^^^^^^  ^^^
+
+warning: unused import: `Context`
+  --> src/daa/training_scheduler.rs:10:14
+   |
+10 | use anyhow::{Context, Result};
+   |              ^^^^^^^
+
+warning: unused import: `TimeSeriesData`
+  --> src/data/sector_mapper.rs:23:19
+   |
+23 | use crate::data::{TimeSeriesData, RedisCache};
+   |                   ^^^^^^^^^^^^^^
+
+warning: unused imports: `DateTime` and `Utc`
+  --> src/data/sector_mapper.rs:24:14
+   |
+24 | use chrono::{DateTime, Utc};
+   |              ^^^^^^^^  ^^^
+
+warning: unused imports: `Context` and `anyhow`
+  --> src/data/sector_aggregator.rs:10:14
+   |
+10 | use anyhow::{Context, Result, anyhow};
+   |              ^^^^^^^          ^^^^^^
+
+warning: unused import: `error`
+  --> src/data/sector_aggregator.rs:16:34
+   |
+16 | use tracing::{debug, info, warn, error};
+   |                                  ^^^^^
+
+warning: unused import: `SectorInfo`
+  --> src/data/sector_aggregator.rs:19:75
+   |
+19 | use crate::data::{TimeSeriesData, sector_mapper::{SectorMapper, SectorId, SectorInfo}};
+   |                                                                           ^^^^^^^^^^
+
+warning: unused import: `Context`
+  --> src/data/data_converter.rs:12:14
+   |
+12 | use anyhow::{Context, Result};
+   |              ^^^^^^^
+
+warning: unused import: `Duration`
+ --> src/features/market_microstructure.rs:8:29
+  |
+8 | use chrono::{DateTime, Utc, Duration};
+  |                             ^^^^^^^^
+
+warning: unused imports: `DMatrix` and `DVector`
+ --> src/features/cross_asset.rs:8:16
+  |
+8 | use nalgebra::{DMatrix, DVector};
+  |                ^^^^^^^  ^^^^^^^
+
+warning: unused imports: `Deserialize` and `Serialize`
+ --> src/features/feature_store.rs:8:13
+  |
+8 | use serde::{Deserialize, Serialize};
+  |             ^^^^^^^^^^^  ^^^^^^^^^
+
+warning: unused import: `dashmap::DashMap`
+ --> src/features/shared_feature_extractor.rs:7:5
+  |
+7 | use dashmap::DashMap;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused imports: `FeatureCategory`, `FeatureMetadata`, and `FeatureResult`
+  --> src/features/shared_feature_extractor.rs:17:23
+   |
+17 | use crate::features::{FeatureCategory, FeatureMetadata, FeatureResult};
+   |                       ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `SharedFeatureConfig`
+  --> src/features/symbol_specialization.rs:26:5
+   |
+26 |     SharedFeatureConfig, FeatureCategory
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around assigned value
+   --> src/integration/autonomous_decisions.rs:270:44
+    |
+270 |                 self.decision_threshold *= (1.0 - self.adaptation_rate);
+    |                                            ^                          ^
+    |
+    = note: `#[warn(unused_parens)]` on by default
+help: remove these parentheses
+    |
+270 -                 self.decision_threshold *= (1.0 - self.adaptation_rate);
+270 +                 self.decision_threshold *= 1.0 - self.adaptation_rate;
+    |
+
+warning: unnecessary parentheses around assigned value
+   --> src/integration/autonomous_decisions.rs:273:44
+    |
+273 |                 self.decision_threshold *= (1.0 + self.adaptation_rate);
+    |                                            ^                          ^
+    |
+help: remove these parentheses
+    |
+273 -                 self.decision_threshold *= (1.0 + self.adaptation_rate);
+273 +                 self.decision_threshold *= 1.0 + self.adaptation_rate;
+    |
+
+warning: unused import: `uuid::Uuid`
+  --> src/integration/daa_coordinator.rs:17:5
+   |
+17 | use uuid::Uuid;
+   |     ^^^^^^^^^^
+
+warning: unnecessary parentheses around assigned value
+   --> src/integration/daa_coordinator.rs:583:26
+    |
+583 |         signal_weight *= (0.5 + diversity_score * 0.5);
+    |                          ^                           ^
+    |
+help: remove these parentheses
+    |
+583 -         signal_weight *= (0.5 + diversity_score * 0.5);
+583 +         signal_weight *= 0.5 + diversity_score * 0.5;
+    |
+
+warning: unused import: `anyhow`
+ --> src/integration/daa_coordinator_enhanced.rs:9:31
+  |
+9 | use anyhow::{Context, Result, anyhow};
+  |                               ^^^^^^
+
+warning: unused import: `warn`
+  --> src/integration/daa_coordinator_enhanced.rs:14:28
+   |
+14 | use tracing::{debug, info, warn};
+   |                            ^^^^
+
+warning: unused import: `Context`
+ --> src/integration/daa_coordinator_modular/core.rs:5:14
+  |
+5 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused imports: `debug` and `info`
+  --> src/integration/daa_coordinator_modular/core.rs:10:15
+   |
+10 | use tracing::{debug, error, info, warn};
+   |               ^^^^^         ^^^^
+
+warning: unused import: `PerformanceSnapshot`
+  --> src/integration/daa_coordinator_modular/core.rs:12:65
+   |
+12 | use crate::daa::autonomous_training::{AutonomousTrainingEngine, PerformanceSnapshot};
+   |                                                                 ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `PredictionResult`
+  --> src/integration/daa_coordinator_modular/core.rs:14:38
+   |
+14 | use crate::neural::{NeuralPredictor, PredictionResult, NeuralPredictorTrait};
+   |                                      ^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+  --> src/integration/daa_coordinator_modular/agents.rs:10:21
+   |
+10 | use tracing::{info, warn};
+   |                     ^^^^
+
+warning: unused import: `SyncVendorModel`
+   --> src/integration/model_persistence_service.rs:135:76
+    |
+135 | use crate::adapters::vendor_bridge::{TrainingConfig, VendorTimeSeriesData, SyncVendorModel};
+    |                                                                            ^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::sync::oneshot`
+ --> src/monitoring/health/async_health_monitor.rs:9:5
+  |
+9 | use tokio::sync::oneshot;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/monitoring/model_performance_tracker.rs:6:14
+  |
+6 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused imports: `AtomicU64` and `Ordering`
+  --> src/monitoring/model_performance_tracker.rs:11:25
+   |
+11 | use std::sync::atomic::{AtomicU64, Ordering};
+   |                         ^^^^^^^^^  ^^^^^^^^
+
+warning: unused imports: `error` and `warn`
+  --> src/monitoring/model_performance_tracker.rs:14:22
+   |
+14 | use tracing::{debug, error, info, warn};
+   |                      ^^^^^        ^^^^
+
+warning: unnecessary parentheses around assigned value
+   --> src/monitoring/model_performance_tracker.rs:399:33
+    |
+399 |         let reliability_score = (metrics.confidence_calibration * 0.4 +
+    |                                 ^
+400 |                                (1.0 - metrics.consecutive_failures as f64 / 10.0).max(0.0) * 0.6);
+    |                                                                                                 ^
+    |
+help: remove these parentheses
+    |
+399 ~         let reliability_score = metrics.confidence_calibration * 0.4 +
+400 ~                                (1.0 - metrics.consecutive_failures as f64 / 10.0).max(0.0) * 0.6;
+    |
+
+warning: unused import: `crate::config::NeuralConfig`
+  --> src/neural/mod.rs:11:5
+   |
+11 | use crate::config::NeuralConfig;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/neural/fann_model_adapter.rs:6:22
+  |
+6 | use anyhow::{anyhow, Context, Result};
+  |                      ^^^^^^^
+
+warning: unused import: `tokio::sync::RwLock`
+  --> src/neural/fann_model_adapter.rs:15:5
+   |
+15 | use tokio::sync::RwLock;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+  --> src/neural/fann_model_adapter.rs:16:22
+   |
+16 | use tracing::{debug, error, info, warn};
+   |                      ^^^^^
+
+warning: unused import: `crate::data::TimeSeriesData`
+  --> src/neural/fann_model_adapter.rs:28:5
+   |
+28 | use crate::data::TimeSeriesData;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/neural/streaming_connector.rs:6:14
+  |
+6 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unnecessary parentheses around assigned value
+   --> src/neural/streaming_connector.rs:454:43
+    |
+454 |           current_metrics.overall_quality = (
+    |  ___________________________________________^
+455 | |             current_metrics.completeness * 0.3 +
+    | |____________^
+...
+458 |               current_metrics.consistency * 0.1
+    |  ______________________________________________^
+459 | |         );
+    | |_________^
+    |
+help: remove these parentheses
+    |
+454 ~         current_metrics.overall_quality = current_metrics.completeness * 0.3 +
+455 |             current_metrics.timeliness * 0.3 +
+456 |             current_metrics.accuracy * 0.3 +
+457 ~             current_metrics.consistency * 0.1;
+    |
+
+warning: unused import: `Context`
+ --> src/neural/online_validator.rs:7:14
+  |
+7 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused import: `NeuralPredictorTrait`
+  --> src/neural/online_validator.rs:17:31
+   |
+17 | use super::{PredictionResult, NeuralPredictorTrait};
+   |                               ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::data::TimeSeriesData`
+  --> src/neural/online_validator.rs:18:5
+   |
+18 | use crate::data::TimeSeriesData;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/neural/online_learning_manager.rs:7:14
+  |
+7 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused import: `warn`
+  --> src/neural/enhanced_predictor.rs:20:28
+   |
+20 | use tracing::{debug, info, warn};
+   |                            ^^^^
+
+warning: unused import: `crate::neural::NeuralPredictorTrait`
+  --> src/neural/performance_optimizer.rs:24:5
+   |
+24 | use crate::neural::NeuralPredictorTrait;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `HashSet`
+  --> src/neural/vendor_predictor.rs:18:33
+   |
+18 | use std::collections::{HashMap, HashSet};
+   |                                 ^^^^^^^
+
+warning: unused import: `error`
+  --> src/neural/vendor_predictor.rs:23:22
+   |
+23 | use tracing::{debug, error, info, warn};
+   |                      ^^^^^
+
+warning: unused imports: `SharedSectorFeatures` and `SymbolFeatures`
+  --> src/neural/vendor_predictor.rs:37:94
+   |
+37 | use crate::features::shared_feature_extractor::{SharedFeatureExtractor, SharedFeatureConfig, SharedSectorFeatures, SymbolFeatures};
+   |                                                                                              ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/neural/memory_optimized_predictor.rs:9:14
+  |
+9 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused import: `Duration`
+  --> src/neural/memory_optimized_predictor.rs:11:29
+   |
+11 | use chrono::{DateTime, Utc, Duration};
+   |                             ^^^^^^^^
+
+warning: unused import: `Context`
+  --> src/neural/sector_aggregator.rs:14:22
+   |
+14 | use anyhow::{anyhow, Context, Result};
+   |                      ^^^^^^^
+
+warning: unused import: `warn`
+  --> src/neural/model_factory.rs:10:28
+   |
+10 | use tracing::{debug, info, warn};
+   |                            ^^^^
+
+warning: unused import: `ModelConfig as EmergencyModelConfig`
+  --> src/neural/model_factory.rs:12:65
+   |
+12 | use crate::neural::emergency_model::{BaseModel, EmergencyModel, ModelConfig as EmergencyModelConfig};
+   |                                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> src/neural/emergency_model.rs:3:5
+  |
+3 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> src/neural/typed_storage.rs:10:5
+   |
+10 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::sync::RwLock`
+  --> src/neural/typed_storage.rs:12:5
+   |
+12 | use tokio::sync::RwLock;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::types::DataType`
+  --> src/neural/performance_events.rs:15:5
+   |
+15 | use crate::types::DataType;
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `DateTime` and `Utc`
+  --> src/observability/mod.rs:11:14
+   |
+11 | use chrono::{DateTime, Utc};
+   |              ^^^^^^^^  ^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> src/performance/optimizations.rs:14:5
+   |
+14 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+  --> src/performance/optimizations.rs:17:28
+   |
+17 | use tracing::{debug, info, warn};
+   |                            ^^^^
+
+warning: unused import: `Datelike`
+ --> src/utils/market_hours/holidays.rs:6:40
+  |
+6 | use chrono::{DateTime, Utc, NaiveDate, Datelike};
+  |                                        ^^^^^^^^
+
+warning: unused import: `Context`
+  --> src/utils/market_hours/scheduler.rs:11:14
+   |
+11 | use anyhow::{Context, Result};
+   |              ^^^^^^^
+
+warning: unused import: `info`
+  --> src/utils/resource_monitor.rs:13:29
+   |
+13 | use tracing::{debug, error, info, warn};
+   |                             ^^^^
+
+warning: unused imports: `HashSet` and `VecDeque`
+ --> src/multi_channel/mod.rs:8:33
+  |
+8 | use std::collections::{HashMap, HashSet, VecDeque};
+  |                                 ^^^^^^^  ^^^^^^^^
+
+warning: unused import: `mpsc`
+  --> src/multi_channel/mod.rs:11:27
+   |
+11 | use tokio::sync::{RwLock, mpsc};
+   |                           ^^^^
+
+warning: unused import: `Serialize`
+  --> src/multi_channel/mod.rs:13:26
+   |
+13 | use serde::{Deserialize, Serialize};
+   |                          ^^^^^^^^^
+
+warning: unused import: `ProcessingPriority`
+  --> src/multi_channel/fair_scheduler.rs:10:38
+   |
+10 | use crate::multi_channel::{WorkItem, ProcessingPriority, SymbolStats};
+   |                                      ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `MarketData`
+  --> src/multi_channel/channel_manager.rs:14:37
+   |
+14 | use crate::adapters::{AdapterError, MarketData};
+   |                                     ^^^^^^^^^^
+
+warning: unused variable: `model_name`
+   --> src/adapters/enhanced_neural_adapter.rs:448:23
+    |
+448 |                 move |model_name, data, horizon| {
+    |                       ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_name`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `error`
+   --> src/adapters/fallback_manager.rs:245:17
+    |
+245 |             Err(error) => {
+    |                 ^^^^^ help: if this is intentional, prefix it with an underscore: `_error`
+
+warning: unused variable: `position`
+   --> src/adapters/fallback_manager.rs:299:9
+    |
+299 |         position: u32,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_position`
+
+warning: unused variable: `model_name`
+   --> src/adapters/model_rollback.rs:952:44
+    |
+952 |                 let filtered = if let Some(model_name) = model {
+    |                                            ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_name`
+
+warning: use of deprecated method `redis::Client::get_async_connection`: aio::Connection is deprecated. Use client::get_multiplexed_async_connection instead.
+  --> src/adapters/redis.rs:87:14
+   |
+87 |             .get_async_connection()
+   |              ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: unused variable: `serialized`
+   --> src/adapters/redis_sector_channels.rs:167:13
+    |
+167 |         let serialized = self.serialize_and_compress(data).await?;
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_serialized`
+
+warning: unused variable: `fields`
+   --> src/adapters/redis_sector_channels.rs:224:13
+    |
+224 |         let fields = vec![
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_fields`
+
+warning: unused variable: `serialized`
+   --> src/adapters/redis_sector_channels.rs:297:13
+    |
+297 |         let serialized = self.serialize_and_compress(decision).await?;
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_serialized`
+
+warning: unused variable: `serialized`
+   --> src/adapters/redis_sector_channels.rs:351:13
+    |
+351 |         let serialized = self.serialize_and_compress(data).await?;
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_serialized`
+
+warning: unused variable: `serialized`
+   --> src/adapters/redis_sector_channels.rs:380:13
+    |
+380 |         let serialized = self.serialize_and_compress(data).await?;
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_serialized`
+
+warning: unused variable: `redis`
+   --> src/adapters/redis_sector_channels.rs:382:13
+    |
+382 |         let redis = self.redis.read().await;
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_redis`
+
+warning: unused variable: `serialized`
+   --> src/adapters/redis_sector_channels.rs:396:13
+    |
+396 |         let serialized = self.serialize_and_compress(decision).await?;
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_serialized`
+
+warning: unused variable: `serialized`
+   --> src/adapters/redis_sector_channels.rs:409:13
+    |
+409 |         let serialized = self.serialize_and_compress(data).await?;
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_serialized`
+
+warning: unused variable: `context`
+  --> src/agents/mod.rs:88:47
+   |
+88 |     pub async fn update_market_context(&self, context: MarketContext) -> Result<()> {
+   |                                               ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_context`
+
+warning: unused variable: `create_result`
+  --> src/agents/daa_bridge.rs:45:13
+   |
+45 |         let create_result = Self::execute_daa_command(
+   |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_create_result`
+
+warning: unused variable: `completed_jobs`
+   --> src/daa/training_scheduler.rs:369:17
+    |
+369 |             let completed_jobs = Arc::clone(&self.completed_jobs);
+    |                 ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_completed_jobs`
+
+warning: unused variable: `job_semaphore`
+   --> src/daa/training_scheduler.rs:372:17
+    |
+372 |             let job_semaphore = Arc::clone(&self.job_semaphore);
+    |                 ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_job_semaphore`
+
+warning: unused variable: `executor_handle`
+   --> src/daa/training_scheduler.rs:401:13
+    |
+401 |         let executor_handle = {
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_executor_handle`
+
+warning: this function depends on never type fallback being `()`
+  --> src/data/cache.rs:48:5
+   |
+48 | /     pub async fn set<T: Serialize>(
+49 | |         &self,
+50 | |         key: &str,
+51 | |         value: &T,
+52 | |         ttl_seconds: Option<u64>,
+53 | |     ) -> Result<()> {
+   | |___________________^
+   |
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in Rust 2024 and in a future release in all editions!
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/never-type-fallback.html>
+   = help: specify the types explicitly
+note: in edition 2024, the requirement `!: FromRedisValue` will fail
+  --> src/data/cache.rs:64:22
+   |
+64 |                     .query_async(&mut conn)
+   |                      ^^^^^^^^^^^
+   = note: `#[warn(dependency_on_unit_never_type_fallback)]` on by default
+help: use `()` annotations to avoid fallback changes
+   |
+64 ~                     .query_async::<()>(&mut conn)
+65 |                     .await
+...
+71 |                     .arg(serialized)
+72 ~                     .query_async::<()>(&mut conn)
+   |
+
+warning: this function depends on never type fallback being `()`
+   --> src/data/cache.rs:123:5
+    |
+123 |     pub async fn invalidate(&self, key: &str) -> Result<()> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in Rust 2024 and in a future release in all editions!
+    = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/never-type-fallback.html>
+    = help: specify the types explicitly
+note: in edition 2024, the requirement `!: FromRedisValue` will fail
+   --> src/data/cache.rs:128:14
+    |
+128 |             .query_async(&mut conn)
+    |              ^^^^^^^^^^^
+help: use `()` annotations to avoid fallback changes
+    |
+128 |             .query_async::<()>(&mut conn)
+    |                         ++++++
+
+warning: unused variable: `idx`
+   --> src/data/sector_mapper.rs:624:22
+    |
+624 |                 for (idx, symbol_value) in symbols.iter().enumerate() {
+    |                      ^^^ help: if this is intentional, prefix it with an underscore: `_idx`
+
+warning: unused variable: `cache`
+   --> src/data/sector_aggregator.rs:290:25
+    |
+290 |             if let Some(cache) = &self.cache {
+    |                         ^^^^^ help: if this is intentional, prefix it with an underscore: `_cache`
+
+warning: unused variable: `value`
+   --> src/data/sector_aggregator.rs:292:21
+    |
+292 |                 let value = serde_json::to_string(&aggregation)?;
+    |                     ^^^^^ help: if this is intentional, prefix it with an underscore: `_value`
+
+warning: unused variable: `etf_history`
+   --> src/data/sector_aggregator.rs:448:25
+    |
+448 |             if let Some(etf_history) = self.etf_prices.get(&etf_symbol) {
+    |                         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_etf_history`
+
+warning: unused variable: `sector_agg`
+   --> src/data/sector_aggregator.rs:449:29
+    |
+449 |                 if let Some(sector_agg) = self.aggregations.get(sector_id) {
+    |                             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sector_agg`
+
+warning: unused variable: `symbol`
+    --> src/features/training_features.rs:1325:9
+     |
+1325 |         symbol: &str,
+     |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_symbol`
+
+warning: unused variable: `window_size`
+    --> src/features/training_features.rs:1327:9
+     |
+1327 |         window_size: usize,
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_window_size`
+
+warning: unused variable: `symbol_data`
+   --> src/features/symbol_specialization.rs:303:9
+    |
+303 |         symbol_data: &TimeSeriesData,
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_symbol_data`
+
+warning: unused variable: `features`
+   --> src/features/symbol_specialization.rs:733:57
+    |
+733 |     async fn validates_improvement(&self, symbol: &str, features: &HashMap<String, f64>) -> Result<bool> {
+    |                                                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_features`
+
+warning: variable does not need to be mutable
+  --> src/integration/autonomous_neural_coordinator.rs:99:17
+   |
+99 |             let mut integration = training_integration.write().await;
+   |                 ----^^^^^^^^^^^
+   |                 |
+   |                 help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: variable `hold_votes` is assigned to, but never used
+   --> src/integration/daa_coordinator.rs:671:17
+    |
+671 |         let mut hold_votes = 0;
+    |                 ^^^^^^^^^^
+    |
+    = note: consider using `_hold_votes` instead
+
+warning: unused variable: `decision`
+   --> src/integration/daa_coordinator.rs:787:9
+    |
+787 |         decision: &AutonomousDecision,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_decision`
+
+warning: unused variable: `market_context`
+   --> src/integration/daa_coordinator.rs:788:9
+    |
+788 |         market_context: &MarketContext,
+    |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_market_context`
+
+warning: unused variable: `job_id`
+   --> src/integration/daa_coordinator.rs:981:17
+    |
+981 |             let job_id = uuid::Uuid::new_v4().to_string();
+    |                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_job_id`
+
+warning: unused variable: `sample_actual`
+    --> src/integration/daa_coordinator.rs:1086:17
+     |
+1086 |             let sample_actual = vec![50000.0, 50100.0, 49900.0]; // Mock actual values
+     |                 ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sample_actual`
+
+warning: unused variable: `sample_predicted`
+    --> src/integration/daa_coordinator.rs:1091:17
+     |
+1091 |             let sample_predicted: Vec<PredictionResult> = sample_predicted_values
+     |                 ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sample_predicted`
+
+warning: unused variable: `i`
+    --> src/neural/vendor_predictor.rs:2149:22
+     |
+2149 |                 for (i, (feature_vec, timestamp)) in prepared_data.features.iter()
+     |                      ^ help: if this is intentional, prefix it with an underscore: `_i`
+
+warning: unused variable: `symbol`
+    --> src/neural/vendor_predictor.rs:2311:13
+     |
+2311 |         let symbol = if model_name.contains('_') {
+     |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_symbol`
+
+warning: unused variable: `base_model`
+   --> src/neural/vendor_predictor.rs:438:29
+    |
+438 |                 if let Some(base_model) = self.shared_models.get_mut("base_model") {
+    |                             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_base_model`
+
+warning: unused variable: `layer_ref`
+   --> src/neural/vendor_predictor.rs:472:29
+    |
+472 |                 if let Some(layer_ref) = self.specialization_layers.get(symbol) {
+    |                             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_layer_ref`
+
+warning: unused variable: `layer_ref`
+   --> src/neural/vendor_predictor.rs:486:29
+    |
+486 |                 if let Some(layer_ref) = self.specialization_layers.get(symbol) {
+    |                             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_layer_ref`
+
+warning: unused variable: `historical_data`
+    --> src/integration/daa_coordinator.rs:1316:9
+     |
+1316 |         historical_data: &[TimeSeriesData],
+     |         ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_historical_data`
+
+warning: unused variable: `sector_info`
+    --> src/integration/daa_coordinator.rs:1971:9
+     |
+1971 |         sector_info: &SectorInfo,
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sector_info`
+
+warning: unused variable: `sector_info`
+    --> src/integration/daa_coordinator.rs:2012:9
+     |
+2012 |         sector_info: &SectorInfo,
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sector_info`
+
+warning: unused variable: `sector_data`
+    --> src/integration/daa_coordinator.rs:2014:9
+     |
+2014 |         sector_data: Option<&[TimeSeriesData]>,
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sector_data`
+
+warning: unused variable: `base_decision`
+   --> src/integration/daa_coordinator_enhanced.rs:468:9
+    |
+468 |         base_decision: &AutonomousDecision,
+    |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_base_decision`
+
+warning: unused variable: `data_availability`
+   --> src/integration/daa_coordinator_enhanced.rs:537:9
+    |
+537 |         data_availability: &DataAvailability,
+    |         ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_data_availability`
+
+warning: unused variable: `strategy_signals`
+   --> src/integration/daa_coordinator_modular/core.rs:228:9
+    |
+228 |         strategy_signals: HashMap<String, Signal>,
+    |         ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_strategy_signals`
+
+warning: variable `hold_votes` is assigned to, but never used
+   --> src/integration/daa_coordinator_modular/strategies.rs:114:17
+    |
+114 |         let mut hold_votes = 0;
+    |                 ^^^^^^^^^^
+    |
+    = note: consider using `_hold_votes` instead
+
+warning: unused variable: `decision`
+   --> src/integration/daa_coordinator_modular/agents.rs:204:9
+    |
+204 |         decision: &AutonomousDecision,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_decision`
+
+warning: unused variable: `model_path_str`
+   --> src/integration/model_persistence_service.rs:676:13
+    |
+676 |         let model_path_str = production_model_path.to_str()
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_path_str`
+
+warning: unused variable: `component`
+   --> src/monitoring/health/health_server.rs:126:9
+    |
+126 |         component: ComponentType,
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_component`
+
+warning: unused variable: `status`
+   --> src/monitoring/health/health_server.rs:127:9
+    |
+127 |         status: HealthStatus,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_status`
+
+warning: unused variable: `system_health`
+   --> src/monitoring/health/health_server.rs:226:9
+    |
+226 |     let system_health = match monitor.get_system_health().await {
+    |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_system_health`
+
+warning: variable does not need to be mutable
+   --> src/neural/fann_model_adapter.rs:498:13
+    |
+498 |         let mut record = self.train_with_real_backprop(training_data, config).await?;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `data_access`
+   --> src/neural/online_learning_manager.rs:111:13
+    |
+111 |         let data_access = Arc::new(crate::integration::data_access::DataAccessLayer::new(storage.clone(), cache.clone()).await?);
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_data_access`
+
+warning: unused variable: `training_service`
+   --> src/neural/online_learning_manager.rs:114:13
+    |
+114 |         let training_service = Arc::new(crate::integration::training_data_service::TrainingDataService::new(
+    |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_training_service`
+
+warning: unused variable: `model_name`
+  --> src/neural/batch_optimizer.rs:76:9
+   |
+76 |         model_name: &str,
+   |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_name`
+
+warning: unused variable: `start`
+   --> src/neural/batch_optimizer.rs:100:13
+    |
+100 |         let start = Instant::now();
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_start`
+
+warning: unused variable: `model_name`
+   --> src/neural/batch_optimizer.rs:105:13
+    |
+105 |         for model_name in models {
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_name`
+
+warning: unused variable: `model_names`
+   --> src/neural/batch_optimizer.rs:144:9
+    |
+144 |         model_names: &[String],
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_names`
+
+warning: unused variable: `usage_bytes`
+   --> src/neural/vendor_predictor.rs:508:14
+    |
+508 |         let (usage_bytes, usage_mb) = self.get_memory_usage().await;
+    |              ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_usage_bytes`
+
+warning: unused variable: `estimated_memory_mb`
+   --> src/neural/vendor_predictor.rs:835:9
+    |
+835 |         estimated_memory_mb: f64,
+    |         ^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_estimated_memory_mb`
+
+warning: unused variable: `all_features`
+    --> src/neural/vendor_predictor.rs:1168:13
+     |
+1168 |         let all_features: Vec<String> = vec![];
+     |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_all_features`
+
+warning: unused variable: `neural_config`
+    --> src/neural/vendor_predictor.rs:1776:40
+     |
+1776 |     pub async fn with_vendor_predictor(neural_config: NeuralConfig) -> Result<Self> {
+     |                                        ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_neural_config`
+
+warning: unused variable: `sector_mapper`
+    --> src/neural/vendor_predictor.rs:1781:13
+     |
+1781 |         let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
+     |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sector_mapper`
+
+warning: unused variable: `performance_tracker`
+    --> src/neural/vendor_predictor.rs:1782:13
+     |
+1782 |         let performance_tracker = Arc::new(
+     |             ^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_performance_tracker`
+
+warning: unused variable: `model_name`
+    --> src/neural/vendor_predictor.rs:2975:9
+     |
+2975 |         model_name: &str,
+     |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_name`
+
+warning: unused variable: `data`
+   --> src/neural/sector_aggregator.rs:420:9
+    |
+420 |         data: &TimeSeriesData,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_data`
+
+warning: unreachable statement
+   --> src/neural/migration_layer.rs:243:17
+    |
+219 |                 continue;
+    |                 -------- any code following this expression is unreachable
+...
+243 |                 let progress = (migrated_count + failed_count) as f32 / stats.total_models as f32;
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` on by default
+
+warning: unused variable: `factory_registry`
+   --> src/neural/migration_layer.rs:199:13
+    |
+199 |         let factory_registry = self.factory_registry.read().await;
+    |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_factory_registry`
+
+warning: unused variable: `model_def`
+   --> src/neural/migration_layer.rs:213:30
+    |
+213 |             for (model_name, model_def) in chunk {
+    |                              ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_def`
+
+warning: unused variable: `migration_start`
+   --> src/neural/migration_layer.rs:214:21
+    |
+214 |                 let migration_start = std::time::Instant::now();
+    |                     ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_migration_start`
+
+warning: variable does not need to be mutable
+   --> src/neural/migration_layer.rs:204:13
+    |
+204 |         let mut failed_count = 0;
+    |             ----^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `model_def`
+   --> src/neural/migration_layer.rs:285:9
+    |
+285 |         model_def: &crate::config::SectorModelDefinition,
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_model_def`
+
+warning: unused variable: `factory_registry`
+   --> src/neural/migration_layer.rs:286:9
+    |
+286 |         factory_registry: &ModelFactoryRegistry<f32>,
+    |         ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_factory_registry`
+
+warning: unused variable: `agent_config`
+   --> src/orchestration/platform_orchestrator.rs:162:9
+    |
+162 |         agent_config: serde_json::Value,
+    |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_agent_config`
+
+warning: unused variable: `platform`
+   --> src/orchestration/platform_orchestrator.rs:165:13
+    |
+165 |         let platform = platforms
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_platform`
+
+warning: unused variable: `agent_id`
+   --> src/orchestration/platform_orchestrator.rs:183:9
+    |
+183 |         agent_id: &str,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_agent_id`
+
+warning: unused variable: `platform_id`
+   --> src/orchestration/platform_orchestrator.rs:242:14
+    |
+242 |         for (platform_id, platform) in platforms.iter() {
+    |              ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_platform_id`
+
+warning: unused variable: `platform`
+   --> src/orchestration/platform_orchestrator.rs:242:27
+    |
+242 |         for (platform_id, platform) in platforms.iter() {
+    |                           ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_platform`
+
+warning: unused variable: `metadata`
+  --> src/utils/disk_manager.rs:97:13
+   |
+97 |         let metadata = fs::metadata(path).await?;
+   |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_metadata`
+
+warning: unused variable: `exchange`
+   --> src/utils/market_hours/mod.rs:142:41
+    |
+142 |     pub async fn update_holidays(&self, exchange: Exchange, holidays: Vec<holidays::Holiday>) {
+    |                                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_exchange`
+
+warning: unused variable: `holidays`
+   --> src/utils/market_hours/mod.rs:142:61
+    |
+142 |     pub async fn update_holidays(&self, exchange: Exchange, holidays: Vec<holidays::Holiday>) {
+    |                                                             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_holidays`
+
+warning: unused variable: `exchange`
+   --> src/utils/market_hours/mod.rs:149:36
+    |
+149 |     pub async fn is_holiday(&self, exchange: Exchange, date: DateTime<Utc>) -> bool {
+    |                                    ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_exchange`
+
+warning: unused variable: `date`
+   --> src/utils/market_hours/mod.rs:149:56
+    |
+149 |     pub async fn is_holiday(&self, exchange: Exchange, date: DateTime<Utc>) -> bool {
+    |                                                        ^^^^ help: if this is intentional, prefix it with an underscore: `_date`
+
+warning: unused variable: `d_period`
+   --> src/features/technical_indicators/momentum.rs:145:9
+    |
+145 |         d_period: usize,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_period`
+
+warning: unused variable: `current`
+   --> src/features/technical_indicators/momentum.rs:164:9
+    |
+164 |         current: &TimeSeriesData,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_current`
+
+warning: unused variable: `alpha2`
+   --> src/features/technical_indicators/momentum.rs:273:13
+    |
+273 |         let alpha2 = 2.0 / (second_period as f64 + 1.0);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_alpha2`
+
+warning: unused variable: `current`
+   --> src/features/technical_indicators/advanced.rs:324:9
+    |
+324 |         current: &TimeSeriesData,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_current`
+
+warning: unused variable: `current`
+   --> src/features/technical_indicators/advanced.rs:364:9
+    |
+364 |         current: &TimeSeriesData,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_current`
+
+warning: unused variable: `period`
+   --> src/features/technical_indicators/advanced.rs:409:9
+    |
+409 |         period: usize,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_period`
+
+warning: unused variable: `current`
+   --> src/features/technical_indicators/advanced.rs:464:9
+    |
+464 |         current: &TimeSeriesData,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_current`
+
+warning: unused variable: `period`
+   --> src/features/technical_indicators/advanced.rs:466:9
+    |
+466 |         period: usize,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_period`
+
+warning: unused variable: `current`
+   --> src/features/market_microstructure.rs:649:9
+    |
+649 |         current: &TimeSeriesData,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_current`
+
+warning: unused variable: `stats`
+   --> src/features/regime_detection.rs:368:9
+    |
+368 |         stats: &MarketStatistics,
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_stats`
+
+warning: variable `unknown_count` is assigned to, but never used
+   --> src/monitoring/health/async_health_monitor.rs:308:17
+    |
+308 |         let mut unknown_count = 0;
+    |                 ^^^^^^^^^^^^^
+    |
+    = note: consider using `_unknown_count` instead
+
+warning: unused variable: `config`
+   --> src/neural/performance_optimizer.rs:289:9
+    |
+289 |         config: &VendorPredictorConfig,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_config`
+
+warning: unused variable: `i`
+    --> src/neural/vendor_predictor.rs:2536:14
+     |
+2536 |         for (i, data_point) in data.iter().enumerate() {
+     |              ^ help: if this is intentional, prefix it with an underscore: `_i`
+
+warning: unused variable: `registry`
+   --> src/neural/model_factory.rs:444:9
+    |
+444 |         registry: &ModelFactoryRegistry<f32>,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_registry`
+
+warning: unused variable: `registry`
+   --> src/neural/model_factory.rs:460:9
+    |
+460 |         registry: &ModelFactoryRegistry<f32>,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_registry`
+
+warning: unused variable: `model`
+   --> src/neural/typed_storage.rs:397:9
+    |
+397 |         model: &Arc<dyn BaseModel<f32, State = (), Config = ()> + Send + Sync>,
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_model`
+
+warning: type `BridgeMetrics` is more private than the item `AsyncSyncBridge::get_metrics`
+   --> src/adapters/vendor_bridge.rs:292:5
+    |
+292 |     pub async fn get_metrics(&self) -> BridgeMetrics {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `AsyncSyncBridge::get_metrics` is reachable at visibility `pub`
+    |
+note: but type `BridgeMetrics` is only usable at visibility `pub(self)`
+   --> src/adapters/vendor_bridge.rs:160:1
+    |
+160 | struct BridgeMetrics {
+    | ^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `BridgeMetrics` is more private than the item `AsyncModelWrapper::<M>::get_performance_metrics`
+   --> src/adapters/vendor_bridge.rs:396:5
+    |
+396 |     pub async fn get_performance_metrics(&self) -> BridgeMetrics {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `AsyncModelWrapper::<M>::get_performance_metrics` is reachable at visibility `pub`
+    |
+note: but type `BridgeMetrics` is only usable at visibility `pub(self)`
+   --> src/adapters/vendor_bridge.rs:160:1
+    |
+160 | struct BridgeMetrics {
+    | ^^^^^^^^^^^^^^^^^^^^
+
+warning: type `daa_coordinator::PerformanceMetrics` is more private than the item `daa_coordinator::DaaCoordinator::get_metrics`
+    --> src/integration/daa_coordinator.rs:1114:5
+     |
+1114 |     pub async fn get_metrics(&self) -> PerformanceMetrics {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `daa_coordinator::DaaCoordinator::get_metrics` is reachable at visibility `pub`
+     |
+note: but type `daa_coordinator::PerformanceMetrics` is only usable at visibility `pub(self)`
+    --> src/integration/daa_coordinator.rs:273:1
+     |
+273  | struct PerformanceMetrics {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `daa_coordinator::RetrainingMetrics` is more private than the item `daa_coordinator::DaaCoordinator::get_retraining_metrics`
+    --> src/integration/daa_coordinator.rs:1119:5
+     |
+1119 |     pub async fn get_retraining_metrics(&self) -> Result<RetrainingMetrics> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `daa_coordinator::DaaCoordinator::get_retraining_metrics` is reachable at visibility `pub`
+     |
+note: but type `daa_coordinator::RetrainingMetrics` is only usable at visibility `pub(self)`
+    --> src/integration/daa_coordinator.rs:158:1
+     |
+158  | struct RetrainingMetrics {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `daa_coordinator::SectorPerformanceMetrics` is more private than the item `SectorDAACoordinator::get_sector_metrics`
+    --> src/integration/daa_coordinator.rs:2118:5
+     |
+2118 |     pub async fn get_sector_metrics(&self) -> SectorPerformanceMetrics {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `SectorDAACoordinator::get_sector_metrics` is reachable at visibility `pub`
+     |
+note: but type `daa_coordinator::SectorPerformanceMetrics` is only usable at visibility `pub(self)`
+    --> src/integration/daa_coordinator.rs:1834:1
+     |
+1834 | struct SectorPerformanceMetrics {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `ServiceMetrics` is more private than the item `TrainingDataService::get_metrics`
+   --> src/integration/training_data_service.rs:422:5
+    |
+422 |     pub async fn get_metrics(&self) -> ServiceMetrics {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `TrainingDataService::get_metrics` is reachable at visibility `pub`
+    |
+note: but type `ServiceMetrics` is only usable at visibility `pub(self)`
+   --> src/integration/training_data_service.rs:98:1
+    |
+98  | struct ServiceMetrics {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `model_persistence_service::TrainingRecord` is more private than the item `ModelPersistenceService::train_model`
+   --> src/integration/model_persistence_service.rs:277:5
+    |
+277 | /     pub async fn train_model(
+278 | |         &self,
+279 | |         model_name: &str,
+280 | |         symbol: &str,
+281 | |         training_config: TrainingConfig,
+282 | |         data_config: TrainingDataConfig,
+283 | |     ) -> Result<TrainingRecord> {
+    | |_______________________________^ method `ModelPersistenceService::train_model` is reachable at visibility `pub`
+    |
+note: but type `model_persistence_service::TrainingRecord` is only usable at visibility `pub(self)`
+   --> src/integration/model_persistence_service.rs:43:1
+    |
+43  | struct TrainingRecord {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `fallback_manager` is never read
+   --> src/adapters/enhanced_neural_adapter.rs:190:5
+    |
+186 | pub struct EnhancedNeuralAdapter {
+    |            --------------------- field in this struct
+...
+190 |     fallback_manager: Option<Arc<FallbackManager>>,
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `error_count_by_type` is never read
+   --> src/adapters/enhanced_neural_adapter.rs:205:5
+    |
+198 | struct PerformanceStats {
+    |        ---------------- field in this struct
+...
+205 |     error_count_by_type: HashMap<String, u64>,
+    |     ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `PerformanceStats` has derived impls for the traits `Default` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: method `predict_with_fallback` is never used
+   --> src/adapters/enhanced_neural_adapter.rs:427:14
+    |
+208 | impl EnhancedNeuralAdapter {
+    | -------------------------- method in this implementation
+...
+427 |     async fn predict_with_fallback(
+    |              ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `model_name` is never read
+   --> src/adapters/enhanced_neural_adapter.rs:708:5
+    |
+707 | struct ModelHealthChecker {
+    |        ------------------ field in this struct
+708 |     model_name: String,
+    |     ^^^^^^^^^^
+
+warning: field `confidence` is never read
+   --> src/adapters/fallback_manager.rs:123:5
+    |
+119 | struct CacheEntry<T> {
+    |        ---------- field in this struct
+...
+123 |     confidence: f64,
+    |     ^^^^^^^^^^
+    |
+    = note: `CacheEntry` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `normalization_enabled` is never read
+  --> src/adapters/neural/vendor_conversion.rs:31:5
+   |
+29 | pub struct VendorFormatConverter {
+   |            --------------------- field in this struct
+30 |     type_converter: VendorDataConverter,
+31 |     normalization_enabled: bool,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `config` and `channel_cache` are never read
+  --> src/adapters/redis_sector_channels.rs:91:5
+   |
+86 | pub struct RedisSectorChannels {
+   |            ------------------- fields in this struct
+...
+91 |     config: SectorChannelConfig,
+   |     ^^^^^^
+...
+94 |     channel_cache: Arc<RwLock<HashMap<String, String>>>,
+   |     ^^^^^^^^^^^^^
+
+warning: method `deserialize_and_decompress` is never used
+   --> src/adapters/redis_sector_channels.rs:437:14
+    |
+122 | impl RedisSectorChannels {
+    | ------------------------ method in this implementation
+...
+437 |     async fn deserialize_and_decompress<T: for<'de> Deserialize<'de>>(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `total_duration` is never read
+   --> src/adapters/vendor_bridge.rs:164:5
+    |
+160 | struct BridgeMetrics {
+    |        ------------- field in this struct
+...
+164 |     total_duration: Duration,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `BridgeMetrics` has derived impls for the traits `Default`, `Clone`, and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `market_context` is never read
+  --> src/agents/mod.rs:65:5
+   |
+63 | pub struct AutonomousAgent {
+   |            --------------- field in this struct
+64 |     config: AgentConfig,
+65 |     market_context: Option<MarketContext>,
+   |     ^^^^^^^^^^^^^^
+
+warning: field `daa_initialized` is never read
+  --> src/agents/daa_bridge.rs:31:5
+   |
+28 | pub struct DAAAgent {
+   |            -------- field in this struct
+...
+31 |     daa_initialized: bool,
+   |     ^^^^^^^^^^^^^^^
+
+warning: field `engine` is never read
+   --> src/daa/autonomous_training.rs:504:5
+    |
+503 | pub struct DAATrainingIntegration {
+    |            ---------------------- field in this struct
+504 |     engine: AutonomousTrainingEngine,
+    |     ^^^^^^
+
+warning: type alias `VendorDataset` is never used
+  --> src/data/data_converter.rs:27:6
+   |
+27 | type VendorDataset = TimeSeriesDataset<f32>;
+   |      ^^^^^^^^^^^^^
+
+warning: fields `order_book_buffer` and `trade_flow_buffer` are never read
+  --> src/features/market_microstructure.rs:14:5
+   |
+12 | pub struct MicrostructureAnalyzer {
+   |            ---------------------- fields in this struct
+13 |     /// Order book snapshots buffer
+14 |     order_book_buffer: VecDeque<OrderBookSnapshot>,
+   |     ^^^^^^^^^^^^^^^^^
+...
+17 |     trade_flow_buffer: VecDeque<TradeEvent>,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: field `regime_history` is never read
+  --> src/features/regime_detection.rs:38:5
+   |
+33 | pub struct RegimeDetector {
+   |            -------------- field in this struct
+...
+38 |     regime_history: Vec<RegimeProbabilities>,
+   |     ^^^^^^^^^^^^^^
+
+warning: fields `mean_return`, `skewness`, and `kurtosis` are never read
+   --> src/features/regime_detection.rs:610:5
+    |
+609 | struct MarketStatistics {
+    |        ---------------- fields in this struct
+610 |     mean_return: f64,
+    |     ^^^^^^^^^^^
+...
+617 |     skewness: f64,
+    |     ^^^^^^^^
+618 |     kurtosis: f64,
+    |     ^^^^^^^^
+    |
+    = note: `MarketStatistics` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `config` is never read
+  --> src/features/feature_store.rs:16:5
+   |
+15 | pub struct FeatureStore {
+   |            ------------ field in this struct
+16 |     config: FeaturePipelineConfig,
+   |     ^^^^^^
+   |
+   = note: `FeatureStore` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `sector_id` and `memory_allocation` are never read
+   --> src/features/shared_feature_extractor.rs:211:5
+    |
+210 | pub struct SharedFeatureExtractor {
+    |            ---------------------- fields in this struct
+211 |     sector_id: SectorId,
+    |     ^^^^^^^^^
+...
+215 |     memory_allocation: Arc<RwLock<Option<MemoryAllocation>>>,
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: `SharedFeatureExtractor` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `sector_id` is never read
+   --> src/features/symbol_specialization.rs:210:5
+    |
+208 | pub struct SymbolSpecializationLayer {
+    |            ------------------------- field in this struct
+209 |     /// Sector ID this specialization belongs to
+210 |     sector_id: SectorId,
+    |     ^^^^^^^^^
+    |
+    = note: `SymbolSpecializationLayer` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `parse_sector_from_string` is never used
+   --> src/data_pipeline/routing.rs:460:4
+    |
+460 | fn parse_sector_from_string(s: &str) -> Result<SectorId> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `timestamp`, `market_trend`, and `action_taken` are never read
+  --> src/integration/autonomous_decisions.rs:68:5
+   |
+67 | struct DecisionRecord {
+   |        -------------- fields in this struct
+68 |     timestamp: chrono::DateTime<chrono::Utc>,
+   |     ^^^^^^^^^
+69 |     market_trend: MarketTrend,
+   |     ^^^^^^^^^^^^
+70 |     confidence: ConfidenceLevel,
+71 |     action_taken: String,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `DecisionRecord` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `training_config` is never read
+  --> src/integration/autonomous_neural_coordinator.rs:34:5
+   |
+22 | pub struct AutonomousNeuralCoordinator {
+   |            --------------------------- field in this struct
+...
+34 |     training_config: TrainingTriggerConfig,
+   |     ^^^^^^^^^^^^^^^
+
+warning: field `historical_accuracy` is never read
+   --> src/integration/daa_coordinator.rs:152:9
+    |
+149 | struct ConfidenceBreakdown {
+    |        ------------------- field in this struct
+...
+152 |     pub historical_accuracy: f64,
+    |         ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `ConfidenceBreakdown` has derived impls for the traits `Default`, `Clone`, and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `should_retrain` is never read
+   --> src/integration/daa_coordinator.rs:161:9
+    |
+158 | struct RetrainingMetrics {
+    |        ----------------- field in this struct
+...
+161 |     pub should_retrain: bool,
+    |         ^^^^^^^^^^^^^^
+    |
+    = note: `RetrainingMetrics` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `performance_trend` is never read
+   --> src/integration/daa_coordinator.rs:267:5
+    |
+248 | pub struct DaaCoordinator {
+    |            -------------- field in this struct
+...
+267 |     performance_trend: Arc<RwLock<Vec<f64>>>,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: field `profitable_decisions` is never read
+   --> src/integration/daa_coordinator.rs:275:5
+    |
+273 | struct PerformanceMetrics {
+    |        ------------------ field in this struct
+274 |     total_decisions: u64,
+275 |     profitable_decisions: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `PerformanceMetrics` has derived impls for the traits `Default`, `Clone`, and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: method `create_performance_snapshot` is never used
+    --> src/integration/daa_coordinator.rs:1230:14
+     |
+284  | impl DaaCoordinator {
+     | ------------------- method in this implementation
+...
+1230 |     async fn create_performance_snapshot(
+     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `base_metrics`, `sector_win_rate`, and `correlation_accuracy` are never read
+    --> src/integration/daa_coordinator.rs:1836:5
+     |
+1834 | struct SectorPerformanceMetrics {
+     |        ------------------------ fields in this struct
+1835 |     /// Base performance metrics
+1836 |     base_metrics: PerformanceMetrics,
+     |     ^^^^^^^^^^^^
+1837 |     /// Sector-specific win rate
+1838 |     sector_win_rate: f64,
+     |     ^^^^^^^^^^^^^^^
+...
+1842 |     correlation_accuracy: f64,
+     |     ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `SectorPerformanceMetrics` has derived impls for the traits `Default`, `Clone`, and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `last_retrain_check`, `autonomous_retraining_enabled`, and `autonomous_training` are never read
+  --> src/integration/daa_coordinator_modular/core.rs:29:5
+   |
+21 | pub struct DaaCoordinator {
+   |            -------------- fields in this struct
+...
+29 |     last_retrain_check: Arc<RwLock<DateTime<Utc>>>,
+   |     ^^^^^^^^^^^^^^^^^^
+30 |     autonomous_retraining_enabled: bool,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+31 |     autonomous_training: Option<Arc<AutonomousTrainingEngine>>,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: fields `agent_id`, `symbol`, `timeframe`, `subscription_type`, `created_at`, and `last_update` are never read
+   --> src/integration/data_access.rs:98:5
+    |
+97  | struct AgentSubscription {
+    |        ----------------- fields in this struct
+98  |     agent_id: String,
+    |     ^^^^^^^^
+99  |     symbol: String,
+    |     ^^^^^^
+100 |     timeframe: Timeframe,
+    |     ^^^^^^^^^
+101 |     subscription_type: String,
+    |     ^^^^^^^^^^^^^^^^^
+102 |     created_at: DateTime<Utc>,
+    |     ^^^^^^^^^^
+103 |     last_update: DateTime<Utc>,
+    |     ^^^^^^^^^^^
+    |
+    = note: `AgentSubscription` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `last_error` is never read
+   --> src/integration/training_data_service.rs:104:5
+    |
+98  | struct ServiceMetrics {
+    |        -------------- field in this struct
+...
+104 |     last_error: Option<String>,
+    |     ^^^^^^^^^^
+    |
+    = note: `ServiceMetrics` has derived impls for the traits `Default`, `Clone`, and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: struct `LocalFannModelConfig` is never constructed
+  --> src/integration/model_persistence_service.rs:36:8
+   |
+36 | struct LocalFannModelConfig {
+   |        ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `LocalFannModelConfig` has a derived impl for the trait `Default`, but this is intentionally ignored during dead code analysis
+
+warning: fields `model_name`, `timestamp`, `epochs`, and `final_error` are never read
+  --> src/integration/model_persistence_service.rs:44:9
+   |
+43 | struct TrainingRecord {
+   |        -------------- fields in this struct
+44 |     pub model_name: String,
+   |         ^^^^^^^^^^
+45 |     pub timestamp: DateTime<Utc>,
+   |         ^^^^^^^^^
+46 |     pub epochs: usize,
+   |         ^^^^^^
+47 |     pub final_error: f64,
+   |         ^^^^^^^^^^^
+   |
+   = note: `TrainingRecord` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: struct `LocalFannModelAdapter` is never constructed
+  --> src/integration/model_persistence_service.rs:50:8
+   |
+50 | struct LocalFannModelAdapter;
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `train_with_checkpointing`, `get_performance_metrics`, `save_model`, `get_metadata`, and `load_model` are never used
+   --> src/integration/model_persistence_service.rs:53:14
+    |
+52  | impl LocalFannModelAdapter {
+    | -------------------------- associated items in this implementation
+53  |     async fn new(_config: LocalFannModelConfig, _storage: ModelStorageConfig) -> Result<Self> {
+    |              ^^^
+...
+57  |     async fn train_with_checkpointing(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+71  |     fn get_performance_metrics(&self) -> PerformanceMetrics {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+80  |     async fn save_model(&self, _version: VersionIncrement) -> Result<PathBuf> {
+    |              ^^^^^^^^^^
+...
+84  |     fn get_metadata(&self) -> ModelMetadata {
+    |        ^^^^^^^^^^^^
+...
+130 |     async fn load_model(&mut self, _version: String) -> Result<()> {
+    |              ^^^^^^^^^^
+
+warning: field `model_storage` is never read
+   --> src/integration/model_persistence_service.rs:214:5
+    |
+212 | pub struct ModelPersistenceService {
+    |            ----------------------- field in this struct
+213 |     config: ModelPersistenceConfig,
+214 |     model_storage: Arc<ModelStorage>,
+    |     ^^^^^^^^^^^^^
+
+warning: field `health_checker` is never read
+  --> src/monitoring/health/mod.rs:54:5
+   |
+50 | pub struct HealthMonitor {
+   |            ------------- field in this struct
+...
+54 |     health_checker: LegacyHealthChecker,
+   |     ^^^^^^^^^^^^^^
+   |
+   = note: `HealthMonitor` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: function `format_instant_as_iso8601` is never used
+   --> src/monitoring/health/health_server.rs:356:4
+    |
+356 | fn format_instant_as_iso8601(_instant: Instant) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `timeout` is never read
+   --> src/monitoring/health/component_checkers.rs:227:5
+    |
+225 | pub struct NeuralSystemHealthChecker {
+    |            ------------------------- field in this struct
+226 |     model_path: String,
+227 |     timeout: Duration,
+    |     ^^^^^^^
+
+warning: field `timeout` is never read
+   --> src/monitoring/health/component_checkers.rs:298:5
+    |
+296 | pub struct DAAOrchestratorHealthChecker {
+    |            ---------------------------- field in this struct
+297 |     coordinator_url: String,
+298 |     timeout: Duration,
+    |     ^^^^^^^
+
+warning: fields `ensemble_metrics` and `training_history` are never read
+   --> src/monitoring/model_performance_tracker.rs:192:5
+    |
+187 | pub struct ModelPerformanceTracker {
+    |            ----------------------- fields in this struct
+...
+192 |     ensemble_metrics: Arc<DashMap<String, EnsembleMetrics>>, // symbol -> metrics
+    |     ^^^^^^^^^^^^^^^^
+...
+195 |     training_history: Arc<RwLock<HashMap<String, Vec<TrainingRecord>>>>,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: struct `MockFannModel` is never constructed
+  --> src/neural/fann_model_adapter.rs:40:8
+   |
+40 | struct MockFannModel {
+   |        ^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> src/neural/fann_model_adapter.rs:45:8
+   |
+44 | impl MockFannModel {
+   | ------------------ associated function in this implementation
+45 |     fn new(file_path: PathBuf) -> Self {
+   |        ^^^
+
+warning: fields `latency_samples` and `last_updated` are never read
+   --> src/neural/fann_model_adapter.rs:168:9
+    |
+164 | pub struct PerformanceTracker {
+    |            ------------------ fields in this struct
+...
+168 |     pub latency_samples: Vec<u64>,
+    |         ^^^^^^^^^^^^^^^
+169 |     pub last_updated: DateTime<Utc>,
+    |         ^^^^^^^^^^^^
+    |
+    = note: `PerformanceTracker` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `save_checkpoint`, `update_performance`, `get_training_history`, and `get_config` are never used
+   --> src/neural/fann_model_adapter.rs:548:14
+    |
+196 | impl FannModelAdapter {
+    | --------------------- methods in this implementation
+...
+548 |     async fn save_checkpoint(&self, epoch: usize, mse: f32) -> Result<()> {
+    |              ^^^^^^^^^^^^^^^
+...
+598 |     pub fn update_performance(&mut self, actual: f32, predicted: f32, latency_ms: u64) {
+    |            ^^^^^^^^^^^^^^^^^^
+...
+617 |     pub fn get_training_history(&self) -> &[TrainingRecord] {
+    |            ^^^^^^^^^^^^^^^^^^^^
+...
+632 |     pub fn get_config(&self) -> &FannModelConfig {
+    |            ^^^^^^^^^^
+
+warning: struct `StreamingConnector` is never constructed
+  --> src/neural/streaming_connector.rs:89:12
+   |
+89 | pub struct StreamingConnector {
+   |            ^^^^^^^^^^^^^^^^^^
+
+warning: struct `ConnectionStatus` is never constructed
+   --> src/neural/streaming_connector.rs:101:12
+    |
+101 | pub struct ConnectionStatus {
+    |            ^^^^^^^^^^^^^^^^
+    |
+    = note: `ConnectionStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: multiple associated items are never used
+   --> src/neural/streaming_connector.rs:112:12
+    |
+110 | impl StreamingConnector {
+    | ----------------------- associated items in this implementation
+111 |     /// Create a new streaming connector
+112 |     pub fn new(config: StreamingConfig, predictor: Arc<FannPredictor>) -> Self {
+    |            ^^^
+...
+134 |     pub async fn start(&mut self) -> Result<()> {
+    |                  ^^^^^
+...
+167 |     pub async fn stop(&self) -> Result<()> {
+    |                  ^^^^
+...
+174 |     async fn start_connection_monitor(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+204 |     async fn start_data_processor(&self, mut rx: mpsc::UnboundedReceiver<MarketDataMessage>) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^
+...
+264 |     async fn start_quality_monitor(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^
+...
+294 |     async fn start_mock_data_feed(&self, tx: mpsc::UnboundedSender<MarketDataMessage>) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^
+...
+355 |     fn convert_to_time_series(message: &MarketDataMessage) -> Result<TimeSeriesData> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+...
+407 |     async fn update_quality_metrics(
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+...
+465 |     pub async fn get_connection_status(&self) -> ConnectionStatus {
+    |                  ^^^^^^^^^^^^^^^^^^^^^
+...
+470 |     pub async fn get_quality_metrics(&self) -> HashMap<String, DataQualityMetrics> {
+    |                  ^^^^^^^^^^^^^^^^^^^
+...
+475 |     pub async fn get_buffer_size(&self) -> usize {
+    |                  ^^^^^^^^^^^^^^^
+...
+480 |     pub async fn get_recent_data(&self, limit: usize) -> Vec<TimeSeriesData> {
+    |                  ^^^^^^^^^^^^^^^
+
+warning: struct `ValidationSample` is never constructed
+   --> src/neural/online_validator.rs:138:8
+    |
+138 | struct ValidationSample {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: struct `OnlineValidator` is never constructed
+   --> src/neural/online_validator.rs:147:12
+    |
+147 | pub struct OnlineValidator {
+    |            ^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/neural/online_validator.rs:158:12
+    |
+156 | impl OnlineValidator {
+    | -------------------- associated items in this implementation
+157 |     /// Create a new online validator
+158 |     pub fn new(config: OnlineValidationConfig) -> Self {
+    |            ^^^
+...
+170 |     pub async fn start(&self) -> Result<()> {
+    |                  ^^^^^
+...
+195 |     pub async fn stop(&self) -> Result<()> {
+    |                  ^^^^
+...
+202 |     pub async fn record_prediction(
+    |                  ^^^^^^^^^^^^^^^^^
+...
+233 |     pub async fn update_with_actual(
+    |                  ^^^^^^^^^^^^^^^^^^
+...
+266 |     async fn calculate_metrics(&self, model_name: &str) -> Result<ValidationMetrics> {
+    |              ^^^^^^^^^^^^^^^^^
+...
+389 |     async fn start_validation_monitor(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+434 |     async fn calculate_metrics_static(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+513 |     async fn start_metrics_calculator(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+527 |     async fn start_alert_processor(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^
+...
+546 |     async fn generate_alert(
+    |              ^^^^^^^^^^^^^^
+...
+605 |     pub async fn get_all_metrics(&self) -> HashMap<String, ValidationMetrics> {
+    |                  ^^^^^^^^^^^^^^^
+...
+610 |     pub async fn get_metrics(&self, model_name: &str) -> Option<ValidationMetrics> {
+    |                  ^^^^^^^^^^^
+...
+615 |     pub async fn get_recent_alerts(&self, limit: usize) -> Vec<ValidationAlert> {
+    |                  ^^^^^^^^^^^^^^^^^
+...
+621 |     pub async fn needs_retraining(&self, model_name: &str) -> bool {
+    |                  ^^^^^^^^^^^^^^^^
+...
+632 |     pub async fn get_validation_report(&self) -> HashMap<String, serde_json::Value> {
+    |                  ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `OnlineLearningManager` is never constructed
+  --> src/neural/online_learning_manager.rs:94:12
+   |
+94 | pub struct OnlineLearningManager {
+   |            ^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/neural/online_learning_manager.rs:105:18
+    |
+103 | impl OnlineLearningManager {
+    | -------------------------- associated items in this implementation
+104 |     /// Create a new online learning manager
+105 |     pub async fn new(config: OnlineLearningConfig) -> Result<Self> {
+    |                  ^^^
+...
+150 |     pub async fn initialize(&mut self) -> Result<()> {
+    |                  ^^^^^^^^^^
+...
+169 |     pub async fn start(&self) -> Result<()> {
+    |                  ^^^^^
+...
+225 |     pub async fn stop(&self) -> Result<()> {
+    |                  ^^^^
+...
+250 |     pub async fn process_sample(&self, sample: TimeSeriesData) -> Result<()> {
+    |                  ^^^^^^^^^^^^^^
+...
+283 |     pub async fn process_batch(&self, samples: &[TimeSeriesData]) -> Result<()> {
+    |                  ^^^^^^^^^^^^^
+...
+304 |     pub async fn predict(&self, data: &[TimeSeriesData], horizon: usize) -> Result<Vec<PredictionResult>> {
+    |                  ^^^^^^^
+...
+323 |     pub async fn update_with_actual(&self, predictions: &[PredictionResult], actual_values: &[f64]) -> Result<()> {
+    |                  ^^^^^^^^^^^^^^^^^^
+...
+346 |     pub async fn get_status(&self) -> OnlineLearningStatus {
+    |                  ^^^^^^^^^^
+...
+363 |     pub async fn get_validation_metrics(&self) -> HashMap<String, ValidationMetrics> {
+    |                  ^^^^^^^^^^^^^^^^^^^^^^
+...
+372 |     pub async fn get_performance_metrics(&self) -> Result<HashMap<String, serde_json::Value>> {
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^
+...
+377 |     pub async fn trigger_retraining(&self, model_names: &[String]) -> Result<()> {
+    |                  ^^^^^^^^^^^^^^^^^^
+...
+393 |     pub async fn check_retraining_needs(&self) -> Vec<String> {
+    |                  ^^^^^^^^^^^^^^^^^^^^^^
+...
+398 |     pub async fn save_checkpoints(&self) -> Result<()> {
+    |                  ^^^^^^^^^^^^^^^^
+...
+410 |     pub async fn load_checkpoints(&self) -> Result<()> {
+    |                  ^^^^^^^^^^^^^^^^
+...
+422 |     pub async fn get_system_report(&self) -> HashMap<String, serde_json::Value> {
+    |                  ^^^^^^^^^^^^^^^^^
+...
+458 |     async fn start_management_loop(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^
+...
+489 |     async fn start_memory_manager(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^
+...
+506 |     async fn start_performance_monitor(&self) -> tokio::task::JoinHandle<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+531 |     async fn estimate_memory_usage(&self) -> f64 {
+    |              ^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple fields are never read
+  --> src/neural/enhanced_predictor.rs:70:5
+   |
+68 | pub struct PerformanceTracker {
+   |            ------------------ fields in this struct
+69 |     /// Recent prediction accuracy (exponentially weighted)
+70 |     recent_accuracy: f64,
+   |     ^^^^^^^^^^^^^^^
+71 |     /// Total predictions made
+72 |     total_predictions: AtomicUsize,
+   |     ^^^^^^^^^^^^^^^^^
+73 |     /// Successful predictions (within threshold)
+74 |     successful_predictions: AtomicUsize,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+75 |     /// Last training timestamp
+76 |     last_training_time: DateTime<Utc>,
+   |     ^^^^^^^^^^^^^^^^^^
+77 |     /// Training samples since last training
+78 |     new_samples_count: AtomicUsize,
+   |     ^^^^^^^^^^^^^^^^^
+79 |     /// Accuracy threshold for retraining trigger
+80 |     accuracy_threshold: f64,
+   |     ^^^^^^^^^^^^^^^^^^
+81 |     /// Hours threshold for time-based retraining
+82 |     hours_threshold: i64,
+   |     ^^^^^^^^^^^^^^^
+83 |     /// Sample count threshold for data-based retraining
+84 |     sample_threshold: usize,
+   |     ^^^^^^^^^^^^^^^^
+85 |     /// Recent prediction history for accuracy calculation
+86 |     prediction_history: Arc<RwLock<VecDeque<(f64, f64, DateTime<Utc>)>>>, // (actual, predicted, timestamp)
+   |     ^^^^^^^^^^^^^^^^^^
+87 |     /// Maximum history size
+88 |     max_history_size: usize,
+   |     ^^^^^^^^^^^^^^^^
+89 |     /// Performance decay factor for weighted accuracy
+90 |     decay_factor: f64,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `PerformanceTracker` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: multiple fields are never read
+   --> src/neural/enhanced_predictor.rs:111:5
+    |
+109 | pub struct EnhancedNeuralPredictor {
+    |            ----------------------- fields in this struct
+110 |     /// Core FANN predictor for actual neural network operations
+111 |     fann_predictor: VendorPredictor,
+    |     ^^^^^^^^^^^^^^
+112 |     /// Performance tracking for retraining decisions
+113 |     performance_tracker: Arc<RwLock<PerformanceTracker>>,
+    |     ^^^^^^^^^^^^^^^^^^^
+114 |     /// Configuration
+115 |     config: NeuralConfig,
+    |     ^^^^^^
+116 |     /// Model ensemble weights (dynamically adjusted)
+117 |     ensemble_weights: Arc<RwLock<HashMap<String, f64>>>,
+    |     ^^^^^^^^^^^^^^^^
+118 |     /// Recent market volatility for confidence adjustments
+119 |     recent_volatility: Arc<RwLock<f64>>,
+    |     ^^^^^^^^^^^^^^^^^
+120 |     /// Market regime detection cache
+121 |     market_regime_cache: Arc<RwLock<(String, DateTime<Utc>)>>,
+    |     ^^^^^^^^^^^^^^^^^^^
+122 |     /// Data quality metrics
+123 |     data_quality_tracker: Arc<RwLock<DataQualityTracker>>,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `completeness_score`, `freshness_score`, `outlier_score`, `volume_consistency`, and `last_update` are never read
+   --> src/neural/enhanced_predictor.rs:130:5
+    |
+128 | struct DataQualityTracker {
+    |        ------------------ fields in this struct
+129 |     /// Recent data completeness (0.0 to 1.0)
+130 |     completeness_score: f64,
+    |     ^^^^^^^^^^^^^^^^^^
+131 |     /// Data freshness score (0.0 to 1.0)
+132 |     freshness_score: f64,
+    |     ^^^^^^^^^^^^^^^
+133 |     /// Outlier detection score (0.0 to 1.0, higher = fewer outliers)
+134 |     outlier_score: f64,
+    |     ^^^^^^^^^^^^^
+135 |     /// Volume consistency score (0.0 to 1.0)
+136 |     volume_consistency: f64,
+    |     ^^^^^^^^^^^^^^^^^^
+137 |     /// Last quality update
+138 |     last_update: DateTime<Utc>,
+    |     ^^^^^^^^^^^
+    |
+    = note: `DataQualityTracker` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: multiple methods are never used
+   --> src/neural/enhanced_predictor.rs:202:18
+    |
+141 | impl EnhancedNeuralPredictor {
+    | ---------------------------- methods in this implementation
+...
+202 |     pub async fn predict_with_confidence(
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^
+...
+291 |     async fn calculate_enhanced_prediction(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+393 |     async fn calculate_confidence_breakdown(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+457 |     pub async fn should_retrain(&self) -> Result<RetrainingMetrics> {
+    |                  ^^^^^^^^^^^^^^
+...
+525 |     pub async fn update_performance(
+    |                  ^^^^^^^^^^^^^^^^^^
+...
+586 |     pub async fn add_training_samples(&self, sample_count: usize) -> Result<()> {
+    |                  ^^^^^^^^^^^^^^^^^^^^
+...
+604 |     pub async fn mark_retrained(&self) -> Result<()> {
+    |                  ^^^^^^^^^^^^^^
+...
+619 |     pub async fn get_performance_metrics(&self) -> Result<HashMap<String, serde_json::Value>> {
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^
+...
+671 |     pub(crate) async fn calculate_current_volatility(&self, data: &[TimeSeriesData]) -> Result<f64> {
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+699 |     pub(crate) async fn detect_market_regime(&self, data: &[TimeSeriesData]) -> Result<String> {
+    |                         ^^^^^^^^^^^^^^^^^^^^
+...
+738 |     pub(crate) async fn update_data_quality(&self, data: &[TimeSeriesData]) -> Result<()> {
+    |                         ^^^^^^^^^^^^^^^^^^^
+...
+805 |     pub fn get_fann_predictor(&self) -> &VendorPredictor {
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: fields `predictions`, `confidence`, and `model_performance` are never read
+  --> src/neural/performance_optimizer.rs:29:9
+   |
+28 | pub struct OptimizedPredictionResult {
+   |            ------------------------- fields in this struct
+29 |     pub predictions: Vec<f64>,
+   |         ^^^^^^^^^^^
+30 |     pub confidence: f64,
+   |         ^^^^^^^^^^
+31 |     pub model_performance: Option<f64>,
+   |         ^^^^^^^^^^^^^^^^^
+   |
+   = note: `OptimizedPredictionResult` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `model_load_time_ms`, `prediction_latency_ms`, `batch_throughput`, `memory_usage_mb`, `cache_hit_rate`, and `parallel_efficiency` are never read
+  --> src/neural/performance_optimizer.rs:37:9
+   |
+36 | pub struct PerformanceMetrics {
+   |            ------------------ fields in this struct
+37 |     pub model_load_time_ms: f64,
+   |         ^^^^^^^^^^^^^^^^^^
+38 |     pub prediction_latency_ms: f64,
+   |         ^^^^^^^^^^^^^^^^^^^^^
+39 |     pub batch_throughput: f64,
+   |         ^^^^^^^^^^^^^^^^
+40 |     pub memory_usage_mb: f64,
+   |         ^^^^^^^^^^^^^^^
+41 |     pub cache_hit_rate: f64,
+   |         ^^^^^^^^^^^^^^
+42 |     pub parallel_efficiency: f64,
+   |         ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `PerformanceMetrics` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `config`, `last_used`, and `load_time_ms` are never read
+  --> src/neural/performance_optimizer.rs:48:5
+   |
+47 | struct CachedModel {
+   |        ----------- fields in this struct
+48 |     config: VendorPredictorConfig,
+   |     ^^^^^^
+49 |     last_used: Instant,
+   |     ^^^^^^^^^
+50 |     load_time_ms: f64,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `CachedModel` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: fields `input_buffers`, `output_buffers`, and `buffer_size` are never read
+  --> src/neural/performance_optimizer.rs:72:5
+   |
+70 | pub struct MemoryPool {
+   |            ---------- fields in this struct
+71 |     /// Pre-allocated input buffers
+72 |     input_buffers: Mutex<Vec<Vec<f32>>>,
+   |     ^^^^^^^^^^^^^
+73 |     /// Pre-allocated output buffers
+74 |     output_buffers: Mutex<Vec<Vec<f32>>>,
+   |     ^^^^^^^^^^^^^^
+75 |     /// Buffer size
+76 |     buffer_size: usize,
+   |     ^^^^^^^^^^^
+
+warning: fields `sender` and `receiver` are never read
+  --> src/neural/performance_optimizer.rs:81:5
+   |
+80 | struct BatchQueue {
+   |        ---------- fields in this struct
+81 |     sender: Sender<BatchRequest>,
+   |     ^^^^^^
+82 |     receiver: Receiver<BatchRequest>,
+   |     ^^^^^^^^
+
+warning: fields `model_name`, `data`, and `response` are never read
+  --> src/neural/performance_optimizer.rs:87:5
+   |
+86 | struct BatchRequest {
+   |        ------------ fields in this struct
+87 |     model_name: String,
+   |     ^^^^^^^^^^
+88 |     data: Vec<TimeSeriesData>,
+   |     ^^^^
+89 |     response: tokio::sync::oneshot::Sender<Result<Vec<OptimizedPredictionResult>>>,
+   |     ^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/neural/performance_optimizer.rs:94:8
+    |
+92  | impl OptimizedFannPredictor {
+    | --------------------------- associated items in this implementation
+93  |     /// Get default model configuration as static method
+94  |     fn get_default_model_config(_model_name: &str) -> Option<VendorPredictorConfig> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+109 |     pub async fn new(base_predictor: Arc<VendorPredictor>) -> Result<Self> {
+    |                  ^^^
+...
+136 |     fn default_model_config(&self, _model_name: &str) -> Option<VendorPredictorConfig> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+...
+151 |     async fn preload_models(&self) -> Result<()> {
+    |              ^^^^^^^^^^^^^^
+...
+185 |     async fn load_and_cache_model(
+    |              ^^^^^^^^^^^^^^^^^^^^
+...
+214 |     pub async fn predict_batch(
+    |                  ^^^^^^^^^^^^^
+...
+250 |     fn predict_single_optimized(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+286 |     fn prepare_input_zero_copy(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+320 |     async fn start_batch_processor(&self) {
+    |              ^^^^^^^^^^^^^^^^^^^^^
+...
+354 |     async fn process_batch(&self, batch: &mut Vec<BatchRequest>) {
+    |              ^^^^^^^^^^^^^
+...
+382 |     async fn process_model_batch(&self, model_name: String, requests: Vec<BatchRequest>) {
+    |              ^^^^^^^^^^^^^^^^^^^
+...
+413 |     async fn get_or_load_model(&self, model_name: &str) -> Result<CachedModel> {
+    |              ^^^^^^^^^^^^^^^^^
+...
+432 |     fn compute_cache_key(&self, data: &[TimeSeriesData], horizon: usize) -> u64 {
+    |        ^^^^^^^^^^^^^^^^^
+...
+450 |     fn build_prediction_result(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+472 |     fn predict_batch_request(
+    |        ^^^^^^^^^^^^^^^^^^^^^
+...
+489 |     pub fn get_metrics(&self) -> PerformanceMetrics {
+    |            ^^^^^^^^^^^
+...
+494 |     pub fn clear_caches(&self) {
+    |            ^^^^^^^^^^^^
+
+warning: associated items `new`, `get_input_buffer`, and `return_input_buffer` are never used
+   --> src/neural/performance_optimizer.rs:501:12
+    |
+500 | impl MemoryPool {
+    | --------------- associated items in this implementation
+501 |     pub fn new(pool_size: usize, buffer_size: usize) -> Self {
+    |            ^^^
+...
+517 |     pub fn get_input_buffer(&self) -> Vec<f32> {
+    |            ^^^^^^^^^^^^^^^^
+...
+524 |     fn return_input_buffer(&self, mut buffer: Vec<f32>) {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `BatchOptimizer` is never constructed
+  --> src/neural/batch_optimizer.rs:18:12
+   |
+18 | pub struct BatchOptimizer {
+   |            ^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/neural/batch_optimizer.rs:27:12
+    |
+25  | impl BatchOptimizer {
+    | ------------------- associated items in this implementation
+26  |     /// Create new batch optimizer
+27  |     pub fn new(max_concurrent: usize, max_batch_size: usize) -> Self {
+    |            ^^^
+...
+35  |     pub async fn predict_batch(
+    |                  ^^^^^^^^^^^^^
+...
+73  |     async fn process_batch_parallel(
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+...
+93  |     pub async fn ensemble_predict_optimized(
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+142 |     async fn performance_weighted_ensemble(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+202 |     pub fn extract_features_parallel(
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+214 |     fn extract_features_single(&self, data: &[TimeSeriesData], lookback: usize) -> Vec<f32> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `BatchPerformanceMonitor` is never constructed
+   --> src/neural/batch_optimizer.rs:250:12
+    |
+250 | pub struct BatchPerformanceMonitor {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `record_batch`, `get_throughput`, `get_average_batch_time`, and `report` are never used
+   --> src/neural/batch_optimizer.rs:257:12
+    |
+256 | impl BatchPerformanceMonitor {
+    | ---------------------------- associated items in this implementation
+257 |     pub fn new() -> Self {
+    |            ^^^
+...
+265 |     pub fn record_batch(&mut self, predictions: usize, time_ms: u128) {
+    |            ^^^^^^^^^^^^
+...
+271 |     pub fn get_throughput(&self) -> f64 {
+    |            ^^^^^^^^^^^^^^
+...
+278 |     pub fn get_average_batch_time(&self) -> f64 {
+    |            ^^^^^^^^^^^^^^^^^^^^^^
+...
+285 |     pub fn report(&self) {
+    |            ^^^^^^
+
+warning: type alias `VendorDataset` is never used
+  --> src/neural/vendor_predictor.rs:31:6
+   |
+31 | type VendorDataset = TimeSeriesDataset<f32>;
+   |      ^^^^^^^^^^^^^
+
+warning: fields `lazy_models` and `data_availability` are never read
+   --> src/neural/vendor_predictor.rs:537:5
+    |
+529 | pub struct VendorPredictor {
+    |            --------------- fields in this struct
+...
+537 |     lazy_models: Arc<DashMap<String, ModelConfig>>,
+    |     ^^^^^^^^^^^
+...
+561 |     data_availability: Arc<RwLock<HashMap<String, Vec<String>>>>,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: methods `update_model_confidence` and `store_normalization_metadata` are never used
+    --> src/neural/vendor_predictor.rs:2284:14
+     |
+570  | impl VendorPredictor {
+     | -------------------- methods in this implementation
+...
+2284 |     async fn update_model_confidence(&self, model_name: &str, confidence: f64) -> Result<()> {
+     |              ^^^^^^^^^^^^^^^^^^^^^^^
+...
+2973 |     async fn store_normalization_metadata(
+     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `model_metadata` and `performance_tracker` are never read
+   --> src/neural/memory_optimized_predictor.rs:106:5
+    |
+96  | pub struct MemoryOptimizedPredictor {
+    |            ------------------------ fields in this struct
+...
+106 |     model_metadata: Arc<DashMap<String, ModelMetadata>>,
+    |     ^^^^^^^^^^^^^^
+...
+113 |     performance_tracker: Arc<ModelPerformanceTracker>,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: method `load_model_lazy` is never used
+   --> src/neural/memory_optimized_predictor.rs:208:14
+    |
+122 | impl MemoryOptimizedPredictor {
+    | ----------------------------- method in this implementation
+...
+208 |     async fn load_model_lazy(&self, model_id: &str) -> Result<()> {
+    |              ^^^^^^^^^^^^^^^
+
+warning: field `redis_adapter` is never read
+   --> src/neural/sector_aggregator.rs:131:5
+    |
+125 | pub struct SectorAggregator {
+    |            ---------------- field in this struct
+...
+131 |     redis_adapter: Arc<RwLock<RedisAdapter>>,
+    |     ^^^^^^^^^^^^^
+
+warning: field `sector` is never read
+  --> src/neural/emergency_model.rs:13:5
+   |
+11 | pub struct EmergencyModel {
+   |            -------------- field in this struct
+12 |     model_type: String,
+13 |     sector: String,
+   |     ^^^^^^
+   |
+   = note: `EmergencyModel` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `migrate_single_model` and `validate_migrated_model` are never used
+   --> src/neural/migration_layer.rs:282:14
+    |
+126 | impl MigrationLayer {
+    | ------------------- methods in this implementation
+...
+282 |     async fn migrate_single_model(
+    |              ^^^^^^^^^^^^^^^^^^^^
+...
+294 |     async fn validate_migrated_model(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `training_engine` is never read
+   --> src/neural/realtime_training.rs:139:5
+    |
+134 | pub struct RealtimeTrainingExtension {
+    |            ------------------------- field in this struct
+...
+139 |     training_engine: Arc<RwLock<AutonomousTrainingEngine>>,
+    |     ^^^^^^^^^^^^^^^
+
+warning: fields `logger` and `tracer` are never read
+  --> src/observability/mod.rs:31:5
+   |
+30 | pub struct ObservabilitySystem {
+   |            ------------------- fields in this struct
+31 |     logger: Arc<StructuredLogger>,
+   |     ^^^^^^
+32 |     metrics_exporter: Arc<PrometheusExporter>,
+33 |     tracer: Arc<DistributedTracer>,
+   |     ^^^^^^
+   |
+   = note: `ObservabilitySystem` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: field `config` is never read
+   --> src/observability/mod.rs:149:5
+    |
+148 | pub struct StructuredLogger {
+    |            ---------------- field in this struct
+149 |     config: LoggingConfig,
+    |     ^^^^^^
+
+warning: field `trace_config` is never read
+   --> src/observability/mod.rs:327:5
+    |
+326 | pub struct DistributedTracer {
+    |            ----------------- field in this struct
+327 |     trace_config: TracingConfig,
+    |     ^^^^^^^^^^^^
+
+warning: field `config` is never read
+  --> src/observability/tracer.rs:20:5
+   |
+19 | pub struct DistributedTracer {
+   |            ----------------- field in this struct
+20 |     config: TracingConfig,
+   |     ^^^^^^
+   |
+   = note: `DistributedTracer` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: fields `config` and `metrics` are never read
+  --> src/orchestration/platform_orchestrator.rs:89:5
+   |
+87 | pub struct PlatformOrchestrator {
+   |            -------------------- fields in this struct
+88 |     platforms: Arc<RwLock<HashMap<String, Arc<Platform>>>>,
+89 |     config: OrchestrationConfig,
+   |     ^^^^^^
+90 |     state: Arc<RwLock<OrchestrationState>>,
+91 |     metrics: Arc<MetricsCollector>,
+   |     ^^^^^^^
+
+warning: field `config` is never read
+  --> src/security/mod.rs:30:5
+   |
+29 | pub struct SecuritySystem {
+   |            -------------- field in this struct
+30 |     config: SecurityConfig,
+   |     ^^^^^^
+   |
+   = note: `SecuritySystem` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: methods `calculate_rsi_for_index` and `calculate_sma_for_index` are never used
+   --> src/strategies/neural_enhanced.rs:213:14
+    |
+73  | impl NeuralEnhancedStrategy {
+    | --------------------------- methods in this implementation
+...
+213 |     async fn calculate_rsi_for_index(&self, prices: &VecDeque<f64>, index: usize) -> Option<f64> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^
+...
+244 |     async fn calculate_sma_for_index(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `event_serializer`, `event_ttl`, and `last_cleanup` are never read
+  --> src/streaming/event_bus.rs:21:5
+   |
+19 | pub struct EventBusIntegration {
+   |            ------------------- fields in this struct
+20 |     pub daa_access: Arc<DataAccessLayer>,
+21 |     event_serializer: EventSerializer,
+   |     ^^^^^^^^^^^^^^^^
+...
+35 |     event_ttl: Duration,              // Default: 5 minutes
+   |     ^^^^^^^^^
+36 |     last_cleanup: Arc<RwLock<Instant>>,
+   |     ^^^^^^^^^^^^
+
+warning: field `compression_enabled` is never read
+   --> src/streaming/event_bus.rs:126:5
+    |
+125 | pub struct EventSerializer {
+    |            --------------- field in this struct
+126 |     compression_enabled: bool,
+    |     ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `EventSerializer` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `routing_rules` is never read
+   --> src/streaming/event_bus.rs:137:5
+    |
+135 | pub struct EventRouter {
+    |            ----------- field in this struct
+136 |     filter_rules: HashMap<String, String>,
+137 |     routing_rules: HashMap<String, Vec<String>>,
+    |     ^^^^^^^^^^^^^
+    |
+    = note: `EventRouter` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `compression_enabled` is never read
+   --> src/utils/disk_manager.rs:315:5
+    |
+313 | pub struct StreamingDataProcessor {
+    |            ---------------------- field in this struct
+314 |     buffer_size: usize,
+315 |     compression_enabled: bool,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: fields `redis_adapter` and `event_bus` are never read
+   --> src/multi_channel/mod.rs:235:5
+    |
+233 | pub struct MultiChannelSubscriptionManager {
+    |            ------------------------------- fields in this struct
+234 |     config: MultiChannelConfig,
+235 |     redis_adapter: Arc<RedisAdapter>,
+    |     ^^^^^^^^^^^^^
+236 |     event_bus: Arc<EventBusIntegration>,
+    |     ^^^^^^^^^
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/integration/mod.rs:52:5
+   |
+52 |     async fn get_real_time_data(&self, symbol: &str) -> Result<crate::data::TimeSeriesData>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+   = note: `#[warn(async_fn_in_trait)]` on by default
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+52 -     async fn get_real_time_data(&self, symbol: &str) -> Result<crate::data::TimeSeriesData>;
+52 +     fn get_real_time_data(&self, symbol: &str) -> impl std::future::Future<Output = Result<crate::data::TimeSeriesData>> + Send;
+   |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/integration/mod.rs:55:5
+   |
+55 |     async fn subscribe(&self, symbols: Vec<String>) -> Result<()>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+55 -     async fn subscribe(&self, symbols: Vec<String>) -> Result<()>;
+55 +     fn subscribe(&self, symbols: Vec<String>) -> impl std::future::Future<Output = Result<()>> + Send;
+   |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/integration/mod.rs:58:5
+   |
+58 |     async fn unsubscribe(&self, symbols: Vec<String>) -> Result<()>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+58 -     async fn unsubscribe(&self, symbols: Vec<String>) -> Result<()>;
+58 +     fn unsubscribe(&self, symbols: Vec<String>) -> impl std::future::Future<Output = Result<()>> + Send;
+   |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/integration/mod.rs:64:5
+   |
+64 |     async fn execute_trade(&self, order: TradeOrder) -> Result<TradeResult>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+64 -     async fn execute_trade(&self, order: TradeOrder) -> Result<TradeResult>;
+64 +     fn execute_trade(&self, order: TradeOrder) -> impl std::future::Future<Output = Result<TradeResult>> + Send;
+   |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/integration/mod.rs:67:5
+   |
+67 |     async fn get_balance(&self) -> Result<AccountBalance>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+67 -     async fn get_balance(&self) -> Result<AccountBalance>;
+67 +     fn get_balance(&self) -> impl std::future::Future<Output = Result<AccountBalance>> + Send;
+   |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/integration/mod.rs:70:5
+   |
+70 |     async fn get_positions(&self) -> Result<Vec<Position>>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+70 -     async fn get_positions(&self) -> Result<Vec<Position>>;
+70 +     fn get_positions(&self) -> impl std::future::Future<Output = Result<Vec<Position>>> + Send;
+   |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/monitoring/health/dashboard.rs:14:5
+   |
+14 |     async fn get_system_health(&self) -> Result<SystemHealth>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+14 -     async fn get_system_health(&self) -> Result<SystemHealth>;
+14 +     fn get_system_health(&self) -> impl std::future::Future<Output = Result<SystemHealth>> + Send;
+   |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+  --> src/monitoring/health/dashboard.rs:15:5
+   |
+15 |     async fn collect_performance_metrics(&self) -> Result<PerformanceMetrics>;
+   |     ^^^^^
+   |
+   = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+   |
+15 -     async fn collect_performance_metrics(&self) -> Result<PerformanceMetrics>;
+15 +     fn collect_performance_metrics(&self) -> impl std::future::Future<Output = Result<PerformanceMetrics>> + Send;
+   |
+
+warning: call to `.clone()` on a reference in this situation does nothing
+   --> src/monitoring/health/async_health_monitor.rs:232:38
+    |
+232 |                 let checker = checker.clone();
+    |                                      ^^^^^^^^
+    |
+    = note: the type `Box<dyn health::types::HealthChecker>` does not implement `Clone`, so calling `clone` on `&Box<dyn health::types::HealthChecker>` copies the reference, which does not do anything and can be removed
+    = note: `#[warn(noop_method_call)]` on by default
+help: remove this redundant call
+    |
+232 -                 let checker = checker.clone();
+232 +                 let checker = checker;
+    |
+help: if you meant to clone `Box<dyn health::types::HealthChecker>`, implement `Clone` for it
+   --> /usr/local/rustup/toolchains/1.87.0-aarch64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:231:1
+    |
+231 + #[derive(Clone)]
+232 | pub struct Box<
+    |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+   --> src/monitoring/resource_health_integration.rs:302:5
+    |
+302 |     async fn add_resource_monitoring(
+    |     ^^^^^
+    |
+    = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+    |
+302 ~     fn add_resource_monitoring(
+303 |         &self,
+304 |         resource_governor: Arc<ResourceGovernor>,
+305 ~     ) -> impl std::future::Future<Output = Result<Arc<ResourceHealthIntegration>>> + Send;
+    |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+   --> src/neural/realtime_training.rs:538:5
+    |
+538 |     async fn update_parameters_realtime(&mut self, feedback: &ModelFeedback) -> Result<()>;
+    |     ^^^^^
+    |
+    = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+    |
+538 -     async fn update_parameters_realtime(&mut self, feedback: &ModelFeedback) -> Result<()>;
+538 +     fn update_parameters_realtime(&mut self, feedback: &ModelFeedback) -> impl std::future::Future<Output = Result<()>> + Send;
+    |
+
+warning: use of `async fn` in public traits is discouraged as auto trait bounds cannot be specified
+   --> src/neural/realtime_training.rs:539:5
+    |
+539 |     async fn adjust_prediction_confidence(&self, 
+    |     ^^^^^
+    |
+    = note: you can suppress this lint if you plan to use the trait only in your own code, or do not care about auto traits like `Send` on the `Future`
+help: you can alternatively desugar to a normal `fn` that returns `impl Future` and add any desired bounds such as `Send`, but these cannot be relaxed without a breaking API change
+    |
+539 ~     fn adjust_prediction_confidence(&self, 
+540 |         prediction: &mut PredictionResult, 
+541 |         recent_performance: &PerformanceSnapshot
+542 ~     ) -> impl std::future::Future<Output = Result<()>> + Send;
+    |
+
+warning: `autonomous-platform` (lib) generated 303 warnings (run `cargo fix --lib -p autonomous-platform` to apply 95 suggestions)
+warning: unused import: `tokio::sync::RwLock`
+ --> src/bin/mcp_server.rs:8:5
+  |
+8 | use tokio::sync::RwLock;
+  |     ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `shutdown_symbols`
+   --> src/main.rs:785:9
+    |
+785 |     let shutdown_symbols = all_trading_symbols.clone();
+    |         ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_shutdown_symbols`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: function `load_trading_symbols` is never used
+  --> src/main.rs:35:4
+   |
+35 | fn load_trading_symbols() -> Result<Vec<String>> {
+   |    ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `load_symbols_from_sector_config` is never used
+  --> src/main.rs:74:4
+   |
+74 | fn load_symbols_from_sector_config(config_path: &str) -> Result<Vec<String>> {
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `load_initial_historical_data` is never used
+   --> src/main.rs:150:10
+    |
+150 | async fn load_initial_historical_data(
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `autonomous-platform` (bin "mcp_server") generated 1 warning (run `cargo fix --bin "mcp_server"` to apply 1 suggestion)
+warning: `autonomous-platform` (bin "neural-trader") generated 4 warnings
+    Finished `release` profile [optimized] target(s) in 1m 15s

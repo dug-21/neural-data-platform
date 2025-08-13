@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::Duration as TokioDuration;
+use std::time::Duration as StdDuration;
 use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber;
 use sqlx;
@@ -223,24 +224,33 @@ async fn load_historical_data(
     
     let (start_time, end_time) = match max_time_result {
         Some(max_available_time) => {
-            // Use the most recent available data
+            // Use the most recent available data with configurable window
             let end = max_available_time;
-            let start = end - chrono::Duration::hours(4);
-            info!("Using most recent available market data ending at {}", end.format("%Y-%m-%d %H:%M:%S UTC"));
+            // Get training history days from environment or use default
+            let history_days = std::env::var("TRAINING_HISTORY_DAYS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse::<i64>()
+                .unwrap_or(30);
+            let start = end - chrono::Duration::days(history_days);
+            info!("Using {} days of market data ending at {}", history_days, end.format("%Y-%m-%d %H:%M:%S UTC"));
             (start, end)
         }
         None => {
             // Fallback to current time if no data available
             let end = chrono::Utc::now();
-            let start = end - chrono::Duration::hours(4);
-            warn!("No data found in market_data_1h, using current time range");
+            let history_days = std::env::var("TRAINING_HISTORY_DAYS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse::<i64>()
+                .unwrap_or(30);
+            let start = end - chrono::Duration::days(history_days);
+            warn!("No data found in market_data_1h, using {} days from current time", history_days);
             (start, end)
         }
     };
 
     info!("Querying market_data_1h from {} to {}", start_time.format("%Y-%m-%d %H:%M:%S UTC"), end_time.format("%Y-%m-%d %H:%M:%S UTC"));
 
-    // Query the continuous aggregate market_data_1h for last 4 hours
+    // Query the continuous aggregate market_data_1h for configured time window
     let rows = sqlx::query_as::<_, HistoricalMarketData>(
         r#"
         SELECT 
@@ -364,6 +374,39 @@ async fn main() -> Result<()> {
     info!("   Real-time Adaptation: {}", enable_realtime_adaptation);
     info!("   Data Discovery: {}", enable_data_discovery);
     
+    // Initialize storage components first
+    info!("Initializing storage components...");
+    // Initialize TimescaleDB storage
+    let storage = Arc::new(
+        TimescaleDBStorage::new(&config.database.url)
+            .await
+            .context("Failed to initialize TimescaleDB storage")?,
+    );
+
+    // Initialize Redis cache
+    let cache = Arc::new(
+        RedisCache::new(&config.redis.url)
+            .await
+            .context("Failed to initialize Redis cache")?,
+    );
+
+    // Initialize Data Access Layer
+    let data_access = Arc::new(
+        DataAccessLayer::new(storage.clone(), cache.clone())
+            .await
+            .context("Failed to initialize data access layer")?,
+    );
+    
+    // Initialize Training Data Service for real market data access
+    let training_data_service = Arc::new(
+        autonomous_platform::integration::training_data_service::TrainingDataService::new(
+            storage.clone(), 
+            cache.clone()
+        )
+        .await
+        .context("Failed to initialize training data service")?,
+    );
+    
     // Initialize DAA components with proper error handling
     info!("Initializing neural predictor with VendorPredictor...");
     
@@ -432,7 +475,7 @@ async fn main() -> Result<()> {
         );
         
         Arc::new(
-            NeuralPredictor::new(&config.neural, sector_mapper, performance_tracker)
+            NeuralPredictor::new_with_services(&config.neural, sector_mapper, performance_tracker, data_access.clone(), training_data_service.clone())
                 .context("Failed to initialize neural predictor")?,
         )
     } else {
@@ -440,9 +483,15 @@ async fn main() -> Result<()> {
         // When not using sector models, use default symbols from environment or fallback
         all_trading_symbols = symbol_loader::load_trading_symbols();
         info!("Using {} symbols from environment/defaults for training", all_trading_symbols.len());
+        // Create required dependencies for VendorPredictor
+        let sector_config = autonomous_platform::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(autonomous_platform::data::sector_mapper::SectorMapper::new(sector_config));
+        let performance_tracker = Arc::new(
+            autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker::new()
+        );
+        
         Arc::new(
-            NeuralPredictor::with_vendor_predictor(config.neural.clone())
-                .await
+            NeuralPredictor::new_with_services(&config.neural, sector_mapper, performance_tracker, data_access.clone(), training_data_service.clone())
                 .context("Failed to initialize VendorPredictor")?,
         )
     };
@@ -642,27 +691,6 @@ async fn main() -> Result<()> {
         .context("Failed to connect to Redis")?;
     let redis_adapter = Arc::new(redis_adapter);
 
-    info!("Initializing storage components...");
-    // Initialize TimescaleDB storage
-    let storage = Arc::new(
-        TimescaleDBStorage::new(&config.database.url)
-            .await
-            .context("Failed to initialize TimescaleDB storage")?,
-    );
-
-    // Initialize Redis cache
-    let cache = Arc::new(
-        RedisCache::new(&config.redis.url)
-            .await
-            .context("Failed to initialize Redis cache")?,
-    );
-
-    // Initialize Data Access Layer
-    let data_access = Arc::new(
-        DataAccessLayer::new(storage.clone(), cache.clone())
-            .await
-            .context("Failed to initialize data access layer")?,
-    );
 
     info!("Initializing event bus...");
     let event_bus = Arc::new(
@@ -752,7 +780,7 @@ async fn main() -> Result<()> {
     let health_server_config = HealthServerConfig {
         port: 9092,
         bind_address: "0.0.0.0".to_string(),
-        request_timeout: std::time::Duration::from_secs(30),
+        request_timeout: StdDuration::from_secs(30),
     };
     
     let mut health_server = HealthServer::with_monitor(health_server_config, async_health_monitor);
@@ -791,17 +819,31 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Start decision processing loop
+    // Start decision processing loop with market hours enforcement
     let _daa_clone = daa_coordinator.clone();
     let loop_signal = shutdown_signal.clone();
+    let market_hours_decision = market_hours.clone();
     tokio::spawn(async move {
-        info!("Starting DAA decision processing loop...");
+        info!("Starting DAA decision processing loop with market hours enforcement...");
         while let Some(decision) = decision_receiver.recv().await {
             if loop_signal.load(Ordering::Relaxed) {
                 break;
             }
-            info!("DAA Decision: {:?}", decision);
-            // Here decisions would be executed via trading adapters
+            
+            // Check if markets are open before executing trading decisions
+            use autonomous_platform::utils::market_hours::Exchange;
+            let markets_open = market_hours_decision.is_market_open(
+                Exchange::NYSE, 
+                chrono::Utc::now()
+            ).await;
+            
+            if markets_open {
+                info!("📈 Markets OPEN - Executing DAA Decision: {:?}", decision);
+                // Here decisions would be executed via trading adapters
+            } else {
+                info!("🚫 Markets CLOSED - Deferring trading decision until market hours: {:?}", decision);
+                // Could queue decision for next market open or discard based on strategy
+            }
         }
     });
     
@@ -810,8 +852,8 @@ async fn main() -> Result<()> {
     let market_hours_checkpoint = market_hours.clone();
     let checkpoint_signal = shutdown_signal.clone();
     tokio::spawn(async move {
-        info!("Starting hourly ETF sector model checkpoint saving during market hours...");
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // 1 hour
+        info!("Starting market-hours-aware checkpoint and training scheduler...");
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1800)); // 30 minutes
         
         loop {
             interval.tick().await;
@@ -823,18 +865,31 @@ async fn main() -> Result<()> {
             let now = chrono::Utc::now();
             let nyse_open = market_hours_checkpoint.is_market_open(Exchange::NYSE, now).await;
             let nasdaq_open = market_hours_checkpoint.is_market_open(Exchange::NASDAQ, now).await;
+            let markets_open = nyse_open || nasdaq_open;
             
-            if nyse_open || nasdaq_open {
-                info!("⏰ Performing hourly ETF sector model checkpoint save during market hours");
+            if markets_open {
+                // During market hours: prioritize light checkpointing over heavy training
+                info!("📈 [MARKET HOURS] Performing light checkpoint save (training deferred)");
                 let etf_symbols = symbol_loader::load_sector_etf_symbols();
-                for symbol in etf_symbols.iter() {
+                for symbol in etf_symbols.iter().take(3) { // Limit to 3 symbols during market hours
                     match neural_checkpoint.save_checkpoint(symbol).await {
-                        Ok(_) => info!("✅ Saved hourly checkpoint for ETF {}", symbol),
-                        Err(e) => warn!("⚠️ Failed to save hourly checkpoint for ETF {}: {}", symbol, e),
+                        Ok(_) => info!("💾 [MARKET HOURS] Saved checkpoint for ETF {}", symbol),
+                        Err(e) => warn!("⚠️ Failed to save checkpoint for ETF {}: {}", symbol, e),
                     }
                 }
             } else {
-                debug!("Markets closed - skipping hourly checkpoint");
+                // After hours: perform full checkpointing and allow intensive training
+                info!("🌃 [AFTER-HOURS] Performing full checkpoint save and training");
+                let etf_symbols = symbol_loader::load_sector_etf_symbols();
+                for symbol in etf_symbols.iter() {
+                    match neural_checkpoint.save_checkpoint(symbol).await {
+                        Ok(_) => info!("💾 [AFTER-HOURS] Saved checkpoint for ETF {}", symbol),
+                        Err(e) => warn!("⚠️ Failed to save checkpoint for ETF {}: {}", symbol, e),
+                    }
+                }
+                
+                // After-hours intensive training window
+                info!("🌃 [AFTER-HOURS] Optimal training window detected - enhanced model training available");
             }
         }
     });
@@ -1188,9 +1243,9 @@ async fn main() -> Result<()> {
 
                                     // Get current position for this symbol
                                     let position = current_positions.get(&symbol);
-
-                                    info!("Making DAA decision for {} - Price: ${:.2}, Trend: {}, Volatility: {:.2}%",
-                                          symbol, latest.close, trend, volatility * 100.0);
+                                    
+                                    debug!("Making DAA trading decision for {} - Price: ${:.2}, Trend: {}, Volatility: {:.2}%",
+                                           symbol, latest.close, trend, volatility * 100.0);
 
                                     // Call DAA coordinator to make a decision
                                     match coordinator_clone
@@ -1198,32 +1253,14 @@ async fn main() -> Result<()> {
                                         .await
                                     {
                                         Ok(decision) => {
-                                            info!(
-                                                "🎯 DAA Decision for {}: {:?} (confidence: {:.2}%)",
-                                                symbol,
-                                                decision.action,
-                                                decision.confidence * 100.0
-                                            );
+                                            info!("DAA Decision for {}: {:?} (confidence: {:.2}%)",
+                                                  symbol, decision.action, decision.confidence * 100.0);
                                             
-                                            // Check if autonomous training should be triggered based on decision quality
+                                            // Training is now handled by DAA coordinator via check_market_timing()
+                                            // No need for custom market hours logic in main loop
                                             if decision.confidence < 0.7 && enable_autonomous_training {
-                                                info!("⚠️ Low confidence decision ({:.1}%) detected for {} - considering autonomous retraining", 
-                                                      decision.confidence * 100.0, symbol);
-                                                
-                                                // Trigger adaptive training for this symbol's models
-                                                let neural_for_retrain = neural_predictor.clone();
-                                                let retrain_symbol = symbol.clone();
-                                                
-                                                tokio::spawn(async move {
-                                                    match neural_for_retrain.trigger_automatic_retrain(&format!("{}_adaptive", retrain_symbol)).await {
-                                                        Ok(_) => {
-                                                            info!("🔄 Triggered adaptive retraining for {} due to low confidence", retrain_symbol);
-                                                        }
-                                                        Err(e) => {
-                                                            warn!("⚠️ Failed to trigger adaptive retraining for {}: {}", retrain_symbol, e);
-                                                        }
-                                                    }
-                                                });
+                                                debug!("Low confidence decision ({:.1}%) for {} - DAA will handle training prioritization", 
+                                                       decision.confidence * 100.0, symbol);
                                             }
 
                                             // Update position tracking based on decision

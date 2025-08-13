@@ -35,6 +35,10 @@ pub mod migration_layer;
 // Phase 3: Real-time training extensions
 pub mod realtime_training;
 
+// Phase 4: Two-layer sector architecture
+pub mod sector_hierarchy_manager;
+pub mod training_coordinator;
+
 // Re-export vendor integration components
 pub use vendor_predictor::{VendorPredictor, VendorPredictorConfig};
 pub use memory_optimized_predictor::{
@@ -46,6 +50,14 @@ pub use memory_optimized_predictor::{
 pub use sector_aggregator::{
     SectorAggregator, SectorAggregatorConfig, SectorAggregation, 
     ETFCorrelation, BreadthConfig
+};
+pub use sector_hierarchy_manager::{
+    SectorHierarchyManager, SectorModel, SymbolSpecialization,
+    Prediction, TrainingPhase, TrainingStatus, TrainingResults
+};
+pub use training_coordinator::{
+    TrainingCoordinator, TrainingDataPipeline, SectorTrainer,
+    SpecializationTrainer, TimeWindow, SectorTrainingData, SpecializationTrainingData
 };
 
 // NOTE: predictor.rs module removed - using VendorPredictor directly as NeuralPredictor

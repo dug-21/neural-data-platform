@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 
 #[derive(Debug, Clone)]
 pub struct TimescaleDBStorage {
@@ -79,7 +79,7 @@ impl TimescaleDBStorage {
             .execute(&self.pool)
             .await?;
 
-        // Create time series data table
+        // Create time series data table (legacy format for compatibility)
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS time_series_data (
@@ -100,6 +100,37 @@ impl TimescaleDBStorage {
             r#"
             SELECT create_hypertable(
                 'time_series_data', 
+                'timestamp',
+                if_not_exists => TRUE
+            )
+        "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create market data tables if they don't exist
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS market_data_raw (
+                timestamp TIMESTAMPTZ NOT NULL,
+                symbol VARCHAR(50) NOT NULL,
+                open DOUBLE PRECISION NOT NULL,
+                high DOUBLE PRECISION NOT NULL,
+                low DOUBLE PRECISION NOT NULL,
+                close DOUBLE PRECISION NOT NULL,
+                volume DOUBLE PRECISION NOT NULL,
+                PRIMARY KEY (timestamp, symbol)
+            )
+        "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Convert to hypertable
+        sqlx::query(
+            r#"
+            SELECT create_hypertable(
+                'market_data_raw', 
                 'timestamp',
                 if_not_exists => TRUE
             )
@@ -215,25 +246,97 @@ impl TimescaleDBStorage {
     /// Query time series data by time range
     pub async fn query_range(
         &self,
-        entity: &str,
+        symbol: &str,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<Vec<TimeSeriesData>> {
-        let results = sqlx::query_as::<_, TimeSeriesData>(
+        // First try market_data_1h (hourly aggregated data)
+        let hourly_results = sqlx::query(
             r#"
-            SELECT timestamp, source, entity, value, metadata
-            FROM time_series_data
-            WHERE entity = $1 
-              AND timestamp >= $2 
-              AND timestamp <= $3
-            ORDER BY timestamp ASC
+            SELECT bucket as timestamp, symbol, open, high, low, close, volume::float8 as volume
+            FROM market_data_1h
+            WHERE symbol = $1 
+              AND bucket >= $2 
+              AND bucket <= $3
+            ORDER BY bucket ASC
         "#,
         )
-        .bind(entity)
+        .bind(symbol)
         .bind(start)
         .bind(end)
         .fetch_all(&self.pool)
         .await?;
+
+        let mut results = Vec::new();
+        for row in hourly_results {
+            let timestamp: DateTime<Utc> = row.get("timestamp");
+            let symbol: String = row.get("symbol");
+            let open: f64 = row.get("open");
+            let high: f64 = row.get("high");
+            let low: f64 = row.get("low");
+            let close: f64 = row.get("close");
+            let volume: f64 = row.get("volume");
+
+            results.push(TimeSeriesData {
+                timestamp,
+                source: "market_data_1h".to_string(),
+                entity: symbol,
+                value: close, // Use close price as the main value
+                metadata: Some(serde_json::json!({
+                    "open": open,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": volume
+                })),
+            });
+        }
+
+        // If no hourly data, try market_data_1m (minute data) as fallback
+        if results.is_empty() {
+            let minute_results = sqlx::query(
+                r#"
+                SELECT bucket as timestamp, symbol, open, high, low, close, volume::float8 as volume
+                FROM market_data_1m
+                WHERE symbol = $1 
+                  AND bucket >= $2 
+                  AND bucket <= $3
+                ORDER BY bucket ASC
+                LIMIT 1000
+            "#,
+            )
+            .bind(symbol)
+            .bind(start)
+            .bind(end)
+            .fetch_all(&self.pool)
+            .await;
+
+            if let Ok(minute_rows) = minute_results {
+                for row in minute_rows {
+                    let timestamp: DateTime<Utc> = row.get("timestamp");
+                    let symbol: String = row.get("symbol");
+                    let open: f64 = row.get("open");
+                    let high: f64 = row.get("high");
+                    let low: f64 = row.get("low");
+                    let close: f64 = row.get("close");
+                    let volume: f64 = row.get("volume");
+
+                    results.push(TimeSeriesData {
+                        timestamp,
+                        source: "market_data_1m".to_string(),
+                        entity: symbol,
+                        value: close,
+                        metadata: Some(serde_json::json!({
+                            "open": open,
+                            "high": high,
+                            "low": low,
+                            "close": close,
+                            "volume": volume
+                        })),
+                    });
+                }
+            }
+        }
 
         Ok(results)
     }
@@ -333,14 +436,67 @@ impl TimescaleDBStorage {
         Ok(result.rows_affected())
     }
 
-    /// Get aggregated statistics for an entity
+    /// Get aggregated statistics for a symbol
     pub async fn get_statistics(
         &self,
-        entity: &str,
+        symbol: &str,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
         interval: &str,
     ) -> Result<Vec<AggregatedStats>> {
+        // Try to get stats from market_data_1h first, fallback to time_series_data
+        let hourly_results = sqlx::query(
+            r#"
+            SELECT 
+                time_bucket($1::interval, bucket) as bucket,
+                symbol as entity,
+                AVG(close) as avg_value,
+                MIN(low) as min_value,
+                MAX(high) as max_value,
+                COUNT(*) as count,
+                STDDEV(close) as stddev
+            FROM market_data_1h
+            WHERE symbol = $2 
+              AND bucket >= $3 
+              AND bucket <= $4
+            GROUP BY time_bucket($1::interval, bucket), symbol
+            ORDER BY bucket ASC
+        "#,
+        )
+        .bind(interval)
+        .bind(symbol)
+        .bind(start)
+        .bind(end)
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Ok(rows) = hourly_results {
+            let mut results = Vec::new();
+            for row in rows {
+                let bucket: DateTime<Utc> = row.get("bucket");
+                let entity: String = row.get("entity");
+                let avg_value: Option<f64> = row.get("avg_value");
+                let min_value: Option<f64> = row.get("min_value");
+                let max_value: Option<f64> = row.get("max_value");
+                let count: i64 = row.get("count");
+                let stddev: Option<f64> = row.get("stddev");
+
+                results.push(AggregatedStats {
+                    bucket,
+                    entity,
+                    avg_value,
+                    min_value,
+                    max_value,
+                    count,
+                    stddev,
+                });
+            }
+            if !results.is_empty() {
+                return Ok(results);
+            }
+        }
+
+        // Fallback to time_series_data table
         let results = sqlx::query_as::<_, AggregatedStats>(
             r#"
             SELECT 
@@ -360,7 +516,7 @@ impl TimescaleDBStorage {
         "#,
         )
         .bind(interval)
-        .bind(entity)
+        .bind(symbol)
         .bind(start)
         .bind(end)
         .fetch_all(&self.pool)

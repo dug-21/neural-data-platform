@@ -626,6 +626,11 @@ impl DataConverter {
         self.normalization_cache.get(symbol)
     }
     
+    /// Set normalization stats for a symbol
+    pub fn set_normalization_stats(&mut self, symbol: &str, stats: NormalizationStats) {
+        self.normalization_cache.insert(symbol.to_string(), stats);
+    }
+    
     /// Clear normalization cache
     pub fn clear_cache(&mut self) {
         self.normalization_cache.clear();

@@ -16,15 +16,14 @@ use std::fs;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tokio::fs as async_fs;
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
-use super::errors::{AdapterError, HealthCheckResult, HealthMetrics};
+use super::errors::{HealthCheckResult, HealthMetrics};
 use super::HealthChecker;
-use crate::config::NeuralConfig;
 
 /// Rollback configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
