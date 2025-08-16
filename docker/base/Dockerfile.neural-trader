@@ -1,0 +1,173 @@
+# Multi-stage Dockerfile for Neural Trader Core Service
+# Optimized for production deployment with minimal image size
+
+# ============================================================================
+# Stage 1: Rust Build Environment
+# ============================================================================
+FROM rust:1.75-slim AS rust-builder
+
+# Install system dependencies required for building
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libpq-dev \
+    libclang-dev \
+    cmake \
+    build-essential \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /build
+
+# Copy dependency files first for better layer caching
+COPY Cargo.toml Cargo.lock ./
+COPY vendor/ vendor/
+COPY mcp-trading-server/ mcp-trading-server/
+
+# Create src directory with minimal main.rs for dependency compilation
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies first (cached layer)
+RUN cargo build --release --bin neural-trader
+RUN rm src/main.rs
+
+# Copy actual source code
+COPY src/ src/
+COPY benches/ benches/
+COPY examples/ examples/
+COPY tests/ tests/
+
+# Build the actual application
+RUN cargo build --release --bin neural-trader
+
+# Strip debug symbols for smaller binary
+RUN strip target/release/neural-trader
+
+# ============================================================================
+# Stage 2: Runtime Environment
+# ============================================================================
+FROM debian:12-slim AS runtime-base
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    libpq5 \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd -r neural-trader && useradd -r -g neural-trader neural-trader
+
+# Create necessary directories
+RUN mkdir -p /opt/neural-trader/{models,config,logs,data} \
+    && mkdir -p /var/log/neural-trader \
+    && chown -R neural-trader:neural-trader /opt/neural-trader /var/log/neural-trader
+
+# ============================================================================
+# Stage 3: Production Image
+# ============================================================================
+FROM runtime-base AS production
+
+# Copy the binary from builder stage
+COPY --from=rust-builder /build/target/release/neural-trader /usr/local/bin/neural-trader
+
+# Copy configuration files
+COPY neural-trader-config/ /opt/neural-trader/config/
+COPY docker/base/scripts/neural-trader-entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# Set permissions
+RUN chmod +x /usr/local/bin/neural-trader /usr/local/bin/entrypoint.sh \
+    && chown neural-trader:neural-trader /usr/local/bin/neural-trader
+
+# Switch to non-root user
+USER neural-trader
+
+# Set working directory
+WORKDIR /opt/neural-trader
+
+# Environment variables
+ENV RUST_LOG=info \
+    RUST_BACKTRACE=1 \
+    CONFIG_PATH=/opt/neural-trader/config \
+    LOG_PATH=/var/log/neural-trader
+
+# Expose ports
+EXPOSE 8080 9092
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:9092/health || exit 1
+
+# Volume mounts
+VOLUME ["/opt/neural-trader/models", "/opt/neural-trader/data", "/var/log/neural-trader"]
+
+# Entry point
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["neural-trader"]
+
+# ============================================================================
+# Stage 4: Development Image
+# ============================================================================
+FROM rust-builder AS development
+
+# Install development tools
+RUN cargo install cargo-watch sccache
+
+# Install additional debugging tools
+RUN apt-get update && apt-get install -y \
+    gdb \
+    valgrind \
+    strace \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up sccache for faster builds
+ENV RUSTC_WRAPPER=sccache
+ENV SCCACHE_DIR=/sccache
+
+# Create development user
+RUN groupadd -r developer && useradd -r -g developer developer
+RUN mkdir -p /sccache && chown developer:developer /sccache
+
+# Development volumes
+VOLUME ["/build/src", "/build/target", "/sccache"]
+
+# Switch to development user
+USER developer
+
+WORKDIR /build
+
+# Development entry point with hot reload
+ENTRYPOINT ["cargo", "watch", "-x", "run"]
+
+# ============================================================================
+# Stage 5: Test Image
+# ============================================================================
+FROM rust-builder AS test
+
+# Install test dependencies
+RUN cargo install cargo-tarpaulin cargo-audit
+
+# Install additional test tools
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    redis-tools \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy test files
+COPY tests/ tests/
+COPY benches/ benches/
+
+# Set test environment
+ENV RUST_TEST_THREADS=1
+ENV DATABASE_URL=postgresql://test:test@timescaledb-test:5432/test_db
+ENV REDIS_URL=redis://redis-test:6379/1
+
+# Test entry point
+ENTRYPOINT ["cargo"]
+CMD ["test", "--all-features"]
