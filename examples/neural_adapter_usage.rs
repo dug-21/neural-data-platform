@@ -1,11 +1,11 @@
 //! Example usage of the neural adapter infrastructure
 
 use chrono::Utc;
-use neural_trader::adapters::neural::{
+use autonomous_platform::adapters::neural::{
     ConversionFormat, DataConverter, NeuralModelConfig, NeuroDivergentAdapter,
 };
-use neural_trader::adapters::DataAdapter;
-use neural_trader::data::TimeSeriesData;
+use autonomous_platform::adapters::DataAdapter;
+use autonomous_platform::data::TimeSeriesData;
 use std::collections::HashMap;
 
 #[tokio::main]

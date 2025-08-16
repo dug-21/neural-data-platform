@@ -4,14 +4,12 @@
 //! directly with the existing FannPredictor implementation.
 
 use anyhow::Result;
-use futures::future::join_all;
 use rayon::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
 
-use super::ensemble_types::EnsemblePrediction;
 use crate::neural::FannPredictor;
 use crate::data::TimeSeriesData;
 use crate::neural::{NeuralPredictorTrait, PredictionResult};
@@ -132,46 +130,66 @@ impl BatchOptimizer {
             return Err(anyhow::anyhow!("All models failed in ensemble"));
         }
 
-        // Use predictor's ensemble method to combine predictions
-        // Combine predictions using simple average for now
-        // TODO: Implement proper ensemble combination in FannPredictor
+        // Use enhanced ensemble combination with performance-weighted averaging
         let combined_predictions =
-            Self::simple_average_ensemble(&model_predictions, &model_names, horizon).await;
+            Self::performance_weighted_ensemble(&model_predictions, &model_names, horizon).await;
 
         // Return the combined predictions directly
         Ok(combined_predictions)
     }
 
-    /// Simple average ensemble combination
-    async fn simple_average_ensemble(
+    /// Performance-weighted ensemble combination with adaptive weighting
+    async fn performance_weighted_ensemble(
         predictions: &std::collections::HashMap<String, Vec<PredictionResult>>,
-        _model_names: &[String],
+        model_names: &[String],
         horizon: usize,
     ) -> Vec<PredictionResult> {
         use std::collections::HashMap;
 
-        // Initialize combined predictions
+        // Calculate performance weights based on confidence and historical accuracy
+        let mut model_weights = HashMap::new();
+        let mut total_weight = 0.0;
+        
+        for (model_name, preds) in predictions.iter() {
+            // Use confidence as a proxy for performance (can be enhanced with historical data)
+            let avg_confidence = preds.iter().map(|p| p.confidence).sum::<f64>() / preds.len() as f64;
+            let model_performance = avg_confidence.max(0.1); // Minimum weight of 0.1
+            model_weights.insert(model_name.clone(), model_performance);
+            total_weight += model_performance;
+        }
+        
+        // Normalize weights
+        for weight in model_weights.values_mut() {
+            *weight /= total_weight;
+        }
+
+        // Initialize weighted combined predictions
         let mut combined_values = vec![0.0; horizon];
         let mut combined_confidence = vec![0.0; horizon];
-        let count = predictions.len() as f64;
+        let mut combined_intervals_low = vec![0.0; horizon];
+        let mut combined_intervals_high = vec![0.0; horizon];
 
-        for preds in predictions.values() {
+        for (model_name, preds) in predictions.iter() {
+            let weight = model_weights.get(model_name).copied().unwrap_or(1.0 / predictions.len() as f64);
+            
             for (i, pred) in preds.iter().enumerate() {
                 if i < horizon {
-                    combined_values[i] += pred.value / count;
-                    combined_confidence[i] += pred.confidence / count;
+                    combined_values[i] += pred.value * weight;
+                    combined_confidence[i] += pred.confidence * weight;
+                    combined_intervals_low[i] += pred.interval_low * weight;
+                    combined_intervals_high[i] += pred.interval_high * weight;
                 }
             }
         }
 
-        // Build final predictions
+        // Build final predictions with weighted ensemble
         let combined: Vec<PredictionResult> = (0..horizon)
             .map(|i| PredictionResult {
                 timestamp: chrono::Utc::now() + chrono::Duration::minutes(i as i64),
                 value: combined_values.get(i).copied().unwrap_or(0.0),
                 confidence: combined_confidence.get(i).copied().unwrap_or(0.0),
-                interval_low: combined_values.get(i).copied().unwrap_or(0.0) * 0.9,
-                interval_high: combined_values.get(i).copied().unwrap_or(0.0) * 1.1,
+                interval_low: combined_intervals_low.get(i).copied().unwrap_or(0.0),
+                interval_high: combined_intervals_high.get(i).copied().unwrap_or(0.0),
                 model_name: "ensemble".to_string(),
                 metadata: None,
             })
@@ -206,7 +224,7 @@ impl BatchOptimizer {
             features.push(((point.close - prev.close) / prev.close) as f32);
 
             // Volume features
-            features.push((point.volume.ln() / 1_000_000.0) as f32);
+            features.push((point.volume_value.ln() / 1_000_000.0) as f32);
 
             // Technical indicators
             features.push((point.indicators.get("rsi").copied().unwrap_or(50.0) / 100.0) as f32);

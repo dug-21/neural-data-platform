@@ -33,10 +33,11 @@ impl Default for RedisConfig {
 }
 
 /// Redis adapter for real-time data
+#[derive(Clone)]  
 pub struct RedisAdapter {
     config: RedisConfig,
-    client: Option<Client>,
-    connection: Option<ConnectionManager>,
+    client: Option<Arc<Client>>,
+    connection: Option<Arc<RwLock<ConnectionManager>>>,
 }
 
 impl RedisAdapter {
@@ -55,11 +56,11 @@ impl RedisAdapter {
         channel: &str,
         data: &MarketData,
     ) -> Result<(), AdapterError> {
-        let mut conn = self
+        let connection = self
             .connection
             .as_ref()
-            .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?
-            .clone();
+            .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
+        let mut conn = connection.write().await.clone();
 
         let json =
             serde_json::to_string(data).map_err(|e| AdapterError::Serialization(e.to_string()))?;
@@ -79,8 +80,8 @@ impl RedisAdapter {
         let client = self
             .client
             .as_ref()
-            .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?
-            .clone();
+            .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
+        let client = client.as_ref().clone();
 
         let pubsub_conn = client
             .get_async_connection()
@@ -116,7 +117,7 @@ impl RedisAdapter {
             ));
         }
 
-        let conn = self
+        let connection = self
             .connection
             .as_ref()
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
@@ -125,7 +126,7 @@ impl RedisAdapter {
         let json = serde_json::to_string(order_book)
             .map_err(|e| AdapterError::Serialization(e.to_string()))?;
 
-        let mut conn = conn.clone();
+        let mut conn = connection.write().await.clone();
         conn.set_ex::<_, _, ()>(&key, json, 60) // Expire after 60 seconds
             .await
             .map_err(|e| AdapterError::Query(e.to_string()))?;
@@ -135,13 +136,13 @@ impl RedisAdapter {
 
     /// Get cached order book
     pub async fn get_order_book(&self, symbol: &str) -> Result<Option<OrderBook>, AdapterError> {
-        let conn = self
+        let connection = self
             .connection
             .as_ref()
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
         let key = format!("orderbook:{}", symbol);
-        let mut conn = conn.clone();
+        let mut conn = connection.write().await.clone();
 
         let result: Option<String> = conn
             .get(&key)
@@ -165,7 +166,7 @@ impl RedisAdapter {
         price: f64,
         timestamp: i64,
     ) -> Result<(), AdapterError> {
-        let conn = self
+        let connection = self
             .connection
             .as_ref()
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
@@ -173,7 +174,7 @@ impl RedisAdapter {
         let key = format!("price:latest:{}", symbol);
         let value = format!("{}:{}", price, timestamp);
 
-        let mut conn = conn.clone();
+        let mut conn = connection.write().await.clone();
         conn.set::<_, _, ()>(&key, value)
             .await
             .map_err(|e| AdapterError::Query(e.to_string()))?;
@@ -183,13 +184,13 @@ impl RedisAdapter {
 
     /// Get latest price for a symbol
     pub async fn get_latest_price(&self, symbol: &str) -> Result<Option<(f64, i64)>, AdapterError> {
-        let conn = self
+        let connection = self
             .connection
             .as_ref()
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
         let key = format!("price:latest:{}", symbol);
-        let mut conn = conn.clone();
+        let mut conn = connection.read().await.clone();
 
         let result: Option<String> = conn
             .get(&key)
@@ -223,12 +224,12 @@ impl RedisAdapter {
         stream_key: &str,
         data: &MarketData,
     ) -> Result<String, AdapterError> {
-        let conn = self
+        let connection = self
             .connection
             .as_ref()
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
-        let mut conn = conn.clone();
+        let mut conn = connection.write().await.clone();
 
         // Create stream entry fields with owned strings
         let timestamp_str = data.timestamp.to_string();
@@ -264,12 +265,12 @@ impl RedisAdapter {
         start_id: &str,
         count: usize,
     ) -> Result<Vec<MarketData>, AdapterError> {
-        let conn = self
+        let connection = self
             .connection
             .as_ref()
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
-        let mut conn = conn.clone();
+        let mut conn = connection.write().await.clone();
 
         // Read from stream
         let reply: StreamRangeReply = conn
@@ -344,12 +345,12 @@ impl RedisAdapter {
         stream_key: &str,
         group_name: &str,
     ) -> Result<(), AdapterError> {
-        let conn = self
+        let connection = self
             .connection
             .as_ref()
             .ok_or_else(|| AdapterError::Connection("Not connected".to_string()))?;
 
-        let mut conn = conn.clone();
+        let mut conn = connection.write().await.clone();
 
         // Create consumer group starting from beginning of stream
         let _: Result<(), _> = conn
@@ -382,8 +383,8 @@ impl DataAdapter for RedisAdapter {
             .await
             .map_err(|e| AdapterError::Connection(e.to_string()))?;
 
-        self.client = Some(client);
-        self.connection = Some(connection);
+        self.client = Some(Arc::new(client));
+        self.connection = Some(Arc::new(RwLock::new(connection)));
 
         Ok(())
     }

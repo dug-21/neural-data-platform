@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use super::alerts::AlertManager;
 use super::config::{HealthStatus, PerformanceMetrics, SystemHealth};
-use super::metrics::MetricsCollector;
 
 /// Health monitor interface for dashboard
 pub trait HealthMonitorInterface {
@@ -257,17 +256,16 @@ impl HealthReporter {
     /// Generate a CSV report of component health
     pub fn generate_csv_report(health: &SystemHealth) -> String {
         let mut csv = String::new();
-        csv.push_str("Component,Status,Last Check,Response Time (ms),Error Message,Uptime (s)\n");
+        csv.push_str("Component,Status,Last Check,Response Time (ms),Error Message\n");
         
         for (component_type, component_health) in &health.components {
             csv.push_str(&format!(
-                "{:?},{},{},{},{},{}\n",
+                "{:?},{},{},{},{}\n",
                 component_type,
                 component_health.status,
                 component_health.last_check,
                 component_health.response_time_ms.unwrap_or(0),
-                component_health.error_message.as_deref().unwrap_or(""),
-                component_health.uptime.as_secs()
+                component_health.error_message.as_deref().unwrap_or("")
             ));
         }
         

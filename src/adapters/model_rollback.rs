@@ -16,15 +16,14 @@ use std::fs;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tokio::fs as async_fs;
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
-use super::errors::{AdapterError, HealthCheckResult, HealthMetrics};
-use super::health_monitor::{HealthChecker, HealthStatus};
-use crate::config::NeuralConfig;
+use super::errors::{HealthCheckResult, HealthMetrics};
+use super::HealthChecker;
 
 /// Rollback configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,7 +53,7 @@ pub struct RollbackConfig {
 impl Default for RollbackConfig {
     fn default() -> Self {
         Self {
-            model_base_dir: PathBuf::from("/opt/neural-trader/models"),
+            model_base_dir: PathBuf::from("/opt/neural-trader/sector-models"),
             max_versions: 5,
             degradation_threshold: 10.0, // 10% performance drop triggers rollback
             evaluation_period: 300,       // 5 minutes
@@ -1081,7 +1080,7 @@ mod tests {
         let model_path_v2 = _temp_dir.path().join("model_v2.bin");
         create_test_model(&model_path_v2).await.unwrap();
         
-        let v2 = manager.deploy_model(
+        let _v2 = manager.deploy_model(
             "test_model",
             &model_path_v2,
             serde_json::json!({"version": 2}),

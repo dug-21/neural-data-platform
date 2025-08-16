@@ -4,14 +4,17 @@
 //! and training window calculations across different exchanges.
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc, Weekday};
-use neural_trader::utils::market_hours::{
+use autonomous_platform::utils::market_hours::{
     Exchange, MarketHours, MarketIntensity, MarketSession, TrainingWindow,
+    holidays::{Holiday, HolidayType},
 };
 use std::collections::HashMap;
 
 /// Helper to create a specific UTC datetime
 fn create_datetime(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(year, month, day, hour, minute, 0).unwrap()
+    Utc.with_ymd_and_hms(year, month, day, hour, minute, 0)
+        .single()
+        .expect("Invalid date/time")
 }
 
 /// Helper to create a datetime for a specific weekday and time
@@ -23,7 +26,9 @@ fn create_weekday_datetime(weekday: Weekday, hour: u32, minute: u32) -> DateTime
         date = date.succ_opt().unwrap();
     }
     
-    Utc.from_utc_datetime(&date.and_hms_opt(hour, minute, 0).unwrap())
+    date.and_hms_opt(hour, minute, 0)
+        .unwrap()
+        .and_utc()
 }
 
 #[tokio::test]
@@ -35,8 +40,8 @@ async fn test_market_hours_initialization() {
         Exchange::NYSE,
         Exchange::NASDAQ,
         Exchange::LSE,
-        Exchange::TOKYO,
-        Exchange::SHANGHAI,
+        Exchange::TSE,
+        Exchange::SSE,
     ];
     
     for exchange in exchanges {
@@ -169,15 +174,42 @@ async fn test_holiday_handling() {
     let market_hours = MarketHours::new();
     
     // Add some test holidays
-    let christmas = create_datetime(2024, 12, 25, 12, 0);
-    let new_year = create_datetime(2024, 1, 1, 12, 0);
-    let july_4th = create_datetime(2024, 7, 4, 12, 0);
-    
-    let holidays = vec![christmas, new_year, july_4th];
+    let holidays = vec![
+        Holiday {
+            date: NaiveDate::from_ymd_opt(2024, 12, 25).unwrap(),
+            name: "Christmas Day".to_string(),
+            holiday_type: HolidayType::NationalHoliday,
+            affects_trading: true,
+            early_close_time: None,
+            late_open_time: None,
+            description: Some("Christmas holiday closure".to_string()),
+        },
+        Holiday {
+            date: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            name: "New Year's Day".to_string(),
+            holiday_type: HolidayType::NationalHoliday,
+            affects_trading: true,
+            early_close_time: None,
+            late_open_time: None,
+            description: Some("New Year holiday closure".to_string()),
+        },
+        Holiday {
+            date: NaiveDate::from_ymd_opt(2024, 7, 4).unwrap(),
+            name: "Independence Day".to_string(),
+            holiday_type: HolidayType::NationalHoliday,
+            affects_trading: true,
+            early_close_time: None,
+            late_open_time: None,
+            description: Some("Fourth of July holiday closure".to_string()),
+        },
+    ];
     market_hours.update_holidays(Exchange::NYSE, holidays.clone()).await;
     market_hours.update_holidays(Exchange::NASDAQ, holidays).await;
     
     // Test that exchanges are closed on holidays
+    let christmas = create_datetime(2024, 12, 25, 12, 0);
+    let new_year = create_datetime(2024, 1, 1, 12, 0);
+    
     assert!(!market_hours.is_exchange_open(Exchange::NYSE, christmas).await);
     assert_eq!(
         market_hours.get_session(Exchange::NYSE, christmas).await,
@@ -287,7 +319,7 @@ async fn test_multiple_exchange_sessions() {
     // Test a time when Asian markets are open but US markets are closed
     let asia_morning = create_datetime(2024, 1, 15, 2, 0); // 2 AM UTC = 11 AM Tokyo
     
-    let tokyo_session = market_hours.get_session(Exchange::TOKYO, asia_morning).await;
+    let tokyo_session = market_hours.get_session(Exchange::TSE, asia_morning).await;
     let nyse_session = market_hours.get_session(Exchange::NYSE, asia_morning).await;
     
     // NYSE should be closed

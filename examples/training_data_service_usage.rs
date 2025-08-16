@@ -3,15 +3,15 @@
 //! This example demonstrates how to use the TrainingDataService to prepare
 //! training data for different neural network model types.
 
-use neural_trader::config::{DataConfig, RedisConfig};
-use neural_trader::data::{RedisCache, TimescaleDBStorage};
-use neural_trader::integration::{ModelType, TrainingDataConfig, TrainingDataService};
+use autonomous_platform::config::{RedisConfig};
+use autonomous_platform::data::{RedisCache, TimescaleDBStorage};
+use autonomous_platform::integration::{TrainingDataConfig, TrainingDataService};
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
-    tracing_subscriber::init();
+    tracing_subscriber::fmt::init();
 
     println!("🧠 TrainingDataService Usage Example");
     println!("=====================================");
@@ -157,7 +157,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Create sample data for validation
     use chrono::{Duration, Utc};
-    use neural_trader::data::TimeSeriesData;
+    use autonomous_platform::data::TimeSeriesData;
     use std::collections::HashMap;
 
     let mut test_data = Vec::new();

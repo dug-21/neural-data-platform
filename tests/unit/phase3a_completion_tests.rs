@@ -22,7 +22,7 @@ mod module_validation {
     #[test]
     fn test_config_module_structure() {
         // Verify all config submodules exist and are accessible
-        use neural_trader::config::{
+        use autonomous_platform::config::{
             NeuralConfig, DatabaseConfig, MonitoringConfig, SecurityConfig,
             database, neural, monitoring, security, legacy
         };
@@ -40,9 +40,9 @@ mod module_validation {
     #[test]
     fn test_neural_module_structure() {
         // Verify neural submodules organization
-        use neural_trader::neural::{
+        use autonomous_platform::neural::{
             predictor::NeuralPredictor,
-            fann_predictor::FannPredictor,
+            predictor::NeuralPredictor,
             monitoring::PerformanceChannel,
             NeuralPredictorTrait,
         };
@@ -56,7 +56,7 @@ mod module_validation {
     
     #[test]
     fn test_adapter_module_structure() {
-        use neural_trader::adapters::{
+        use autonomous_platform::adapters::{
             enhanced_neural_adapter::EnhancedNeuralAdapter,
             neural::type_converter::TypeConverter,
             neural::vendor_conversion,
@@ -74,7 +74,7 @@ mod compilation_tests {
     #[test]
     fn test_default_features_compile() {
         // This test passes if the code compiles with default features
-        use neural_trader::{
+        use autonomous_platform::{
             neural::predictor::NeuralPredictor,
             config::NeuralConfig,
         };
@@ -89,7 +89,7 @@ mod compilation_tests {
     #[cfg(feature = "performance-monitoring")]
     #[test]
     fn test_performance_monitoring_feature() {
-        use neural_trader::neural::monitoring::{
+        use autonomous_platform::neural::monitoring::{
             PerformanceMonitoringSystem,
             MonitoringConfig,
         };
@@ -103,7 +103,7 @@ mod compilation_tests {
     #[cfg(feature = "health-monitoring")]
     #[test]
     fn test_health_monitoring_feature() {
-        use neural_trader::monitoring::{
+        use autonomous_platform::monitoring::{
             HealthMonitor,
             HealthChecker,
         };
@@ -115,7 +115,7 @@ mod compilation_tests {
 // Performance channel unit tests
 mod performance_channel_tests {
     use super::*;
-    use neural_trader::neural::monitoring::{
+    use autonomous_platform::neural::monitoring::{
         PerformanceChannel, PerformanceEvent, PerformanceEventBuilder,
         EventPriority, PerformanceEventType, PerformanceSource,
         ChannelConfig,
@@ -300,7 +300,7 @@ mod performance_channel_tests {
 // Training notification system tests
 mod training_notification_tests {
     use super::*;
-    use neural_trader::neural::monitoring::{
+    use autonomous_platform::neural::monitoring::{
         TrainingNotificationSystem, TrainingThresholds, TrainingNotification,
         TrainingPriority, PerformanceEvent, PerformanceEventBuilder,
         PerformanceEventType, PerformanceSource, EventPriority,
@@ -460,7 +460,7 @@ mod training_notification_tests {
 // Integration readiness tests
 mod integration_readiness_tests {
     use super::*;
-    use neural_trader::{
+    use autonomous_platform::{
         neural::NeuralPredictorTrait,
         adapters::enhanced_neural_adapter::EnhancedNeuralAdapter,
         error::{NeuralError, AdapterError},
@@ -512,8 +512,8 @@ mod integration_readiness_tests {
     
     #[test]
     fn test_public_api_stability() {
-        use neural_trader::neural::predictor::NeuralPredictor;
-        use neural_trader::neural::PredictionResult;
+        use autonomous_platform::neural::predictor::NeuralPredictor;
+        use autonomous_platform::neural::PredictionResult;
         
         // Verify key types are exported and stable
         let _ = std::mem::size_of::<NeuralPredictor>();

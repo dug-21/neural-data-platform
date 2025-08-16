@@ -8,10 +8,10 @@ use chrono::Utc;
 use std::collections::HashMap;
 
 // Import neural-trader types
-use neural_trader::adapters::neural::{
+use autonomous_platform::adapters::neural::{
     BatchConverter, SafeF32Convert, StreamingConverter, VendorDataConverter, VendorFormatConverter,
 };
-use neural_trader::data::TimeSeriesData;
+use autonomous_platform::data::TimeSeriesData;
 
 fn main() -> Result<()> {
     println!("🔄 Neural Trader Data Conversion Example");

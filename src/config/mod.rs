@@ -14,12 +14,14 @@ pub mod neural;
 pub mod database;
 pub mod monitoring;
 pub mod security;
+pub mod sector_models;
 
 // Re-export main configuration types
 pub use neural::{NeuralConfig, TrainingConfig, EnsembleConfig};
 pub use database::{DatabaseConfig, RedisConfig, BackupConfig};
 pub use monitoring::{MonitoringConfig, ObservabilityConfig, LoggingConfig, AlertsConfig, PerformanceConfig};
 pub use security::{SecurityConfig, CircuitBreakerConfig, GracefulShutdownConfig, AuthConfig, EncryptionConfig};
+pub use sector_models::{SectorModelsConfig, SectorConfig, ModelConfig, PerformanceThresholds, DAACoordinationConfig, SectorModelDefinition};
 
 // Re-export types defined in this module
 // Structs are already defined as pub in this module, no need for use statement
@@ -70,6 +72,8 @@ pub struct ModularPlatformConfig {
     pub training: TrainingConfig,
     #[serde(default)]
     pub ensemble: EnsembleConfig,
+    #[serde(default)]
+    pub sector_models: SectorModelsConfig,
 }
 
 /// Platform metadata
@@ -161,6 +165,7 @@ impl Default for ModularPlatformConfig {
             encryption: EncryptionConfig::default(),
             training: TrainingConfig::default(),
             ensemble: EnsembleConfig::default(),
+            sector_models: SectorModelsConfig::default(),
         }
     }
 }
@@ -267,17 +272,26 @@ pub const DEFAULT_CONFIG_PATH: &str = "config/platform.toml";
 
 /// Load default configuration using modular system
 pub fn load_default_config() -> Result<PlatformConfig> {
-    PlatformConfig::load_from_file(DEFAULT_CONFIG_PATH)
+    // Check environment variable first, fallback to default path
+    let config_path = std::env::var("PLATFORM_CONFIG_PATH")
+        .unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_string());
+    PlatformConfig::load_from_file(&config_path)
 }
 
 /// Load production configuration
 pub fn load_production_config() -> Result<PlatformConfig> {
-    PlatformConfig::load_from_file("config/production.toml")
+    // Check environment variable first, fallback to default path
+    let config_path = std::env::var("PLATFORM_CONFIG_PATH")
+        .unwrap_or_else(|_| "config/production.toml".to_string());
+    PlatformConfig::load_from_file(&config_path)
 }
 
 /// Load development configuration  
 pub fn load_development_config() -> Result<PlatformConfig> {
-    PlatformConfig::load_from_file("config/development.toml")
+    // Check environment variable first, fallback to default path
+    let config_path = std::env::var("PLATFORM_CONFIG_PATH")
+        .unwrap_or_else(|_| "config/development.toml".to_string());
+    PlatformConfig::load_from_file(&config_path)
 }
 
 /// Get configuration based on environment

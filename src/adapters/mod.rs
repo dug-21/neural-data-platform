@@ -19,6 +19,8 @@ pub mod neural;
 // Use enhanced_neural_adapter with FANN predictor instead
 
 pub mod redis;
+pub mod redis_sector_channels;
+pub mod redis_integration;
 pub mod timescale;
 pub mod vendor_bridge;
 
@@ -52,6 +54,8 @@ pub use model_storage::{
     PerformanceMetrics, PersistableModel, SemanticVersion, StorageMetrics, TrainingParams,
     VersionIncrement,
 };
+
+// Market data types are defined below and automatically public
 
 /// Metadata for adapter configuration and runtime information
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -4,17 +4,17 @@
 //! DAA decision making, and resource management across different market conditions.
 
 use chrono::{DateTime, Duration, TimeZone, Utc, Weekday};
-use neural_trader::daa::autonomous_training::{
+use autonomous_platform::daa::autonomous_training::{
     AutonomousTrainingAgent, ResourceRequirements, TrainingDecision, TrainingDecisionType,
     TrainingPriority,
 };
-use neural_trader::daa::training_scheduler::{
+use autonomous_platform::daa::training_scheduler::{
     DAASchedulerConfig, DAATrainingScheduler, JobStatus,
 };
-use neural_trader::data::{RedisCache, TimescaleDBStorage};
-use neural_trader::integration::data_access::DataAccessLayer;
-use neural_trader::streaming::event_bus::{EventBusIntegration, SystemEvent};
-use neural_trader::utils::market_hours::{Exchange, MarketHours, TrainingWindow};
+use autonomous_platform::data::{RedisCache, TimescaleDBStorage};
+use autonomous_platform::integration::data_access::DataAccessLayer;
+use autonomous_platform::streaming::event_bus::{EventBusIntegration, SystemEvent};
+use autonomous_platform::utils::market_hours::{Exchange, MarketHours, TrainingWindow, holidays::{Holiday, HolidayType}};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -103,21 +103,54 @@ impl TestEnvironment {
             decision_id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
             decision_type,
-            priority,
-            confidence_score: 0.85,
-            resource_requirements: ResourceRequirements {
-                cpu_cores: 4,
+            confidence: 0.85,
+            reasoning: vec!["market-aware test reasoning".to_string()],
+            reasons: vec!["market-aware test reason".to_string()],
+            priority: Some(priority),
+            priority_numeric: Some(128), // Medium priority as numeric
+            performance_snapshot: autonomous_platform::daa::autonomous_training::PerformanceSnapshot {
+                timestamp: Utc::now(),
+                accuracy: 0.8,
+                latency_ms: 100,
+                error_rate: 0.05,
+                recent_predictions: 100,
+                confidence: 0.85,
+                price_error: 0.05,
+                sharpe_ratio: 1.2,
+                max_drawdown: 0.05,
+                volatility: 0.02,
+                model_agreement: 0.9,
+                consecutive_failures: 0,
+                trading_volume: vec![1000000.0],
+                profit_loss: 0.05,
+                event_count: 1,
+                window_duration: chrono::Duration::minutes(5),
+                symbol: "BTCUSD".to_string(),
+                trading_performance: None,
+                accuracy_metrics: None,
+                data_type_metrics: None,
+                cpu_usage: 0.0,
+                memory_usage: 0.0,
+                active_connections: 0,
+                requests_per_second: 0.0,
+                average_response_time: 0.0,
+                cache_hit_rate: 0.0,
+            },
+            resource_requirements: autonomous_platform::daa::autonomous_training::ResourceRequirements {
                 memory_gb: 16.0,
-                gpu_required: true,
-                estimated_time_minutes: 30,
-                network_bandwidth_mbps: 100.0,
+                cpu_cores: 4,
+                gpu_memory_gb: Some(8.0),
                 storage_gb: 50.0,
+                gpu_required: true,
+                network_bandwidth_mbps: 100.0,
             },
             estimated_duration: Duration::minutes(30),
-            market_impact_assessment: "Low".to_string(),
-            performance_delta_threshold: 0.05,
             affected_models: vec!["model1".to_string(), "model2".to_string()],
-            training_data_requirements: HashMap::new(),
+            // MCP compatibility fields
+            triggered_by: Some("market-aware-test".to_string()),
+            estimated_training_time_minutes: Some(30),
+            target_symbols: vec!["BTCUSD".to_string(), "ETHUSD".to_string()],
+            training_parameters: None,
         }
     }
 
@@ -137,7 +170,9 @@ async fn test_market_aware_scheduling_during_weekend() {
     let env = TestEnvironment::new().await;
 
     // Simulate weekend time
-    let weekend = Utc.with_ymd_and_hms(2024, 1, 6, 12, 0, 0).unwrap(); // Saturday
+    let weekend = Utc.with_ymd_and_hms(2024, 1, 6, 12, 0, 0)
+        .single()
+        .expect("Invalid date/time"); // Saturday
 
     // Verify it's optimal training time
     let window = env.market_hours.get_training_window(weekend).await;
@@ -185,7 +220,9 @@ async fn test_market_aware_scheduling_during_trading_hours() {
     let env = TestEnvironment::new().await;
 
     // Simulate active trading hours (Wednesday 2 PM UTC ~ 9 AM ET)
-    let trading_hours = Utc.with_ymd_and_hms(2024, 1, 10, 14, 0, 0).unwrap();
+    let trading_hours = Utc.with_ymd_and_hms(2024, 1, 10, 14, 0, 0)
+        .single()
+        .expect("Invalid date/time");
 
     // Check market intensity
     let intensity = env.market_hours.get_market_intensity(trading_hours).await;
@@ -384,8 +421,24 @@ async fn test_holiday_scheduling() {
 
     // Add holidays to market hours
     let holidays = vec![
-        Utc.with_ymd_and_hms(2024, 12, 25, 0, 0, 0).unwrap(), // Christmas
-        Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),   // New Year
+        Holiday {
+            date: chrono::NaiveDate::from_ymd_opt(2024, 12, 25).unwrap(),
+            name: "Christmas Day".to_string(),
+            holiday_type: HolidayType::NationalHoliday,
+            affects_trading: true,
+            early_close_time: None,
+            late_open_time: None,
+            description: Some("Christmas holiday closure".to_string()),
+        },
+        Holiday {
+            date: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            name: "New Year's Day".to_string(),
+            holiday_type: HolidayType::NationalHoliday,
+            affects_trading: true,
+            early_close_time: None,
+            late_open_time: None,
+            description: Some("New Year holiday closure".to_string()),
+        },
     ];
 
     env.market_hours
@@ -396,7 +449,9 @@ async fn test_holiday_scheduling() {
         .await;
 
     // Test scheduling on Christmas (should be optimal)
-    let christmas = Utc.with_ymd_and_hms(2024, 12, 25, 12, 0, 0).unwrap();
+    let christmas = Utc.with_ymd_and_hms(2024, 12, 25, 12, 0, 0)
+        .single()
+        .expect("Invalid date/time");
     let window = env.market_hours.get_training_window(christmas).await;
     assert_eq!(window, TrainingWindow::Optimal);
 
@@ -423,13 +478,21 @@ async fn test_global_market_coordination() {
     // Test scheduling across different global market times
     let test_times = vec![
         // Asia morning (Tokyo open, US closed)
-        Utc.with_ymd_and_hms(2024, 1, 15, 1, 0, 0).unwrap(),
+        Utc.with_ymd_and_hms(2024, 1, 15, 1, 0, 0)
+            .single()
+            .expect("Invalid date/time"),
         // Europe morning (London open, Asia closing)
-        Utc.with_ymd_and_hms(2024, 1, 15, 8, 0, 0).unwrap(),
+        Utc.with_ymd_and_hms(2024, 1, 15, 8, 0, 0)
+            .single()
+            .expect("Invalid date/time"),
         // US morning (NYSE open, Europe active)
-        Utc.with_ymd_and_hms(2024, 1, 15, 14, 30, 0).unwrap(),
+        Utc.with_ymd_and_hms(2024, 1, 15, 14, 30, 0)
+            .single()
+            .expect("Invalid date/time"),
         // US afternoon (US closing, Asia closed)
-        Utc.with_ymd_and_hms(2024, 1, 15, 21, 0, 0).unwrap(),
+        Utc.with_ymd_and_hms(2024, 1, 15, 21, 0, 0)
+            .single()
+            .expect("Invalid date/time"),
     ];
 
     for test_time in test_times {

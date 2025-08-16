@@ -373,7 +373,8 @@ impl StreamingConnector {
             high: message.high_24h.unwrap_or(message.price * 1.001),
             low: message.low_24h.unwrap_or(message.price * 0.999),
             close: message.price,
-            volume: message.volume,
+            volume: vec![message.volume],
+            volume_value: message.volume,
             indicators,
             source: Some(message.source.clone()),
             entity: Some(message.symbol.clone()),
@@ -383,6 +384,22 @@ impl StreamingConnector {
                 "ask": message.ask,
                 "source": message.source
             })),
+            // Required fields for vendor model integration
+            values: vec![message.price],
+            intervals: vec![],
+            timestamps: vec![message.timestamp],
+            metadata_map: {
+                let mut map = HashMap::new();
+                map.insert("symbol".to_string(), serde_json::json!(message.symbol));
+                map.insert("source".to_string(), serde_json::json!(message.source));
+                if let Some(bid) = message.bid {
+                    map.insert("bid".to_string(), serde_json::json!(bid));
+                }
+                if let Some(ask) = message.ask {
+                    map.insert("ask".to_string(), serde_json::json!(ask));
+                }
+                map
+            },
         })
     }
 
@@ -490,6 +507,13 @@ mod tests {
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,
             enable_adaptive_retry: true,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
             enable_model_ensembles: false,
             model_timeout_seconds: 60,
             max_retries: 3,
@@ -509,7 +533,7 @@ mod tests {
             symbol: "BTCUSD".to_string(),
             timestamp: Utc::now(),
             price: 50000.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             bid: Some(49995.0),
             ask: Some(50005.0),
             high_24h: Some(51000.0),

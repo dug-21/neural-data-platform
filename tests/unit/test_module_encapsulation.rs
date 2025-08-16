@@ -13,29 +13,29 @@
 mod encapsulation_tests {
     // Test 1: Verify FannPredictor is not directly accessible
     // SHOULD NOT COMPILE if encapsulation is correct:
-    // use neural_trader::neural::FannPredictor;
-    // use neural_trader::neural::fann_predictor::FannPredictor;
+    // use autonomous_platform::neural::FannPredictor;
+    // use autonomous_platform::neural::predictor::NeuralPredictor;
     
     // Test 2: Verify EnhancedNeuralPredictor is not directly accessible  
     // SHOULD NOT COMPILE if encapsulation is correct:
-    // use neural_trader::neural::EnhancedNeuralPredictor;
-    // use neural_trader::neural::enhanced_predictor::EnhancedNeuralPredictor;
+    // use autonomous_platform::neural::EnhancedNeuralPredictor;
+    // use autonomous_platform::neural::enhanced_predictor::EnhancedNeuralPredictor;
     
     // Test 3: Verify FannModelAdapter is not directly accessible
     // SHOULD NOT COMPILE if encapsulation is correct:
-    // use neural_trader::neural::FannModelAdapter;
-    // use neural_trader::neural::fann_model_adapter::FannModelAdapter;
+    // use autonomous_platform::neural::FannModelAdapter;
+    // use autonomous_platform::neural::fann_model_adapter::FannModelAdapter;
     
     // Test 4: Verify EnhancedNeuralAdapter is not accessible from adapters
     // SHOULD NOT COMPILE if encapsulation is correct:
-    // use neural_trader::adapters::EnhancedNeuralAdapter;
-    // use neural_trader::adapters::enhanced_neural_adapter::EnhancedNeuralAdapter;
+    // use autonomous_platform::adapters::EnhancedNeuralAdapter;
+    // use autonomous_platform::adapters::enhanced_neural_adapter::EnhancedNeuralAdapter;
     
     // Test 5: Verify only NeuralPredictor is accessible
     #[test]
     fn test_only_neural_predictor_accessible() {
         // This SHOULD compile - NeuralPredictor is the only public interface
-        use neural_trader::neural::NeuralPredictor;
+        use autonomous_platform::neural::NeuralPredictor;
         
         // Can create predictor through public interface
         let _predictor = NeuralPredictor::default();
@@ -44,7 +44,7 @@ mod encapsulation_tests {
     // Test 6: Verify performance monitoring components are accessible (they're safe)
     #[test]
     fn test_performance_monitoring_accessible() {
-        use neural_trader::neural::{
+        use autonomous_platform::neural::{
             PerformanceChannel, PerformanceEvent, PerformanceAggregator
         };
         
@@ -56,7 +56,7 @@ mod encapsulation_tests {
     // Test 7: Verify trait is accessible but implementations are not
     #[test]
     fn test_trait_accessible() {
-        use neural_trader::neural::NeuralPredictorTrait;
+        use autonomous_platform::neural::NeuralPredictorTrait;
         
         // Trait should be accessible for type bounds
         fn accepts_predictor<T: NeuralPredictorTrait>(_predictor: &T) {
@@ -67,8 +67,8 @@ mod encapsulation_tests {
 
 #[cfg(test)]
 mod integration_encapsulation_tests {
-    use neural_trader::config::NeuralConfig;
-    use neural_trader::neural::NeuralPredictor;
+    use autonomous_platform::config::NeuralConfig;
+    use autonomous_platform::neural::NeuralPredictor;
     
     #[test]
     fn test_cannot_bypass_central_predictor() {
@@ -96,7 +96,7 @@ mod integration_encapsulation_tests {
         };
         
         // Only way to create predictor is through the public interface
-        let predictor = NeuralPredictor::new(config).unwrap();
+        let predictor = NeuralPredictor::new(config).await.unwrap();
         
         // Cannot access internal implementations
         // The following would not compile:
@@ -109,30 +109,30 @@ mod integration_encapsulation_tests {
 // These use doc tests that should fail to compile if encapsulation is broken
 /// ```compile_fail
 /// // This should fail - FannPredictor is not exported
-/// use neural_trader::neural::FannPredictor;
+/// use autonomous_platform::neural::FannPredictor;
 /// ```
 fn _test_fann_predictor_not_exported() {}
 
 /// ```compile_fail
 /// // This should fail - EnhancedNeuralPredictor is not exported
-/// use neural_trader::neural::EnhancedNeuralPredictor;
+/// use autonomous_platform::neural::EnhancedNeuralPredictor;
 /// ```
 fn _test_enhanced_predictor_not_exported() {}
 
 /// ```compile_fail
 /// // This should fail - EnhancedNeuralAdapter is not exported
-/// use neural_trader::adapters::EnhancedNeuralAdapter;
+/// use autonomous_platform::adapters::EnhancedNeuralAdapter;
 /// ```
 fn _test_enhanced_adapter_not_exported() {}
 
 /// ```compile_fail
 /// // This should fail - Direct module access is private
-/// use neural_trader::neural::fann_predictor;
+/// use autonomous_platform::neural::fann_predictor;
 /// ```
 fn _test_fann_module_not_accessible() {}
 
 /// ```compile_fail
 /// // This should fail - Direct module access is private
-/// use neural_trader::neural::enhanced_predictor;
+/// use autonomous_platform::neural::enhanced_predictor;
 /// ```
 fn _test_enhanced_module_not_accessible() {}

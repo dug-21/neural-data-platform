@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
     println!("📋 Configuration: Simple standalone mode");
 
     // Load configuration
-    let config = load_default_config()?;
+    let _config = load_default_config()?;
 
     println!("🔧 Initializing components...");
 
@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
 
     // Neural predictor
     println!("🧠 Initializing neural predictor...");
-    let predictor = match NeuralPredictor::default().await {
+    let predictor = match NeuralPredictor::new_with_defaults().await {
         Ok(predictor) => {
             println!("✅ Neural predictor ready");
             Arc::new(predictor)

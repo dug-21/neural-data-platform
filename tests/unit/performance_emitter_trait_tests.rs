@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use async_trait::async_trait;
 use anyhow::Result;
 
-use neural_trader::neural::{
+use autonomous_platform::neural::{
     PerformanceEmitter,
     PerformanceEvent,
     PerformanceEventBuilder,
@@ -132,7 +132,7 @@ mod performance_emitter_tests {
         // Pattern 2: System health event
         let health_event = PerformanceEventBuilder::new()
             .source(PerformanceSource::HealthMonitor {
-                component: neural_trader::neural::ComponentType::NeuralEngine,
+                component: autonomous_platform::neural::ComponentType::NeuralEngine,
             })
             .event_type(PerformanceEventType::SystemHealth {
                 cpu_usage: 45.2,
@@ -250,8 +250,8 @@ mod performance_emitter_tests {
 #[cfg(test)]
 mod fann_predictor_performance_integration_tests {
     use super::*;
-    use neural_trader::neural::FannPredictor;
-    use neural_trader::config::NeuralConfig;
+    use autonomous_platform::neural::FannPredictor;
+    use autonomous_platform::config::NeuralConfig;
 
     #[tokio::test]
     async fn test_fann_predictor_should_implement_emitter() {
@@ -263,7 +263,7 @@ mod fann_predictor_performance_integration_tests {
             ..Default::default()
         };
         
-        let predictor = FannPredictor::new(config)
+        let predictor = NeuralPredictor::new(config)
             .expect("Should create predictor");
         
         // TODO: This should compile when FannPredictor implements PerformanceEmitter
@@ -285,14 +285,14 @@ mod fann_predictor_performance_integration_tests {
             ..Default::default()
         };
         
-        let mut predictor = FannPredictor::new(config)
+        let mut predictor = NeuralPredictor::new(config)
             .expect("Should create predictor");
         
         // TODO: Wire up performance monitoring
         // predictor.set_performance_sender(tx);
         
         // Make a prediction
-        let test_data = vec![neural_trader::data::TimeSeriesData {
+        let test_data = vec![autonomous_platform::data::TimeSeriesData {
             timestamp: Utc::now(),
             value: 100.0,
             volume: Some(1000.0),

@@ -1,0 +1,15 @@
+# Fix 1: Add Copy trait to SwingType enum
+# Error: cannot move out of `current_swing.swing_type` which is behind a shared reference
+# Location: src/features/technical_indicators/advanced.rs:485
+
+--- a/src/features/technical_indicators/advanced.rs
++++ b/src/features/technical_indicators/advanced.rs
+@@ -627,7 +627,7 @@ pub struct SwingPoint {
+     pub timestamp: chrono::DateTime<chrono::Utc>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq)]
++#[derive(Debug, Clone, Copy, PartialEq)]
+ pub enum SwingType {
+     High,
+     Low,

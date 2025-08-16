@@ -5,7 +5,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use sqlx::{PgPool, Row};
+use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -13,8 +13,9 @@ use tokio::sync::RwLock;
 
 use crate::agents::AutonomousAgent;
 use crate::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
-use crate::monitoring::{ComponentHealth, HealthMonitor, HealthStatus, SystemHealth};
-use crate::neural::NeuralPredictor;
+use crate::monitoring::HealthMonitor;
+use crate::monitoring::health::LegacyHealthStatus as HealthStatus;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 
 /// MCP Trading Tools Implementation
 pub struct TradingMcpTools {
@@ -43,7 +44,6 @@ impl TradingMcpTools {
 
     pub async fn with_monitor(monitor: Arc<HealthMonitor>) -> Result<Self> {
         // Create placeholder components for health monitoring only
-        use sqlx::postgres::PgPoolOptions;
 
         // Create minimal storage pool for health monitoring
         let storage = Arc::new(TimescaleDBStorage {
@@ -71,7 +71,7 @@ impl TradingMcpTools {
         Ok(Self {
             storage,
             cache,
-            predictor: Arc::new(NeuralPredictor::default().await.map_err(|e| anyhow::anyhow!("Failed to create neural predictor: {}", e))?),
+            predictor: Arc::new(NeuralPredictor::new_with_defaults().await.map_err(|e| anyhow::anyhow!("Failed to create neural predictor: {}", e))?),
             agent: Arc::new(RwLock::new(AutonomousAgent::default())),
             monitor: Some(monitor),
         })
@@ -482,7 +482,8 @@ impl TradingMcpTools {
                 },
                 "message": match &health_info.status {
                     HealthStatus::Healthy => "Operating normally",
-                    HealthStatus::Degraded(msg) | HealthStatus::Unhealthy(msg) => msg.as_str(),
+                    HealthStatus::Degraded(msg) => msg,
+                    HealthStatus::Unhealthy(msg) => msg,
                     HealthStatus::Unknown => "Status unknown",
                 },
                 "last_check": health_info.last_check.to_rfc3339(),
@@ -556,12 +557,18 @@ impl TradingMcpTools {
                 high: 0.0,
                 low: 0.0,
                 close: row.get("value"),
-                volume: row.get("volume"),
+                volume: vec![row.get("volume")],
+                volume_value: row.get("volume"),
                 indicators: Default::default(),
                 source: Some("timescale".to_string()),
                 entity: Some(row.get::<String, _>("symbol")),
                 value: Some(row.get("value")),
                 metadata: None,
+                // Required fields for vendor model integration
+                values: vec![row.get("value")],
+                intervals: vec![],
+                timestamps: vec![row.get("timestamp")],
+                metadata_map: HashMap::new(),
             })
             .collect())
     }

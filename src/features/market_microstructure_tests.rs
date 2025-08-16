@@ -16,15 +16,16 @@ mod tests {
     /// Helper function to create test time series data
     fn create_test_data(prices: Vec<(f64, f64, f64, f64, f64)>) -> Vec<TimeSeriesData> {
         prices.iter().enumerate().map(|(i, &(open, high, low, close, volume))| {
-            TimeSeriesData {
-                timestamp: Utc.timestamp_opt(1640000000 + (i as i64 * 60), 0).unwrap(),
-                symbol: "TEST".to_string(),
-                open,
-                high,
-                low,
-                close,
-                volume,
-            }
+            let mut data = TimeSeriesData::new(
+                "TEST".to_string(),
+                Utc.timestamp_opt(1640000000 + (i as i64 * 60), 0).unwrap()
+            );
+            data.open = open;
+            data.high = high;
+            data.low = low;
+            data.close = close;
+            data.volume = vec![volume];
+            data
         }).collect()
     }
 

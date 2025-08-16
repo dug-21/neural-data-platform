@@ -5,20 +5,20 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use chrono::{Utc, Duration};
 
-use neural_trader::daa::autonomous_training::{
+use autonomous_platform::daa::autonomous_training::{
     AutonomousTrainingEngine, TrainingTriggerConfig, PerformanceSnapshot,
     TrainingDecisionType, DAATrainingIntegration, TrainingOutcome,
 };
 
-use neural_trader::integration::daa_coordinator::{DAACoordinator, DAAConfig};
-use neural_trader::integration::autonomous_neural_coordinator::AutonomousNeuralCoordinator;
+use autonomous_platform::integration::daa_coordinator::{DAACoordinator, DAAConfig};
+use autonomous_platform::integration::autonomous_neural_coordinator::AutonomousNeuralCoordinator;
 
 /// Helper to create a DAA coordinator for testing
 async fn create_test_coordinator() -> Arc<DAACoordinator> {
     let config = DAAConfig {
         enable_learning: true,
         enable_coordination: true,
-        persistence_mode: neural_trader::integration::daa_coordinator::PersistenceMode::Memory,
+        persistence_mode: autonomous_platform::integration::daa_coordinator::PersistenceMode::Memory,
         agent_timeout_seconds: 30,
         max_agents: 10,
         enable_neural_integration: true,
@@ -250,7 +250,7 @@ mod autonomous_training_integration {
         
         // Should trigger emergency training
         assert!(matches!(decision.decision_type, TrainingDecisionType::Emergency { .. }));
-        assert_eq!(decision.priority, neural_trader::daa::autonomous_training::TrainingPriority::Emergency);
+        assert_eq!(decision.priority, autonomous_platform::daa::autonomous_training::TrainingPriority::Emergency);
         
         // Decision should be sent immediately
         let sent_decision = receiver.try_recv().unwrap();
@@ -367,19 +367,19 @@ mod autonomous_training_integration {
             
             // Higher priority should get more resources
             match decision.priority {
-                neural_trader::daa::autonomous_training::TrainingPriority::Emergency => {
+                autonomous_platform::daa::autonomous_training::TrainingPriority::Emergency => {
                     assert!(decision.resource_requirements.cpu_cores >= 12);
                     assert!(decision.resource_requirements.memory_gb >= 32.0);
                 }
-                neural_trader::daa::autonomous_training::TrainingPriority::High => {
+                autonomous_platform::daa::autonomous_training::TrainingPriority::High => {
                     assert!(decision.resource_requirements.cpu_cores >= 8);
                     assert!(decision.resource_requirements.memory_gb >= 16.0);
                 }
-                neural_trader::daa::autonomous_training::TrainingPriority::Medium => {
+                autonomous_platform::daa::autonomous_training::TrainingPriority::Medium => {
                     assert!(decision.resource_requirements.cpu_cores >= 4);
                     assert!(decision.resource_requirements.memory_gb >= 8.0);
                 }
-                neural_trader::daa::autonomous_training::TrainingPriority::Low => {
+                autonomous_platform::daa::autonomous_training::TrainingPriority::Low => {
                     assert!(decision.resource_requirements.cpu_cores >= 2);
                     assert!(decision.resource_requirements.memory_gb >= 4.0);
                 }

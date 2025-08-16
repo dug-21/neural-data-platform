@@ -1,0 +1,1171 @@
+// performance_monitor.rs.template
+// Performance monitoring implementation for multilayer ensemble system
+//
+// DESIGN DECISIONS:
+// - Real-time metrics collection with minimal overhead
+// - Hierarchical monitoring (system -> ensemble -> model -> layer)
+// - Adaptive alerting based on performance trends
+// - Historical data analysis for performance optimization
+// - Integration with existing health monitoring infrastructure
+//
+// INTEGRATION POINTS:
+// - src/monitoring/health/component_checkers.rs (health monitoring)
+// - ensemble_predictor.rs (ensemble performance tracking)
+// - specialization_layer_impl.rs (layer-specific metrics)
+// - Redis for metrics storage and alerting
+// - Prometheus/Grafana for visualization (optional)
+
+use std::collections::{HashMap, VecDeque, BTreeMap};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{RwLock, Mutex};
+use tracing::{info, warn, error, debug, instrument};
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+
+// TODO: Import your actual types
+use crate::error::Result;
+use crate::data::sector_mapper::Sector;
+
+/// Performance monitoring configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceMonitorConfig {
+    /// Metrics collection interval (seconds)
+    pub collection_interval_secs: u64,
+    /// Historical data retention period (days)
+    pub retention_days: u32,
+    /// Performance alert thresholds
+    pub alert_thresholds: AlertThresholds,
+    /// Enable detailed profiling (higher overhead)
+    pub enable_detailed_profiling: bool,
+    /// Metrics aggregation window sizes
+    pub aggregation_windows: Vec<Duration>,
+    /// Maximum number of metrics to store per component
+    pub max_metrics_per_component: usize,
+    /// Enable predictive alerting
+    pub enable_predictive_alerts: bool,
+    /// Anomaly detection sensitivity (0.0-1.0)
+    pub anomaly_detection_sensitivity: f64,
+}
+
+impl Default for PerformanceMonitorConfig {
+    fn default() -> Self {
+        Self {
+            collection_interval_secs: 30,
+            retention_days: 7,
+            alert_thresholds: AlertThresholds::default(),
+            enable_detailed_profiling: false,
+            aggregation_windows: vec![
+                Duration::from_secs(60),    // 1 minute
+                Duration::from_secs(300),   // 5 minutes
+                Duration::from_secs(3600),  // 1 hour
+                Duration::from_secs(86400), // 1 day
+            ],
+            max_metrics_per_component: 10000,
+            enable_predictive_alerts: true,
+            anomaly_detection_sensitivity: 0.8,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertThresholds {
+    /// Maximum acceptable prediction latency (ms)
+    pub max_prediction_latency_ms: f64,
+    /// Maximum acceptable error rate (0.0-1.0)
+    pub max_error_rate: f64,
+    /// Minimum acceptable accuracy
+    pub min_accuracy: f64,
+    /// Maximum acceptable memory usage (MB)
+    pub max_memory_usage_mb: f64,
+    /// Maximum acceptable CPU usage (0.0-1.0)
+    pub max_cpu_usage: f64,
+    /// Maximum acceptable model disagreement
+    pub max_model_disagreement: f64,
+    /// Minimum acceptable ensemble diversity
+    pub min_ensemble_diversity: f64,
+}
+
+impl Default for AlertThresholds {
+    fn default() -> Self {
+        Self {
+            max_prediction_latency_ms: 1000.0,
+            max_error_rate: 0.05,
+            min_accuracy: 0.85,
+            max_memory_usage_mb: 4096.0,
+            max_cpu_usage: 0.8,
+            max_model_disagreement: 0.3,
+            min_ensemble_diversity: 0.1,
+        }
+    }
+}
+
+/// Core performance metrics structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceMetrics {
+    pub timestamp: DateTime<Utc>,
+    pub component_id: String,
+    pub component_type: ComponentType,
+    
+    // Latency metrics
+    pub prediction_latency: LatencyMetrics,
+    pub processing_latency: LatencyMetrics,
+    
+    // Accuracy and quality metrics
+    pub accuracy_metrics: AccuracyMetrics,
+    pub quality_metrics: QualityMetrics,
+    
+    // Resource usage metrics
+    pub resource_metrics: ResourceMetrics,
+    
+    // Ensemble-specific metrics
+    pub ensemble_metrics: Option<EnsembleMetrics>,
+    
+    // Sector-specific metrics
+    pub sector_metrics: Option<HashMap<Sector, SectorMetrics>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComponentType {
+    System,
+    EnsemblePredictor,
+    SpecializationLayer(usize),
+    BaseModel(String),
+    MetaEnsemble,
+    FallbackModel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatencyMetrics {
+    pub mean: f64,
+    pub median: f64,
+    pub p95: f64,
+    pub p99: f64,
+    pub max: f64,
+    pub min: f64,
+    pub std_dev: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccuracyMetrics {
+    pub overall_accuracy: f64,
+    pub precision: f64,
+    pub recall: f64,
+    pub f1_score: f64,
+    pub auc_roc: Option<f64>,
+    pub calibration_error: f64,
+    pub confidence_accuracy_correlation: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityMetrics {
+    pub prediction_consistency: f64,
+    pub uncertainty_calibration: f64,
+    pub coverage_probability: f64,
+    pub interval_width: f64,
+    pub sharpness: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceMetrics {
+    pub memory_usage_mb: f64,
+    pub cpu_usage_percent: f64,
+    pub disk_io_mb_per_sec: f64,
+    pub network_io_mb_per_sec: f64,
+    pub gpu_usage_percent: Option<f64>,
+    pub gpu_memory_mb: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnsembleMetrics {
+    pub model_agreement: f64,
+    pub diversity_score: f64,
+    pub routing_entropy: f64,
+    pub expert_utilization: HashMap<String, f64>,
+    pub voting_confidence: f64,
+    pub fallback_usage_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectorMetrics {
+    pub sector: Sector,
+    pub prediction_count: u64,
+    pub accuracy: f64,
+    pub average_confidence: f64,
+    pub error_rate: f64,
+    pub specialization_score: f64,
+}
+
+/// Performance trend analysis
+#[derive(Debug, Clone, Serialize)]
+pub struct PerformanceTrend {
+    pub metric_name: String,
+    pub trend_direction: TrendDirection,
+    pub slope: f64,
+    pub confidence: f64,
+    pub projected_value: f64,
+    pub projection_horizon: Duration,
+    pub anomaly_score: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum TrendDirection {
+    Improving,
+    Degrading,
+    Stable,
+    Volatile,
+}
+
+/// Performance alert
+#[derive(Debug, Clone, Serialize)]
+pub struct PerformanceAlert {
+    pub alert_id: String,
+    pub alert_type: AlertType,
+    pub severity: AlertSeverity,
+    pub component_id: String,
+    pub metric_name: String,
+    pub current_value: f64,
+    pub threshold_value: f64,
+    pub message: String,
+    pub timestamp: DateTime<Utc>,
+    pub recommended_actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum AlertType {
+    Threshold,
+    Trend,
+    Anomaly,
+    Prediction,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum AlertSeverity {
+    Info,
+    Warning,
+    Critical,
+    Emergency,
+}
+
+/// Main performance monitoring system
+pub struct PerformanceMonitor {
+    config: PerformanceMonitorConfig,
+    
+    // Metrics storage and collection
+    metrics_collector: MetricsCollector,
+    metrics_storage: Arc<RwLock<MetricsStorage>>,
+    
+    // Analysis and alerting
+    trend_analyzer: TrendAnalyzer,
+    anomaly_detector: AnomalyDetector,
+    alert_manager: AlertManager,
+    
+    // Performance optimization
+    performance_optimizer: PerformanceOptimizer,
+    
+    // Component monitoring
+    component_monitors: Arc<RwLock<HashMap<String, ComponentMonitor>>>,
+    
+    // Historical analysis
+    historical_analyzer: HistoricalAnalyzer,
+}
+
+impl PerformanceMonitor {
+    /// Create new performance monitor
+    pub fn new(config: PerformanceMonitorConfig) -> Self {
+        let metrics_collector = MetricsCollector::new(&config);
+        let metrics_storage = Arc::new(RwLock::new(MetricsStorage::new(&config)));
+        let trend_analyzer = TrendAnalyzer::new(&config);
+        let anomaly_detector = AnomalyDetector::new(config.anomaly_detection_sensitivity);
+        let alert_manager = AlertManager::new(&config);
+        let performance_optimizer = PerformanceOptimizer::new(&config);
+        let component_monitors = Arc::new(RwLock::new(HashMap::new()));
+        let historical_analyzer = HistoricalAnalyzer::new(&config);
+
+        Self {
+            config,
+            metrics_collector,
+            metrics_storage,
+            trend_analyzer,
+            anomaly_detector,
+            alert_manager,
+            performance_optimizer,
+            component_monitors,
+            historical_analyzer,
+        }
+    }
+
+    /// Start monitoring system
+    #[instrument(skip(self))]
+    pub async fn start_monitoring(&self) -> Result<()> {
+        info!("Starting performance monitoring system");
+
+        // Start metrics collection
+        self.start_metrics_collection().await?;
+        
+        // Start analysis tasks
+        self.start_trend_analysis().await?;
+        self.start_anomaly_detection().await?;
+        self.start_alerting().await?;
+        
+        // Start optimization tasks
+        if self.config.enable_predictive_alerts {
+            self.start_predictive_analysis().await?;
+        }
+        
+        info!("Performance monitoring system started successfully");
+        Ok(())
+    }
+
+    /// Register a component for monitoring
+    #[instrument(skip(self))]
+    pub async fn register_component(
+        &self,
+        component_id: String,
+        component_type: ComponentType,
+    ) -> Result<()> {
+        info!("Registering component for monitoring: {}", component_id);
+        
+        let monitor = ComponentMonitor::new(component_id.clone(), component_type);
+        
+        let mut monitors = self.component_monitors.write().await;
+        monitors.insert(component_id, monitor);
+        
+        Ok(())
+    }
+
+    /// Record performance metrics for a component
+    #[instrument(skip(self, metrics))]
+    pub async fn record_metrics(
+        &self,
+        component_id: &str,
+        metrics: PerformanceMetrics,
+    ) -> Result<()> {
+        // Store metrics
+        {
+            let mut storage = self.metrics_storage.write().await;
+            storage.store_metrics(component_id, metrics.clone()).await?;
+        }
+
+        // Update component monitor
+        {
+            let mut monitors = self.component_monitors.write().await;
+            if let Some(monitor) = monitors.get_mut(component_id) {
+                monitor.update_metrics(metrics.clone()).await;
+            }
+        }
+
+        // Check for immediate alerts
+        self.check_immediate_alerts(component_id, &metrics).await?;
+        
+        Ok(())
+    }
+
+    /// Record prediction timing
+    #[instrument(skip(self))]
+    pub async fn record_prediction_timing(
+        &self,
+        component_id: &str,
+        prediction_duration: Duration,
+        processing_duration: Duration,
+    ) -> Result<()> {
+        let timing_metrics = TimingMetrics {
+            component_id: component_id.to_string(),
+            prediction_duration,
+            processing_duration,
+            timestamp: Utc::now(),
+        };
+
+        self.metrics_collector.record_timing(timing_metrics).await;
+        Ok(())
+    }
+
+    /// Record prediction accuracy
+    #[instrument(skip(self))]
+    pub async fn record_prediction_accuracy(
+        &self,
+        component_id: &str,
+        predicted_value: f64,
+        actual_value: f64,
+        confidence: f64,
+    ) -> Result<()> {
+        let accuracy_record = AccuracyRecord {
+            component_id: component_id.to_string(),
+            predicted_value,
+            actual_value,
+            confidence,
+            timestamp: Utc::now(),
+        };
+
+        self.metrics_collector.record_accuracy(accuracy_record).await;
+        Ok(())
+    }
+
+    /// Get current performance summary
+    #[instrument(skip(self))]
+    pub async fn get_performance_summary(&self) -> Result<PerformanceSummary> {
+        let storage = self.metrics_storage.read().await;
+        let summary = storage.generate_summary().await?;
+        Ok(summary)
+    }
+
+    /// Get performance trends for a component
+    #[instrument(skip(self))]
+    pub async fn get_performance_trends(
+        &self,
+        component_id: &str,
+        time_range: Duration,
+    ) -> Result<Vec<PerformanceTrend>> {
+        let storage = self.metrics_storage.read().await;
+        let metrics = storage.get_metrics_range(component_id, time_range).await?;
+        
+        let trends = self.trend_analyzer.analyze_trends(&metrics).await?;
+        Ok(trends)
+    }
+
+    /// Get active performance alerts
+    #[instrument(skip(self))]
+    pub async fn get_active_alerts(&self) -> Vec<PerformanceAlert> {
+        self.alert_manager.get_active_alerts().await
+    }
+
+    /// Generate performance optimization recommendations
+    #[instrument(skip(self))]
+    pub async fn get_optimization_recommendations(&self) -> Result<Vec<OptimizationRecommendation>> {
+        let storage = self.metrics_storage.read().await;
+        let all_metrics = storage.get_all_recent_metrics().await?;
+        
+        let recommendations = self.performance_optimizer
+            .generate_recommendations(&all_metrics).await?;
+        
+        Ok(recommendations)
+    }
+
+    /// Start metrics collection task
+    async fn start_metrics_collection(&self) -> Result<()> {
+        let collector = self.metrics_collector.clone();
+        let storage = self.metrics_storage.clone();
+        let interval = Duration::from_secs(self.config.collection_interval_secs);
+
+        tokio::spawn(async move {
+            let mut interval_timer = tokio::time::interval(interval);
+            loop {
+                interval_timer.tick().await;
+                
+                if let Err(e) = collector.collect_system_metrics(&storage).await {
+                    error!("Failed to collect system metrics: {}", e);
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Start trend analysis task
+    async fn start_trend_analysis(&self) -> Result<()> {
+        let analyzer = self.trend_analyzer.clone();
+        let storage = self.metrics_storage.clone();
+        let alert_manager = self.alert_manager.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300)); // 5 minutes
+            loop {
+                interval.tick().await;
+                
+                match storage.read().await.get_all_recent_metrics().await {
+                    Ok(metrics) => {
+                        if let Ok(trends) = analyzer.analyze_trends(&metrics).await {
+                            for trend in trends {
+                                if trend.anomaly_score > 0.8 {
+                                    let alert = PerformanceAlert {
+                                        alert_id: format!("trend_{}", uuid::Uuid::new_v4()),
+                                        alert_type: AlertType::Trend,
+                                        severity: AlertSeverity::Warning,
+                                        component_id: "system".to_string(),
+                                        metric_name: trend.metric_name.clone(),
+                                        current_value: trend.projected_value,
+                                        threshold_value: 0.0,
+                                        message: format!("Trend anomaly detected: {}", trend.metric_name),
+                                        timestamp: Utc::now(),
+                                        recommended_actions: vec![
+                                            "Investigate trend cause".to_string(),
+                                            "Consider model retraining".to_string(),
+                                        ],
+                                    };
+                                    alert_manager.trigger_alert(alert).await;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => error!("Failed to get metrics for trend analysis: {}", e),
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Start anomaly detection task
+    async fn start_anomaly_detection(&self) -> Result<()> {
+        let detector = self.anomaly_detector.clone();
+        let storage = self.metrics_storage.clone();
+        let alert_manager = self.alert_manager.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60)); // 1 minute
+            loop {
+                interval.tick().await;
+                
+                match storage.read().await.get_all_recent_metrics().await {
+                    Ok(metrics) => {
+                        for metric_group in metrics {
+                            if let Ok(anomalies) = detector.detect_anomalies(&metric_group).await {
+                                for anomaly in anomalies {
+                                    let alert = PerformanceAlert {
+                                        alert_id: format!("anomaly_{}", uuid::Uuid::new_v4()),
+                                        alert_type: AlertType::Anomaly,
+                                        severity: AlertSeverity::Warning,
+                                        component_id: anomaly.component_id,
+                                        metric_name: anomaly.metric_name,
+                                        current_value: anomaly.value,
+                                        threshold_value: anomaly.expected_value,
+                                        message: format!("Anomaly detected: {} deviation", anomaly.deviation),
+                                        timestamp: Utc::now(),
+                                        recommended_actions: anomaly.recommended_actions,
+                                    };
+                                    alert_manager.trigger_alert(alert).await;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => error!("Failed to get metrics for anomaly detection: {}", e),
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Start alerting task
+    async fn start_alerting(&self) -> Result<()> {
+        let alert_manager = self.alert_manager.clone();
+        
+        tokio::spawn(async move {
+            alert_manager.start_alert_processing().await;
+        });
+
+        Ok(())
+    }
+
+    /// Start predictive analysis task
+    async fn start_predictive_analysis(&self) -> Result<()> {
+        let storage = self.metrics_storage.clone();
+        let alert_manager = self.alert_manager.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(900)); // 15 minutes
+            loop {
+                interval.tick().await;
+                
+                // TODO: Implement predictive analysis
+                // - Forecast future performance trends
+                // - Predict potential issues before they occur
+                // - Generate proactive recommendations
+                
+                debug!("Predictive analysis task running");
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Check for immediate alerts based on current metrics
+    async fn check_immediate_alerts(
+        &self,
+        component_id: &str,
+        metrics: &PerformanceMetrics,
+    ) -> Result<()> {
+        let thresholds = &self.config.alert_thresholds;
+        let mut alerts = Vec::new();
+
+        // Check latency thresholds
+        if metrics.prediction_latency.mean > thresholds.max_prediction_latency_ms {
+            alerts.push(PerformanceAlert {
+                alert_id: format!("latency_{}", uuid::Uuid::new_v4()),
+                alert_type: AlertType::Threshold,
+                severity: AlertSeverity::Warning,
+                component_id: component_id.to_string(),
+                metric_name: "prediction_latency".to_string(),
+                current_value: metrics.prediction_latency.mean,
+                threshold_value: thresholds.max_prediction_latency_ms,
+                message: "Prediction latency exceeded threshold".to_string(),
+                timestamp: Utc::now(),
+                recommended_actions: vec![
+                    "Check system load".to_string(),
+                    "Consider model optimization".to_string(),
+                ],
+            });
+        }
+
+        // Check accuracy thresholds
+        if metrics.accuracy_metrics.overall_accuracy < thresholds.min_accuracy {
+            alerts.push(PerformanceAlert {
+                alert_id: format!("accuracy_{}", uuid::Uuid::new_v4()),
+                alert_type: AlertType::Threshold,
+                severity: AlertSeverity::Critical,
+                component_id: component_id.to_string(),
+                metric_name: "overall_accuracy".to_string(),
+                current_value: metrics.accuracy_metrics.overall_accuracy,
+                threshold_value: thresholds.min_accuracy,
+                message: "Model accuracy below threshold".to_string(),
+                timestamp: Utc::now(),
+                recommended_actions: vec![
+                    "Investigate data quality".to_string(),
+                    "Consider model retraining".to_string(),
+                    "Check for concept drift".to_string(),
+                ],
+            });
+        }
+
+        // Check resource usage thresholds
+        if metrics.resource_metrics.memory_usage_mb > thresholds.max_memory_usage_mb {
+            alerts.push(PerformanceAlert {
+                alert_id: format!("memory_{}", uuid::Uuid::new_v4()),
+                alert_type: AlertType::Threshold,
+                severity: AlertSeverity::Warning,
+                component_id: component_id.to_string(),
+                metric_name: "memory_usage".to_string(),
+                current_value: metrics.resource_metrics.memory_usage_mb,
+                threshold_value: thresholds.max_memory_usage_mb,
+                message: "Memory usage exceeded threshold".to_string(),
+                timestamp: Utc::now(),
+                recommended_actions: vec![
+                    "Review memory usage patterns".to_string(),
+                    "Consider garbage collection tuning".to_string(),
+                ],
+            });
+        }
+
+        // Trigger alerts
+        for alert in alerts {
+            self.alert_manager.trigger_alert(alert).await;
+        }
+
+        Ok(())
+    }
+}
+
+// Supporting components
+#[derive(Clone)]
+pub struct MetricsCollector {
+    config: PerformanceMonitorConfig,
+    timing_buffer: Arc<Mutex<VecDeque<TimingMetrics>>>,
+    accuracy_buffer: Arc<Mutex<VecDeque<AccuracyRecord>>>,
+}
+
+impl MetricsCollector {
+    pub fn new(config: &PerformanceMonitorConfig) -> Self {
+        Self {
+            config: config.clone(),
+            timing_buffer: Arc::new(Mutex::new(VecDeque::new())),
+            accuracy_buffer: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    pub async fn record_timing(&self, timing: TimingMetrics) {
+        let mut buffer = self.timing_buffer.lock().await;
+        buffer.push_back(timing);
+        
+        // Keep buffer size manageable
+        if buffer.len() > 1000 {
+            buffer.pop_front();
+        }
+    }
+
+    pub async fn record_accuracy(&self, accuracy: AccuracyRecord) {
+        let mut buffer = self.accuracy_buffer.lock().await;
+        buffer.push_back(accuracy);
+        
+        // Keep buffer size manageable
+        if buffer.len() > 1000 {
+            buffer.pop_front();
+        }
+    }
+
+    pub async fn collect_system_metrics(
+        &self,
+        storage: &Arc<RwLock<MetricsStorage>>,
+    ) -> Result<()> {
+        // TODO: Implement system metrics collection
+        // - CPU usage
+        // - Memory usage
+        // - Disk I/O
+        // - Network I/O
+        // - GPU usage (if applicable)
+        
+        Ok(())
+    }
+}
+
+pub struct MetricsStorage {
+    config: PerformanceMonitorConfig,
+    metrics_store: BTreeMap<String, VecDeque<PerformanceMetrics>>,
+    aggregated_metrics: HashMap<String, HashMap<Duration, AggregatedMetrics>>,
+}
+
+impl MetricsStorage {
+    pub fn new(config: &PerformanceMonitorConfig) -> Self {
+        Self {
+            config: config.clone(),
+            metrics_store: BTreeMap::new(),
+            aggregated_metrics: HashMap::new(),
+        }
+    }
+
+    pub async fn store_metrics(
+        &mut self,
+        component_id: &str,
+        metrics: PerformanceMetrics,
+    ) -> Result<()> {
+        // Store raw metrics
+        let component_metrics = self.metrics_store
+            .entry(component_id.to_string())
+            .or_insert_with(VecDeque::new);
+        
+        component_metrics.push_back(metrics.clone());
+        
+        // Maintain size limits
+        if component_metrics.len() > self.config.max_metrics_per_component {
+            component_metrics.pop_front();
+        }
+
+        // Update aggregated metrics
+        self.update_aggregated_metrics(component_id, &metrics).await;
+        
+        Ok(())
+    }
+
+    pub async fn get_metrics_range(
+        &self,
+        component_id: &str,
+        time_range: Duration,
+    ) -> Result<Vec<PerformanceMetrics>> {
+        let cutoff_time = Utc::now() - time_range;
+        
+        if let Some(metrics) = self.metrics_store.get(component_id) {
+            let filtered: Vec<PerformanceMetrics> = metrics
+                .iter()
+                .filter(|m| m.timestamp >= cutoff_time)
+                .cloned()
+                .collect();
+            Ok(filtered)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    pub async fn get_all_recent_metrics(&self) -> Result<Vec<Vec<PerformanceMetrics>>> {
+        // TODO: Return recent metrics for all components
+        Ok(Vec::new())
+    }
+
+    pub async fn generate_summary(&self) -> Result<PerformanceSummary> {
+        // TODO: Generate comprehensive performance summary
+        Ok(PerformanceSummary::default())
+    }
+
+    async fn update_aggregated_metrics(
+        &mut self,
+        component_id: &str,
+        metrics: &PerformanceMetrics,
+    ) {
+        // TODO: Update aggregated metrics for different time windows
+    }
+}
+
+#[derive(Clone)]
+pub struct TrendAnalyzer {
+    config: PerformanceMonitorConfig,
+}
+
+impl TrendAnalyzer {
+    pub fn new(config: &PerformanceMonitorConfig) -> Self {
+        Self {
+            config: config.clone(),
+        }
+    }
+
+    pub async fn analyze_trends(
+        &self,
+        metrics: &[PerformanceMetrics],
+    ) -> Result<Vec<PerformanceTrend>> {
+        // TODO: Implement trend analysis algorithms
+        // - Linear regression for trend detection
+        // - Change point detection
+        // - Seasonal decomposition
+        // - Forecasting
+        
+        Ok(Vec::new())
+    }
+}
+
+#[derive(Clone)]
+pub struct AnomalyDetector {
+    sensitivity: f64,
+    // TODO: Add anomaly detection state
+}
+
+impl AnomalyDetector {
+    pub fn new(sensitivity: f64) -> Self {
+        Self { sensitivity }
+    }
+
+    pub async fn detect_anomalies(
+        &self,
+        metrics: &[PerformanceMetrics],
+    ) -> Result<Vec<Anomaly>> {
+        // TODO: Implement anomaly detection algorithms
+        // - Statistical outlier detection
+        // - Isolation forest
+        // - One-class SVM
+        // - Autoencoder-based detection
+        
+        Ok(Vec::new())
+    }
+}
+
+#[derive(Clone)]
+pub struct AlertManager {
+    config: PerformanceMonitorConfig,
+    active_alerts: Arc<RwLock<HashMap<String, PerformanceAlert>>>,
+    alert_history: Arc<RwLock<VecDeque<PerformanceAlert>>>,
+}
+
+impl AlertManager {
+    pub fn new(config: &PerformanceMonitorConfig) -> Self {
+        Self {
+            config: config.clone(),
+            active_alerts: Arc::new(RwLock::new(HashMap::new())),
+            alert_history: Arc::new(RwLock::new(VecDeque::new())),
+        }
+    }
+
+    pub async fn trigger_alert(&self, alert: PerformanceAlert) {
+        info!("Performance alert triggered: {}", alert.message);
+        
+        // Store active alert
+        {
+            let mut alerts = self.active_alerts.write().await;
+            alerts.insert(alert.alert_id.clone(), alert.clone());
+        }
+
+        // Add to history
+        {
+            let mut history = self.alert_history.write().await;
+            history.push_back(alert.clone());
+            
+            // Maintain history size
+            if history.len() > 1000 {
+                history.pop_front();
+            }
+        }
+
+        // TODO: Send notifications (email, Slack, etc.)
+        self.send_alert_notification(&alert).await;
+    }
+
+    pub async fn get_active_alerts(&self) -> Vec<PerformanceAlert> {
+        let alerts = self.active_alerts.read().await;
+        alerts.values().cloned().collect()
+    }
+
+    pub async fn start_alert_processing(&self) {
+        // TODO: Implement alert processing loop
+        // - Deduplication
+        // - Escalation
+        // - Auto-resolution
+    }
+
+    async fn send_alert_notification(&self, alert: &PerformanceAlert) {
+        // TODO: Implement alert notification system
+        debug!("Sending alert notification: {}", alert.alert_id);
+    }
+}
+
+pub struct PerformanceOptimizer {
+    config: PerformanceMonitorConfig,
+}
+
+impl PerformanceOptimizer {
+    pub fn new(config: &PerformanceMonitorConfig) -> Self {
+        Self {
+            config: config.clone(),
+        }
+    }
+
+    pub async fn generate_recommendations(
+        &self,
+        metrics: &[Vec<PerformanceMetrics>],
+    ) -> Result<Vec<OptimizationRecommendation>> {
+        // TODO: Implement optimization recommendation engine
+        // - Resource allocation optimization
+        // - Model selection optimization
+        // - Hyperparameter tuning suggestions
+        // - Architecture improvements
+        
+        Ok(Vec::new())
+    }
+}
+
+pub struct ComponentMonitor {
+    component_id: String,
+    component_type: ComponentType,
+    metrics_history: VecDeque<PerformanceMetrics>,
+    last_update: DateTime<Utc>,
+}
+
+impl ComponentMonitor {
+    pub fn new(component_id: String, component_type: ComponentType) -> Self {
+        Self {
+            component_id,
+            component_type,
+            metrics_history: VecDeque::new(),
+            last_update: Utc::now(),
+        }
+    }
+
+    pub async fn update_metrics(&mut self, metrics: PerformanceMetrics) {
+        self.metrics_history.push_back(metrics);
+        self.last_update = Utc::now();
+        
+        // Maintain history size
+        if self.metrics_history.len() > 100 {
+            self.metrics_history.pop_front();
+        }
+    }
+}
+
+pub struct HistoricalAnalyzer {
+    config: PerformanceMonitorConfig,
+}
+
+impl HistoricalAnalyzer {
+    pub fn new(config: &PerformanceMonitorConfig) -> Self {
+        Self {
+            config: config.clone(),
+        }
+    }
+}
+
+// Supporting types
+#[derive(Debug, Clone)]
+pub struct TimingMetrics {
+    pub component_id: String,
+    pub prediction_duration: Duration,
+    pub processing_duration: Duration,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccuracyRecord {
+    pub component_id: String,
+    pub predicted_value: f64,
+    pub actual_value: f64,
+    pub confidence: f64,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AggregatedMetrics {
+    pub window: Duration,
+    pub count: u64,
+    pub mean_latency: f64,
+    pub mean_accuracy: f64,
+    pub mean_resource_usage: ResourceMetrics,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PerformanceSummary {
+    pub overall_health: f64,
+    pub component_summaries: HashMap<String, ComponentSummary>,
+    pub system_metrics: ResourceMetrics,
+    pub alert_count: usize,
+    pub trend_summary: Vec<PerformanceTrend>,
+    pub generated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ComponentSummary {
+    pub component_id: String,
+    pub health_score: f64,
+    pub current_metrics: PerformanceMetrics,
+    pub trend_indicators: Vec<TrendIndicator>,
+    pub active_alerts: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrendIndicator {
+    pub metric_name: String,
+    pub direction: TrendDirection,
+    pub magnitude: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Anomaly {
+    pub component_id: String,
+    pub metric_name: String,
+    pub value: f64,
+    pub expected_value: f64,
+    pub deviation: f64,
+    pub timestamp: DateTime<Utc>,
+    pub recommended_actions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptimizationRecommendation {
+    pub recommendation_id: String,
+    pub component_id: String,
+    pub recommendation_type: RecommendationType,
+    pub description: String,
+    pub expected_improvement: f64,
+    pub implementation_effort: ImplementationEffort,
+    pub priority: Priority,
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum RecommendationType {
+    ResourceOptimization,
+    ModelOptimization,
+    ArchitectureImprovement,
+    ConfigurationTuning,
+    DataQualityImprovement,
+}
+
+#[derive(Debug, Clone)]
+pub enum ImplementationEffort {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Clone)]
+pub enum Priority {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl Default for PerformanceMetrics {
+    fn default() -> Self {
+        Self {
+            timestamp: Utc::now(),
+            component_id: String::new(),
+            component_type: ComponentType::System,
+            prediction_latency: LatencyMetrics::default(),
+            processing_latency: LatencyMetrics::default(),
+            accuracy_metrics: AccuracyMetrics::default(),
+            quality_metrics: QualityMetrics::default(),
+            resource_metrics: ResourceMetrics::default(),
+            ensemble_metrics: None,
+            sector_metrics: None,
+        }
+    }
+}
+
+impl Default for LatencyMetrics {
+    fn default() -> Self {
+        Self {
+            mean: 0.0,
+            median: 0.0,
+            p95: 0.0,
+            p99: 0.0,
+            max: 0.0,
+            min: 0.0,
+            std_dev: 0.0,
+        }
+    }
+}
+
+impl Default for AccuracyMetrics {
+    fn default() -> Self {
+        Self {
+            overall_accuracy: 0.0,
+            precision: 0.0,
+            recall: 0.0,
+            f1_score: 0.0,
+            auc_roc: None,
+            calibration_error: 0.0,
+            confidence_accuracy_correlation: 0.0,
+        }
+    }
+}
+
+impl Default for QualityMetrics {
+    fn default() -> Self {
+        Self {
+            prediction_consistency: 0.0,
+            uncertainty_calibration: 0.0,
+            coverage_probability: 0.0,
+            interval_width: 0.0,
+            sharpness: 0.0,
+        }
+    }
+}
+
+impl Default for ResourceMetrics {
+    fn default() -> Self {
+        Self {
+            memory_usage_mb: 0.0,
+            cpu_usage_percent: 0.0,
+            disk_io_mb_per_sec: 0.0,
+            network_io_mb_per_sec: 0.0,
+            gpu_usage_percent: None,
+            gpu_memory_mb: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_performance_monitor_creation() {
+        let config = PerformanceMonitorConfig::default();
+        let monitor = PerformanceMonitor::new(config);
+        
+        // Test basic functionality
+        assert!(monitor.register_component(
+            "test_component".to_string(),
+            ComponentType::BaseModel("test".to_string())
+        ).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_collection() {
+        // TODO: Test metrics collection and storage
+    }
+
+    #[tokio::test]
+    async fn test_alert_thresholds() {
+        // TODO: Test alert threshold checking
+    }
+
+    #[tokio::test]
+    async fn test_trend_analysis() {
+        // TODO: Test trend analysis functionality
+    }
+
+    #[tokio::test]
+    async fn test_anomaly_detection() {
+        // TODO: Test anomaly detection
+    }
+
+    #[tokio::test]
+    async fn test_performance_optimization() {
+        // TODO: Test optimization recommendations
+    }
+}

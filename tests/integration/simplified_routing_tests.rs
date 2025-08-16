@@ -1,7 +1,7 @@
 //! Integration Tests for Simplified Routing Architecture
 //!
 //! These tests validate the end-to-end prediction flow through the clean architecture:
-//! NeuralPredictor → EnhancedNeuralAdapter → FannPredictor
+//! VendorPredictor → EnhancedNeuralAdapter → VendorModels
 //!
 //! Test Coverage:
 //! - Single path prediction flow validation
@@ -15,16 +15,17 @@ use std::sync::Arc;
 use tokio::time::timeout;
 use anyhow::Result;
 
-use crate::neural::predictor::NeuralPredictor;
-use crate::neural::fann_predictor::FannPredictor;
+use crate::neural::vendor_predictor::VendorPredictor;
 use crate::neural::NeuralPredictorTrait;
+use crate::data::sector_mapper::{SectorMapper, SectorMapperConfig};
+use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
 use crate::config::NeuralConfig;
 use crate::adapters::enhanced_neural_adapter::{EnhancedNeuralAdapter, EnhancedNeuralConfig};
 
 mod helpers;
 use helpers::{TestConfigBuilder, TestDataGenerator, PerformanceMeasurement, TestResultValidator};
 
-/// Test the single-path prediction flow: NeuralPredictor → Enhanced → FANN
+/// Test the single-path prediction flow: VendorPredictor → Enhanced → VendorModels
 #[tokio::test]
 async fn test_single_path_prediction_flow() -> Result<()> {
     let config = TestConfigBuilder::new()

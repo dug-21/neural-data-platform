@@ -8,8 +8,10 @@ use anyhow::Result;
 use autonomous_platform::{
     adapters::{
         redis::{RedisAdapter, RedisConfig},
-        DataAdapter, MarketData, OrderBook, OrderBookLevel,
+        // Note: OrderBookLevel is defined in features::multi_modal::data_types
+        DataAdapter, MarketData, OrderBook,
     },
+    features::multi_modal::data_types::OrderBookLevel,
     data::{RedisCache, TimeSeriesData, TimescaleDBStorage},
     integration::{
         daa_coordinator::{AutonomousDecision, DaaConfig, DaaCoordinator, TradingAction},
@@ -30,6 +32,14 @@ use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use tracing::info;
 use uuid::Uuid;
+
+// Import test utilities - helpers module not found, using inline function
+// use crate::helpers::test_utils::create_test_market_hours;
+
+/// Create test MarketHours instance for testing (inline since helpers module not found)
+fn create_test_market_hours() -> std::sync::Arc<autonomous_platform::utils::market_hours::MarketHours> {
+    std::sync::Arc::new(autonomous_platform::utils::market_hours::MarketHours::default())
+}
 
 /// Test configuration with mock URLs
 fn create_test_config() -> autonomous_platform::config::Config {
@@ -93,7 +103,7 @@ fn create_test_market_data(symbol: &str, price: f64) -> MarketData {
         high: price + 20.0,
         low: price - 20.0,
         close: price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         bid: price - 0.5,
         ask: price + 0.5,
         exchange: "TEST".to_string(),
@@ -149,12 +159,17 @@ fn create_time_series_data(symbol: &str, base_price: f64, count: usize) -> Vec<T
             high: price + 10.0,
             low: price - 10.0,
             close: price,
-            volume: 1000.0 + (i as f64 * 100.0),
+            volume: vec![1000.0 + (i as f64 * 100.0)],
+            volume_value: 1000.0 + (i as f64 * 100.0),
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some(symbol.to_string()),
             value: Some(price),
             metadata: None,
+            values: vec![price],
+            intervals: vec![i as u64],
+            timestamps: vec![now - chrono::Duration::minutes((count - i) as i64)],
+            metadata_map: HashMap::new(),
         });
     }
 
@@ -270,7 +285,7 @@ mod integration_tests {
     async fn test_event_bus_market_events() {
         // For this test, we'll skip the actual DAL initialization since it requires real DB
         // and test the EventBus components directly
-        return Ok(()); // Skip this test for now as it requires actual database connections
+        return; // Skip this test for now as it requires actual database connections
 
         // Initialize EventBus
         let event_bus = EventBusIntegration::new(dal).await;
@@ -288,7 +303,7 @@ mod integration_tests {
             timestamp: Utc::now(),
             event_type: "price_update".to_string(),
             price: 50000.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             bid: 49990.0,
             ask: 50010.0,
             spread: 20.0,
@@ -324,7 +339,7 @@ mod integration_tests {
         let daa_config = DaaConfig::default();
         let (tx, mut rx) = mpsc::channel(100);
 
-        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx, create_test_market_hours()));
+        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?);        // Add ? to handle Result
 
         // Create market context
         let market_context = MarketContext {
@@ -396,7 +411,7 @@ mod integration_tests {
         let redis_connected = redis_adapter.connect().await.is_ok();
 
         // Skip this test as it requires actual database connections
-        return Ok(());
+        return;
 
         // Initialize EventBus
         let event_bus = Arc::new(EventBusIntegration::new(dal).await.unwrap());
@@ -408,7 +423,8 @@ mod integration_tests {
             DaaConfig::default(),
             neural_predictor,
             decision_tx,
-        ));
+            create_test_market_hours(),
+        )?);
 
         if redis_connected {
             // Publish test market data to Redis
@@ -535,7 +551,7 @@ mod integration_tests {
         let config = create_test_config();
         let neural_predictor = Arc::new(NeuralPredictor::new(config.neural).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?;
 
         let invalid_market = MarketContext {
             symbol: "INVALID".to_string(),
@@ -568,7 +584,8 @@ mod integration_tests {
             DaaConfig::default(),
             neural_predictor,
             tx,
-        ));
+            create_test_market_hours(),
+        )?);
 
         // Spawn multiple concurrent decision tasks
         let mut handles = vec![];
@@ -735,7 +752,7 @@ mod integration_tests {
         daa_config.enable_adaptation = true;
 
         let (tx, mut rx) = mpsc::channel(100);
-        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx, create_test_market_hours()));
+        let coordinator = Arc::new(DaaCoordinator::new(daa_config, neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?);
 
         // Simulate market conditions that should trigger adaptation
         let volatile_market = MarketContext {
@@ -785,7 +802,7 @@ mod integration_tests {
         let config = create_test_config();
         let neural_predictor = Arc::new(NeuralPredictor::new(config.neural).unwrap());
         let (tx, _rx) = mpsc::channel(100);
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?;
 
         // Test with extreme market conditions
         let extreme_cases = vec![
@@ -855,7 +872,8 @@ mod integration_tests {
             DaaConfig::default(),
             neural_predictor,
             tx,
-        ));
+            create_test_market_hours(),
+        )?);
 
         // Simulate different position scenarios
         let positions = vec![
@@ -948,7 +966,8 @@ mod stress_tests {
             DaaConfig::default(),
             neural_predictor,
             tx,
-        ));
+            create_test_market_hours(),
+        )?);
 
         let start = std::time::Instant::now();
         let iterations = 100;

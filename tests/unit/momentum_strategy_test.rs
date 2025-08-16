@@ -1,6 +1,6 @@
 //! Unit tests for Momentum trading strategy
 
-use neural_trader::strategies::{
+use autonomous_platform::strategies::{
     momentum::{MomentumConfig, MomentumStrategy},
     MarketContext, Position, PositionSide, Signal, StrategyConfig, StrategyError, TradingStrategy,
 };
@@ -18,17 +18,18 @@ mod tests {
         parameters.insert("momentum_threshold".to_string(), serde_json::json!(0.02));
 
         StrategyConfig {
-            name: "test_momentum".to_string(),
-            strategy_type: "momentum".to_string(),
+            name: "momentum".to_string(),
+            enabled: true,
             parameters,
             risk_limit: 0.1,
-            max_positions: 5,
+            position_size: 1.0,
         }
     }
 
     fn create_market_context(bid: f64, ask: f64, volume: f64, volatility: f64) -> MarketContext {
         MarketContext {
             symbol: "BTC/USD".to_string(),
+            current_price: (bid + ask) / 2.0,
             timestamp: 1640995200,
             bid,
             ask,
@@ -38,15 +39,19 @@ mod tests {
     }
 
     fn create_position(entry_price: f64, current_price: f64, side: PositionSide) -> Position {
+        let unrealized_pnl = match side {
+            PositionSide::Long => (current_price - entry_price) * 1.0,
+            PositionSide::Short => (entry_price - current_price) * 1.0,
+        };
+        
         Position {
-            id: "test_position".to_string(),
             symbol: "BTC/USD".to_string(),
             side,
             size: 1.0,
             entry_price,
             current_price,
+            unrealized_pnl,
             timestamp: 1640995200,
-            pnl: (current_price - entry_price) * 1.0,
         }
     }
 
@@ -257,7 +262,7 @@ mod tests {
                 reason,
             } => {
                 assert_eq!(confidence, 1.0);
-                assert_eq!(size, 1.0);
+                assert_eq!(size, Some(1.0));
                 assert_eq!(reason, "Stop loss triggered");
             }
             _ => panic!("Expected Sell signal"),
@@ -283,7 +288,7 @@ mod tests {
                 reason,
             } => {
                 assert_eq!(confidence, 1.0);
-                assert_eq!(size, 1.0);
+                assert_eq!(size, Some(1.0));
                 assert_eq!(reason, "Stop loss triggered");
             }
             _ => panic!("Expected Sell signal"),
@@ -309,7 +314,7 @@ mod tests {
                 reason,
             } => {
                 assert_eq!(confidence, 1.0);
-                assert_eq!(size, 1.0);
+                assert_eq!(size, Some(1.0));
                 assert_eq!(reason, "Take profit reached");
             }
             _ => panic!("Expected Sell signal"),
@@ -335,7 +340,7 @@ mod tests {
                 reason,
             } => {
                 assert_eq!(confidence, 1.0);
-                assert_eq!(size, 1.0);
+                assert_eq!(size, Some(1.0));
                 assert_eq!(reason, "Take profit reached");
             }
             _ => panic!("Expected Sell signal"),

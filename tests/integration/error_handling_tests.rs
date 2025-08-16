@@ -12,8 +12,10 @@ use std::sync::Arc;
 use anyhow::Result;
 use tokio::time::timeout;
 
-use crate::neural::predictor::NeuralPredictor;
+use crate::neural::vendor_predictor::VendorPredictor;
 use crate::neural::NeuralPredictorTrait;
+use crate::data::sector_mapper::{SectorMapper, SectorMapperConfig};
+use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
 use crate::config::NeuralConfig;
 use crate::adapters::enhanced_neural_adapter::{EnhancedNeuralAdapter, EnhancedNeuralConfig};
 

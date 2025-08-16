@@ -8,10 +8,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use autonomous_platform::{
-    agents::AutonomousAgent,
     mcp::{register_mcp_tools, TradingMcpTools},
     monitoring::HealthMonitor,
-    neural::NeuralPredictor,
 };
 
 #[tokio::main]

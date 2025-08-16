@@ -11,7 +11,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::daa::autonomous_training::{AutonomousTrainingEngine, PerformanceSnapshot};
 use crate::data::TimeSeriesData;
-use crate::neural::{NeuralPredictor, PredictionResult};
+use crate::neural::{NeuralPredictor, PredictionResult, NeuralPredictorTrait};
 use crate::strategies::{MarketContext, Position, Signal, TradingStrategy};
 
 use super::config::{DaaConfig, PerformanceMetrics};

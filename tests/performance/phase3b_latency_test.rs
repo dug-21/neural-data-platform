@@ -6,11 +6,11 @@
 mod phase3b_performance_tests {
     use std::time::Instant;
     use tokio::runtime::Runtime;
-    use neural_trader::neural::monitoring::performance_channel::{
+    use autonomous_platform::neural::monitoring::performance_channel::{
         PerformanceChannel, PerformanceEventBuilder, PerformanceSource,
         PerformanceEventType, EventPriority, ChannelConfig,
     };
-    use neural_trader::integration::event_bus::{EventBus, EventBusConfig};
+    use autonomous_platform::integration::event_bus::{EventBus, EventBusConfig};
     use std::collections::HashMap;
     use chrono::Utc;
 
@@ -228,7 +228,7 @@ mod phase3b_performance_tests {
 
     // Helper functions
     
-    fn create_test_event() -> neural_trader::neural::monitoring::performance_channel::PerformanceEvent {
+    fn create_test_event() -> autonomous_platform::neural::monitoring::performance_channel::PerformanceEvent {
         PerformanceEventBuilder::new()
             .source(PerformanceSource::System {
                 service_name: "test".to_string(),
@@ -243,7 +243,7 @@ mod phase3b_performance_tests {
             .unwrap()
     }
 
-    fn create_test_event_with_data(id: usize) -> neural_trader::neural::monitoring::performance_channel::PerformanceEvent {
+    fn create_test_event_with_data(id: usize) -> autonomous_platform::neural::monitoring::performance_channel::PerformanceEvent {
         let mut metrics = HashMap::new();
         metrics.insert("test_id".to_string(), id as f64);
         metrics.insert("value".to_string(), 42.0);
@@ -264,7 +264,7 @@ mod phase3b_performance_tests {
             .unwrap()
     }
 
-    fn create_decision_event() -> neural_trader::neural::monitoring::performance_channel::PerformanceEvent {
+    fn create_decision_event() -> autonomous_platform::neural::monitoring::performance_channel::PerformanceEvent {
         PerformanceEventBuilder::new()
             .source(PerformanceSource::TradingStrategy {
                 strategy_name: "test_strategy".to_string(),
@@ -283,7 +283,7 @@ mod phase3b_performance_tests {
             .unwrap()
     }
 
-    async fn process_decision(_event: neural_trader::neural::monitoring::performance_channel::PerformanceEvent) {
+    async fn process_decision(_event: autonomous_platform::neural::monitoring::performance_channel::PerformanceEvent) {
         // Simulate minimal decision processing
         tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
     }

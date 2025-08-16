@@ -3,10 +3,9 @@
 //! These tests validate that the new create_and_initialize_strategy method
 //! properly initializes strategies before returning them.
 
-use neural_trader::strategies::{
+use autonomous_platform::strategies::{
     MarketContext, Position, PositionSide, Signal, StrategyConfig, 
     StrategyError, StrategyFactory, TradingStrategy,
-    momentum::MomentumStrategy,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -119,9 +118,9 @@ mod factory_initialization_tests {
     #[tokio::test]
     async fn test_create_and_initialize_neural_enhanced_strategy() {
         // GIVEN: A neural enhanced strategy configuration
-        let neural_config = neural_trader::config::NeuralConfig::default();
+        let neural_config = autonomous_platform::config::NeuralConfig::default();
         let neural_predictor = Arc::new(
-            neural_trader::neural::NeuralPredictor::new(neural_config).unwrap()
+            autonomous_platform::neural::NeuralPredictor::new(neural_config).await.unwrap()
         );
         
         let config = StrategyConfig {
@@ -358,8 +357,8 @@ mod factory_error_handling_tests {
 #[cfg(test)]
 mod factory_integration_tests {
     use super::*;
-    use neural_trader::adapters::DataAdapter;
-    use neural_trader::data::TimeSeriesData;
+    use autonomous_platform::adapters::DataAdapter;
+    use autonomous_platform::data::TimeSeriesData;
     use chrono::Utc;
 
     #[tokio::test]

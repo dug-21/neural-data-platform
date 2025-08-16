@@ -36,7 +36,7 @@ async fn test_daa_decision_making() {
 
     let context = MarketContext {
         current_price: 100.0,
-        volume: 10000.0,
+        volume: vec![10000.0],
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
@@ -64,7 +64,7 @@ async fn test_risk_assessment() {
 
     let context = MarketContext {
         current_price: 150.0,
-        volume: 5000.0,
+        volume: vec![5000.0],
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
@@ -91,7 +91,7 @@ async fn test_strategy_signal() {
 
     let context = MarketContext {
         current_price: 99.5,
-        volume: 15000.0,
+        volume: vec![15000.0],
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
@@ -172,7 +172,7 @@ async fn test_autonomous_agent_compatibility() {
 
     let context = MarketContext {
         current_price: 101.0,
-        volume: 12000.0,
+        volume: vec![12000.0],
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };
@@ -202,7 +202,7 @@ async fn test_multi_strategy_decision() {
 
     let context = MarketContext {
         current_price: 100.5,
-        volume: 20000.0,
+        volume: vec![20000.0],
         timestamp: Utc::now(),
         metadata: HashMap::new(),
     };

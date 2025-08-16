@@ -5,14 +5,13 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use super::errors::{
-    AdapterError, DefaultErrorHandler, ErrorContext, ErrorHandler, ErrorSeverity, FallbackConfig,
+use super::errors::{AdapterError, DefaultErrorHandler, ErrorContext, ErrorHandler, FallbackConfig,
     RecoveryStrategy,
 };
 use super::health_monitor::{HealthMonitor, HealthStatus};
@@ -683,6 +682,7 @@ mod tests {
                         interval_low: 95.0 + i as f64,
                         interval_high: 105.0 + i as f64,
                         model_name: model_name.clone(),
+                        metadata: None,
                     });
                 }
                 Ok(predictions)

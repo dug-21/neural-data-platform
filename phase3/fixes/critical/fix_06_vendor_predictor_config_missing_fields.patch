@@ -1,0 +1,18 @@
+# Fix 6: Add missing fields to VendorPredictorConfig struct
+# Error: struct `VendorPredictorConfig` has no field named `layers`, `base_config`
+# Location: src/neural/performance_optimizer.rs:99, 205
+
+--- a/src/neural/vendor_predictor.rs
++++ b/src/neural/vendor_predictor.rs
+@@ -85,6 +85,12 @@ pub struct VendorPredictorConfig {
+     pub enable_performance_tracking: bool,
+     /// Enable sector-based routing
+     pub enable_sector_routing: bool,
++    // Missing fields that are used in the code
++    #[serde(default)]
++    pub layers: Vec<usize>,
++    #[serde(default)]
++    pub base_config: Option<serde_json::Value>,
++    #[serde(default)]
++    pub intervals: Vec<u64>, // For time intervals
+ }

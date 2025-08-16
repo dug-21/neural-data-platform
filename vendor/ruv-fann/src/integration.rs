@@ -15,7 +15,6 @@ use crate::{
     Network, NetworkBuilder,
     TrainingData,
     CascadeTrainer, CascadeConfig,
-    errors::RuvFannError,
 };
 
 

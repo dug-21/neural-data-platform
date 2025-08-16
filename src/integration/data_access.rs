@@ -6,9 +6,10 @@
 
 use crate::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
 use anyhow::{bail, Context, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, error, info, warn};
@@ -140,6 +141,62 @@ impl DataAccessLayer {
         })
     }
 
+    /// Get training history days from environment variables with fallback defaults
+    fn get_training_history_days() -> (i64, i64, i64) {
+        let training_history_days = env::var("TRAINING_HISTORY_DAYS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(90); // Default: 90 days
+
+        let min_training_history_days = env::var("MIN_TRAINING_HISTORY_DAYS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(30); // Default: 30 days
+
+        let max_training_history_days = env::var("MAX_TRAINING_HISTORY_DAYS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(365); // Default: 365 days
+
+        (training_history_days, min_training_history_days, max_training_history_days)
+    }
+
+    /// Get appropriate time range for a given timeframe based on environment configuration
+    /// 
+    /// Environment variables respected:
+    /// - TRAINING_HISTORY_DAYS: Base training window (default: 90 days)
+    /// - MIN_TRAINING_HISTORY_DAYS: Minimum allowed window (default: 30 days)  
+    /// - MAX_TRAINING_HISTORY_DAYS: Maximum allowed window (default: 365 days)
+    fn get_timeframe_duration(timeframe: &Timeframe) -> Duration {
+        let (training_history_days, min_training_history_days, max_training_history_days) = 
+            Self::get_training_history_days();
+        
+        match timeframe {
+            // For shorter timeframes, use shorter windows for performance
+            Timeframe::Minute => Duration::hours(1),
+            Timeframe::FiveMinute => Duration::hours(4), 
+            Timeframe::FifteenMinute => Duration::hours(12),
+            // For longer timeframes, use environment-configured history
+            // CRITICAL FIX: Ensure hourly data requests use DAYS not HOURS for the proper training window
+            Timeframe::Hourly => {
+                // Use the configured training history days for hourly data
+                // This ensures we get the full requested time window (e.g., 90 days * 24 hours = 2160 data points)
+                let days = std::cmp::min(training_history_days, max_training_history_days);
+                info!("📊 Loading {} days of hourly data (TRAINING_HISTORY_DAYS={}) - requesting {} hour window", 
+                      days, training_history_days, days * 24);
+                Duration::days(days) // FIXED: Using Duration::days() not Duration::hours()
+            },
+            Timeframe::Daily => Duration::days(std::cmp::min(
+                std::cmp::max(training_history_days, min_training_history_days), 
+                max_training_history_days
+            )),
+            Timeframe::Weekly => Duration::days(std::cmp::min(
+                std::cmp::max(training_history_days * 2, min_training_history_days * 4), // More data for weekly
+                max_training_history_days
+            )),
+        }
+    }
+
     /// Handle data request from DAA agent
     pub async fn handle_agent_data_request(&self, request: DataRequest) -> Result<DataResponse> {
         let start_time = std::time::Instant::now();
@@ -226,17 +283,20 @@ impl DataAccessLayer {
             return Ok(cached_data);
         }
 
-        // Query from database
+        // Query from database using environment-configured time ranges
         debug!("Cache miss, querying database for market data: {}", symbol);
         let end_time = Utc::now();
-        let start_time = match timeframe {
-            Timeframe::Minute => end_time - Duration::hours(1),
-            Timeframe::FiveMinute => end_time - Duration::hours(4),
-            Timeframe::FifteenMinute => end_time - Duration::hours(12),
-            Timeframe::Hourly => end_time - Duration::days(1),
-            Timeframe::Daily => end_time - Duration::days(30),
-            Timeframe::Weekly => end_time - Duration::days(180),
-        };
+        let duration = Self::get_timeframe_duration(&timeframe);
+        let start_time = end_time - duration;
+        
+        debug!(
+            "Querying {} data for {} from {} to {} (duration: {} days)", 
+            format!("{:?}", timeframe),
+            symbol, 
+            start_time, 
+            end_time,
+            duration.num_days()
+        );
 
         let raw_data = self
             .storage
@@ -247,42 +307,48 @@ impl DataAccessLayer {
         // Convert to TimeSeriesData format
         let mut time_series_data = Vec::new();
         for data_point in raw_data {
-            if let Some(metadata) = &data_point.metadata {
-                time_series_data.push(TimeSeriesData {
-                    symbol: data_point.entity.clone(),
-                    timestamp: data_point.timestamp,
-                    open: metadata
-                        .get("open")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(data_point.value),
-                    high: metadata
-                        .get("high")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(data_point.value),
-                    low: metadata
-                        .get("low")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(data_point.value),
-                    close: data_point.value,
-                    volume: metadata
-                        .get("volume")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0),
-                    indicators: metadata
-                        .get("indicators")
-                        .and_then(|v| v.as_object())
-                        .map(|obj| {
-                            obj.iter()
-                                .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f)))
-                                .collect()
-                        })
-                        .unwrap_or_default(),
-                    source: Some(data_point.source.clone()),
-                    entity: Some(data_point.entity.clone()),
-                    value: Some(data_point.value),
-                    metadata: data_point.metadata.clone(),
-                });
-            }
+            // Extract OHLCV data from metadata if available
+            let (open, high, low, close, volume) = if let Some(metadata) = &data_point.metadata {
+                (
+                    metadata.get("open").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("high").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("low").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("close").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("volume").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                )
+            } else {
+                // Fallback to using value as close price
+                (data_point.value, data_point.value, data_point.value, data_point.value, 0.0)
+            };
+
+            time_series_data.push(TimeSeriesData {
+                symbol: data_point.entity.clone(),
+                timestamp: data_point.timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume: vec![volume],
+                volume_value: volume,
+                intervals: vec![1000], // Default 1-second intervals
+                timestamps: vec![data_point.timestamp],
+                values: vec![close],
+                indicators: data_point.metadata
+                    .as_ref()
+                    .and_then(|meta| meta.get("indicators"))
+                    .and_then(|v| v.as_object())
+                    .map(|obj| {
+                        obj.iter()
+                            .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f)))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                source: Some(data_point.source.clone()),
+                entity: Some(data_point.entity.clone()),
+                value: Some(close),
+                metadata: data_point.metadata.clone(),
+                metadata_map: HashMap::new(),
+            });
         }
 
         // Cache the result
@@ -319,7 +385,7 @@ impl DataAccessLayer {
                     PriceInfo {
                         price: latest_data.close,
                         timestamp: latest_data.timestamp,
-                        volume: latest_data.volume,
+                        volume: latest_data.volume_value,
                         source: "cache".to_string(),
                     },
                 );
@@ -334,15 +400,19 @@ impl DataAccessLayer {
                     .await
                 {
                     if let Some(latest) = data.last() {
+                        let (price, volume) = if let Some(metadata) = &latest.metadata {
+                            (
+                                metadata.get("close").and_then(|v| v.as_f64()).unwrap_or(latest.value),
+                                metadata.get("volume").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                            )
+                        } else {
+                            (latest.value, 0.0)
+                        };
+
                         let price_info = PriceInfo {
-                            price: latest.value,
+                            price,
                             timestamp: latest.timestamp,
-                            volume: latest
-                                .metadata
-                                .as_ref()
-                                .and_then(|m| m.get("volume"))
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0),
+                            volume,
                             source: "database".to_string(),
                         };
                         price_map.insert(symbol, price_info);
@@ -484,12 +554,17 @@ impl DataAccessLayer {
                 high: price_info.price,
                 low: price_info.price,
                 close: price_info.price,
-                volume: price_info.volume,
+                volume: vec![price_info.volume],
+                volume_value: price_info.volume,
+                intervals: vec![1000], // Default 1-second intervals
+                timestamps: vec![price_info.timestamp],
+                values: vec![price_info.price],
                 indicators: HashMap::new(),
                 source: Some("price_feed".to_string()),
                 entity: Some(symbol.clone()),
                 value: Some(price_info.price),
                 metadata: None,
+                metadata_map: HashMap::new(),
             });
         }
 
@@ -551,12 +626,18 @@ impl DataAccessLayer {
                 high: stat.max_value.unwrap_or(0.0),
                 low: stat.min_value.unwrap_or(0.0),
                 close: stat.avg_value.unwrap_or(0.0),
-                volume: 1000.0, // Default volume for aggregated data
+                volume: vec![1000.0], // Default volume for aggregated data
+                volume_value: 1000.0,
                 indicators,
                 source: Some("aggregated_stats".to_string()),
                 entity: Some(stat.entity.clone()),
                 value: Some(stat.avg_value.unwrap_or(0.0)),
                 metadata: None,
+                // Required fields for vendor model integration
+                values: vec![stat.avg_value.unwrap_or(0.0)],
+                intervals: vec![],
+                timestamps: vec![stat.bucket],
+                metadata_map: HashMap::new(),
             });
         }
 
@@ -778,7 +859,7 @@ impl DataAccessLayer {
                 "high" => time_series.iter().map(|d| d.high).collect(),
                 "low" => time_series.iter().map(|d| d.low).collect(),
                 "close" => time_series.iter().map(|d| d.close).collect(),
-                "volume" => time_series.iter().map(|d| d.volume).collect(),
+                "volume" => time_series.iter().map(|d| d.volume_value).collect(),
                 // Technical indicators from metadata
                 indicator => time_series
                     .iter()
@@ -867,10 +948,61 @@ impl DataAccessLayer {
     fn aggregate_by_timeframe(
         &self,
         raw_data: Vec<crate::data::storage::TimeSeriesData>,
-        _timeframe: &Timeframe,
+        timeframe: &Timeframe,
     ) -> Result<Vec<TimeSeriesData>> {
         // Convert storage format to unified format first
-        self.convert_to_time_series(raw_data)
+        let minute_data = self.convert_to_time_series(raw_data)?;
+        
+        // If it's already minute data or smaller, no aggregation needed for minute timeframe
+        if matches!(timeframe, Timeframe::Minute) {
+            return Ok(minute_data);
+        }
+        
+        // Group data by time buckets based on timeframe
+        let bucket_duration = match timeframe {
+            Timeframe::Minute => Duration::minutes(1),
+            Timeframe::FiveMinute => Duration::minutes(5), 
+            Timeframe::FifteenMinute => Duration::minutes(15),
+            Timeframe::Hourly => Duration::hours(1),
+            Timeframe::Daily => Duration::days(1),
+            Timeframe::Weekly => Duration::weeks(1),
+        };
+        
+        let mut aggregated_data = Vec::new();
+        let mut current_bucket: Option<(DateTime<Utc>, Vec<TimeSeriesData>)> = None;
+        
+        for data_point in minute_data {
+            // Calculate the bucket start time for this data point
+            let bucket_start = self.get_bucket_start(data_point.timestamp, &bucket_duration);
+            
+            match &mut current_bucket {
+                Some((bucket_time, bucket_data)) => {
+                    if *bucket_time == bucket_start {
+                        // Same bucket, add to current
+                        bucket_data.push(data_point);
+                    } else {
+                        // New bucket, finalize current and start new one
+                        if let Some(aggregated) = self.aggregate_bucket(bucket_data.clone(), *bucket_time)? {
+                            aggregated_data.push(aggregated);
+                        }
+                        current_bucket = Some((bucket_start, vec![data_point]));
+                    }
+                }
+                None => {
+                    // First bucket
+                    current_bucket = Some((bucket_start, vec![data_point]));
+                }
+            }
+        }
+        
+        // Process the final bucket
+        if let Some((bucket_time, bucket_data)) = current_bucket {
+            if let Some(aggregated) = self.aggregate_bucket(bucket_data, bucket_time)? {
+                aggregated_data.push(aggregated);
+            }
+        }
+        
+        Ok(aggregated_data)
     }
 
     /// Convert storage time series data to unified time series format  
@@ -918,8 +1050,8 @@ impl DataAccessLayer {
                     let data_len = data.len();
                     for i in 19..data_len {
                         let avg_volume: f64 =
-                            data[i - 19..=i].iter().map(|d| d.volume).sum::<f64>() / 20.0;
-                        let current_volume = data[i].volume;
+                            data[i - 19..=i].iter().map(|d| d.volume_value).sum::<f64>() / 20.0;
+                        let current_volume = data[i].volume_value;
                         if avg_volume > 0.0 {
                             data[i]
                                 .indicators
@@ -948,5 +1080,103 @@ impl DataAccessLayer {
             self.training_semaphore.available_permits() as f64,
         );
         stats
+    }
+
+    /// Get the bucket start time for a given timestamp and duration
+    fn get_bucket_start(&self, timestamp: DateTime<Utc>, bucket_duration: &Duration) -> DateTime<Utc> {
+        match bucket_duration {
+            d if *d == Duration::minutes(5) => {
+                // Round down to nearest 5-minute interval
+                let minutes = timestamp.minute();
+                let rounded_minutes = (minutes / 5) * 5;
+                timestamp.with_minute(rounded_minutes).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap()
+            }
+            d if *d == Duration::minutes(15) => {
+                // Round down to nearest 15-minute interval
+                let minutes = timestamp.minute();
+                let rounded_minutes = (minutes / 15) * 15;
+                timestamp.with_minute(rounded_minutes).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap()
+            }
+            d if *d == Duration::hours(1) => {
+                // Round down to nearest hour
+                timestamp.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap()
+            }
+            d if *d == Duration::days(1) => {
+                // Round down to nearest day
+                timestamp.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc()
+            }
+            d if *d == Duration::weeks(1) => {
+                // Round down to nearest Monday
+                let days_since_monday = timestamp.weekday().num_days_from_monday();
+                let monday = timestamp.date_naive() - chrono::Duration::days(days_since_monday as i64);
+                monday.and_hms_opt(0, 0, 0).unwrap().and_utc()
+            }
+            _ => {
+                // Default: round down to nearest minute
+                timestamp.with_second(0).unwrap().with_nanosecond(0).unwrap()
+            }
+        }
+    }
+
+    /// Aggregate a bucket of data points into a single OHLCV candle
+    fn aggregate_bucket(&self, bucket_data: Vec<TimeSeriesData>, bucket_time: DateTime<Utc>) -> Result<Option<TimeSeriesData>> {
+        if bucket_data.is_empty() {
+            return Ok(None);
+        }
+
+        // Sort by timestamp to ensure proper OHLC calculation
+        let mut sorted_data = bucket_data;
+        sorted_data.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+        let first = &sorted_data[0];
+        let last = &sorted_data[sorted_data.len() - 1];
+
+        // Calculate OHLCV
+        let open = first.open;
+        let close = last.close;
+        let high = sorted_data.iter().map(|d| d.high).fold(f64::NEG_INFINITY, f64::max);
+        let low = sorted_data.iter().map(|d| d.low).fold(f64::INFINITY, f64::min);
+        let volume = sorted_data.iter().map(|d| d.volume_value).sum::<f64>();
+
+        // Aggregate indicators (average them for now - could be more sophisticated)
+        let mut aggregated_indicators = HashMap::new();
+        if !sorted_data[0].indicators.is_empty() {
+            for key in sorted_data[0].indicators.keys() {
+                let sum: f64 = sorted_data
+                    .iter()
+                    .filter_map(|d| d.indicators.get(key))
+                    .sum();
+                let count = sorted_data
+                    .iter()
+                    .filter(|d| d.indicators.contains_key(key))
+                    .count();
+                if count > 0 {
+                    aggregated_indicators.insert(key.clone(), sum / count as f64);
+                }
+            }
+        }
+
+        // Create aggregated candle
+        let aggregated = TimeSeriesData {
+            symbol: first.symbol.clone(),
+            timestamp: bucket_time,
+            open,
+            high,
+            low,
+            close,
+            volume: vec![volume],
+            volume_value: volume,
+            intervals: vec![bucket_time.timestamp_millis() as u64],
+            timestamps: vec![bucket_time],
+            values: vec![close],
+            indicators: aggregated_indicators,
+            source: first.source.clone(),
+            entity: first.entity.clone(),
+            value: Some(close),
+            metadata: first.metadata.clone(),
+            metadata_map: first.metadata_map.clone(),
+        };
+
+        Ok(Some(aggregated))
     }
 }

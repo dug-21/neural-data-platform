@@ -99,7 +99,7 @@ impl IntegrationBridge {
             // Update fields from latest data
             context.symbol = latest.symbol.clone();
             context.current_price = latest.close;
-            context.volume_24h = latest.volume;
+            context.volume_24h = latest.volume.first().copied().unwrap_or(0.0);  // Get first element from Vec<f64>
             context.timestamp = latest.timestamp.timestamp();
             // Update bid/ask with small spread
             context.bid = latest.close * 0.999;

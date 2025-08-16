@@ -23,6 +23,7 @@ pub mod neuro_divergent_error_handling_test;
 
 // Data pipeline tests
 pub mod data_pipeline_test;
+pub mod data_pipeline_routing_test;
 
 // Service layer tests
 pub mod service_data_test;
@@ -47,3 +48,9 @@ pub mod test_module_encapsulation;
 // Phase 3B tests
 pub mod phase3b_mock_tests;
 pub mod event_subscription_tests;
+
+// Memory optimization tests
+pub mod memory_optimization_test;
+
+// Phase 3 DAA Extensions Tests
+pub mod daa;

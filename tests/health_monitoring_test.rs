@@ -144,7 +144,7 @@ mod health_monitor_tests {
 
         let health_monitor = create_test_health_monitor().await.unwrap();
         let health = health_monitor
-            .check_component_health(ComponentType::Streaming)
+            .check_component_health(ComponentType::Custom("Streaming".to_string()))
             .await;
 
         assert!(health.is_ok());
@@ -214,7 +214,7 @@ mod health_monitor_tests {
 
         assert!(health.is_ok());
         let health = health.unwrap();
-        assert!(matches!(health.status, HealthStatus::Unhealthy(_)));
+        assert!(matches!(health.status, HealthStatus::Unhealthy));
         assert!(health.error_message.is_some());
     }
 
@@ -241,7 +241,7 @@ mod health_monitor_tests {
 
         assert!(health.is_ok());
         let health = health.unwrap();
-        assert!(matches!(health.status, HealthStatus::Degraded(_)));
+        assert!(matches!(health.status, HealthStatus::Degraded));
     }
 
     #[tokio::test]
@@ -261,7 +261,7 @@ mod health_monitor_tests {
         assert!(system_health.components.contains_key(&ComponentType::Redis));
         assert!(system_health
             .components
-            .contains_key(&ComponentType::Streaming));
+            .contains_key(&ComponentType::Custom("Streaming".to_string())));
         assert!(system_health
             .components
             .contains_key(&ComponentType::DAAOrchestrator));
@@ -271,7 +271,7 @@ mod health_monitor_tests {
 
         // Overall status should be determined by component statuses
         match system_health.overall_status {
-            HealthStatus::Healthy | HealthStatus::Degraded(_) | HealthStatus::Unhealthy(_) => {}
+            HealthStatus::Healthy | HealthStatus::Degraded | HealthStatus::Unhealthy => {}
             _ => panic!("Invalid overall status"),
         }
     }
@@ -429,12 +429,12 @@ impl TestHealthMonitor {
         let status = match component {
             ComponentType::Database => HealthStatus::Healthy,
             ComponentType::Redis => HealthStatus::Healthy,
-            ComponentType::Streaming => HealthStatus::Healthy,
+            ComponentType::Custom("Streaming".to_string()) => HealthStatus::Healthy,
             ComponentType::DAAOrchestrator => HealthStatus::Healthy,
             ComponentType::NeuralSystem => HealthStatus::Healthy,
-            ComponentType::EventBus => HealthStatus::Healthy,
-            ComponentType::DataPipeline => HealthStatus::Healthy,
-            ComponentType::Cache => HealthStatus::Healthy,
+            ComponentType::Custom("EventBus".to_string()) => HealthStatus::Healthy,
+            ComponentType::Custom("DataPipeline".to_string()) => HealthStatus::Healthy,
+            ComponentType::Custom("Cache".to_string()) => HealthStatus::Healthy,
         };
 
         let health = ComponentHealth {
@@ -464,7 +464,7 @@ impl TestHealthMonitor {
         for component_type in [
             ComponentType::Database,
             ComponentType::Redis,
-            ComponentType::Streaming,
+            ComponentType::Custom("Streaming".to_string()),
             ComponentType::DAAOrchestrator,
             ComponentType::NeuralSystem,
         ] {
@@ -475,12 +475,12 @@ impl TestHealthMonitor {
         // Determine overall status
         let overall_status = if components
             .values()
-            .any(|h| matches!(h.status, HealthStatus::Unhealthy(_)))
+            .any(|h| matches!(h.status, HealthStatus::Unhealthy))
         {
             HealthStatus::Unhealthy("Some components are unhealthy".to_string())
         } else if components
             .values()
-            .any(|h| matches!(h.status, HealthStatus::Degraded(_)))
+            .any(|h| matches!(h.status, HealthStatus::Degraded))
         {
             HealthStatus::Degraded("Some components are degraded".to_string())
         } else {
@@ -494,11 +494,11 @@ impl TestHealthMonitor {
             .count();
         let degraded_components = components
             .values()
-            .filter(|c| matches!(c.status, HealthStatus::Degraded(_)))
+            .filter(|c| matches!(c.status, HealthStatus::Degraded))
             .count();
         let unhealthy_components = components
             .values()
-            .filter(|c| matches!(c.status, HealthStatus::Unhealthy(_)))
+            .filter(|c| matches!(c.status, HealthStatus::Unhealthy))
             .count();
 
         Ok(SystemHealth {

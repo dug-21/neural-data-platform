@@ -58,6 +58,11 @@ impl MarketHours {
         self.scheduler.is_exchange_open(exchange, time).await
     }
 
+    /// Check if market is open (alias for is_exchange_open for backward compatibility)
+    pub async fn is_market_open(&self, exchange: Exchange, time: DateTime<Utc>) -> bool {
+        self.scheduler.is_exchange_open(exchange, time).await
+    }
+
     /// Get current market session for an exchange
     pub async fn get_session(&self, exchange: Exchange, time: DateTime<Utc>) -> MarketSession {
         self.scheduler.get_session(exchange, time).await

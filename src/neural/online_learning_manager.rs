@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
-use crate::neural::FannPredictor;
+use crate::neural::VendorPredictor;
 use super::online_validator::{OnlineValidator, OnlineValidationConfig, ValidationMetrics};
 use super::streaming_connector::{StreamingConnector, StreamingConfig};
 use super::PredictionResult;
@@ -93,7 +93,7 @@ pub struct OnlineLearningStatus {
 /// Comprehensive online learning manager
 pub struct OnlineLearningManager {
     config: OnlineLearningConfig,
-    predictor: Arc<FannPredictor>,
+    predictor: Arc<VendorPredictor>,
     validator: Option<Arc<OnlineValidator>>,
     streaming_connector: Option<Arc<RwLock<StreamingConnector>>>,
     status: Arc<RwLock<OnlineLearningStatus>>,
@@ -102,8 +102,27 @@ pub struct OnlineLearningManager {
 
 impl OnlineLearningManager {
     /// Create a new online learning manager
-    pub fn new(config: OnlineLearningConfig) -> Result<Self> {
-        let predictor = Arc::new(FannPredictor::new(config.neural_config.clone())?);
+    pub async fn new(config: OnlineLearningConfig) -> Result<Self> {
+        // Create storage and cache first
+        let storage = Arc::new(crate::data::TimescaleDBStorage::new("postgresql://localhost/neural_trader").await?);
+        let cache = Arc::new(crate::data::cache::RedisCache::new("redis://127.0.0.1:6379").await?);
+        
+        // Create data access layer with required dependencies
+        let data_access = Arc::new(crate::integration::data_access::DataAccessLayer::new(storage.clone(), cache.clone()).await?);
+        
+        // Create training data service
+        let training_service = Arc::new(crate::integration::training_data_service::TrainingDataService::new(
+            storage.clone(),
+            cache.clone()
+        ).await?);
+        
+        let predictor = Arc::new(VendorPredictor::new(
+            &config.neural_config, 
+            Arc::new(crate::data::sector_mapper::SectorMapper::new(
+                crate::data::sector_mapper::SectorMapperConfig::default()
+            )),
+            Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new())
+        )?);
         
         let status = OnlineLearningStatus {
             is_running: false,
@@ -237,11 +256,21 @@ impl OnlineLearningManager {
             }
         }
 
-        // Update status
-        {
+        // Update status and check if we should save checkpoints
+        let should_save = {
             let mut status = self.status.write().await;
             status.total_samples_processed += 1;
             status.last_update = Utc::now();
+            
+            // Save checkpoint every 100 samples processed
+            status.total_samples_processed % 100 == 0
+        };
+        
+        if should_save {
+            info!("💾 Auto-saving checkpoints after processing 100 samples");
+            if let Err(e) = self.save_checkpoints().await {
+                warn!("Failed to save checkpoints: {}", e);
+            }
         }
 
         debug!("📊 Processed sample for online learning: symbol={}, price={:.2}", 
@@ -255,7 +284,7 @@ impl OnlineLearningManager {
         let batch_size = 32;
         
         for model_name in &self.config.neural_config.models {
-            if let Err(e) = self.predictor.mini_batch_update(model_name, vec![], batch_size, None).await {
+            if let Err(e) = self.predictor.mini_batch_update(model_name, &[], batch_size, None).await {
                 warn!("Failed to process batch for model '{}': {}", model_name, e);
             }
         }
@@ -295,7 +324,7 @@ impl OnlineLearningManager {
         // Update performance metrics
         for model_name in &self.config.neural_config.models {
             let prediction_values: Vec<f64> = predictions.iter().map(|p| p.value).collect();
-            if let Err(e) = self.predictor.update_performance(model_name, actual_values.to_vec(), prediction_values).await {
+            if let Err(e) = self.predictor.update_performance(model_name, actual_values, &prediction_values).await {
                 warn!("Failed to update performance for model '{}': {}", model_name, e);
             }
         }
@@ -601,7 +630,7 @@ mod tests {
             high: 1002.0,
             low: 998.0,
             close: 1001.0,
-            volume: 1000000.0,
+            volume: vec![1000000.0],
             source: Some("test".to_string()),
             value: Some(1001.0),
             metadata: None,

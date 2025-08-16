@@ -3,7 +3,7 @@
 
 use chrono::{Utc, Duration};
 use tokio::sync::mpsc;
-use neural_trader::daa::autonomous_training::{
+use autonomous_platform::daa::autonomous_training::{
     AutonomousTrainingEngine, TrainingTriggerConfig, PerformanceSnapshot,
     TrainingDecisionType, TrainingDecision, TrainingOutcome, ResourceRequirements,
     TrainingPriority, DAATrainingIntegration,
@@ -855,11 +855,18 @@ mod serialization_tests {
             },
             confidence: 0.85,
             reasoning: vec!["Reason 1".to_string(), "Reason 2".to_string()],
+            reasons: vec!["Legacy reason".to_string()],
+            priority: Some(TrainingPriority::High),
+            priority_numeric: Some(200), // High priority as numeric
             performance_snapshot: create_default_performance(),
             resource_requirements: ResourceRequirements::full_training(),
             estimated_duration: Duration::hours(4),
-            priority: TrainingPriority::High,
             affected_models: vec!["Model1".to_string(), "Model2".to_string()],
+            // MCP compatibility fields
+            triggered_by: Some("test".to_string()),
+            estimated_training_time_minutes: Some(240), // 4 hours
+            target_symbols: vec!["BTCUSD".to_string()],
+            training_parameters: None,
         };
         
         let json = serde_json::to_string(&decision).unwrap();

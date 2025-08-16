@@ -4,8 +4,10 @@
 //! existing health monitoring infrastructure.
 
 use crate::monitoring::health::{
-    ComponentHealth, ComponentType, HealthStatus, HealthMonitor,
-    AlertConfig, AlertType, AlertSeverity,
+    AlertConfig, AlertType, AlertSeverity, HealthMonitor,
+    LegacyComponentHealth as ComponentHealth, 
+    LegacyComponentType as ComponentType, 
+    LegacyHealthStatus as HealthStatus,
 };
 use crate::utils::resource_monitor::{
     ResourceGovernor, ResourceSnapshot, ResourceViolation, 
@@ -133,18 +135,9 @@ impl ResourceHealthIntegration {
         let load_critical = snapshot.load_average.one_minute > 10.0;
         
         if critical_violations > 5 || cpu_critical || memory_critical || load_critical {
-            HealthStatus::Unhealthy(format!(
-                "Critical resource constraints: {} violations, CPU: {:.1}%, Memory: {:.1}%",
-                critical_violations,
-                snapshot.cpu_usage_percent,
-                snapshot.memory_percent
-            ))
+            HealthStatus::Unhealthy("Critical resource violations detected".to_string())
         } else if critical_violations > 0 || snapshot.cpu_usage_percent > 70.0 || snapshot.memory_percent > 70.0 {
-            HealthStatus::Degraded(format!(
-                "Elevated resource usage: CPU: {:.1}%, Memory: {:.1}%",
-                snapshot.cpu_usage_percent,
-                snapshot.memory_percent
-            ))
+            HealthStatus::Degraded("Resource violations detected".to_string())
         } else {
             HealthStatus::Healthy
         }
@@ -368,7 +361,7 @@ mod tests {
         ).await.unwrap();
         
         let snapshot = ResourceSnapshot {
-            timestamp: Utc::now(),
+            timestamp: chrono::Utc::now(),
             cpu_usage_percent: 50.0,
             memory_usage_mb: 1000,
             memory_percent: 25.0,

@@ -5,9 +5,12 @@
 
 use autonomous_platform::{
     data::TimeSeriesData,
-    integration::{autonomous_decisions::*, OrderSide, OrderType, TradeOrder},
+    integration::{autonomous_decisions::*, OrderSide, OrderType, TradeOrder, MarketTrend},
     Result,
 };
+
+// Import test types needed for compilation
+use crate::phase3::utilities::*;
 use chrono::{DateTime, Utc};
 use serial_test::serial;
 use std::collections::HashMap;
@@ -17,7 +20,7 @@ use tokio;
 pub struct MockMarketContext {
     pub symbol: String,
     pub current_price: f64,
-    pub volume: f64,
+    pub volume: Vec<f64>,
     pub volatility: f64,
     pub trend: MarketTrend,
     pub support_level: f64,
@@ -29,7 +32,7 @@ impl MockMarketContext {
         Self {
             symbol: symbol.to_string(),
             current_price: 100.0,
-            volume: 1000000.0,
+            volume: vec![1000000.0],
             volatility: 0.15,
             trend: MarketTrend::Bullish,
             support_level: 95.0,
@@ -41,7 +44,7 @@ impl MockMarketContext {
         Self {
             symbol: symbol.to_string(),
             current_price: 100.0,
-            volume: 800000.0,
+            volume: vec![800000.0],
             volatility: 0.25,
             trend: MarketTrend::Bearish,
             support_level: 85.0,
@@ -53,7 +56,7 @@ impl MockMarketContext {
         Self {
             symbol: symbol.to_string(),
             current_price: 100.0,
-            volume: 500000.0,
+            volume: vec![500000.0],
             volatility: 0.08,
             trend: MarketTrend::Sideways,
             support_level: 98.0,
@@ -134,7 +137,7 @@ async fn test_autonomous_decision_bullish_market() {
     let market_context = MarketContext {
         symbol: "BTC-USD".to_string(),
         current_price: 50000.0,
-        volume: 1500000.0,
+        volume: vec![1500000.0],
         volatility: 0.12,
         trend: MarketTrend::Bullish,
         support_level: 48000.0,
@@ -181,7 +184,7 @@ async fn test_autonomous_decision_bearish_market() {
     let market_context = MarketContext {
         symbol: "ETH-USD".to_string(),
         current_price: 3000.0,
-        volume: 800000.0,
+        volume: vec![800000.0],
         volatility: 0.35,
         trend: MarketTrend::Bearish,
         support_level: 2500.0,
@@ -273,7 +276,7 @@ async fn test_decision_engine_conflict_resolution() {
     let conflicting_context = MarketContext {
         symbol: "TSLA".to_string(),
         current_price: 800.0,
-        volume: 2000000.0,
+        volume: vec![2000000.0],
         volatility: 0.60,             // Very high volatility
         trend: MarketTrend::Sideways, // Mixed signals
         support_level: 750.0,
@@ -382,7 +385,7 @@ async fn test_portfolio_agent_coordination() {
     let market_context = MarketContext {
         symbol: "ADA-USD".to_string(),
         current_price: 2.0,
-        volume: 500000.0,
+        volume: vec![500000.0],
         volatility: 0.25,
         trend: MarketTrend::Bullish,
         support_level: 1.8,
@@ -421,7 +424,7 @@ async fn test_execution_agent_order_generation() {
     let market_context = MarketContext {
         symbol: "SOL-USD".to_string(),
         current_price: 150.0,
-        volume: 1000000.0,
+        volume: vec![1000000.0],
         volatility: 0.20,
         trend: MarketTrend::Bullish,
         support_level: 140.0,
@@ -487,7 +490,7 @@ async fn test_autonomous_adaptation() {
     let initial_context = MarketContext {
         symbol: "BNB-USD".to_string(),
         current_price: 400.0,
-        volume: 800000.0,
+        volume: vec![800000.0],
         volatility: 0.15,
         trend: MarketTrend::Bullish,
         support_level: 380.0,
@@ -553,7 +556,7 @@ async fn test_system_performance_stress() {
         let market_context = MarketContext {
             symbol: symbol.to_string(),
             current_price: 100.0,
-            volume: 1000000.0,
+            volume: vec![1000000.0],
             volatility: 0.20,
             trend: MarketTrend::Bullish,
             support_level: 95.0,
