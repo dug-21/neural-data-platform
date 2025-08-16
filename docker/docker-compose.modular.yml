@@ -1,0 +1,630 @@
+# Neural Trader Modular Containerization
+# Complete microservices architecture with isolated containers
+
+version: '3.8'
+
+# ============================================================================
+# Network Configuration
+# ============================================================================
+networks:
+  frontend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+    labels:
+      - "neural-trader.network.tier=frontend"
+      
+  backend:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+    labels:
+      - "neural-trader.network.tier=backend"
+      
+  monitoring:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+    labels:
+      - "neural-trader.network.tier=monitoring"
+
+# ============================================================================
+# Volume Configuration for Zero-Copy Data Sharing
+# ============================================================================
+volumes:
+  # High-performance model storage
+  neural_models:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=8g,uid=1000,gid=1000
+    labels:
+      - "neural-trader.volume.type=models"
+      
+  # Market data cache - fast SSD storage
+  market_data_cache:
+    driver: local
+    driver_opts:
+      type: bind
+      device: ${MARKET_DATA_PATH:-./data/market-cache}
+      o: bind
+    labels:
+      - "neural-trader.volume.type=market-data"
+      
+  # Shared configuration - read-only
+  shared_config:
+    driver: local
+    driver_opts:
+      type: bind
+      device: ./config
+      o: ro,bind
+    labels:
+      - "neural-trader.volume.type=config"
+      
+  # Database storage
+  timescaledb_data:
+    driver: local
+    labels:
+      - "neural-trader.volume.type=database"
+      
+  # Redis persistence
+  redis_data:
+    driver: local
+    labels:
+      - "neural-trader.volume.type=cache"
+      
+  # Monitoring data
+  prometheus_data:
+    driver: local
+    labels:
+      - "neural-trader.volume.type=monitoring"
+      
+  grafana_data:
+    driver: local
+    labels:
+      - "neural-trader.volume.type=monitoring"
+      
+  # Log aggregation
+  log_data:
+    driver: local
+    labels:
+      - "neural-trader.volume.type=logs"
+
+# ============================================================================
+# Secrets Management
+# ============================================================================
+secrets:
+  jwt_secret:
+    external: true
+    name: neural_trader_jwt_secret
+    
+  api_keys:
+    file: ./secrets/api_keys.json
+    
+  db_password:
+    external: true
+    name: neural_trader_db_password
+
+# ============================================================================
+# Service Definitions
+# ============================================================================
+services:
+
+  # --------------------------------------------------------------------------
+  # Data Layer Services
+  # --------------------------------------------------------------------------
+  
+  timescaledb:
+    image: neural-trader/timescaledb:${TAG:-latest}
+    build:
+      context: ./docker/base
+      dockerfile: Dockerfile.timescaledb
+      args:
+        - POSTGRES_VERSION=16
+        - TIMESCALE_VERSION=2.14
+    container_name: neural-trader-timescaledb
+    hostname: timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      TIMESCALEDB_TELEMETRY: 'off'
+    secrets:
+      - db_password
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./docker/base/scripts/timescale-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      backend:
+        ipv4_address: 172.21.0.10
+      monitoring:
+        ipv4_address: 172.22.0.10
+    ports:
+      - "127.0.0.1:5432:5432"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "neural-trader.service.type=database"
+      - "neural-trader.service.tier=data"
+
+  redis:
+    image: redis:7-alpine
+    container_name: neural-trader-redis
+    hostname: redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - redis_data:/data
+      - ./docker/base/configs/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      backend:
+        ipv4_address: 172.21.0.11
+      monitoring:
+        ipv4_address: 172.22.0.11
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "neural-trader.service.type=cache"
+      - "neural-trader.service.tier=data"
+
+  # --------------------------------------------------------------------------
+  # Compute Layer Services
+  # --------------------------------------------------------------------------
+  
+  neural-trader:
+    image: neural-trader/neural-trader:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: ./docker/base/Dockerfile.neural-trader
+      target: production
+      args:
+        - RUST_VERSION=1.75
+    container_name: neural-trader-core
+    hostname: neural-trader
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: ${LOG_LEVEL:-info}
+      CONFIG_PATH: /opt/neural-trader/config
+      MODEL_STORAGE_PATH: /opt/neural-trader/models
+      ENABLE_SECTOR_MODELS: ${ENABLE_SECTOR_MODELS:-true}
+      ENABLE_REALTIME_ADAPTATION: ${ENABLE_REALTIME_ADAPTATION:-true}
+      ENABLE_AUTONOMOUS_TRAINING: ${ENABLE_AUTONOMOUS_TRAINING:-false}
+      TRAINING_SAMPLE_THRESHOLD: ${TRAINING_SAMPLE_THRESHOLD:-1000}
+      NEURAL_USE_REAL_MODELS: ${NEURAL_USE_REAL_MODELS:-true}
+    secrets:
+      - jwt_secret
+    volumes:
+      - neural_models:/opt/neural-trader/models:rw
+      - market_data_cache:/opt/neural-trader/data:ro
+      - shared_config:/opt/neural-trader/config:ro
+      - log_data:/var/log/neural-trader:rw
+    tmpfs:
+      - /tmp/neural-trader:rw,noexec,nosuid,size=2g
+    shm_size: 2g
+    networks:
+      frontend:
+        ipv4_address: 172.20.0.20
+      backend:
+        ipv4_address: 172.21.0.20
+      monitoring:
+        ipv4_address: 172.22.0.20
+    ports:
+      - "127.0.0.1:8080:8080"  # API
+      - "127.0.0.1:9092:9092"  # Metrics
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '3.0'
+        reservations:
+          memory: 3G
+          cpus: '1.5'
+      placement:
+        constraints:
+          - node.labels.performance == high
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    labels:
+      - "neural-trader.service.type=core"
+      - "neural-trader.service.tier=compute"
+      - "traefik.enable=true"
+      - "traefik.http.routers.neural-trader.rule=Host(`api.neural-trader.local`)"
+
+  data-ingestion:
+    image: neural-trader/data-ingestion:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: ./docker/base/Dockerfile.data-ingestion
+      target: production
+      args:
+        - PYTHON_VERSION=3.11
+    container_name: neural-trader-data-ingestion
+    hostname: data-ingestion
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PRIMARY_PROVIDER: ${PRIMARY_PROVIDER:-alpaca}
+      SYMBOLS: ${TRADING_SYMBOLS_PRIMARY:-AAPL,MSFT,GOOGL,AMZN,NVDA}
+      UPDATE_INTERVAL: ${UPDATE_INTERVAL:-60s}
+      CONFIG_PATH: /opt/data-ingestion/config
+      DATA_PATH: /opt/data-ingestion/data
+      # API Keys
+      ALPACA_API_KEY: ${ALPACA_API_KEY}
+      ALPACA_API_SECRET: ${ALPACA_API_SECRET}
+      POLYGON_API_KEY: ${POLYGON_API_KEY}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
+    secrets:
+      - api_keys
+    volumes:
+      - market_data_cache:/opt/data-ingestion/data:rw
+      - shared_config:/opt/data-ingestion/config:ro
+      - log_data:/var/log/data-ingestion:rw
+    networks:
+      frontend:
+        ipv4_address: 172.20.0.21
+      backend:
+        ipv4_address: 172.21.0.21
+      monitoring:
+        ipv4_address: 172.22.0.21
+    ports:
+      - "127.0.0.1:8001:8001"  # API
+      - "127.0.0.1:9091:9091"  # Metrics
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+      update_config:
+        parallelism: 1
+        delay: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    labels:
+      - "neural-trader.service.type=ingestion"
+      - "neural-trader.service.tier=compute"
+
+  model-manager:
+    image: neural-trader/model-manager:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: ./docker/base/Dockerfile.model-manager
+      target: production
+      args:
+        - RUST_VERSION=1.75
+        - PYTHON_VERSION=3.11
+    container_name: neural-trader-model-manager
+    hostname: model-manager
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: ${LOG_LEVEL:-info}
+      CONFIG_PATH: /opt/model-manager/config
+      MODEL_STORAGE_PATH: /opt/model-manager/models
+      MODEL_STORAGE_BACKEND: ${MODEL_STORAGE_BACKEND:-filesystem}
+      MODEL_VERSIONING: ${MODEL_VERSIONING:-true}
+      AUTO_CLEANUP: ${AUTO_CLEANUP:-true}
+      CLEANUP_RETENTION_DAYS: ${CLEANUP_RETENTION_DAYS:-30}
+    volumes:
+      - neural_models:/opt/model-manager/models:rw
+      - shared_config:/opt/model-manager/config:ro
+      - log_data:/var/log/model-manager:rw
+    tmpfs:
+      - /opt/model-manager/temp:rw,noexec,nosuid,size=4g
+    networks:
+      backend:
+        ipv4_address: 172.21.0.22
+      monitoring:
+        ipv4_address: 172.22.0.22
+    ports:
+      - "127.0.0.1:8002:8002"  # API
+      - "127.0.0.1:9093:9093"  # Metrics
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+      placement:
+        constraints:
+          - node.labels.gpu == true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    labels:
+      - "neural-trader.service.type=model-manager"
+      - "neural-trader.service.tier=compute"
+
+  # --------------------------------------------------------------------------
+  # Service Layer
+  # --------------------------------------------------------------------------
+  
+  api-gateway:
+    image: nginx:1.25-alpine
+    container_name: neural-trader-gateway
+    hostname: api-gateway
+    restart: unless-stopped
+    depends_on:
+      - neural-trader
+      - data-ingestion
+      - model-manager
+    volumes:
+      - ./docker/base/configs/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/base/configs/nginx-ssl:/etc/nginx/ssl:ro
+      - log_data:/var/log/nginx:rw
+    networks:
+      frontend:
+        ipv4_address: 172.20.0.30
+    ports:
+      - "80:80"
+      - "443:443"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    labels:
+      - "neural-trader.service.type=gateway"
+      - "neural-trader.service.tier=service"
+
+  # --------------------------------------------------------------------------
+  # Infrastructure Layer
+  # --------------------------------------------------------------------------
+  
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: neural-trader-prometheus
+    hostname: prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.route-prefix=/'
+      - '--web.external-url=http://localhost:9090'
+    volumes:
+      - prometheus_data:/prometheus
+      - ./docker/base/configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/base/configs/alerts.yml:/etc/prometheus/alerts.yml:ro
+    networks:
+      monitoring:
+        ipv4_address: 172.22.0.40
+    ports:
+      - "127.0.0.1:9090:9090"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    labels:
+      - "neural-trader.service.type=monitoring"
+      - "neural-trader.service.tier=infrastructure"
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: neural-trader-grafana
+    hostname: grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - timescaledb
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_INSTALL_PLUGINS: 'grafana-clock-panel,grafana-simple-json-datasource'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/base/configs/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/base/configs/grafana-datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      monitoring:
+        ipv4_address: 172.22.0.41
+      backend:
+        ipv4_address: 172.21.0.41
+    ports:
+      - "127.0.0.1:3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    labels:
+      - "neural-trader.service.type=monitoring"
+      - "neural-trader.service.tier=infrastructure"
+
+  # --------------------------------------------------------------------------
+  # Monitoring Exporters
+  # --------------------------------------------------------------------------
+  
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB}?sslmode=disable"
+    networks:
+      backend:
+        ipv4_address: 172.21.0.50
+      monitoring:
+        ipv4_address: 172.22.0.50
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    labels:
+      - "neural-trader.service.type=exporter"
+      - "neural-trader.service.tier=infrastructure"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    environment:
+      REDIS_ADDR: "redis:6379"
+    networks:
+      backend:
+        ipv4_address: 172.21.0.51
+      monitoring:
+        ipv4_address: 172.22.0.51
+    depends_on:
+      redis:
+        condition: service_healthy
+    labels:
+      - "neural-trader.service.type=exporter"
+      - "neural-trader.service.tier=infrastructure"
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      monitoring:
+        ipv4_address: 172.22.0.52
+    labels:
+      - "neural-trader.service.type=exporter"
+      - "neural-trader.service.tier=infrastructure"
+
+# ============================================================================
+# Extension Configs
+# ============================================================================
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-restart-policy: &default-restart-policy
+  restart: unless-stopped
+
+x-healthcheck-defaults: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
+# Apply to all services
+services:
+  timescaledb:
+    <<: *default-restart-policy
+    logging: *default-logging
+    
+  redis:
+    <<: *default-restart-policy
+    logging: *default-logging
+    
+  neural-trader:
+    <<: *default-restart-policy
+    logging: *default-logging
+    
+  data-ingestion:
+    <<: *default-restart-policy
+    logging: *default-logging
+    
+  model-manager:
+    <<: *default-restart-policy
+    logging: *default-logging
+    
+  api-gateway:
+    <<: *default-restart-policy
+    logging: *default-logging
+    
+  prometheus:
+    <<: *default-restart-policy
+    logging: *default-logging
+    
+  grafana:
+    <<: *default-restart-policy
+    logging: *default-logging
