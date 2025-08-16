@@ -26,25 +26,31 @@ This document defines the comprehensive requirements for an MCP-first API archit
 - Tools MUST support pipeline-style workflows
 - Tools MUST handle partial results and continuations
 
-### 1.2 Claude Control Boundaries
+### 1.2 Autonomous Capabilities with Human Oversight
 
-**REQ-MCP-004: Autonomous Operation Scope**
-- Claude MUST have read access to all market data and analysis
-- Claude MUST have approval workflow access for trading decisions
-- Claude MUST have emergency stop capabilities for risk management
-- Claude MUST have configuration access for non-destructive operations
+**REQ-MCP-004: Autonomous System Operation**
+- System MUST operate autonomously within defined boundaries
+- System MUST initiate model retraining when drift detected (with notification)
+- System MUST autonomously adjust strategies based on market conditions
+- System MUST self-heal and recover from non-critical failures
+- System MUST proactively identify and alert on anomalous behavior
+- Claude MUST have full observability and control access to autonomous systems
 
-**REQ-MCP-005: Human Override Requirements**
-- All Claude decisions MUST be overridable by human commands
+**REQ-MCP-005: Human Override Authority**
+- Humans MUST retain ultimate authority over ALL system operations
+- All autonomous decisions MUST be overridable by human commands
 - Override commands MUST execute within 5 seconds maximum
 - Override reasons MUST be logged for audit purposes
-- Override capabilities MUST be granular (symbol, strategy, timeframe)
+- Override capabilities MUST be granular (symbol, strategy, timeframe, model)
+- Human can disable ANY autonomous capability at ANY time
 
-**REQ-MCP-006: Safety Boundaries**
-- Trading operations above configurable thresholds MUST require human approval
-- Model retraining MUST require explicit human consent
-- System configuration changes MUST require elevated permissions
+**REQ-MCP-006: Autonomous Safety Boundaries**
+- Autonomous trading MUST operate within configurable risk limits
+- Autonomous model retraining MUST notify humans but CAN proceed without approval
+- Autonomous anomaly response MUST follow pre-defined playbooks
+- Autonomous position sizing MUST respect maximum exposure limits
 - Emergency stops MUST be accessible without authentication delays
+- Critical operations (account transfers, system shutdown) MUST require human approval
 
 ### 1.3 State Management Requirements
 
@@ -286,21 +292,58 @@ This document defines the comprehensive requirements for an MCP-first API archit
 - Reporting requirements MUST be automatically satisfied
 - Compliance violations MUST trigger immediate alerts
 
+### 4.5 Autonomous Decision-Making Requirements
+
+**REQ-AUTO-001: Model Drift Response**
+- System MUST detect model drift autonomously using statistical tests
+- System MUST initiate retraining when drift exceeds thresholds
+- System MUST notify humans of retraining with reasoning and metrics
+- System MUST continue trading with existing model during retraining
+- System MUST validate new model before deployment
+- Human CAN cancel retraining at any point
+
+**REQ-AUTO-002: Anomaly Detection and Response**
+- System MUST continuously monitor for anomalous patterns
+- System MUST classify anomalies (market, data, system, model)
+- System MUST execute pre-approved response playbooks
+- System MUST escalate unknown anomalies to human attention
+- System MUST learn from human responses to improve detection
+- Claude MUST have access to anomaly history and responses
+
+**REQ-AUTO-003: Self-Optimization Capabilities**
+- System MUST optimize execution timing based on market microstructure
+- System MUST adjust position sizing based on volatility regime
+- System MUST rebalance portfolios based on risk targets
+- System MUST tune hyperparameters based on recent performance
+- System MUST document all autonomous optimizations
+- Human MUST be able to review and rollback any optimization
+
+**REQ-AUTO-004: Autonomous Risk Management**
+- System MUST enforce position limits automatically
+- System MUST execute stop-losses without human intervention
+- System MUST reduce exposure during high volatility periods
+- System MUST diversify positions when concentration exceeds limits
+- System MUST hedge positions based on risk models
+- All autonomous risk actions MUST be logged and reportable
+
 ## 5. Bi-directional Communication Requirements
 
 ### 5.1 Platform-to-Claude Notifications
 
-**REQ-NOT-001: Proactive Alert System**
-- Model confidence degradation MUST trigger notifications
-- Significant market movements MUST generate alerts
-- System health issues MUST be immediately reported
-- Performance anomalies MUST trigger analysis requests
+**REQ-NOT-001: Autonomous System Notifications**
+- Model drift detection MUST notify humans of autonomous retraining
+- Autonomous strategy adjustments MUST be reported in real-time
+- Self-healing actions MUST be logged and notified
+- Anomaly detection and response MUST generate alerts
+- Performance optimization changes MUST be communicated
+- Risk management actions MUST be immediately reported
 
-**REQ-NOT-002: Decision Request System**
-- High-impact trades MUST request human approval via Claude
-- Model retraining recommendations MUST be presented for approval
-- Risk limit breaches MUST request immediate attention
-- Strategy modifications MUST be presented with impact analysis
+**REQ-NOT-002: Decision Escalation System**
+- Decisions exceeding confidence thresholds MUST request human review
+- Unknown anomaly patterns MUST escalate to human analysis
+- Model performance degradation beyond limits MUST trigger escalation
+- Risk events outside playbooks MUST request human intervention
+- Critical system failures MUST immediately notify all stakeholders
 
 **REQ-NOT-003: Opportunity Notifications**
 - Market opportunities MUST be identified and presented
@@ -478,28 +521,74 @@ This document defines the comprehensive requirements for an MCP-first API archit
 - Compliance and regulatory reporting
 - Enterprise integration capabilities
 
-## 10. Success Criteria
+## 10. Autonomous System Lifecycle Management
 
-### 10.1 Functional Success Criteria
+### 10.1 Autonomous Component Lifecycle
+
+**REQ-LIFE-001: Autonomous Service Management**
+- Autonomous services MUST self-register their capabilities
+- Autonomous services MUST monitor their own health
+- Autonomous services MUST report performance metrics continuously
+- Autonomous services MUST gracefully degrade under stress
+- Autonomous services MUST coordinate with other autonomous components
+- Human MUST be able to pause/resume any autonomous service
+
+**REQ-LIFE-002: Learning and Adaptation**
+- System MUST maintain learning history across restarts
+- System MUST version all learned behaviors and models
+- System MUST allow rollback to previous learning states
+- System MUST share learnings across similar components
+- System MUST validate learnings before deployment
+- Claude MUST have access to learning metrics and history
+
+**REQ-LIFE-003: Autonomous Coordination**
+- Multiple autonomous agents MUST coordinate without conflicts
+- Resource allocation MUST be managed automatically
+- Priority conflicts MUST be resolved using defined rules
+- Deadlock situations MUST be detected and resolved
+- Coordination decisions MUST be explainable to humans
+
+## 11. Success Criteria
+
+### 11.1 Functional Success Criteria
 - 100% of platform capabilities accessible via MCP tools
 - Natural language commands work for 95% of common use cases
 - Emergency stops execute within 1 second in all scenarios
 - Bi-directional communication maintains < 100ms latency
 
-### 10.2 User Experience Success Criteria
+### 11.2 User Experience Success Criteria
 - Users can accomplish 90% of tasks through conversation alone
 - Complex operations require no external documentation
 - Error messages provide clear resolution guidance
 - Learning curve is demonstrably reduced vs. traditional interfaces
 
-### 10.3 Technical Success Criteria
+### 11.3 Technical Success Criteria
 - System maintains 99.9% uptime under normal operations
 - Response times meet specified requirements under load
 - Security audit reveals no critical vulnerabilities
 - Integration with existing systems requires no modifications
 
+### 11.4 Autonomous System Success Criteria
+- Autonomous model retraining reduces drift impact by >80%
+- Anomaly detection achieves >95% accuracy with <1% false positives
+- Self-healing resolves >90% of non-critical failures without human intervention
+- Autonomous optimization improves performance metrics by >20% quarterly
+- Human override commands execute 100% reliably within 5 seconds
+- All autonomous actions are fully auditable and explainable
+
 ## Conclusion
 
-These requirements establish a comprehensive foundation for an MCP-first trading platform architecture that enables unprecedented flexibility for both Claude AI and human users. The design prioritizes conversational control, intelligent automation, and seamless integration while maintaining the security, performance, and reliability demands of professional trading environments.
+These requirements establish a comprehensive foundation for an MCP-first trading platform with sophisticated autonomous capabilities, where the system can independently detect and respond to model drift, anomalies, and optimization opportunities while maintaining absolute human authority over all operations. 
 
-The phased implementation approach ensures that critical capabilities are delivered early while more advanced features are built on a solid foundation. Success will be measured not just by technical metrics, but by the dramatic improvement in user experience and the ability to democratize access to sophisticated trading capabilities through natural conversation.
+The architecture enables a unique three-tier intelligence model:
+1. **Autonomous System Layer** - Self-managing components that detect drift, retrain models, optimize strategies, and respond to anomalies
+2. **Claude AI Layer** - Conversational interface providing intelligent orchestration, monitoring, and control of autonomous systems
+3. **Human Authority Layer** - Ultimate decision-making power with ability to override, pause, or redirect any system behavior
+
+This design ensures the platform operates efficiently with minimal human intervention during normal conditions, while guaranteeing immediate human control when needed. The system's autonomous capabilities significantly reduce operational overhead while the MCP interface through Claude provides unprecedented flexibility and ease of use.
+
+Success will be measured not just by technical metrics, but by the platform's ability to:
+- Autonomously maintain optimal performance through self-management
+- Provide intuitive conversational control through Claude
+- Ensure complete human authority and transparency
+- Deliver professional-grade trading capabilities with minimal operational burden
