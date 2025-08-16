@@ -1,5 +1,6 @@
 # Rust
-/target/
+target/
+**/target/
 **/*.rs.bk
 *.pdb
 Cargo.lock
@@ -248,3 +249,45 @@ claude-flow
 claude-flow.bat
 claude-flow.ps1
 hive-mind-prompt-*.txt
+
+# Build and test artifacts
+*.o
+*.a
+*.so
+*.rlib
+*.rmeta
+*.d
+debug_*
+test_*.py
+test_*.sh
+check_*.rs
+validate_*.py
+
+# Temporary build/error logs
+build_errors.txt
+build_errors.log
+build_output*.txt
+build_status_report.txt
+cargo_output*.txt
+error_log.txt
+compile_errors.txt
+check_output.txt
+release_build_output.txt
+python_test_results.log
+test_results.log
+
+# Temporary investigation files
+*_INVESTIGATION*.md
+*_FIX_*.md
+*_REPORT.md
+*_SUMMARY.md
+data_conversion_summary.md
+
+# Model files (should be in /opt/neural-trader in production)
+*.fann
+*.ruv
+*.model
+
+# Emergency test build artifacts
+tests/emergency/target/
+tests/emergency/Cargo.lock
