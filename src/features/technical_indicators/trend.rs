@@ -105,7 +105,7 @@ impl<'a> TrendIndicators<'a> {
         data: &[TimeSeriesData],
         fast: usize,
         slow: usize,
-        signal: usize,
+        _signal: usize,
     ) -> Result<(f64, f64, f64)> {
         let fast_ema = self.calculate_ema(data, fast)?;
         let slow_ema = self.calculate_ema(data, slow)?;
@@ -319,29 +319,32 @@ mod tests {
     
     fn create_test_data() -> Vec<TimeSeriesData> {
         vec![
-            TimeSeriesData {
-                timestamp: DateTime::<Utc>::from_timestamp(1640995200, 0).unwrap(),
-                open: 100.0,
-                high: 105.0,
-                low: 95.0,
-                close: 102.0,
-                volume: 1000.0,
+            {
+                let mut data = TimeSeriesData::new("TEST".to_string(), DateTime::<Utc>::from_timestamp(1640995200, 0).unwrap());
+                data.open = 100.0;
+                data.high = 105.0;
+                data.low = 95.0;
+                data.close = 102.0;
+                data.volume = vec![1000.0];
+                data
             },
-            TimeSeriesData {
-                timestamp: DateTime::<Utc>::from_timestamp(1640995260, 0).unwrap(),
-                open: 102.0,
-                high: 107.0,
-                low: 98.0,
-                close: 104.0,
-                volume: 1100.0,
+            {
+                let mut data = TimeSeriesData::new("TEST".to_string(), DateTime::<Utc>::from_timestamp(1640995260, 0).unwrap());
+                data.open = 102.0;
+                data.high = 107.0;
+                data.low = 98.0;
+                data.close = 104.0;
+                data.volume = vec![1100.0];
+                data
             },
-            TimeSeriesData {
-                timestamp: DateTime::<Utc>::from_timestamp(1640995320, 0).unwrap(),
-                open: 104.0,
-                high: 109.0,
-                low: 101.0,
-                close: 106.0,
-                volume: 1200.0,
+            {
+                let mut data = TimeSeriesData::new("TEST".to_string(), DateTime::<Utc>::from_timestamp(1640995320, 0).unwrap());
+                data.open = 104.0;
+                data.high = 109.0;
+                data.low = 101.0;
+                data.close = 106.0;
+                data.volume = vec![1200.0];
+                data
             },
         ]
     }

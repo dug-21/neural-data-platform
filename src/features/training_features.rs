@@ -7,7 +7,7 @@
 
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Datelike, Timelike};
 use serde::{Serialize, Deserialize};
 use crate::data::TimeSeriesData;
 
@@ -210,7 +210,7 @@ impl TrainingFeatureEngine {
         let closes: Vec<f64> = data.iter().map(|d| d.close).collect();
         let highs: Vec<f64> = data.iter().map(|d| d.high).collect();
         let lows: Vec<f64> = data.iter().map(|d| d.low).collect();
-        let volumes: Vec<f64> = data.iter().map(|d| d.volume).collect();
+        let volumes: Vec<f64> = data.iter().map(|d| d.volume_value).collect();
         
         // RSI for different periods
         for &period in &self.config.indicator_periods {
@@ -232,9 +232,9 @@ impl TrainingFeatureEngine {
         for &period in &[20, 50] {
             if data.len() >= period {
                 let (upper, middle, lower) = self.calculate_bollinger_bands(&closes, period)?;
-                features.insert(format!("bb_upper_{}", period), upper);
+                features.insert(format!("bb_upper_{}", period), upper.clone());
                 features.insert(format!("bb_middle_{}", period), middle);
-                features.insert(format!("bb_lower_{}", period), lower);
+                features.insert(format!("bb_lower_{}", period), lower.clone());
                 
                 // Price position relative to bands
                 let bb_position: Vec<f64> = closes.iter().zip(&upper).zip(&lower)
@@ -357,11 +357,11 @@ impl TrainingFeatureEngine {
         features.insert("spread_proxy".to_string(), spread_proxy);
         
         // Volume profile features
-        let volume_mean = data.iter().map(|d| d.volume).sum::<f64>() / data.len() as f64;
+        let volume_mean = data.iter().map(|d| d.volume_value).sum::<f64>() / data.len() as f64;
         let volume_ratio: Vec<f64> = data.iter()
             .map(|d| {
                 if volume_mean != 0.0 {
-                    d.volume / volume_mean
+                    d.volume_value / volume_mean
                 } else {
                     1.0
                 }
@@ -378,8 +378,8 @@ impl TrainingFeatureEngine {
         // Amihud illiquidity
         let amihud: Vec<f64> = data.iter()
             .map(|d| {
-                if d.volume * d.close != 0.0 {
-                    ((d.close - d.open).abs() / d.open) / (d.volume * d.close)
+                if d.volume_value * d.close != 0.0 {
+                    ((d.close - d.open).abs() / d.open) / (d.volume_value * d.close)
                 } else {
                     0.0
                 }
@@ -424,7 +424,7 @@ impl TrainingFeatureEngine {
                 features.insert(format!("rolling_kurtosis_{}", window), rolling_kurt);
                 
                 // Rolling correlation with volume
-                let volumes: Vec<f64> = data.iter().map(|d| d.volume).collect();
+                let volumes: Vec<f64> = data.iter().map(|d| d.volume_value).collect();
                 let rolling_corr = self.calculate_rolling_correlation(&closes, &volumes, window)?;
                 features.insert(format!("price_volume_corr_{}", window), rolling_corr);
             }
@@ -763,7 +763,7 @@ impl TrainingFeatureEngine {
                 let volume_sign = if data[j].close > data[j - 1].close { 1.0 } else { -1.0 };
                 
                 price_changes.push(price_change);
-                signed_volumes.push(volume_sign * data[j].volume);
+                signed_volumes.push(volume_sign * data[j].volume_value);
             }
             
             // Simple regression coefficient
@@ -1336,7 +1336,7 @@ impl TrainingFeatureEngine {
         
         // Update price-based features
         features.insert("close".to_string(), new_data.close);
-        features.insert("volume".to_string(), new_data.volume);
+        features.insert("volume".to_string(), new_data.volume_value);
         features.insert("high_low_ratio".to_string(), new_data.high / new_data.low);
         
         // Add more incremental calculations as needed

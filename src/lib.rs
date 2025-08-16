@@ -76,16 +76,23 @@ pub mod agents;
 pub mod config; // Modular configuration system
 pub mod daa;
 pub mod data;
+pub mod features; // Advanced feature engineering for neural trading
+pub mod data_pipeline;
 pub mod integration;
 pub mod mcp;
 pub mod monitoring;
 pub mod neural;
 pub mod observability;
+pub mod performance;
 pub mod orchestration;
 pub mod security;
 pub mod strategies;
 pub mod streaming;
+pub mod types; // Shared type definitions
 pub mod utils;
+pub mod multi_channel;
+pub mod helpers;
+pub mod validation;
 
 // Re-export commonly used types
 pub use anyhow::Result;

@@ -17,12 +17,14 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
-use super::errors::{AdapterError, CircuitBreakerState, ErrorSeverity};
+use super::errors::AdapterError;
 use super::errors::{HealthCheckResult, HealthMetrics};
-use super::fallback_manager::{
-    FallbackManager, FallbackResult, FallbackStrategy, UltimateFallbackStrategy,
+use super::fallback_manager::{FallbackManager, FallbackStrategy};
+use super::health_monitor::{
+    HealthChecker, HealthMonitor, HealthMonitorConfig
 };
-use super::health_monitor::{HealthChecker, HealthMonitor, HealthMonitorConfig, HealthStatus};
+// AsyncHealthMonitor exists but is not used in this simplified adapter
+// use crate::monitoring::health::{AsyncHealthMonitor, ComponentType as HealthComponentType};
 use super::{DataAdapter, AdapterMetadata, ConnectionStatus};
 // Removed: neuro_divergent adapter import (deprecated)
 use crate::config::NeuralConfig;
@@ -30,8 +32,9 @@ use crate::data::TimeSeriesData;
 use crate::neural::{
     NeuralPredictorTrait, PredictionResult,
 };
-// Ensure trait is in scope for method calls
-use crate::neural::NeuralPredictorTrait as _;
+// Trait is already imported above
+use crate::data::SectorMapper;
+use crate::monitoring::model_performance_tracker::ModelPerformanceTracker;
 // Phase 3B: Removed monitoring imports - architectural layer not allowed
 
 // Simple performance event types for basic monitoring
@@ -60,7 +63,7 @@ pub trait PerformanceEmitter: Send + Sync {
     fn get_performance_sender(&self) -> Option<mpsc::UnboundedSender<PerformanceEvent>>;
     fn set_performance_sender(&mut self, sender: mpsc::UnboundedSender<PerformanceEvent>);
 }
-use crate::neural::FannPredictor;
+use crate::neural::VendorPredictor;
 
 /// Enhanced configuration with feature flags and error handling
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,7 +123,7 @@ impl Default for EnhancedNeuralConfig {
                     "NHITS".to_string(),
                     "TCN".to_string(),
                     "LSTM".to_string(),
-                    "FANN_MLP".to_string(),
+                    "MLP".to_string(),
                 ],
                 prediction_cache_ttl: 300,
                 model_load_timeout: 60,
@@ -159,7 +162,7 @@ impl Default for EnhancedNeuralConfig {
                 ("TCN".to_string(), Duration::from_secs(20)),
                 ("LSTM".to_string(), Duration::from_secs(15)),
                 ("GRU".to_string(), Duration::from_secs(15)),
-                ("FANN_MLP".to_string(), Duration::from_secs(5)),
+                ("MLP".to_string(), Duration::from_secs(5)),
             ]),
             retry_config: RetryConfig {
                 max_retries: 3,
@@ -182,7 +185,7 @@ impl Default for EnhancedNeuralConfig {
 /// Enhanced neural adapter with production-ready features
 pub struct EnhancedNeuralAdapter {
     config: EnhancedNeuralConfig,
-    fann_predictor: Arc<FannPredictor>,
+    vendor_predictor: Arc<VendorPredictor>,
     health_monitor: Option<Arc<HealthMonitor>>,
     fallback_manager: Option<Arc<FallbackManager>>,
     performance_stats: Arc<RwLock<PerformanceStats>>,
@@ -207,11 +210,17 @@ impl EnhancedNeuralAdapter {
     pub async fn new(config: EnhancedNeuralConfig) -> Result<Self, AdapterError> {
         info!("Initializing Enhanced Neural Adapter");
 
-        // Initialize FANN predictor (always available as fallback)
+        // Create dependencies first
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(SectorMapper::new(sector_config));
+
+        let performance_tracker = Arc::new(ModelPerformanceTracker::new());
+
+        // Initialize VendorPredictor (always available as fallback)
         let neural_config = config.neural.clone();
-        let fann_predictor = Arc::new(FannPredictor::new(neural_config).map_err(|e| {
+        let vendor_predictor = Arc::new(VendorPredictor::new(&neural_config, sector_mapper.clone(), performance_tracker.clone()).map_err(|e| {
             AdapterError::ModelInitialization {
-                model: "FANN".to_string(),
+                model: "VendorPredictor".to_string(),
                 reason: e.to_string(),
             }
         })?);
@@ -225,7 +234,7 @@ impl EnhancedNeuralAdapter {
             for model in &config.neural.models {
                 let checker = Arc::new(ModelHealthChecker::new(
                     model.clone(),
-                    fann_predictor.clone(),
+                    vendor_predictor.clone(),
                 ));
                 monitor.register_health_checker(model.clone(), checker);
             }
@@ -260,7 +269,7 @@ impl EnhancedNeuralAdapter {
 
         Ok(Self {
             config,
-            fann_predictor,
+            vendor_predictor,
             health_monitor,
             fallback_manager,
             performance_stats: Arc::new(RwLock::new(PerformanceStats::default())),
@@ -269,17 +278,17 @@ impl EnhancedNeuralAdapter {
         })
     }
 
-    /// Create new enhanced neural adapter with FANN predictor
+    /// Create new enhanced neural adapter with VendorPredictor  
     pub fn new_with_predictor(
         config: NeuralConfig,
-        fann_predictor: Arc<FannPredictor>,
+        vendor_predictor: Arc<crate::neural::vendor_predictor::VendorPredictor>,
     ) -> Result<Self, AdapterError> {
-        info!("Initializing Enhanced Neural Adapter with provided FANN predictor");
+        info!("Initializing Enhanced Neural Adapter with provided VendorPredictor");
 
         // Create enhanced config from neural config
         let enhanced_config = EnhancedNeuralConfig {
             neural: config.clone(),
-            use_real_models: false, // Only FANN models
+            use_real_models: false, // Only vendor models
             enable_health_monitoring: config.enable_health_checks,
             enable_fallback: config.enable_fallback,
             enable_caching: true,
@@ -296,7 +305,7 @@ impl EnhancedNeuralAdapter {
             for model in &enhanced_config.neural.models {
                 let checker = Arc::new(ModelHealthChecker::new(
                     model.clone(),
-                    fann_predictor.clone(),
+                    vendor_predictor.clone(),
                 ));
                 monitor.register_health_checker(model.clone(), checker);
             }
@@ -324,7 +333,7 @@ impl EnhancedNeuralAdapter {
 
         Ok(Self {
             config: enhanced_config,
-            fann_predictor,
+            vendor_predictor,
             health_monitor,
             fallback_manager,
             performance_stats: Arc::new(RwLock::new(PerformanceStats::default())),
@@ -431,16 +440,16 @@ impl EnhancedNeuralAdapter {
 
         let data_clone = data.to_vec();
         let horizon_clone = horizon;
-        // Clone the fann_predictor Arc to ensure Send safety
-        let fann_predictor_clone = Arc::clone(&self.fann_predictor);
+        // Clone the vendor_predictor Arc to ensure Send safety
+        let vendor_predictor_clone = Arc::clone(&self.vendor_predictor);
 
         let fallback_result = fallback_manager
             .predict_with_fallback(
                 move |model_name, data, horizon| {
-                    let fann_predictor_clone = Arc::clone(&fann_predictor_clone);
+                    let vendor_predictor_clone = Arc::clone(&vendor_predictor_clone);
                     async move {
-                        // Use the FANN predictor directly for fallback operations
-                        fann_predictor_clone
+                        // Use the VendorPredictor directly for fallback operations
+                        vendor_predictor_clone
                             .predict(&data, horizon, None)
                             .await
                             .map_err(|e| AdapterError::Prediction(e.to_string()))
@@ -485,10 +494,10 @@ impl EnhancedNeuralAdapter {
             .copied()
             .unwrap_or(Duration::from_secs(30));
 
-        // Always use FANN models - real models have been removed
+        // Always use vendor models - real models have been removed
         let prediction_result = tokio::time::timeout(
             timeout,
-            self.predict_with_fann_model(data, horizon, model_name),
+            self.predict_with_vendor_model(data, horizon, model_name),
         )
         .await;
 
@@ -504,15 +513,15 @@ impl EnhancedNeuralAdapter {
 
     // predict_with_real_model method removed - only FANN models are used
 
-    /// Predict using FANN models
-    async fn predict_with_fann_model(
+    /// Predict using vendor models
+    async fn predict_with_vendor_model(
         &self,
         data: &[TimeSeriesData],
         horizon: usize,
         model_name: &str,
     ) -> Result<Vec<PredictionResult>, AdapterError> {
-        // Use FANN predictor's test method for specific model prediction
-        self.fann_predictor
+        // Use VendorPredictor's test method for specific model prediction
+        self.vendor_predictor
             .predict(data, horizon, None)
             .await
             .map_err(|e| AdapterError::PredictionFailed {
@@ -697,17 +706,17 @@ pub struct PerformanceStatsSnapshot {
 /// Health checker implementation for neural models
 struct ModelHealthChecker {
     model_name: String,
-    fann_predictor: Arc<FannPredictor>,
+    vendor_predictor: Arc<VendorPredictor>,
 }
 
 impl ModelHealthChecker {
     fn new(
         model_name: String,
-        fann_predictor: Arc<FannPredictor>,
+        vendor_predictor: Arc<VendorPredictor>,
     ) -> Self {
         Self {
             model_name,
-            fann_predictor,
+            vendor_predictor,
         }
     }
 }
@@ -725,17 +734,23 @@ impl HealthChecker for ModelHealthChecker {
             high: 101.0,
             low: 99.0,
             close: 100.5,
-            volume: 1000.0,
+            volume: vec![1000.0],
+            volume_value: 1000.0,
             indicators: HashMap::new(),
             source: Some("health_check".to_string()),
             entity: Some("test".to_string()),
             value: Some(100.5),
             metadata: None,
+            // Enhanced fields for vendor model integration
+            values: vec![100.5], // Single test value
+            intervals: vec![],
+            timestamps: vec![chrono::Utc::now()], // Single test timestamp
+            metadata_map: HashMap::new(), // Empty metadata map
         }];
 
         // Try a simple prediction to check health
         let healthy = match self
-            .fann_predictor
+            .vendor_predictor
             .predict(&test_data, 1, None)
             .await
         {
@@ -874,14 +889,14 @@ impl NeuralPredictorTrait for EnhancedNeuralAdapter {
         models: &[String],
         _features: Option<HashMap<String, serde_json::Value>>,
     ) -> anyhow::Result<Vec<PredictionResult>> {
-        // Use the FANN predictor's ensemble capability
-        self.fann_predictor
+        // Use the VendorPredictor's ensemble capability
+        self.vendor_predictor
             .predict_ensemble(data, horizon, models, None)
             .await
     }
 
     async fn get_feature_importance(&self) -> anyhow::Result<HashMap<String, f64>> {
-        self.fann_predictor.get_feature_importance().await
+        self.vendor_predictor.get_feature_importance().await
     }
 }
 
@@ -914,7 +929,7 @@ mod tests {
         let adapter = EnhancedNeuralAdapter::new(config).await.unwrap();
 
         // Test with configured model
-        let available = adapter.is_model_available("FANN_MLP").await;
+        let available = adapter.is_model_available("MLP").await;
         assert!(available);
 
         // Test with non-configured model
@@ -940,12 +955,17 @@ mod tests {
             high: 51000.0,
             low: 49500.0,
             close: 50500.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
+            volume_value: 1000.0,
             indicators: HashMap::new(),
             source: None,
             entity: None,
             value: None,
             metadata: None,
+            values: vec![50500.0],
+            intervals: vec![0],
+            timestamps: vec![chrono::Utc::now()],
+            metadata_map: HashMap::new(),
         }];
 
         let result = adapter.predict_enhanced(&test_data, 5, None).await;

@@ -1,7 +1,7 @@
 //! Unit tests for error scenarios and edge cases
 
 use autonomous_platform::neural::{NeuralPredictor, NeuralPredictorTrait};
-use autonomous_platform::neural::fann_predictor::FannPredictor;
+use autonomous_platform::neural::predictor::NeuralPredictor;
 use autonomous_platform::config::NeuralConfig;
 use autonomous_platform::data::TimeSeriesData;
 use autonomous_platform::agents::{TradingStrategy, AgentConfig};
@@ -18,9 +18,18 @@ async fn test_neural_predictor_with_empty_data() {
         max_concurrent_predictions: 10,
         enable_model_monitoring: true,
         accuracy_threshold: 0.8,
+        // New required fields
+        input_size: 10,
+        output_size: 1,
+        hidden_layers: vec![20, 10],
+        learning_rate: 0.01,
+        prediction_horizon: None,
+        normalization_method: None,
+        // Use defaults for remaining fields
+        ..Default::default()
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let empty_data = vec![];
     
     // Should handle empty data gracefully
@@ -38,9 +47,18 @@ async fn test_neural_predictor_with_nan_values() {
         max_concurrent_predictions: 10,
         enable_model_monitoring: true,
         accuracy_threshold: 0.8,
+        // New required fields
+        input_size: 10,
+        output_size: 1,
+        hidden_layers: vec![20, 10],
+        learning_rate: 0.01,
+        prediction_horizon: None,
+        normalization_method: None,
+        // Use defaults for remaining fields
+        ..Default::default()
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     
     let mut data = vec![];
     for i in 0..100 {
@@ -51,7 +69,7 @@ async fn test_neural_predictor_with_nan_values() {
             high: 101.0,
             low: 99.0,
             close: if i == 51 { f64::NAN } else { 100.5 },
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("TEST".to_string()),
@@ -75,9 +93,18 @@ async fn test_neural_predictor_with_infinite_values() {
         max_concurrent_predictions: 10,
         enable_model_monitoring: true,
         accuracy_threshold: 0.8,
+        // New required fields
+        input_size: 10,
+        output_size: 1,
+        hidden_layers: vec![20, 10],
+        learning_rate: 0.01,
+        prediction_horizon: None,
+        normalization_method: None,
+        // Use defaults for remaining fields
+        ..Default::default()
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     
     let mut data = vec![];
     data.push(TimeSeriesData {
@@ -87,7 +114,7 @@ async fn test_neural_predictor_with_infinite_values() {
         high: f64::INFINITY,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -110,9 +137,18 @@ async fn test_predictor_with_zero_horizon() {
         max_concurrent_predictions: 10,
         enable_model_monitoring: true,
         accuracy_threshold: 0.8,
+        // New required fields
+        input_size: 10,
+        output_size: 1,
+        hidden_layers: vec![20, 10],
+        learning_rate: 0.01,
+        prediction_horizon: None,
+        normalization_method: None,
+        // Use defaults for remaining fields
+        ..Default::default()
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let data = vec![TimeSeriesData {
         symbol: "TEST".to_string(),
         timestamp: Utc::now(),
@@ -120,7 +156,7 @@ async fn test_predictor_with_zero_horizon() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -144,9 +180,18 @@ async fn test_predictor_with_very_large_horizon() {
         max_concurrent_predictions: 10,
         enable_model_monitoring: true,
         accuracy_threshold: 0.8,
+        // New required fields
+        input_size: 10,
+        output_size: 1,
+        hidden_layers: vec![20, 10],
+        learning_rate: 0.01,
+        prediction_horizon: None,
+        normalization_method: None,
+        // Use defaults for remaining fields
+        ..Default::default()
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let data = vec![TimeSeriesData {
         symbol: "TEST".to_string(),
         timestamp: Utc::now(),
@@ -154,7 +199,7 @@ async fn test_predictor_with_very_large_horizon() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -221,7 +266,7 @@ async fn test_ensemble_with_invalid_models() {
         accuracy_threshold: 0.8,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let data = vec![TimeSeriesData {
         symbol: "TEST".to_string(),
         timestamp: Utc::now(),
@@ -229,7 +274,7 @@ async fn test_ensemble_with_invalid_models() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),
@@ -252,7 +297,7 @@ fn test_time_series_data_with_missing_fields() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: None,  // Missing source
         entity: None,  // Missing entity
@@ -330,7 +375,7 @@ fn test_memory_allocation_limits() {
     };
     
     // Should still create predictor but may have limitations
-    let result = FannPredictor::new(config);
+    let result = NeuralPredictor::new(config);
     assert!(result.is_ok());
 }
 
@@ -346,7 +391,7 @@ async fn test_cache_expiration() {
         accuracy_threshold: 0.8,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let data = vec![TimeSeriesData {
         symbol: "TEST".to_string(),
         timestamp: Utc::now(),
@@ -354,7 +399,7 @@ async fn test_cache_expiration() {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("TEST".to_string()),

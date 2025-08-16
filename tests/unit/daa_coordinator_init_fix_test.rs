@@ -4,14 +4,14 @@
 //! strategies from configuration before using them.
 
 use autonomous_platform::integration::daa_coordinator::*;
-use autonomous_platform::config::{NeuralConfig, Config};
-use autonomous_platform::neural::NeuralPredictor;
-use autonomous_platform::strategies::{
-use neural_trader::utils::market_hours::MarketHours;    TradingStrategy, Signal, MarketContext, Position, PositionSide, 
-    StrategyConfig, StrategyError, StrategyFactory
+use crate::helpers::test_utils::create_test_market_hours;use autonomous_platform::config::{NeuralConfig, Config};
+use crate::helpers::test_utils::create_test_market_hours;use autonomous_platform::neural::NeuralPredictor;
+use crate::helpers::test_utils::create_test_market_hours;use autonomous_platform::strategies::{
+use crate::helpers::test_utils::create_test_market_hours;use autonomous_platform::utils::market_hours::MarketHours;    TradingStrategy, Signal, MarketContext, Position, PositionSide, 
+use crate::helpers::test_utils::create_test_market_hours;    StrategyConfig, StrategyError, StrategyFactory
 };
 use autonomous_platform::data::TimeSeriesData;
-
+use crate::helpers::test_utils::create_test_market_hours;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use std::collections::HashMap;
@@ -56,7 +56,7 @@ mod daa_init_fix_tests {
 
         // WHEN: We create a DAA coordinator with the fixed initialization
         let daa_config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(daa_config, neural_predictor.clone(), tx, create_test_market_hours(, create_test_market_hours()));
 
         // Register strategies using the fixed approach
         for (i, strategy_config) in config.strategies.iter().enumerate() {
@@ -91,7 +91,7 @@ mod daa_init_fix_tests {
                 high: 50100.0,
                 low: 49700.0,
                 close: 50000.0,
-                volume: 1000.0,
+                volume: vec![1000.0],
                 indicators: HashMap::new(),
                 source: Some("test".to_string()),
                 entity: Some("BTC".to_string()),
@@ -166,7 +166,7 @@ mod daa_init_fix_tests {
         );
         let (tx, _rx) = mpsc::channel(100);
 
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours(, create_test_market_hours()));
 
         // WHEN: We try to register all strategies
         let mut successful_registrations = 0;
@@ -217,7 +217,7 @@ mod daa_init_fix_tests {
         );
         let (tx, _rx) = mpsc::channel(100);
 
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours(, create_test_market_hours()));
 
         // Register an UNINITIALIZED strategy (simulating the bug)
         let config = StrategyConfig {
@@ -269,7 +269,7 @@ mod daa_init_fix_tests {
         );
         let (tx, mut rx) = mpsc::channel(100);
 
-        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(DaaConfig::default(), neural_predictor.clone(), tx, create_test_market_hours(, create_test_market_hours()));
 
         // Create strategies with different initialization times
         let strategies = vec![

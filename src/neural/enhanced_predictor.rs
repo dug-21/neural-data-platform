@@ -13,13 +13,18 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+// Import the required data types
+use crate::data::TimescaleDBStorage;
+use crate::integration::data_access::DataAccessLayer;
 use tracing::{debug, info, warn};
 
 use super::PredictionResult;
 use crate::config::NeuralConfig;
 use crate::data::TimeSeriesData;
-use crate::neural::FannPredictor;
+use crate::neural::VendorPredictor;
 use crate::neural::NeuralPredictorTrait;
+use crate::integration::training_data_service::TrainingDataService;
 
 /// Enhanced prediction result with confidence breakdown
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,7 +108,7 @@ pub struct RetrainingMetrics {
 /// Main enhanced neural predictor with Phase 6 capabilities
 pub struct EnhancedNeuralPredictor {
     /// Core FANN predictor for actual neural network operations
-    fann_predictor: FannPredictor,
+    fann_predictor: VendorPredictor,
     /// Performance tracking for retraining decisions
     performance_tracker: Arc<RwLock<PerformanceTracker>>,
     /// Configuration
@@ -135,8 +140,21 @@ struct DataQualityTracker {
 
 impl EnhancedNeuralPredictor {
     /// Create a new enhanced neural predictor
-    pub fn new(config: NeuralConfig) -> Result<Self> {
-        let fann_predictor = FannPredictor::new(config.clone())?;
+    pub async fn new(config: NeuralConfig) -> Result<Self> {
+        // Initialize storage components
+        let storage = Arc::new(TimescaleDBStorage::new("postgresql://localhost/neural_trader").await?);
+        let cache = Arc::new(crate::data::cache::RedisCache::new("redis://127.0.0.1:6379").await?);
+        let data_access = Arc::new(DataAccessLayer::new(storage.clone(), cache.clone()).await?);
+        let training_data_service = Arc::new(TrainingDataService::new(storage, cache).await?);
+        let fann_predictor = VendorPredictor::new_with_services(
+            &config, 
+            Arc::new(crate::data::sector_mapper::SectorMapper::new(
+                crate::data::sector_mapper::SectorMapperConfig::default()
+            )),
+            Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new()),
+            data_access,
+            training_data_service
+        )?;
 
         let performance_tracker = PerformanceTracker {
             recent_accuracy: 0.5, // Start neutral
@@ -728,7 +746,7 @@ impl EnhancedNeuralPredictor {
         // Calculate completeness (non-zero values)
         let non_zero_count = data
             .iter()
-            .filter(|d| d.close > 0.0 && d.volume > 0.0)
+            .filter(|d| d.close > 0.0 && d.volume_value > 0.0)
             .count();
         quality_tracker.completeness_score = non_zero_count as f64 / data.len() as f64;
 
@@ -756,7 +774,7 @@ impl EnhancedNeuralPredictor {
 
         // Calculate volume consistency
         if data.len() > 5 {
-            let volumes: Vec<f64> = data.iter().map(|d| d.volume).collect();
+            let volumes: Vec<f64> = data.iter().map(|d| d.volume_value).collect();
             let volume_mean = volumes.iter().sum::<f64>() / volumes.len() as f64;
             let volume_cv = if volume_mean > 0.0 {
                 let volume_std = {
@@ -784,7 +802,7 @@ impl EnhancedNeuralPredictor {
     }
 
     /// Get the underlying FANN predictor for direct access
-    pub fn get_fann_predictor(&self) -> &FannPredictor {
+    pub fn get_fann_predictor(&self) -> &VendorPredictor {
         &self.fann_predictor
     }
 }
@@ -806,6 +824,13 @@ impl Default for EnhancedNeuralPredictor {
             use_real_models: false,
             enable_health_checks: true,
             enable_fallback: true,
+            // Required fields for NeuralConfig
+            input_size: 24,  // Use the second value which seems more appropriate for enhanced predictor
+            output_size: 1,
+            hidden_layers: vec![64, 32],  // Use the second value which is more optimized
+            learning_rate: 0.001,
+            prediction_horizon: None,  // Use the second value 
+            normalization_method: None,  // Use the second value
             enable_circuit_breakers: true,
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,
@@ -815,14 +840,8 @@ impl Default for EnhancedNeuralPredictor {
             max_retries: 3,
             error_threshold: 0.1,
             lookback_window: 24,
-            input_size: 24,
-            output_size: 1,
-            hidden_layers: vec![64, 32],
-            learning_rate: 0.001,
-            prediction_horizon: None,
-            normalization_method: None,
         };
-        Self::new(config).expect("Failed to create default enhanced predictor")
+        futures::executor::block_on(Self::new(config)).expect("Failed to create default enhanced predictor")
     }
 }
 
@@ -866,7 +885,7 @@ mod tests {
                 high: price * 1.001,
                 low: price * 0.998,
                 close: price,
-                volume: 1000000.0 + (i as f64 * 1000.0),
+                volume: vec![1000000.0 + (i as f64 * 1000.0)],
                 source: Some("test".to_string()),
                 value: Some(price),
                 metadata: Some(serde_json::json!({})),
@@ -894,6 +913,13 @@ mod tests {
             enable_graceful_degradation: false,
             enable_performance_monitoring: true,
             enable_adaptive_retry: true,
+            // Required fields for NeuralConfig
+            input_size: 60,
+            output_size: 1,
+            hidden_layers: vec![128, 64, 32],
+            learning_rate: 0.001,
+            prediction_horizon: Some(24),
+            normalization_method: Some("z-score".to_string()),
             enable_model_ensembles: false,
             model_timeout_seconds: 60,
             max_retries: 3,

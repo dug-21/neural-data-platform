@@ -75,6 +75,16 @@ class Settings(BaseSettings):
     metrics_enabled: bool = Field(default=True, env="METRICS_ENABLED")
     metrics_port: int = Field(default=8000, env="METRICS_PORT")
     
+    # Phase 2: Channel migration settings (INTERFACE_CONTRACT compliance)
+    enable_legacy_channel: bool = Field(default=True, env="ENABLE_LEGACY_CHANNEL")
+    redis_channel_prefix: str = Field(default="market", env="REDIS_CHANNEL_PREFIX")
+    redis_dual_publish: bool = Field(default=True, env="REDIS_DUAL_PUBLISH")
+    
+    # Redis connection and performance settings
+    redis_max_connections: int = Field(default=50, env="REDIS_MAX_CONNECTIONS")
+    redis_publish_timeout: int = Field(default=5, env="REDIS_PUBLISH_TIMEOUT")
+    redis_decode_responses: bool = Field(default=True, env="REDIS_DECODE_RESPONSES")
+    
     class Config:
         """Pydantic config."""
         env_file = ".env"

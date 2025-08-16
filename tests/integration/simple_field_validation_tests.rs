@@ -8,7 +8,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use neural_trader::{
+use autonomous_platform::{
     config::NeuralConfig,
     daa::autonomous_training::{AutonomousTrainingEngine, TrainingTrigger},
     data::TimeSeriesData,
@@ -106,7 +106,7 @@ async fn test_direct_performance_metric_updates() -> Result<()> {
             high: 3010.0,
             low: 2980.0,
             close: 3000.0,
-            volume: 1500.0,
+            volume: vec![1500.0],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("ETH".to_string()),
@@ -154,7 +154,7 @@ async fn test_simple_training_flag_checks() -> Result<()> {
     )?;
     
     // Set up training engine
-    let training_config = neural_trader::daa::autonomous_training::AutonomousTrainingConfig::default();
+    let training_config = autonomous_platform::daa::autonomous_training::AutonomousTrainingConfig::default();
     let training_engine = Arc::new(AutonomousTrainingEngine::new(training_config).await?);
     coordinator.set_autonomous_training(training_engine.clone());
     
@@ -177,7 +177,7 @@ async fn test_simple_training_flag_checks() -> Result<()> {
             high: 45200.0,
             low: 44700.0,
             close: 45000.0,
-            volume: 2000.0,
+            volume: vec![2000.0],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC".to_string()),
@@ -258,7 +258,7 @@ async fn test_direct_config_field_access() -> Result<()> {
             high: 0.505,
             low: 0.49,
             close: 0.50,
-            volume: 5000.0,
+            volume: vec![5000.0],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("ADA".to_string()),
@@ -317,7 +317,7 @@ async fn test_multiple_model_simple_tracking() -> Result<()> {
             high: 100.5,
             low: 99.0,
             close: 100.0,
-            volume: 3000.0,
+            volume: vec![3000.0],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("SOL".to_string()),

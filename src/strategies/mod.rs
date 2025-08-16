@@ -156,6 +156,16 @@ impl StrategyFactory {
             ))),
         }
     }
+
+    /// Create and initialize a strategy instance from configuration
+    pub async fn create_and_initialize_strategy(
+        config: StrategyConfig,
+        neural_predictor: Option<Arc<crate::neural::NeuralPredictor>>,
+    ) -> Result<Box<dyn TradingStrategy>, StrategyError> {
+        let mut strategy = Self::create_strategy(&config, neural_predictor)?;
+        strategy.initialize(config).await?;
+        Ok(strategy)
+    }
 }
 
 /// Strategy performance metrics

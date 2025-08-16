@@ -16,11 +16,10 @@ use autonomous_platform::config::{
 };
 use autonomous_platform::data::TimeSeriesData;
 use autonomous_platform::integration::{
-    neural_predictions::{DecisionContext, PredictionResult},
-    platform_orchestrator::{PlatformOrchestrator, PredictionMetrics, ValidationResult},
-    streaming::{MarketData, NewsData},
+    autonomous_decisions::{DaaDecisionMaker, MarketTrend, DecisionContext},
+    daa_coordinator::{DaaCoordinator, AutonomousDecision},
 };
-use autonomous_platform::monitoring::SystemHealth;
+// SystemHealth removed - using monitoring config instead
 use chrono::{DateTime, Utc};
 use futures::future::try_join_all;
 use serde_json::json;
@@ -153,7 +152,7 @@ fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) ->
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
         price: current_price,
-        volume: 1000.0 + (sequence as f64 * 10.0),
+        volume: vec![1000.0 + (sequence as f64 * 10.0),
         bid: current_price - (current_price * 0.001),
         ask: current_price + (current_price * 0.001),
         source: "validation_feed".to_string(),
@@ -502,7 +501,7 @@ async fn test_error_recovery() -> Result<()> {
             high: 0.0,
             low: 0.0,
             close: 0.0,
-            volume: 0.0,
+            volume: vec![0.0],
             indicators: HashMap::new(),
         },
         context_metadata: HashMap::new(),
@@ -718,7 +717,7 @@ fn create_enhanced_time_series_data(symbol: &str, price: f64) -> TimeSeriesData 
         high: price + 20.0,
         low: price - 20.0,
         close: price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         indicators,
     }
 }

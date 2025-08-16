@@ -30,10 +30,17 @@ async fn test_phase2_simplified_architecture() {
         model_timeout_seconds: 30,
         max_retries: 3,
         error_threshold: 0.1,
+        // Required additional fields
+        input_size: 24,
+        output_size: 1,
+        hidden_layers: vec![50, 30],
+        learning_rate: 0.001,
+        prediction_horizon: None,
+        normalization_method: None,
     };
 
     // Create NeuralPredictor (should be <200 lines)
-    let predictor = match NeuralPredictor::new(config) {
+    let predictor = match NeuralPredictor::new(config).await {
         Ok(p) => p,
         Err(e) => {
             println!("⚠️  Failed to create predictor (expected in test): {}", e);
@@ -58,12 +65,17 @@ async fn test_phase2_simplified_architecture() {
         high: 51000.0,
         low: 49500.0,
         close: 50500.0,
-        volume: 1000.0,
+        volume: vec![1000.0],
+        volume_value: 1000.0,
         indicators: HashMap::new(),
         source: None,
         entity: None,
         value: None,
         metadata: None,
+        values: vec![50500.0],
+        intervals: vec![0],
+        timestamps: vec![chrono::Utc::now()],
+        metadata_map: HashMap::new(),
     }];
 
     // Test Phase 2 single routing path: Client → NeuralPredictor → EnhancedNeuralAdapter → FannPredictor

@@ -5,12 +5,12 @@
 //! - Mock external dependencies
 //! - Focus on behavior verification
 
-use neural_trader::adapters::enhanced_neural_adapter::{
+use autonomous_platform::adapters::enhanced_neural_adapter::{
     EnhancedNeuralAdapter, EnhancedNeuralConfig,
 };
-use neural_trader::config::NeuralConfig;
-use neural_trader::data::TimeSeriesData;
-use neural_trader::neural::NeuralPredictorTrait;
+use autonomous_platform::config::NeuralConfig;
+use autonomous_platform::data::TimeSeriesData;
+use autonomous_platform::neural::NeuralPredictorTrait;
 use std::collections::HashMap;
 use std::env;
 use tokio::test;
@@ -58,12 +58,17 @@ fn create_test_data() -> Vec<TimeSeriesData> {
         high: 101.0,
         low: 99.0,
         close: 100.5,
-        volume: 1000.0,
+        volume: vec![1000.0],
+        volume_value: 1000.0,
         indicators: HashMap::new(),
         source: Some("test".to_string()),
         entity: Some("test".to_string()),
         value: Some(100.5),
         metadata: None,
+        values: vec![100.5],
+        intervals: vec![0],
+        timestamps: vec![chrono::Utc::now()],
+        metadata_map: HashMap::new(),
     }]
 }
 
@@ -83,7 +88,7 @@ async fn test_use_real_models_flag_true() {
     let adapter = EnhancedNeuralAdapter::new(config.clone()).await.unwrap();
     
     // Then: Real models should be preferred
-    let requirements = neural_trader::adapters::enhanced_neural_adapter::PredictionRequirements {
+    let requirements = autonomous_platform::adapters::enhanced_neural_adapter::PredictionRequirements {
         prefer_accuracy: true,
         prefer_speed: false,
         max_acceptable_latency: None,
@@ -349,7 +354,7 @@ async fn test_model_timeout_configuration() {
 async fn test_performance_thresholds() {
     // Given: Configuration with custom performance thresholds
     let config = EnhancedNeuralConfig {
-        performance_thresholds: neural_trader::adapters::enhanced_neural_adapter::PerformanceThresholds {
+        performance_thresholds: autonomous_platform::adapters::enhanced_neural_adapter::PerformanceThresholds {
             max_response_time: std::time::Duration::from_millis(100),
             max_error_rate: 5.0,
             max_memory_usage_mb: 500,
@@ -375,7 +380,7 @@ async fn test_performance_thresholds() {
 async fn test_retry_configuration() {
     // Given: Configuration with retry settings
     let config = EnhancedNeuralConfig {
-        retry_config: neural_trader::adapters::enhanced_neural_adapter::RetryConfig {
+        retry_config: autonomous_platform::adapters::enhanced_neural_adapter::RetryConfig {
             max_retries: 5,
             base_delay: std::time::Duration::from_millis(100),
             max_delay: std::time::Duration::from_secs(2),

@@ -1,0 +1,738 @@
+// specialization_layer_impl.rs.template
+// Enhanced specialization layer implementation with adaptive routing and meta-learning
+//
+// DESIGN DECISIONS:
+// - Dynamic expert allocation based on data characteristics
+// - Gradient-based routing with learnable gates
+// - Meta-learning for cross-task knowledge transfer
+// - Load balancing to prevent expert collapse
+// - Uncertainty-aware routing for improved reliability
+//
+// INTEGRATION POINTS:
+// - src/neural/fann_model_adapter.rs (base neural network functionality)
+// - sector_model_trainer.rs (sector-specific training)
+// - ensemble_predictor.rs (ensemble coordination)
+// - src/features/technical_indicators/ (feature extraction)
+
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{info, warn, debug, instrument};
+use serde::{Serialize, Deserialize};
+use nalgebra::{DVector, DMatrix};
+
+// TODO: Import your actual types
+use crate::neural::fann_model_adapter::FANNModelAdapter;
+use crate::data::sector_mapper::Sector;
+use crate::error::Result;
+
+/// Configuration for specialization layer
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecializationConfig {
+    /// Number of expert networks per layer
+    pub num_experts: usize,
+    /// Expert network hidden dimensions
+    pub expert_hidden_dims: Vec<usize>,
+    /// Gating network dimensions
+    pub gate_hidden_dims: Vec<usize>,
+    /// Minimum expert utilization threshold (for load balancing)
+    pub min_expert_utilization: f64,
+    /// Temperature for softmax gating (higher = more exploration)
+    pub gating_temperature: f64,
+    /// Enable gradient-based routing updates
+    pub adaptive_routing: bool,
+    /// Meta-learning rate for cross-task transfer
+    pub meta_learning_rate: f64,
+    /// Expert capacity factor (for capacity-based routing)
+    pub expert_capacity_factor: f64,
+    /// Enable uncertainty estimation in routing
+    pub uncertainty_routing: bool,
+}
+
+impl Default for SpecializationConfig {
+    fn default() -> Self {
+        Self {
+            num_experts: 8,
+            expert_hidden_dims: vec![256, 128, 64],
+            gate_hidden_dims: vec![128, 64],
+            min_expert_utilization: 0.1,
+            gating_temperature: 1.0,
+            adaptive_routing: true,
+            meta_learning_rate: 0.001,
+            expert_capacity_factor: 1.25,
+            uncertainty_routing: true,
+        }
+    }
+}
+
+/// Expert network specializing in specific data patterns
+#[derive(Debug, Clone)]
+pub struct ExpertNetwork {
+    pub id: usize,
+    pub sector_affinity: Option<Sector>,
+    pub model_adapter: Arc<FANNModelAdapter>,
+    
+    // Performance tracking
+    pub utilization_history: VecDeque<f64>,
+    pub performance_metrics: ExpertMetrics,
+    
+    // Specialization metadata
+    pub specialization_vector: DVector<f64>, // Learned specialization embedding
+    pub confidence_calibration: ConfidenceCalibrator,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpertMetrics {
+    pub total_predictions: u64,
+    pub average_loss: f64,
+    pub prediction_variance: f64,
+    pub calibration_error: f64,
+    pub last_update: chrono::DateTime<chrono::Utc>,
+}
+
+/// Gating network for routing inputs to appropriate experts
+#[derive(Debug)]
+pub struct GatingNetwork {
+    /// Neural network for computing routing probabilities
+    routing_network: Arc<FANNModelAdapter>,
+    /// Learned routing patterns for different input types
+    routing_memory: RoutingMemory,
+    /// Load balancing mechanism
+    load_balancer: LoadBalancer,
+}
+
+/// Routing memory for pattern-based expert selection
+#[derive(Debug)]
+pub struct RoutingMemory {
+    /// Historical routing decisions and their outcomes
+    routing_history: VecDeque<RoutingDecision>,
+    /// Learned routing patterns by input characteristics
+    pattern_routing_map: HashMap<InputPattern, Vec<f64>>, // pattern -> expert weights
+    /// Meta-learning parameters for cross-task transfer
+    meta_parameters: MetaLearningState,
+}
+
+#[derive(Debug, Clone)]
+pub struct RoutingDecision {
+    pub input_pattern: InputPattern,
+    pub expert_weights: Vec<f64>,
+    pub prediction_outcome: PredictionOutcome,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct InputPattern {
+    /// Sector classification
+    pub sector: Sector,
+    /// Market volatility regime (low, medium, high)
+    pub volatility_regime: VolatilityRegime,
+    /// Time-of-day pattern
+    pub time_pattern: TimePattern,
+    /// Technical indicator signature
+    pub technical_signature: TechnicalSignature,
+}
+
+#[derive(Debug, Clone)]
+pub struct PredictionOutcome {
+    pub prediction_accuracy: f64,
+    pub prediction_confidence: f64,
+    pub prediction_time: std::time::Duration,
+}
+
+/// Load balancing mechanism to prevent expert collapse
+#[derive(Debug)]
+pub struct LoadBalancer {
+    /// Expert utilization tracking
+    expert_utilization: Vec<f64>,
+    /// Utilization smoothing factor
+    smoothing_factor: f64,
+    /// Load balancing regularization strength
+    balance_strength: f64,
+}
+
+/// Main specialization layer implementation
+pub struct SpecializationLayer {
+    config: SpecializationConfig,
+    experts: Vec<ExpertNetwork>,
+    gating_network: GatingNetwork,
+    
+    // Adaptive components
+    meta_learner: MetaLearner,
+    uncertainty_estimator: UncertaintyEstimator,
+    
+    // Performance monitoring
+    layer_metrics: Arc<RwLock<LayerMetrics>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayerMetrics {
+    pub total_predictions: u64,
+    pub average_routing_entropy: f64,
+    pub expert_utilization_balance: f64,
+    pub meta_learning_progress: f64,
+    pub uncertainty_calibration: f64,
+}
+
+impl SpecializationLayer {
+    /// Create new specialization layer with configuration
+    pub fn new(config: SpecializationConfig) -> Result<Self> {
+        // Initialize expert networks
+        let experts = Self::initialize_experts(&config)?;
+        
+        // Initialize gating network
+        let gating_network = Self::initialize_gating_network(&config)?;
+        
+        // Initialize adaptive components
+        let meta_learner = MetaLearner::new(config.meta_learning_rate);
+        let uncertainty_estimator = UncertaintyEstimator::new();
+        
+        // Initialize metrics
+        let layer_metrics = Arc::new(RwLock::new(LayerMetrics::default()));
+
+        Ok(Self {
+            config,
+            experts,
+            gating_network,
+            meta_learner,
+            uncertainty_estimator,
+            layer_metrics,
+        })
+    }
+
+    /// Make prediction using mixture of experts
+    #[instrument(skip(self, input_features))]
+    pub async fn predict(
+        &self,
+        input_features: &DVector<f64>,
+        context: &PredictionContext,
+    ) -> Result<SpecializedPrediction> {
+        // Extract input pattern for routing
+        let input_pattern = self.extract_input_pattern(input_features, context).await?;
+        
+        // Compute expert routing weights
+        let routing_weights = self.compute_routing_weights(
+            input_features,
+            &input_pattern,
+        ).await?;
+        
+        // Apply load balancing if needed
+        let balanced_weights = self.apply_load_balancing(&routing_weights).await;
+        
+        // Get predictions from selected experts
+        let expert_predictions = self.get_expert_predictions(
+            input_features,
+            &balanced_weights,
+            &input_pattern,
+        ).await?;
+        
+        // Combine expert predictions with uncertainty
+        let combined_prediction = self.combine_predictions(
+            &expert_predictions,
+            &balanced_weights,
+        ).await?;
+        
+        // Update routing memory and metrics
+        self.update_routing_memory(&input_pattern, &routing_weights, &combined_prediction).await;
+        self.update_metrics(&balanced_weights, &combined_prediction).await;
+        
+        Ok(combined_prediction)
+    }
+
+    /// Train the specialization layer with meta-learning
+    #[instrument(skip(self, training_batch))]
+    pub async fn train_step(
+        &self,
+        training_batch: &TrainingBatch,
+    ) -> Result<TrainingStepResult> {
+        let mut step_metrics = TrainingStepResult::default();
+        
+        for sample in &training_batch.samples {
+            // Forward pass with routing
+            let prediction = self.predict(&sample.features, &sample.context).await?;
+            
+            // Compute losses for each expert
+            let expert_losses = self.compute_expert_losses(&sample, &prediction).await?;
+            
+            // Update expert networks
+            self.update_experts(&expert_losses, &sample).await?;
+            
+            // Update gating network if adaptive routing is enabled
+            if self.config.adaptive_routing {
+                self.update_gating_network(&sample, &prediction).await?;
+            }
+            
+            // Meta-learning update for cross-task transfer
+            self.meta_learner.update(&sample, &prediction, &expert_losses).await?;
+            
+            // Update uncertainty calibration
+            self.uncertainty_estimator.update(&prediction, &sample.target).await?;
+            
+            step_metrics.accumulate(&expert_losses, &prediction);
+        }
+        
+        // Load balancing adjustment
+        self.adjust_expert_utilization().await?;
+        
+        Ok(step_metrics)
+    }
+
+    /// Extract input pattern for routing decisions
+    #[instrument(skip(self, features, context))]
+    async fn extract_input_pattern(
+        &self,
+        features: &DVector<f64>,
+        context: &PredictionContext,
+    ) -> Result<InputPattern> {
+        // TODO: Implement feature-based pattern extraction
+        // - Sector classification from context
+        // - Volatility regime estimation from features
+        // - Time pattern detection
+        // - Technical indicator signature computation
+        
+        let sector = context.sector;
+        
+        // Estimate volatility regime from feature statistics
+        let volatility_regime = self.estimate_volatility_regime(features).await?;
+        
+        // Extract time pattern
+        let time_pattern = self.extract_time_pattern(context).await?;
+        
+        // Compute technical signature
+        let technical_signature = self.compute_technical_signature(features).await?;
+        
+        Ok(InputPattern {
+            sector,
+            volatility_regime,
+            time_pattern,
+            technical_signature,
+        })
+    }
+
+    /// Compute routing weights using gating network and routing memory
+    #[instrument(skip(self, features, pattern))]
+    async fn compute_routing_weights(
+        &self,
+        features: &DVector<f64>,
+        pattern: &InputPattern,
+    ) -> Result<Vec<f64>> {
+        // Get base routing weights from gating network
+        let base_weights = self.gating_network.forward(features).await?;
+        
+        // Apply pattern-based routing memory
+        let memory_weights = self.gating_network.routing_memory
+            .get_pattern_weights(pattern).await
+            .unwrap_or_else(|| vec![1.0 / self.config.num_experts; self.config.num_experts]);
+        
+        // Combine base and memory weights
+        let combined_weights = base_weights.iter()
+            .zip(memory_weights.iter())
+            .map(|(base, memory)| base * memory)
+            .collect::<Vec<f64>>();
+        
+        // Apply temperature scaling
+        let temperature_scaled = self.apply_temperature_scaling(&combined_weights).await;
+        
+        // Normalize to sum to 1
+        let sum: f64 = temperature_scaled.iter().sum();
+        let normalized_weights = temperature_scaled.iter()
+            .map(|w| w / sum)
+            .collect();
+        
+        Ok(normalized_weights)
+    }
+
+    /// Apply load balancing to prevent expert collapse
+    async fn apply_load_balancing(&self, weights: &[f64]) -> Vec<f64> {
+        self.gating_network.load_balancer.balance_weights(weights).await
+    }
+
+    /// Get predictions from selected experts
+    #[instrument(skip(self, features, weights, pattern))]
+    async fn get_expert_predictions(
+        &self,
+        features: &DVector<f64>,
+        weights: &[f64],
+        pattern: &InputPattern,
+    ) -> Result<Vec<ExpertPrediction>> {
+        let mut predictions = Vec::new();
+        
+        for (i, (expert, &weight)) in self.experts.iter().zip(weights).enumerate() {
+            // Skip experts with negligible weights for efficiency
+            if weight < 0.01 {
+                predictions.push(ExpertPrediction::default());
+                continue;
+            }
+            
+            // Get expert prediction with confidence
+            let prediction = expert.predict_with_confidence(features, pattern).await?;
+            predictions.push(prediction);
+        }
+        
+        Ok(predictions)
+    }
+
+    /// Combine expert predictions with uncertainty quantification
+    async fn combine_predictions(
+        &self,
+        expert_predictions: &[ExpertPrediction],
+        weights: &[f64],
+    ) -> Result<SpecializedPrediction> {
+        // Weighted average of predictions
+        let weighted_prediction: f64 = expert_predictions.iter()
+            .zip(weights)
+            .map(|(pred, &weight)| pred.value * weight)
+            .sum();
+        
+        // Uncertainty estimation from prediction variance
+        let prediction_variance = self.compute_prediction_variance(
+            expert_predictions,
+            weights,
+            weighted_prediction,
+        ).await;
+        
+        // Confidence calibration
+        let calibrated_confidence = self.uncertainty_estimator
+            .calibrate_confidence(prediction_variance).await;
+        
+        // Compute prediction interval
+        let prediction_interval = self.compute_prediction_interval(
+            weighted_prediction,
+            prediction_variance,
+        ).await;
+        
+        Ok(SpecializedPrediction {
+            value: weighted_prediction,
+            confidence: calibrated_confidence,
+            uncertainty: prediction_variance.sqrt(),
+            prediction_interval,
+            expert_contributions: weights.to_vec(),
+            routing_entropy: self.compute_routing_entropy(weights).await,
+        })
+    }
+
+    /// Initialize expert networks with diverse specializations
+    fn initialize_experts(config: &SpecializationConfig) -> Result<Vec<ExpertNetwork>> {
+        let mut experts = Vec::new();
+        
+        for i in 0..config.num_experts {
+            // Create expert with different initialization for diversity
+            let expert = ExpertNetwork::new(i, &config.expert_hidden_dims)?;
+            experts.push(expert);
+        }
+        
+        // TODO: Initialize experts with different sector affinities
+        // TODO: Use different activation functions, architectures for diversity
+        
+        Ok(experts)
+    }
+
+    /// Initialize gating network for routing
+    fn initialize_gating_network(config: &SpecializationConfig) -> Result<GatingNetwork> {
+        // TODO: Create routing network architecture
+        // Input: feature vector
+        // Output: routing probabilities for each expert
+        
+        let routing_network = Arc::new(FANNModelAdapter::new(
+            &config.gate_hidden_dims,
+            config.num_experts, // Output size = number of experts
+        )?);
+        
+        let routing_memory = RoutingMemory::new();
+        let load_balancer = LoadBalancer::new(config.num_experts);
+        
+        Ok(GatingNetwork {
+            routing_network,
+            routing_memory,
+            load_balancer,
+        })
+    }
+
+    /// Update routing memory with new decisions and outcomes
+    async fn update_routing_memory(
+        &self,
+        pattern: &InputPattern,
+        weights: &[f64],
+        prediction: &SpecializedPrediction,
+    ) {
+        // TODO: Store routing decision and outcome
+        // Update pattern-based routing map
+        // Implement decay for old patterns
+    }
+
+    /// Update performance metrics
+    async fn update_metrics(
+        &self,
+        weights: &[f64],
+        prediction: &SpecializedPrediction,
+    ) {
+        let mut metrics = self.layer_metrics.write().await;
+        metrics.total_predictions += 1;
+        metrics.average_routing_entropy = prediction.routing_entropy;
+        // TODO: Update other metrics
+    }
+
+    // Helper methods (implement as needed)
+    async fn estimate_volatility_regime(&self, features: &DVector<f64>) -> Result<VolatilityRegime> {
+        // TODO: Implement volatility regime classification
+        Ok(VolatilityRegime::Medium)
+    }
+
+    async fn extract_time_pattern(&self, context: &PredictionContext) -> Result<TimePattern> {
+        // TODO: Extract time-based patterns
+        Ok(TimePattern::Regular)
+    }
+
+    async fn compute_technical_signature(&self, features: &DVector<f64>) -> Result<TechnicalSignature> {
+        // TODO: Compute technical indicator signature
+        Ok(TechnicalSignature::Trending)
+    }
+
+    async fn apply_temperature_scaling(&self, weights: &[f64]) -> Vec<f64> {
+        weights.iter()
+            .map(|w| (w / self.config.gating_temperature).exp())
+            .collect()
+    }
+
+    async fn compute_prediction_variance(
+        &self,
+        predictions: &[ExpertPrediction],
+        weights: &[f64],
+        weighted_mean: f64,
+    ) -> f64 {
+        // TODO: Implement prediction variance computation
+        0.0
+    }
+
+    async fn compute_prediction_interval(
+        &self,
+        prediction: f64,
+        variance: f64,
+    ) -> PredictionInterval {
+        // TODO: Compute confidence intervals
+        PredictionInterval {
+            lower: prediction - 1.96 * variance.sqrt(),
+            upper: prediction + 1.96 * variance.sqrt(),
+        }
+    }
+
+    async fn compute_routing_entropy(&self, weights: &[f64]) -> f64 {
+        -weights.iter()
+            .filter(|&&w| w > 0.0)
+            .map(|&w| w * w.ln())
+            .sum::<f64>()
+    }
+}
+
+// Supporting types and implementations
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum VolatilityRegime { Low, Medium, High }
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum TimePattern { MarketOpen, MidDay, MarketClose, Regular }
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum TechnicalSignature { Trending, Ranging, Breakout, Reversal }
+
+#[derive(Debug, Clone)]
+pub struct ExpertPrediction {
+    pub value: f64,
+    pub confidence: f64,
+    pub expert_id: usize,
+}
+
+impl Default for ExpertPrediction {
+    fn default() -> Self {
+        Self { value: 0.0, confidence: 0.0, expert_id: 0 }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SpecializedPrediction {
+    pub value: f64,
+    pub confidence: f64,
+    pub uncertainty: f64,
+    pub prediction_interval: PredictionInterval,
+    pub expert_contributions: Vec<f64>,
+    pub routing_entropy: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PredictionInterval {
+    pub lower: f64,
+    pub upper: f64,
+}
+
+pub struct PredictionContext {
+    pub sector: Sector,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    // TODO: Add other context fields
+}
+
+pub struct TrainingBatch {
+    pub samples: Vec<TrainingSample>,
+}
+
+pub struct TrainingSample {
+    pub features: DVector<f64>,
+    pub target: f64,
+    pub context: PredictionContext,
+}
+
+#[derive(Default)]
+pub struct TrainingStepResult {
+    pub average_loss: f64,
+    pub routing_entropy: f64,
+    pub expert_utilization: Vec<f64>,
+}
+
+impl TrainingStepResult {
+    fn accumulate(&mut self, losses: &[f64], prediction: &SpecializedPrediction) {
+        // TODO: Implement metric accumulation
+    }
+}
+
+// Meta-learning and uncertainty estimation components
+pub struct MetaLearner {
+    learning_rate: f64,
+    // TODO: Add meta-learning state
+}
+
+impl MetaLearner {
+    pub fn new(learning_rate: f64) -> Self {
+        Self { learning_rate }
+    }
+
+    pub async fn update(
+        &self,
+        sample: &TrainingSample,
+        prediction: &SpecializedPrediction,
+        losses: &[f64],
+    ) -> Result<()> {
+        // TODO: Implement meta-learning update
+        Ok(())
+    }
+}
+
+pub struct UncertaintyEstimator {
+    // TODO: Add uncertainty estimation state
+}
+
+impl UncertaintyEstimator {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub async fn update(&self, prediction: &SpecializedPrediction, target: &f64) -> Result<()> {
+        // TODO: Implement uncertainty calibration update
+        Ok(())
+    }
+
+    pub async fn calibrate_confidence(&self, variance: f64) -> f64 {
+        // TODO: Implement confidence calibration
+        0.5
+    }
+}
+
+pub struct ConfidenceCalibrator {
+    // TODO: Add calibration state
+}
+
+pub struct MetaLearningState {
+    // TODO: Add meta-learning parameters
+}
+
+impl RoutingMemory {
+    pub fn new() -> Self {
+        Self {
+            routing_history: VecDeque::new(),
+            pattern_routing_map: HashMap::new(),
+            meta_parameters: MetaLearningState {},
+        }
+    }
+
+    pub async fn get_pattern_weights(&self, pattern: &InputPattern) -> Option<Vec<f64>> {
+        self.pattern_routing_map.get(pattern).cloned()
+    }
+}
+
+impl LoadBalancer {
+    pub fn new(num_experts: usize) -> Self {
+        Self {
+            expert_utilization: vec![0.0; num_experts],
+            smoothing_factor: 0.99,
+            balance_strength: 0.1,
+        }
+    }
+
+    pub async fn balance_weights(&self, weights: &[f64]) -> Vec<f64> {
+        // TODO: Implement load balancing algorithm
+        weights.to_vec()
+    }
+}
+
+impl ExpertNetwork {
+    pub fn new(id: usize, hidden_dims: &[usize]) -> Result<Self> {
+        // TODO: Initialize expert network
+        todo!("Implement expert network initialization")
+    }
+
+    pub async fn predict_with_confidence(
+        &self,
+        features: &DVector<f64>,
+        pattern: &InputPattern,
+    ) -> Result<ExpertPrediction> {
+        // TODO: Implement expert prediction with confidence
+        todo!("Implement expert prediction")
+    }
+}
+
+impl GatingNetwork {
+    pub async fn forward(&self, features: &DVector<f64>) -> Result<Vec<f64>> {
+        // TODO: Implement gating network forward pass
+        todo!("Implement gating network forward pass")
+    }
+}
+
+impl Default for LayerMetrics {
+    fn default() -> Self {
+        Self {
+            total_predictions: 0,
+            average_routing_entropy: 0.0,
+            expert_utilization_balance: 0.0,
+            meta_learning_progress: 0.0,
+            uncertainty_calibration: 0.0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_specialization_layer_creation() {
+        let config = SpecializationConfig::default();
+        let layer = SpecializationLayer::new(config);
+        assert!(layer.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_routing_weight_computation() {
+        // TODO: Test routing weight computation
+    }
+
+    #[tokio::test]
+    async fn test_expert_prediction_combination() {
+        // TODO: Test prediction combination logic
+    }
+
+    #[tokio::test]
+    async fn test_load_balancing() {
+        // TODO: Test load balancing mechanism
+    }
+
+    #[tokio::test]
+    async fn test_meta_learning_update() {
+        // TODO: Test meta-learning functionality
+    }
+}

@@ -301,7 +301,8 @@ async fn test_model_preloading() -> Result<()> {
 
 /// Get process memory usage in MB
 fn get_process_memory_mb() -> f64 {
-    use sysinfo::{ProcessExt, System, SystemExt};
+    use sysinfo::System;
+    // Note: ProcessExt and SystemExt traits are now part of System methods
 
     let mut system = System::new();
     system.refresh_processes();

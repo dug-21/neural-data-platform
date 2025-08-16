@@ -12,12 +12,11 @@ use autonomous_platform::config::{
     GracefulShutdownConfig, LoggingConfig, MonitoringConfig, NeuralConfig, ObservabilityConfig,
     PerformanceConfig, PlatformConfig, PlatformInfo, RedisConfig, SecurityConfig,
 };
-use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
 use autonomous_platform::integration::{
-    data_access::{DataAccessLayer, DataRequest, Timeframe},
-    neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
-    platform_orchestrator::{PlatformOrchestrator, SystemHealth, ValidationResult},
-    streaming::{MarketData, NewsData, StreamConfig, StreamingPipeline},
+    data_access::DataAccessLayer,
+    autonomous_decisions::{DaaDecisionMaker, MarketTrend},
+    daa_coordinator::{DaaCoordinator, AutonomousDecision},
 };
 use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
@@ -91,7 +90,7 @@ fn create_test_market_data(symbol: &str, price: f64) -> MarketData {
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
         price,
-        volume: 1000.0,
+        volume: vec![1000.0],
         bid: price - 5.0,
         ask: price + 5.0,
         source: "test_feed".to_string(),
@@ -552,7 +551,8 @@ fn create_time_series_data(symbol: &str, price: f64) -> TimeSeriesData {
         high: price + 20.0,
         low: price - 20.0,
         close: price,
-        volume: 1000.0,
+        volume: vec![1000.0],
+        volume_value: 1000.0,
         indicators: {
             let mut indicators = HashMap::new();
             indicators.insert("RSI".to_string(), 65.5);
@@ -560,6 +560,14 @@ fn create_time_series_data(symbol: &str, price: f64) -> TimeSeriesData {
             indicators.insert("SMA_20".to_string(), price - 5.0);
             indicators
         },
+        source: Some("test".to_string()),
+        entity: Some(symbol.to_string()),
+        value: Some(price),
+        metadata: None,
+        values: vec![price],
+        intervals: vec![0],
+        timestamps: vec![Utc::now()],
+        metadata_map: HashMap::new(),
     }
 }
 

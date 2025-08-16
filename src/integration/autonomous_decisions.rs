@@ -10,7 +10,7 @@ use tracing::{debug, info};
 
 use super::{OrderSide, OrderType, TradeOrder};
 use crate::data::TimeSeriesData;
-use crate::neural::NeuralPredictor;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 use crate::strategies::MarketContext;
 
 /// Market trend classification
@@ -353,7 +353,7 @@ mod tests {
             accuracy_threshold: 0.8,
             ..Default::default()
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await.unwrap());
 
         let decision_maker = DaaDecisionMaker::new(neural_predictor);
         assert_eq!(decision_maker.decision_threshold, 0.7);

@@ -126,6 +126,7 @@ impl TrainingDataService {
     }
 
     /// Load a training batch for a specific model type
+    /// CRITICAL: Ensures complete data isolation - only loads data for the requested symbol
     pub async fn load_training_batch(
         &self,
         model_type: ModelType,
@@ -133,34 +134,55 @@ impl TrainingDataService {
         config: TrainingDataConfig,
     ) -> Result<PreparedTrainingData> {
         let start_time = std::time::Instant::now();
-        debug!(
-            "Loading training batch for {:?} model, symbol: {}",
+        
+        // CRITICAL LOGGING: Explicitly log symbol isolation
+        info!(
+            "🎯 [DATA ISOLATION] Loading training batch for {:?} model, SYMBOL: {} ONLY",
             model_type, symbol
         );
+        debug!(
+            "Training data request - Model: {:?}, Symbol: {}, Batch size: {}",
+            model_type, symbol, config.batch_size
+        );
 
-        // Try cache first if enabled
+        // Try cache first if enabled - SYMBOL-SPECIFIC cache key prevents cross-contamination
         if config.cache_enabled {
             let cache_key = format!(
-                "training_data:{}:{}:{:?}",
+                "training_data:SYMBOL_{}:MODEL_{}:BATCH_{}",
                 symbol,
                 serde_json::to_string(&model_type)?,
                 config.batch_size
             );
+            
+            debug!("🔍 [DATA ISOLATION] Cache lookup with symbol-specific key: {}", cache_key);
 
             if let Ok(Some(cached_data)) = self.cache.get::<PreparedTrainingData>(&cache_key).await
             {
-                debug!("Cache hit for training data");
-                let mut metrics = self.metrics.write().await;
-                metrics.cache_hits += 1;
-                return Ok(cached_data);
+                // CRITICAL VALIDATION: Verify cached data matches requested symbol
+                if cached_data.symbol != symbol {
+                    error!(
+                        "🚨 [DATA ISOLATION ERROR] Cache contamination detected! Requested: {}, Got: {}",
+                        symbol, cached_data.symbol
+                    );
+                    // Clear contaminated cache entry
+                    let _ = self.cache.invalidate(&cache_key).await;
+                } else {
+                    info!("✅ [DATA ISOLATION] Cache hit for symbol {} - data validated", symbol);
+                    let mut metrics = self.metrics.write().await;
+                    metrics.cache_hits += 1;
+                    return Ok(cached_data);
+                }
             }
         }
 
         // Acquire semaphore to limit concurrent preparations
         let _permit = self.preparation_semaphore.acquire().await?;
 
-        // Load raw data
+        // Load raw data - SYMBOL-SPECIFIC query
         let raw_data = self.load_raw_data(symbol, &config).await?;
+        
+        // CRITICAL VALIDATION: Verify all loaded data belongs to requested symbol
+        self.validate_symbol_isolation(&raw_data, symbol)?;
 
         // Validate data
         self.validate_training_data(&raw_data)?;
@@ -208,10 +230,10 @@ impl TrainingDataService {
                 / metrics.total_batches_loaded as f64;
         }
 
-        // Cache the prepared data if enabled
+        // Cache the prepared data if enabled - SYMBOL-SPECIFIC cache key
         if config.cache_enabled {
             let cache_key = format!(
-                "training_data:{}:{}:{:?}",
+                "training_data:SYMBOL_{}:MODEL_{}:BATCH_{}",
                 symbol,
                 serde_json::to_string(&model_type)?,
                 config.batch_size
@@ -226,9 +248,20 @@ impl TrainingDataService {
             }
         }
 
+        // FINAL VALIDATION: Confirm prepared data symbol matches request
+        if prepared_data.symbol != symbol {
+            error!(
+                "🚨 [DATA ISOLATION CRITICAL ERROR] Prepared data symbol mismatch! Requested: {}, Prepared: {}",
+                symbol, prepared_data.symbol
+            );
+            bail!("Data isolation violation: prepared data symbol ({}) does not match requested symbol ({})", 
+                  prepared_data.symbol, symbol);
+        }
+        
         info!(
-            "Prepared {} training samples in {:?}",
+            "✅ [DATA ISOLATION] Successfully prepared {} training samples for SYMBOL {} ONLY in {:?}",
             prepared_data.features.len(),
+            symbol,
             start_time.elapsed()
         );
         Ok(prepared_data)
@@ -270,7 +303,7 @@ impl TrainingDataService {
             indicators.insert("price_change".to_string(), price_change);
 
             // Volume average
-            let volume_avg = window_data.iter().map(|d| d.volume).sum::<f64>() / window as f64;
+            let volume_avg = window_data.iter().map(|d| d.volume_value).sum::<f64>() / window as f64;
             indicators.insert("volume_avg".to_string(), volume_avg);
 
             // Volatility (simple standard deviation)
@@ -291,7 +324,11 @@ impl TrainingDataService {
             high: latest.high,
             low: latest.low,
             close: latest.close,
-            volume: latest.volume,
+            volume: latest.volume.clone(),
+            volume_value: latest.volume_value,
+            intervals: vec![1000], // Default 1-second intervals
+            timestamps: vec![latest.timestamp],
+            values: vec![latest.close],
             indicators,
             source: Some("online".to_string()),
             entity: Some(symbol.to_string()),
@@ -300,7 +337,35 @@ impl TrainingDataService {
                 "window_size": window,
                 "data_points": data.len()
             })),
+            metadata_map: HashMap::new(),
         })
+    }
+
+    /// Validate symbol isolation - ensures no cross-contamination between symbols
+    pub fn validate_symbol_isolation(&self, data: &[TimeSeriesData], expected_symbol: &str) -> Result<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        
+        // Check every data point to ensure it belongs to the expected symbol
+        for (i, point) in data.iter().enumerate() {
+            if point.symbol != expected_symbol {
+                error!(
+                    "🚨 [DATA ISOLATION VIOLATION] Data point {} contains wrong symbol! Expected: {}, Found: {}",
+                    i, expected_symbol, point.symbol
+                );
+                bail!(
+                    "Data isolation violation: point {} has symbol '{}' but expected '{}'",
+                    i, point.symbol, expected_symbol
+                );
+            }
+        }
+        
+        info!(
+            "✅ [DATA ISOLATION] Validated {} data points all belong to symbol {}",
+            data.len(), expected_symbol
+        );
+        Ok(())
     }
 
     /// Validate training data
@@ -322,10 +387,10 @@ impl TrainingDataService {
                 )));
             }
 
-            if point.volume < 0.0 || point.volume.is_nan() || point.volume.is_infinite() {
+            if point.volume_value < 0.0 || point.volume_value.is_nan() || point.volume_value.is_infinite() {
                 return Err(ValidationError::InvalidValues(format!(
                     "Invalid volume at index {}: {}",
-                    i, point.volume
+                    i, point.volume_value
                 )));
             }
 
@@ -360,36 +425,157 @@ impl TrainingDataService {
 
     // Private helper methods
 
+    /// Get market data specifically for training, bypassing cache to ensure fresh data
+    /// This prevents serving stale cached data that might have been limited to 7 days
+    async fn get_training_market_data(
+        &self,
+        symbol: &str,
+        timeframe: Timeframe,
+    ) -> Result<Vec<TimeSeriesData>> {
+        use crate::integration::data_access::DataAccessLayer;
+        
+        info!(
+            "🎯 [TRAINING DATA] Fetching fresh {} data for symbol {} (bypassing cache)",
+            format!("{:?}", timeframe),
+            symbol
+        );
+
+        // Calculate time range using environment-configured training window
+        let end_time = chrono::Utc::now();
+        let duration = match std::env::var("TRAINING_HISTORY_DAYS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok()) {
+            Some(days) => {
+                info!("📊 Using TRAINING_HISTORY_DAYS={} for training data query", days);
+                chrono::Duration::days(days)
+            }
+            None => {
+                info!("📊 Using default 90 days for training data query (TRAINING_HISTORY_DAYS not set)");
+                chrono::Duration::days(90) // Default: 90 days
+            }
+        };
+        
+        let start_time = end_time - duration;
+        
+        info!(
+            "🔍 [TRAINING DATA] Direct query: {} from {} to {} ({} days)",
+            symbol,
+            start_time.format("%Y-%m-%d %H:%M:%S UTC"),
+            end_time.format("%Y-%m-%d %H:%M:%S UTC"),
+            duration.num_days()
+        );
+
+        // Query directly from storage, bypassing cache
+        let raw_data = self
+            .data_access
+            .storage
+            .query_range(symbol, start_time, end_time)
+            .await
+            .with_context(|| format!("Failed to query training data for {}", symbol))?;
+
+        info!("✅ [TRAINING DATA] Retrieved {} raw data points for {}", raw_data.len(), symbol);
+
+        // Convert to TimeSeriesData format (similar to DataAccessLayer::get_market_data)
+        let mut time_series_data = Vec::new();
+        for data_point in raw_data {
+            // Extract OHLCV data from metadata if available
+            let (open, high, low, close, volume) = if let Some(metadata) = &data_point.metadata {
+                (
+                    metadata.get("open").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("high").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("low").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("close").and_then(|v| v.as_f64()).unwrap_or(data_point.value),
+                    metadata.get("volume").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                )
+            } else {
+                // Fallback to using value as close price
+                (data_point.value, data_point.value, data_point.value, data_point.value, 0.0)
+            };
+
+            time_series_data.push(TimeSeriesData {
+                symbol: data_point.entity.clone(),
+                timestamp: data_point.timestamp,
+                open,
+                high,
+                low,
+                close,
+                volume: vec![volume],
+                volume_value: volume,
+                intervals: vec![1000], // Default 1-second intervals
+                timestamps: vec![data_point.timestamp],
+                values: vec![close],
+                indicators: data_point.metadata
+                    .as_ref()
+                    .and_then(|meta| meta.get("indicators"))
+                    .and_then(|v| v.as_object())
+                    .map(|obj| {
+                        obj.iter()
+                            .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f)))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                source: Some(data_point.source.clone()),
+                entity: Some(data_point.entity.clone()),
+                value: Some(close),
+                metadata: data_point.metadata.clone(),
+                metadata_map: std::collections::HashMap::new(),
+            });
+        }
+
+        info!(
+            "✅ [TRAINING DATA] Converted to {} TimeSeriesData points for {}",
+            time_series_data.len(),
+            symbol
+        );
+
+        Ok(time_series_data)
+    }
+
     async fn load_raw_data(
         &self,
         symbol: &str,
         config: &TrainingDataConfig,
     ) -> Result<Vec<TimeSeriesData>> {
+        info!("🔍 [DATA ISOLATION] Loading raw data for SYMBOL {} ONLY", symbol);
+        
         // Calculate required data size based on config
         let required_size = config.batch_size + config.sequence_length + config.feature_window;
 
-        // Load more data than needed to account for feature calculation
-        let data = self
-            .data_access
-            .get_market_data(symbol, Timeframe::Hourly)
-            .await?;
+        // CRITICAL FIX: Bypass cache for training data to ensure we get the full 90-day window
+        // The regular get_market_data() might return cached data from when the system was misconfigured
+        debug!("🔍 [DATA ISOLATION] Querying hourly data for symbol: {} (bypassing cache for training)", symbol);
+        let data = self.get_training_market_data(symbol, Timeframe::Hourly).await?;
+
+        // IMMEDIATE VALIDATION: Check data belongs to requested symbol
+        if !data.is_empty() {
+            self.validate_symbol_isolation(&data, symbol)
+                .context("Hourly data failed symbol isolation check")?;
+        }
 
         if data.len() < required_size {
-            // Try to load more data from daily timeframe
-            let daily_data = self
-                .data_access
-                .get_market_data(symbol, Timeframe::Daily)
-                .await?;
+            // Try to load more data from daily timeframe (also bypassing cache)
+            debug!("🔍 [DATA ISOLATION] Insufficient hourly data, querying daily data for symbol: {} (bypassing cache)", symbol);
+            let daily_data = self.get_training_market_data(symbol, Timeframe::Daily).await?;
+                
+            // IMMEDIATE VALIDATION: Check daily data belongs to requested symbol
+            if !daily_data.is_empty() {
+                self.validate_symbol_isolation(&daily_data, symbol)
+                    .context("Daily data failed symbol isolation check")?;
+            }
+                
             if daily_data.len() >= required_size {
+                info!("✅ [DATA ISOLATION] Loaded {} daily data points for symbol {}", daily_data.len(), symbol);
                 Ok(daily_data)
             } else {
                 bail!(
-                    "Insufficient data for training: got {}, need {}",
+                    "Insufficient data for training symbol {}: got {}, need {}",
+                    symbol,
                     daily_data.len(),
                     required_size
                 );
             }
         } else {
+            info!("✅ [DATA ISOLATION] Loaded {} hourly data points for symbol {}", data.len(), symbol);
             Ok(data)
         }
     }
@@ -433,7 +619,7 @@ impl TrainingDataService {
             let mut feature_vec = vec![
                 current.close,
                 if config.include_volume {
-                    current.volume
+                    current.volume_value
                 } else {
                     0.0
                 },
@@ -471,9 +657,9 @@ impl TrainingDataService {
                 };
 
                 // Volume ratio
-                let avg_volume = window.iter().map(|d| d.volume).sum::<f64>() / window.len() as f64;
+                let avg_volume = window.iter().map(|d| d.volume_value).sum::<f64>() / window.len() as f64;
                 let volume_ratio = if avg_volume > 0.0 {
-                    current.volume / avg_volume
+                    current.volume_value / avg_volume
                 } else {
                     1.0
                 };
@@ -497,7 +683,7 @@ impl TrainingDataService {
             None
         };
 
-        Ok(PreparedTrainingData {
+        let prepared_data = PreparedTrainingData {
             model_type: ModelType::MLP,
             symbol: symbol.to_string(),
             features,
@@ -506,7 +692,23 @@ impl TrainingDataService {
             feature_names,
             normalization_params,
             metadata: HashMap::new(),
-        })
+        };
+        
+        // FINAL VALIDATION: Ensure prepared data symbol matches input
+        if prepared_data.symbol != symbol {
+            error!(
+                "🚨 [DATA ISOLATION CRITICAL] MLP data preparation symbol mismatch! Expected: {}, Got: {}",
+                symbol, prepared_data.symbol
+            );
+            bail!("MLP data preparation symbol isolation failure");
+        }
+        
+        info!(
+            "✅ [DATA ISOLATION] MLP data prepared successfully for symbol {} with {} features",
+            symbol, prepared_data.features.len()
+        );
+        
+        Ok(prepared_data)
     }
 
     async fn prepare_sequence_data(
@@ -541,7 +743,7 @@ impl TrainingDataService {
                 sequence.push(vec![
                     point.close,
                     if config.include_volume {
-                        point.volume
+                        point.volume_value
                     } else {
                         0.0
                     },
@@ -579,8 +781,8 @@ impl TrainingDataService {
             serde_json::json!(feature_names.len()),
         );
 
-        Ok(PreparedTrainingData {
-            model_type,
+        let prepared_data = PreparedTrainingData {
+            model_type: model_type.clone(),
             symbol: symbol.to_string(),
             features: sequences,
             targets,
@@ -588,7 +790,23 @@ impl TrainingDataService {
             feature_names,
             normalization_params,
             metadata,
-        })
+        };
+        
+        // FINAL VALIDATION: Ensure prepared data symbol matches input
+        if prepared_data.symbol != symbol {
+            error!(
+                "🚨 [DATA ISOLATION CRITICAL] Sequence data preparation symbol mismatch! Expected: {}, Got: {}",
+                symbol, prepared_data.symbol
+            );
+            bail!("Sequence data preparation symbol isolation failure");
+        }
+        
+        info!(
+            "✅ [DATA ISOLATION] {:?} sequence data prepared successfully for symbol {} with {} sequences",
+            model_type, symbol, prepared_data.features.len()
+        );
+        
+        Ok(prepared_data)
     }
 
     async fn prepare_cnn_data(
@@ -597,12 +815,25 @@ impl TrainingDataService {
         data: Vec<TimeSeriesData>,
         config: &TrainingDataConfig,
     ) -> Result<PreparedTrainingData> {
+        info!("🔍 [DATA ISOLATION] Preparing CNN data for symbol {} ONLY", symbol);
+        
         // For CNN, we can create 2D feature maps
         // This is a simplified version - real implementation would create more sophisticated features
         self.prepare_mlp_data(symbol, data, config)
             .await
             .map(|mut prepared| {
                 prepared.model_type = ModelType::CNN;
+                
+                // VALIDATION: Ensure symbol consistency after model type change
+                if prepared.symbol != symbol {
+                    error!(
+                        "🚨 [DATA ISOLATION CRITICAL] CNN data symbol mismatch after preparation! Expected: {}, Got: {}",
+                        symbol, prepared.symbol
+                    );
+                    panic!("CNN data preparation symbol isolation failure");
+                }
+                
+                info!("✅ [DATA ISOLATION] CNN data prepared successfully for symbol {}", symbol);
                 prepared
             })
     }
@@ -613,12 +844,25 @@ impl TrainingDataService {
         data: Vec<TimeSeriesData>,
         config: &TrainingDataConfig,
     ) -> Result<PreparedTrainingData> {
+        info!("🔍 [DATA ISOLATION] Preparing ensemble data for symbol {} ONLY", symbol);
+        
         // For ensemble, prepare data that can be used by multiple model types
         // This returns MLP-style features that can be adapted by each model
         self.prepare_mlp_data(symbol, data, config)
             .await
             .map(|mut prepared| {
                 prepared.model_type = ModelType::Ensemble;
+                
+                // VALIDATION: Ensure symbol consistency after model type change
+                if prepared.symbol != symbol {
+                    error!(
+                        "🚨 [DATA ISOLATION CRITICAL] Ensemble data symbol mismatch after preparation! Expected: {}, Got: {}",
+                        symbol, prepared.symbol
+                    );
+                    panic!("Ensemble data preparation symbol isolation failure");
+                }
+                
+                info!("✅ [DATA ISOLATION] Ensemble data prepared successfully for symbol {}", symbol);
                 prepared
             })
     }

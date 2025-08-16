@@ -19,7 +19,7 @@ use ruv_fann::training::TrainingAlgorithm;
 
 use crate::{
     data::TimeSeriesDataset,
-    error::{ErrorBuilder, NetworkIntegrationError, NeuroDivergentResult},
+    error::{NetworkIntegrationError, NeuroDivergentResult},
     traits::{ForecastResult, TrainingStatistics},
 };
 

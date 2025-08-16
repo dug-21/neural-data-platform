@@ -277,12 +277,17 @@ mod tests {
             high: 3100.0,
             low: 2950.0,
             close: 3050.0,
-            volume: 5000.0,
+            volume: vec![5000.0],
+            volume_value: 5000.0,
             indicators: HashMap::new(),
             source: None,
             entity: None,
             value: None,
             metadata: None,
+            values: vec![3050.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: HashMap::new(),
         }];
 
         let daa_format = DAAServiceAdapter::to_daa_format(&data).unwrap();

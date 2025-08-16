@@ -15,7 +15,7 @@ use crate::daa::autonomous_training::{
 };
 use crate::data::TimeSeriesData;
 use crate::integration::daa_coordinator::{AutonomousDecision, DaaCoordinator, TradingAction};
-use crate::neural::NeuralPredictor;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 use crate::strategies::{MarketContext, Position};
 
 /// Enhanced DAA coordinator with autonomous neural training capabilities
@@ -259,6 +259,18 @@ impl AutonomousNeuralCoordinator {
             consecutive_failures: consecutive_failures as u32,
             trading_volume: market_context.volume_24h,
             profit_loss: trading_perf.total_pnl,
+            data_type_metrics: None,
+            event_count: 1,
+            window_duration: chrono::Duration::minutes(5),
+            symbol: String::new(),
+            trading_performance: None,
+            accuracy_metrics: None,
+            cpu_usage: 0.0,
+            memory_usage: 0.0,
+            active_connections: 0,
+            requests_per_second: 0.0,
+            average_response_time: 0.0,
+            cache_hit_rate: 0.0,
         })
     }
 
@@ -491,7 +503,7 @@ pub struct PerformanceSummary {
 mod tests {
     use super::*;
     use crate::config::NeuralConfig;
-    use crate::neural::NeuralPredictor;
+    use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
     use tokio::sync::mpsc;
 
     async fn create_test_coordinator() -> AutonomousNeuralCoordinator {
@@ -504,8 +516,17 @@ mod tests {
             max_concurrent_predictions: 10,
             enable_model_monitoring: true,
             accuracy_threshold: 0.8,
+            // New required fields
+            input_size: 10,
+            output_size: 1,
+            hidden_layers: vec![20, 10],
+            learning_rate: 0.01,
+            prediction_horizon: None,
+            normalization_method: None,
+            // Use defaults for remaining fields
+            ..Default::default()
         };
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config.clone()).unwrap());
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config.clone()).await.unwrap());
         let (tx, _rx) = mpsc::channel(100);
 
         // Create DAA coordinator with MarketHours
@@ -513,11 +534,6 @@ mod tests {
         let market_hours = Arc::new(crate::utils::market_hours::MarketHours::default());
         let daa_coordinator =
             Arc::new(DaaCoordinator::new(daa_config, neural_predictor.clone(), tx, market_hours).unwrap());
-
-        // Create neural predictor
-        let neural_predictor = Arc::new(
-            NeuralPredictor::new(neural_config).unwrap(),
-        );
 
         // Create training config
         let training_config = TrainingTriggerConfig::default();
@@ -558,11 +574,16 @@ mod tests {
             high: 50200.0,
             low: 49600.0,
             close: 50000.0,
-            volume: 100.0,
+            volume: vec![100.0],
+            volume_value: 100.0,
             source: Some("test".to_string()),
             value: Some(50000.0),
             metadata: None,
             indicators: std::collections::HashMap::new(),
+            values: vec![50000.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: std::collections::HashMap::new(),
         }];
 
         // Test performance snapshot calculation
@@ -598,11 +619,16 @@ mod tests {
             high: 50200.0,
             low: 49600.0,
             close: 50000.0,
-            volume: 100.0,
+            volume: vec![100.0],
+            volume_value: 100.0,
             source: Some("test".to_string()),
             value: Some(50000.0),
             metadata: None,
             indicators: std::collections::HashMap::new(),
+            values: vec![50000.0],
+            intervals: vec![0],
+            timestamps: vec![Utc::now()],
+            metadata_map: std::collections::HashMap::new(),
         }];
 
         // Force training evaluation

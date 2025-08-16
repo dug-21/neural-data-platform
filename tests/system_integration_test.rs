@@ -13,7 +13,9 @@ use anyhow::Result;
 use autonomous_platform::config::{
     DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
 };
-use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
+// Note: DataPipeline has been refactored - commenting out related code for compilation
+// use autonomous_platform::data_pipeline::DataPipeline;
 use autonomous_platform::integration::{
     data_access::{DataAccessLayer, DataRequest, Timeframe},
     neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
@@ -65,7 +67,7 @@ fn create_realistic_market_data(symbol: &str, base_price: f64, sequence: u64) ->
         symbol: symbol.to_string(),
         timestamp: Utc::now(),
         price: current_price,
-        volume: 1000.0 + (sequence as f64 * 10.0),
+        volume: vec![1000.0 + (sequence as f64 * 10.0),
         bid: current_price - 5.0,
         ask: current_price + 5.0,
         source: "integration_feed".to_string(),
@@ -224,7 +226,7 @@ async fn test_daa_to_neural_coordination() -> Result<()> {
                 high: 2020.0,
                 low: 1960.0,
                 close: 2000.0,
-                volume: 50000.0,
+                volume: vec![50000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 65.5);
@@ -303,7 +305,7 @@ async fn test_multi_component_failure_recovery() -> Result<()> {
             high: 1510.0,
             low: 1480.0,
             close: 1500.0,
-            volume: 10000.0,
+            volume: vec![10000.0],
             indicators: HashMap::new(),
         },
         context_metadata: HashMap::new(),
@@ -446,7 +448,7 @@ async fn test_high_frequency_trading_scenario() -> Result<()> {
                 high: 3010.0,
                 low: 2980.0,
                 close: 3000.0,
-                volume: 100000.0,
+                volume: vec![100000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 55.0);
@@ -500,7 +502,7 @@ async fn test_market_volatility_response() -> Result<()> {
             symbol: "VOL/USD".to_string(),
             timestamp: Utc::now(),
             price: *price,
-            volume: 50000.0 + (i as f64 * 10000.0), // Increasing volume during volatility
+            volume: vec![50000.0 + (i as f64 * 10000.0), // Increasing volume during volatility
             bid: price - 50.0,
             ask: price + 50.0, // Wide spread during volatility
             source: "volatility_test".to_string(),
@@ -617,7 +619,7 @@ async fn test_multi_agent_consensus() -> Result<()> {
                 high: 5050.0,
                 low: 4900.0,
                 close: 5000.0,
-                volume: 75000.0,
+                volume: vec![75000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 62.0);
@@ -739,7 +741,7 @@ async fn test_model_fallback_and_selection() -> Result<()> {
                 high: 6100.0,
                 low: 5900.0,
                 close: 6050.0,
-                volume: 80000.0,
+                volume: vec![80000.0],
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), 58.0);
@@ -835,7 +837,7 @@ async fn test_cross_component_memory_usage() -> Result<()> {
                     high: 7100.0 + (symbol_idx as f64 * 500.0),
                     low: 6900.0 + (symbol_idx as f64 * 500.0),
                     close: 7050.0 + (symbol_idx as f64 * 500.0),
-                    volume: 100000.0,
+                    volume: vec![100000.0],
                     indicators: {
                         let mut indicators = HashMap::new();
                         indicators.insert("RSI".to_string(), 50.0 + (agent_idx as f64 * 5.0));

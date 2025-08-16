@@ -1,7 +1,10 @@
 //! Integration tests for Neural and DAA components
 
-use autonomous_platform::neural::fann_predictor::FannPredictor;
+use autonomous_platform::neural::vendor_predictor::VendorPredictor;
 use autonomous_platform::neural::NeuralPredictorTrait;
+use autonomous_platform::data::sector_mapper::{SectorMapper, SectorMapperConfig};
+use autonomous_platform::monitoring::model_performance_tracker::ModelPerformanceTracker;
+use std::sync::Arc;
 use autonomous_platform::agents::daa_bridge::DAAAgent;
 use autonomous_platform::agents::{TradingStrategy, AgentConfig};
 use autonomous_platform::config::NeuralConfig;
@@ -99,7 +102,7 @@ async fn test_neural_predictor_with_realistic_data() {
         accuracy_threshold: 0.8,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let market_data = create_realistic_market_data(200);
     
     // Test single model prediction
@@ -159,7 +162,7 @@ async fn test_daa_agent_trading_decisions() {
         high: 50500.0,
         low: 49500.0,
         close: 50200.0,
-        volume: 1500.0,
+        volume: vec![1500.0],
     };
     
     // Test decision context preparation
@@ -190,7 +193,7 @@ async fn test_neural_prediction_performance() {
         accuracy_threshold: 0.8,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let market_data = create_realistic_market_data(150);
     
     // Measure prediction time
@@ -222,7 +225,7 @@ async fn test_prediction_with_missing_indicators() {
         accuracy_threshold: 0.8,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     
     // Create data with missing indicators
     let mut data = create_realistic_market_data(100);
@@ -247,7 +250,7 @@ async fn test_online_learning_adaptation() {
         accuracy_threshold: 0.8,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     
     // Initial training data
     let initial_data = create_realistic_market_data(150);
@@ -277,7 +280,7 @@ async fn test_concurrent_model_predictions() {
         accuracy_threshold: 0.8,
     };
     
-    let predictor = FannPredictor::new(config).unwrap();
+    let predictor = NeuralPredictor::new(config).await.unwrap();
     let market_data = create_realistic_market_data(100);
     
     // Launch predictions for different models concurrently

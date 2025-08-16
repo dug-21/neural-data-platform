@@ -17,6 +17,7 @@ use crate::adapters::model_storage::{
     ModelStorage, ModelStorageConfig, ModelMetadata, VersionIncrement,
     SemanticVersion
 };
+use crate::neural::fann_model_adapter::{FannModelAdapter, FannModelConfig};
 use crate::adapters::model_rollback::{
     ModelRollbackManager, RollbackConfig, ModelVersion, ModelMetrics,
     RollbackReason
@@ -32,7 +33,7 @@ pub struct PerformanceMetrics {
 }
 
 #[derive(Debug, Clone, Default)]
-struct FannModelConfig {
+struct LocalFannModelConfig {
     pub input_size: usize,
     pub hidden_sizes: Vec<usize>,
     pub output_size: usize,
@@ -46,11 +47,11 @@ struct TrainingRecord {
     pub final_error: f64,
 }
 
-struct FannModelAdapter;
+struct LocalFannModelAdapter;
 
-impl FannModelAdapter {
-    async fn new(_config: FannModelConfig, _storage: ModelStorageConfig) -> Result<Self> {
-        Ok(FannModelAdapter)
+impl LocalFannModelAdapter {
+    async fn new(_config: LocalFannModelConfig, _storage: ModelStorageConfig) -> Result<Self> {
+        Ok(LocalFannModelAdapter)
     }
     
     async fn train_with_checkpointing(
@@ -158,7 +159,7 @@ pub struct ModelPersistenceConfig {
 impl Default for ModelPersistenceConfig {
     fn default() -> Self {
         Self {
-            model_storage_path: PathBuf::from("/opt/neural-trader/models"),
+            model_storage_path: PathBuf::from("/opt/neural-trader/sector-models"),
             rollback_config: RollbackConfig::default(),
             enable_auto_checkpointing: true,
             checkpoint_frequency: 100,
@@ -346,9 +347,9 @@ impl ModelPersistenceService {
         // Update performance metrics for rollback monitoring
         let performance_metrics = adapter_guard.get_performance_metrics();
         let model_metrics = ModelMetrics {
-            accuracy: performance_metrics.accuracy,
+            accuracy: performance_metrics.mae, // Using mae from model_storage::PerformanceMetrics
             latency_ms: 50.0, // Default latency
-            error_rate: performance_metrics.loss,
+            error_rate: performance_metrics.mse, // Using mse from model_storage::PerformanceMetrics
             memory_mb: 100, // Default memory usage
             cpu_percent: 25.0, // Default CPU usage
             throughput: 1.0 / 0.05, // predictions per second
@@ -376,14 +377,19 @@ impl ModelPersistenceService {
             },
             success: true,
             message: format!("Training completed: {} epochs, MSE: {:.6}", 
-                           record.epochs, record.final_error),
+                           record.epochs_completed, record.final_mse),
             timestamp: Utc::now(),
             metadata: None,
             version: None,
         }).await;
 
         info!("Training completed for model: {}", model_name);
-        Ok(record)
+        Ok(TrainingRecord {
+            model_name: model_name.to_string(),
+            timestamp: Utc::now(),
+            epochs: record.epochs_completed,
+            final_error: record.final_mse as f64,
+        })
     }
 
     /// Save a model with versioning
@@ -402,7 +408,7 @@ impl ModelPersistenceService {
 
         let adapter_guard = adapter.read().await;
         let saved_path = adapter_guard.save_model(version_increment).await?;
-        let metadata = adapter_guard.get_metadata();
+        let metadata = adapter_guard.get_metadata().clone();
         drop(adapter_guard);
 
         // Record operation
@@ -419,7 +425,7 @@ impl ModelPersistenceService {
         }).await;
 
         info!("Model {} saved successfully: version {}", model_name, metadata.version);
-        Ok(metadata.version)
+        Ok(metadata.version.clone())
     }
 
     /// Load a model version
@@ -437,8 +443,8 @@ impl ModelPersistenceService {
         drop(models);
 
         let mut adapter_guard = adapter.write().await;
-        adapter_guard.load_model(version.as_ref().map(|v| v.to_string()).unwrap_or_default()).await?;
-        let metadata = adapter_guard.get_metadata();
+        adapter_guard.load_model(version.clone()).await?;
+        let metadata = adapter_guard.get_metadata().clone();
         drop(adapter_guard);
 
         // Record operation
@@ -455,7 +461,7 @@ impl ModelPersistenceService {
         }).await;
 
         info!("Model {} loaded successfully: version {}", model_name, metadata.version);
-        Ok(metadata)
+        Ok(metadata.clone())
     }
 
     /// Rollback a model to previous version
@@ -483,7 +489,7 @@ impl ModelPersistenceService {
                 minor: 0,
                 patch: 0,
             }; // This would come from the rollback version
-            adapter_guard.load_model(version.to_string()).await?;
+            adapter_guard.load_model(Some(version)).await?;
         }
 
         // Record operation
@@ -581,7 +587,8 @@ impl ModelPersistenceService {
                 drop(adapter_guard);
 
                 // Check for performance degradation
-                let accuracy_pct = metrics.accuracy * 100.0;
+                // Use R-squared as accuracy proxy (higher is better, 0-1 range)
+                let accuracy_pct = metrics.r_squared * 100.0;
                 let degradation = 100.0 - accuracy_pct;
 
                 if degradation > threshold as f64 {

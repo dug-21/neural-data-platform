@@ -173,18 +173,18 @@ impl MicrostructureAnalyzer {
             if i == 0 { continue; }
             
             if data.close > historical[i - 1].close {
-                buy_volume += data.volume;
+                buy_volume += data.volume_value;
             } else if data.close < historical[i - 1].close {
-                sell_volume += data.volume;
+                sell_volume += data.volume_value;
             }
         }
         
         // Current volume attribution
         if let Some(prev) = historical.last() {
             if current.close > prev.close {
-                buy_volume += current.volume;
+                buy_volume += current.volume_value;
             } else if current.close < prev.close {
-                sell_volume += current.volume;
+                sell_volume += current.volume_value;
             }
         }
         
@@ -276,9 +276,9 @@ impl MicrostructureAnalyzer {
         
         // Volume-weighted average trade size
         let avg_trade_size = if historical.is_empty() {
-            current.volume
+            current.volume_value
         } else {
-            let total_volume: f64 = historical.iter().map(|d| d.volume).sum();
+            let total_volume: f64 = historical.iter().map(|d| d.volume_value).sum();
             total_volume / historical.len() as f64
         };
         features.insert("avg_trade_size".to_string(), avg_trade_size);
@@ -287,13 +287,13 @@ impl MicrostructureAnalyzer {
         if let Some(prev) = historical.last() {
             let price_change = (current.close - prev.close).abs();
             if price_change > 0.0 {
-                let liquidity_ratio = current.volume / price_change;
+                let liquidity_ratio = current.volume_value / price_change;
                 features.insert("liquidity_ratio".to_string(), liquidity_ratio);
             }
         }
         
         // Market depth proxy (using volume and high-low range)
-        let depth_proxy = current.volume / (current.high - current.low + 0.0001);
+        let depth_proxy = current.volume_value / (current.high - current.low + 0.0001);
         features.insert("market_depth_proxy".to_string(), depth_proxy);
         
         Ok(())
@@ -321,10 +321,10 @@ impl MicrostructureAnalyzer {
         }
         
         // Volume-normalized price impact
-        if current.volume > 0.0 && historical.len() > 0 {
+        if current.volume_value > 0.0 && historical.len() > 0 {
             let price_return = (current.close - historical.last().unwrap().close) 
                 / historical.last().unwrap().close;
-            let normalized_impact = price_return / current.volume.ln();
+            let normalized_impact = price_return / current.volume_value.ln();
             features.insert("normalized_price_impact".to_string(), normalized_impact);
         }
         
@@ -341,11 +341,11 @@ impl MicrostructureAnalyzer {
         // Trade arrival rate (trades per period)
         let periods = historical.len().max(1);
         let avg_volume_per_period = historical.iter()
-            .map(|d| d.volume)
+            .map(|d| d.volume_value)
             .sum::<f64>() / periods as f64;
         
         // Current vs average intensity
-        let intensity_ratio = current.volume / (avg_volume_per_period + 0.0001);
+        let intensity_ratio = current.volume_value / (avg_volume_per_period + 0.0001);
         features.insert("trade_intensity_ratio".to_string(), intensity_ratio);
         
         // Volume concentration
@@ -353,13 +353,13 @@ impl MicrostructureAnalyzer {
             let recent_volume: f64 = historical.iter()
                 .rev()
                 .take(5)
-                .map(|d| d.volume)
+                .map(|d| d.volume_value)
                 .sum();
             
             let total_volume: f64 = historical.iter()
                 .rev()
                 .take(20)
-                .map(|d| d.volume)
+                .map(|d| d.volume_value)
                 .sum();
             
             if total_volume > 0.0 {
@@ -420,15 +420,15 @@ impl MicrostructureAnalyzer {
         for i in 1..data.len() {
             let price_change = data[i].close - data[i - 1].close;
             if price_change > 0.0 {
-                buy_volumes.push(data[i].volume);
+                buy_volumes.push(data[i].volume_value);
                 sell_volumes.push(0.0);
             } else if price_change < 0.0 {
                 buy_volumes.push(0.0);
-                sell_volumes.push(data[i].volume);
+                sell_volumes.push(data[i].volume_value);
             } else {
                 // Split volume equally for unchanged price
-                buy_volumes.push(data[i].volume / 2.0);
-                sell_volumes.push(data[i].volume / 2.0);
+                buy_volumes.push(data[i].volume_value / 2.0);
+                sell_volumes.push(data[i].volume_value / 2.0);
             }
         }
         
@@ -468,9 +468,9 @@ impl MicrostructureAnalyzer {
             
             // Approximate net order flow
             let net_volume = if data[i].close > data[i - 1].close {
-                data[i].volume
+                data[i].volume_value
             } else {
-                -data[i].volume
+                -data[i].volume_value
             };
             net_volumes.push(net_volume.abs());
         }
@@ -533,8 +533,8 @@ impl MicrostructureAnalyzer {
         
         for i in 1..data.len() {
             let price_return = ((data[i].close - data[i - 1].close) / data[i - 1].close).abs();
-            if data[i].volume > 0.0 {
-                illiquidity_values.push(price_return / data[i].volume);
+            if data[i].volume_value > 0.0 {
+                illiquidity_values.push(price_return / data[i].volume_value);
             }
         }
         
@@ -579,7 +579,7 @@ impl MicrostructureAnalyzer {
             return Ok(0.0);
         }
         
-        let volumes: Vec<f64> = data.iter().map(|d| d.volume).collect();
+        let volumes: Vec<f64> = data.iter().map(|d| d.volume_value).collect();
         let mean_volume = volumes.iter().sum::<f64>() / volumes.len() as f64;
         
         let variance = volumes.iter()
@@ -666,7 +666,7 @@ impl MicrostructureAnalyzer {
             let normalized_change = price_change / avg_price;
             
             // Large price moves with high volume indicate informed trading
-            if normalized_change > 0.001 && historical[i].volume > historical[i - 1].volume * 1.5 {
+            if normalized_change > 0.001 && historical[i].volume_value > historical[i - 1].volume_value * 1.5 {
                 informed_trades += 1.0;
             }
             total_trades += 1.0;
@@ -755,7 +755,7 @@ impl MicrostructureAnalyzer {
         let mut total_periods = 0;
         
         for i in 1..historical.len() {
-            let volume_ratio = historical[i].volume / historical[i - 1].volume.max(1.0);
+            let volume_ratio = historical[i].volume_value / historical[i - 1].volume_value.max(1.0);
             let price_movement = (historical[i].close - historical[i - 1].close).abs() / historical[i - 1].close;
             
             // High volume with minimal price movement suggests quote stuffing
@@ -777,9 +777,9 @@ impl MicrostructureAnalyzer {
         let mut spoof_patterns = 0;
         
         for i in 2..historical.len() {
-            let vol1 = historical[i - 2].volume;
-            let vol2 = historical[i - 1].volume;
-            let vol3 = historical[i].volume;
+            let vol1 = historical[i - 2].volume_value;
+            let vol2 = historical[i - 1].volume_value;
+            let vol3 = historical[i].volume_value;
             
             let price1 = historical[i - 2].close;
             let price2 = historical[i - 1].close;

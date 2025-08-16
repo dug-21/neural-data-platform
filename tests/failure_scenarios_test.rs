@@ -14,7 +14,9 @@ use anyhow::Result;
 use autonomous_platform::config::{
     DatabaseConfig, MonitoringConfig, NeuralConfig, PlatformConfig, PlatformInfo, RedisConfig,
 };
-use autonomous_platform::data::{DataPipeline, RedisCache, TimeSeriesData, TimescaleDBStorage};
+use autonomous_platform::data::{RedisCache, TimeSeriesData, TimescaleDBStorage};
+// Note: DataPipeline has been refactored - commenting out related code for compilation
+// use autonomous_platform::data_pipeline::DataPipeline;
 use autonomous_platform::integration::{
     data_access::{DataAccessLayer, DataRequest, Timeframe},
     neural_predictions::{DecisionContext, ModelType, NeuralPredictionSystem},
@@ -117,7 +119,7 @@ async fn test_invalid_data_validation() -> Result<()> {
             symbol: "VALID/USD".to_string(),
             timestamp: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(), // Very old timestamp
             price: 0.0,
-            volume: 0.0,
+            volume: vec![0.0],
             bid: 0.0,
             ask: 0.0,
             source: "old_data".to_string(),
@@ -177,7 +179,7 @@ async fn test_memory_exhaustion() -> Result<()> {
             symbol: symbol.clone(),
             timestamp: Utc::now(),
             price: 1000.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             bid: 995.0,
             ask: 1005.0,
             source: "memory_test".to_string(),
@@ -234,7 +236,7 @@ async fn test_concurrent_access_conflicts() -> Result<()> {
                 symbol: "CONFLICT/USD".to_string(), // Same symbol for all
                 timestamp: Utc::now(),
                 price: 1000.0 + (i as f64),
-                volume: 1000.0,
+                volume: vec![1000.0],
                 bid: 995.0,
                 ask: 1005.0,
                 source: format!("concurrent_{}", i),
@@ -308,13 +310,22 @@ async fn test_neural_model_failures() -> Result<()> {
                 high: f64::MAX,
                 low: f64::MIN,
                 close: f64::MAX,
-                volume: f64::MAX,
+                volume: vec![f64::MAX],
+                volume_value: f64::MAX,
                 indicators: {
                     let mut indicators = HashMap::new();
                     indicators.insert("RSI".to_string(), f64::INFINITY);
                     indicators.insert("MACD".to_string(), f64::NEG_INFINITY);
                     indicators
                 },
+                source: Some("extreme_test".to_string()),
+                entity: Some("EXTREME/USD".to_string()),
+                value: Some(f64::MAX),
+                metadata: None,
+                values: vec![f64::MAX],
+                intervals: vec![0],
+                timestamps: vec![Utc::now()],
+                metadata_map: HashMap::new(),
             },
             context_metadata: HashMap::new(),
             required_confidence: 0.99,
@@ -360,7 +371,7 @@ async fn test_cascade_failure_resilience() -> Result<()> {
             symbol: format!("CASCADE{}/USD", i),
             timestamp: Utc::now(),
             price: 1000.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             bid: 995.0,
             ask: 1005.0,
             source: "cascade_test".to_string(),
@@ -386,7 +397,7 @@ async fn test_cascade_failure_resilience() -> Result<()> {
             high: 1020.0,
             low: 980.0,
             close: 1010.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators: HashMap::new(),
         },
         context_metadata: HashMap::new(),
@@ -428,7 +439,7 @@ async fn test_network_timeout_resilience() -> Result<()> {
             symbol: format!("TIMEOUT{}/USD", i),
             timestamp: Utc::now(),
             price: 1000.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             bid: 995.0,
             ask: 1005.0,
             source: "timeout_test".to_string(),
@@ -486,7 +497,7 @@ async fn test_resource_cleanup() -> Result<()> {
                     symbol: format!("CLEANUP{}/USD", i),
                     timestamp: Utc::now(),
                     price: 1000.0,
-                    volume: 1000.0,
+                    volume: vec![1000.0],
                     bid: 995.0,
                     ask: 1005.0,
                     source: "cleanup_test".to_string(),
@@ -521,7 +532,7 @@ async fn test_data_corruption_recovery() -> Result<()> {
         symbol: "CORRUPT/USD".to_string(),
         timestamp: Utc::now(),
         price: 1000.0,
-        volume: 1000.0,
+        volume: vec![1000.0],
         bid: 995.0,
         ask: 1005.0,
         source: "corruption_test".to_string(),
@@ -551,7 +562,7 @@ async fn test_data_corruption_recovery() -> Result<()> {
         symbol: "VALID/USD".to_string(),
         timestamp: Utc::now(),
         price: 1000.0,
-        volume: 1000.0,
+        volume: vec![1000.0],
         bid: 995.0,
         ask: 1005.0,
         source: "recovery_test".to_string(),
@@ -593,7 +604,7 @@ async fn test_multi_component_stress() -> Result<()> {
                     symbol: format!("STRESS{}_{}/USD", i, j),
                     timestamp: Utc::now(),
                     price: 1000.0 + (j as f64),
-                    volume: 1000.0,
+                    volume: vec![1000.0],
                     bid: 995.0,
                     ask: 1005.0,
                     source: format!("stress_test_{}", i),

@@ -1,0 +1,442 @@
+// sector_model_trainer.rs.template
+// Template for sector-based model training with parallel processing and checkpointing
+//
+// DESIGN DECISIONS:
+// - Async/parallel training for multiple sectors simultaneously
+// - Checkpoint system for crash recovery and incremental training
+// - Memory-efficient data streaming for large datasets
+// - Integration with existing neural adapter and persistence layers
+//
+// INTEGRATION POINTS:
+// - src/neural/fann_model_adapter.rs (model creation/training)
+// - src/integration/model_persistence_service.rs (checkpoint saving)
+// - src/data/sector_mapper.rs (sector classification)
+// - Redis for distributed coordination
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{RwLock, Semaphore};
+use tracing::{info, warn, error, instrument};
+use serde::{Serialize, Deserialize};
+
+// TODO: Import your actual types
+use crate::neural::fann_model_adapter::FANNModelAdapter;
+use crate::integration::model_persistence_service::ModelPersistenceService;
+use crate::data::sector_mapper::{SectorMapper, Sector};
+use crate::error::Result;
+
+/// Configuration for sector-based training
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectorTrainingConfig {
+    /// Maximum number of concurrent sector trainings
+    pub max_concurrent_sectors: usize,
+    /// Checkpoint frequency (number of batches)
+    pub checkpoint_frequency: usize,
+    /// Memory budget per sector (MB)
+    pub memory_budget_mb: usize,
+    /// Enable incremental learning
+    pub incremental_learning: bool,
+    /// Training data batch size
+    pub batch_size: usize,
+    /// Maximum epochs per sector
+    pub max_epochs: usize,
+    /// Early stopping patience
+    pub early_stopping_patience: usize,
+}
+
+impl Default for SectorTrainingConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_sectors: 4, // Conservative for memory
+            checkpoint_frequency: 100,
+            memory_budget_mb: 512,
+            incremental_learning: true,
+            batch_size: 1000,
+            max_epochs: 1000,
+            early_stopping_patience: 50,
+        }
+    }
+}
+
+/// Training state for a single sector
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectorTrainingState {
+    pub sector: Sector,
+    pub current_epoch: usize,
+    pub best_validation_loss: f64,
+    pub patience_counter: usize,
+    pub training_samples: usize,
+    pub last_checkpoint: chrono::DateTime<chrono::Utc>,
+    pub training_metrics: TrainingMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainingMetrics {
+    pub training_loss: f64,
+    pub validation_loss: f64,
+    pub training_accuracy: f64,
+    pub validation_accuracy: f64,
+    pub learning_rate: f64,
+    pub batch_processing_time_ms: f64,
+}
+
+/// Checkpoint data for recovery
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrainingCheckpoint {
+    pub sector: Sector,
+    pub epoch: usize,
+    pub model_weights: Vec<u8>, // Serialized model weights
+    pub optimizer_state: Vec<u8>, // Serialized optimizer state
+    pub training_state: SectorTrainingState,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Main sector model trainer
+pub struct SectorModelTrainer {
+    config: SectorTrainingConfig,
+    sector_mapper: Arc<SectorMapper>,
+    model_adapter: Arc<FANNModelAdapter>,
+    persistence_service: Arc<ModelPersistenceService>,
+    
+    // Concurrency control
+    training_semaphore: Arc<Semaphore>,
+    sector_states: Arc<RwLock<HashMap<Sector, SectorTrainingState>>>,
+    
+    // Memory management
+    memory_monitor: Arc<MemoryMonitor>,
+}
+
+impl SectorModelTrainer {
+    /// Create new sector trainer with configuration
+    pub fn new(
+        config: SectorTrainingConfig,
+        sector_mapper: Arc<SectorMapper>,
+        model_adapter: Arc<FANNModelAdapter>,
+        persistence_service: Arc<ModelPersistenceService>,
+    ) -> Self {
+        let training_semaphore = Arc::new(Semaphore::new(config.max_concurrent_sectors));
+        let sector_states = Arc::new(RwLock::new(HashMap::new()));
+        let memory_monitor = Arc::new(MemoryMonitor::new(config.memory_budget_mb));
+
+        Self {
+            config,
+            sector_mapper,
+            model_adapter,
+            persistence_service,
+            training_semaphore,
+            sector_states,
+            memory_monitor,
+        }
+    }
+
+    /// Train models for all sectors in parallel
+    #[instrument(skip(self, training_data))]
+    pub async fn train_all_sectors(
+        &self,
+        training_data: &TrainingDataset,
+    ) -> Result<HashMap<Sector, TrainingResult>> {
+        info!("Starting parallel sector training");
+
+        // Group data by sector
+        let sectored_data = self.partition_data_by_sector(training_data).await?;
+        
+        // Check for existing checkpoints and resume if needed
+        let resumable_sectors = self.discover_resumable_training().await?;
+        
+        // Create training tasks for each sector
+        let mut training_handles = Vec::new();
+        
+        for (sector, data) in sectored_data {
+            let permit = self.training_semaphore.clone().acquire_owned().await?;
+            let trainer = self.clone(); // Arc-based clone
+            let sector_data = data;
+            let resumable_state = resumable_sectors.get(&sector).cloned();
+            
+            let handle = tokio::spawn(async move {
+                let _permit = permit; // Hold permit for duration
+                trainer.train_sector_model(sector, sector_data, resumable_state).await
+            });
+            
+            training_handles.push((sector, handle));
+        }
+
+        // Collect results
+        let mut results = HashMap::new();
+        for (sector, handle) in training_handles {
+            match handle.await? {
+                Ok(result) => {
+                    results.insert(sector, result);
+                    info!("Sector {:?} training completed successfully", sector);
+                }
+                Err(e) => {
+                    error!("Sector {:?} training failed: {}", sector, e);
+                    // Continue with other sectors
+                }
+            }
+        }
+
+        info!("Parallel sector training completed. {} sectors successful", results.len());
+        Ok(results)
+    }
+
+    /// Train a single sector model with checkpointing
+    #[instrument(skip(self, training_data, resumable_state))]
+    async fn train_sector_model(
+        &self,
+        sector: Sector,
+        training_data: SectorTrainingData,
+        resumable_state: Option<TrainingCheckpoint>,
+    ) -> Result<TrainingResult> {
+        info!("Starting training for sector {:?}", sector);
+
+        // Initialize or resume training state
+        let mut training_state = if let Some(checkpoint) = resumable_state {
+            info!("Resuming training from checkpoint at epoch {}", checkpoint.epoch);
+            self.restore_from_checkpoint(&checkpoint).await?
+        } else {
+            self.initialize_sector_training(sector, &training_data).await?
+        };
+
+        // Prepare data iterators with memory-efficient streaming
+        let train_iterator = self.create_streaming_iterator(
+            training_data.train_samples,
+            self.config.batch_size,
+        ).await?;
+        
+        let validation_iterator = self.create_streaming_iterator(
+            training_data.validation_samples,
+            self.config.batch_size,
+        ).await?;
+
+        // Training loop with checkpointing
+        for epoch in training_state.current_epoch..self.config.max_epochs {
+            let epoch_start = std::time::Instant::now();
+            
+            // Check memory pressure
+            if self.memory_monitor.is_memory_pressure().await {
+                warn!("Memory pressure detected for sector {:?}, reducing batch size", sector);
+                // TODO: Implement adaptive batch sizing
+            }
+
+            // Training epoch
+            let train_metrics = self.run_training_epoch(
+                &mut training_state,
+                &train_iterator,
+                epoch,
+            ).await?;
+
+            // Validation epoch
+            let validation_metrics = self.run_validation_epoch(
+                &training_state,
+                &validation_iterator,
+            ).await?;
+
+            // Update training state
+            training_state.current_epoch = epoch + 1;
+            training_state.training_metrics.training_loss = train_metrics.loss;
+            training_state.training_metrics.validation_loss = validation_metrics.loss;
+            training_state.training_metrics.training_accuracy = train_metrics.accuracy;
+            training_state.training_metrics.validation_accuracy = validation_metrics.accuracy;
+
+            // Early stopping check
+            if validation_metrics.loss < training_state.best_validation_loss {
+                training_state.best_validation_loss = validation_metrics.loss;
+                training_state.patience_counter = 0;
+                
+                // Save best model
+                self.save_best_model(&training_state).await?;
+            } else {
+                training_state.patience_counter += 1;
+                if training_state.patience_counter >= self.config.early_stopping_patience {
+                    info!("Early stopping triggered for sector {:?}", sector);
+                    break;
+                }
+            }
+
+            // Periodic checkpointing
+            if epoch % self.config.checkpoint_frequency == 0 {
+                self.save_checkpoint(&training_state).await?;
+            }
+
+            // Update global state
+            self.update_sector_state(training_state.clone()).await;
+
+            let epoch_duration = epoch_start.elapsed();
+            info!(
+                "Sector {:?} epoch {} completed in {:?} - train_loss: {:.4}, val_loss: {:.4}",
+                sector, epoch, epoch_duration, train_metrics.loss, validation_metrics.loss
+            );
+        }
+
+        // Final model save
+        let final_result = self.finalize_sector_training(training_state).await?;
+        
+        info!("Sector {:?} training completed", sector);
+        Ok(final_result)
+    }
+
+    /// Partition training data by sector using efficient streaming
+    #[instrument(skip(self, training_data))]
+    async fn partition_data_by_sector(
+        &self,
+        training_data: &TrainingDataset,
+    ) -> Result<HashMap<Sector, SectorTrainingData>> {
+        // TODO: Implement memory-efficient data partitioning
+        // Use streaming to avoid loading all data into memory
+        // Consider using tokio::fs for async file I/O
+        todo!("Implement efficient data partitioning")
+    }
+
+    /// Create memory-efficient streaming data iterator
+    async fn create_streaming_iterator(
+        &self,
+        samples: Vec<TrainingSample>,
+        batch_size: usize,
+    ) -> Result<StreamingDataIterator> {
+        // TODO: Implement streaming iterator that loads data on-demand
+        // Consider using channels for producer-consumer pattern
+        todo!("Implement streaming data iterator")
+    }
+
+    /// Run single training epoch with batch processing
+    #[instrument(skip(self, training_state, data_iterator))]
+    async fn run_training_epoch(
+        &self,
+        training_state: &mut SectorTrainingState,
+        data_iterator: &StreamingDataIterator,
+        epoch: usize,
+    ) -> Result<EpochMetrics> {
+        // TODO: Implement batch-wise training
+        // - Forward pass
+        // - Backward pass
+        // - Gradient updates
+        // - Metrics collection
+        todo!("Implement training epoch")
+    }
+
+    /// Run validation epoch
+    #[instrument(skip(self, training_state, data_iterator))]
+    async fn run_validation_epoch(
+        &self,
+        training_state: &SectorTrainingState,
+        data_iterator: &StreamingDataIterator,
+    ) -> Result<EpochMetrics> {
+        // TODO: Implement validation without gradient updates
+        todo!("Implement validation epoch")
+    }
+
+    /// Save training checkpoint for crash recovery
+    async fn save_checkpoint(&self, training_state: &SectorTrainingState) -> Result<()> {
+        // TODO: Serialize model weights and optimizer state
+        // Save to persistent storage via ModelPersistenceService
+        todo!("Implement checkpoint saving")
+    }
+
+    /// Restore training from checkpoint
+    async fn restore_from_checkpoint(&self, checkpoint: &TrainingCheckpoint) -> Result<SectorTrainingState> {
+        // TODO: Deserialize model weights and optimizer state
+        // Restore training state
+        todo!("Implement checkpoint restoration")
+    }
+
+    /// Discover existing training checkpoints for resume
+    async fn discover_resumable_training(&self) -> Result<HashMap<Sector, TrainingCheckpoint>> {
+        // TODO: Query persistence service for existing checkpoints
+        todo!("Implement checkpoint discovery")
+    }
+
+    /// Initialize new sector training
+    async fn initialize_sector_training(
+        &self,
+        sector: Sector,
+        training_data: &SectorTrainingData,
+    ) -> Result<SectorTrainingState> {
+        // TODO: Initialize model architecture
+        // Set up optimizer
+        // Initialize training state
+        todo!("Implement training initialization")
+    }
+
+    /// Update sector state in shared memory
+    async fn update_sector_state(&self, state: SectorTrainingState) {
+        let mut states = self.sector_states.write().await;
+        states.insert(state.sector, state);
+    }
+
+    /// Finalize training and return results
+    async fn finalize_sector_training(&self, state: SectorTrainingState) -> Result<TrainingResult> {
+        // TODO: Compile final metrics
+        // Save final model
+        // Clean up temporary resources
+        todo!("Implement training finalization")
+    }
+
+    /// Save best performing model
+    async fn save_best_model(&self, state: &SectorTrainingState) -> Result<()> {
+        // TODO: Save model with metadata
+        todo!("Implement best model saving")
+    }
+}
+
+/// Memory monitoring for adaptive resource management
+pub struct MemoryMonitor {
+    memory_budget_mb: usize,
+}
+
+impl MemoryMonitor {
+    pub fn new(memory_budget_mb: usize) -> Self {
+        Self { memory_budget_mb }
+    }
+
+    /// Check if system is under memory pressure
+    pub async fn is_memory_pressure(&self) -> bool {
+        // TODO: Implement memory usage monitoring
+        // Check system memory, process memory, GPU memory if applicable
+        false
+    }
+
+    /// Get current memory usage statistics
+    pub async fn get_memory_stats(&self) -> MemoryStats {
+        // TODO: Collect comprehensive memory statistics
+        todo!("Implement memory statistics collection")
+    }
+}
+
+// Supporting types (implement as needed)
+pub struct TrainingDataset { /* TODO */ }
+pub struct SectorTrainingData { /* TODO */ }
+pub struct TrainingSample { /* TODO */ }
+pub struct StreamingDataIterator { /* TODO */ }
+pub struct EpochMetrics { pub loss: f64, pub accuracy: f64 }
+pub struct TrainingResult { /* TODO */ }
+pub struct MemoryStats { /* TODO */ }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_sector_trainer_initialization() {
+        // TODO: Test trainer setup with mock dependencies
+    }
+
+    #[tokio::test]
+    async fn test_parallel_sector_training() {
+        // TODO: Test concurrent training of multiple sectors
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_recovery() {
+        // TODO: Test training resumption from checkpoint
+    }
+
+    #[tokio::test]
+    async fn test_memory_pressure_handling() {
+        // TODO: Test adaptive behavior under memory pressure
+    }
+
+    #[tokio::test]
+    async fn test_early_stopping() {
+        // TODO: Test early stopping mechanism
+    }
+}

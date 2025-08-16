@@ -5,7 +5,7 @@
 
 use super::{MarketContext, Position, Signal, StrategyConfig, StrategyError, TradingStrategy};
 use crate::data::TimeSeriesData;
-use crate::neural::NeuralPredictor;
+use crate::neural::{NeuralPredictor, NeuralPredictorTrait};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -256,7 +256,7 @@ impl NeuralEnhancedStrategy {
         Some(sum / period as f64)
     }
 
-    /// Get neural predictions with real FANN neural networks
+    /// Get neural predictions with real vendor neural networks
     async fn get_neural_predictions(&self, symbol: &str) -> Result<Vec<f64>, StrategyError> {
         // Convert price history to TimeSeriesData for neural predictor
         let prices = self.price_history.read().await;
@@ -283,22 +283,31 @@ impl NeuralEnhancedStrategy {
                 high: price * 1.01,
                 low: price * 0.99,
                 close: *price,
-                volume: *volume,
+                volume: vec![*volume],
+                volume_value: *volume,
                 indicators: HashMap::new(),
                 source: Some("neural-enhanced".to_string()),
                 entity: Some(symbol.to_string()),
                 value: Some(*price),
                 metadata: None,
+                // Enhanced fields for vendor model integration
+                values: vec![*price], // Single price value
+                intervals: vec![],
+                timestamps: vec![DateTime::<Utc>::from_timestamp(
+                    now - ((prices.len() - i) as i64 * 3600),
+                    0,
+                ).unwrap_or_else(Utc::now)], // Single timestamp
+                metadata_map: HashMap::new(), // Empty metadata map
             });
         }
 
-        // Get predictions using ensemble of models for better accuracy
-        let models = vec!["NHITS".to_string(), "TCN".to_string(), "DeepAR".to_string()];
+        // Get predictions using ensemble of vendor models for better accuracy
+        let models = vec!["LSTM".to_string(), "GRU".to_string(), "TCN".to_string()];
         let predictions = self
             .neural_predictor
             .predict_ensemble(&time_series_data, 5, &models, None)
             .await
-            .map_err(|e| StrategyError::Execution(format!("Neural prediction failed: {}", e)))?;
+            .map_err(|e| StrategyError::Execution(format!("Vendor neural prediction failed: {}", e)))?;
 
         if predictions.is_empty() {
             return Err(StrategyError::Execution(
@@ -362,7 +371,7 @@ impl NeuralEnhancedStrategy {
             }
         }
 
-        // Neural predictions with real FANN networks
+        // Neural predictions with real vendor networks
         match self.get_neural_predictions(symbol).await {
             Ok(predictions) => {
                 if !predictions.is_empty() {
@@ -654,7 +663,11 @@ mod tests {
             ..Default::default()
         };
 
-        let neural_predictor = match NeuralPredictor::new(neural_config).await {
+        let sector_config = crate::data::sector_mapper::SectorMapperConfig::default();
+        let sector_mapper = Arc::new(crate::data::sector_mapper::SectorMapper::new(sector_config));
+        let performance_tracker = Arc::new(crate::monitoring::model_performance_tracker::ModelPerformanceTracker::new());
+        
+        let neural_predictor = match NeuralPredictor::new(&neural_config, sector_mapper, performance_tracker) {
             Ok(predictor) => Arc::new(predictor),
             Err(_) => {
                 // If we can't create a real predictor, skip test

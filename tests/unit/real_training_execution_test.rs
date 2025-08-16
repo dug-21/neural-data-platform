@@ -8,11 +8,11 @@ use chrono::Utc;
 use std::collections::HashMap;
 use tokio;
 
-use neural_trader::config::NeuralConfig;
-use neural_trader::data::TimeSeriesData;
-use neural_trader::neural::fann_predictor::FannPredictor;
-use neural_trader::neural::mlp_adapter::{MLPAdapter, EnhancedMLPConfig};
-use neural_trader::neural::NeuralPredictorTrait;
+use autonomous_platform::config::NeuralConfig;
+use autonomous_platform::data::TimeSeriesData;
+use autonomous_platform::neural::predictor::NeuralPredictor;
+use autonomous_platform::neural::mlp_adapter::{MLPAdapter, EnhancedMLPConfig};
+use autonomous_platform::neural::NeuralPredictorTrait;
 
 /// Test utilities for creating realistic market data
 mod test_utils {
@@ -93,7 +93,7 @@ mod test_utils {
 #[tokio::test]
 async fn test_fann_predictor_real_training_improves_performance() -> Result<()> {
     let config = test_utils::create_config_for_real_training();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let training_data = test_utils::create_realistic_market_data(200);
     let test_data = test_utils::create_realistic_market_data(50);
     
@@ -186,7 +186,7 @@ async fn test_mlp_adapter_real_training_convergence() -> Result<()> {
 #[tokio::test]
 async fn test_training_with_insufficient_data_handling() -> Result<()> {
     let config = test_utils::create_config_for_real_training();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     
     // Test with very small dataset
     let small_data = test_utils::create_realistic_market_data(10);
@@ -213,7 +213,7 @@ async fn test_training_with_insufficient_data_handling() -> Result<()> {
 #[tokio::test]
 async fn test_online_learning_updates_model() -> Result<()> {
     let config = test_utils::create_config_for_real_training();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     
     // Initial training
     let initial_data = test_utils::create_realistic_market_data(150);
@@ -249,7 +249,7 @@ async fn test_online_learning_updates_model() -> Result<()> {
 #[tokio::test]
 async fn test_ensemble_training_coordination() -> Result<()> {
     let config = test_utils::create_config_for_real_training();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let training_data = test_utils::create_realistic_market_data(250);
     
     // Train ensemble and verify coordination
@@ -285,7 +285,7 @@ async fn test_training_error_recovery() -> Result<()> {
     let mut config = test_utils::create_config_for_real_training();
     config.models = vec!["NonExistentModel".to_string(), "MLP".to_string()];
     
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let training_data = test_utils::create_realistic_market_data(100);
     
     // Should recover from invalid model and still train valid ones
@@ -308,7 +308,7 @@ async fn test_training_error_recovery() -> Result<()> {
 
 // Helper functions for test validation
 
-fn calculate_prediction_accuracy(predictions: &[neural_trader::neural::PredictionResult], actual_data: &[TimeSeriesData]) -> f64 {
+fn calculate_prediction_accuracy(predictions: &[autonomous_platform::neural::PredictionResult], actual_data: &[TimeSeriesData]) -> f64 {
     if predictions.is_empty() || actual_data.is_empty() {
         return 0.0;
     }
@@ -330,7 +330,7 @@ fn calculate_prediction_accuracy(predictions: &[neural_trader::neural::Predictio
     }
 }
 
-fn calculate_prediction_consistency(pred1: &[neural_trader::neural::PredictionResult], pred2: &[neural_trader::neural::PredictionResult]) -> f64 {
+fn calculate_prediction_consistency(pred1: &[autonomous_platform::neural::PredictionResult], pred2: &[autonomous_platform::neural::PredictionResult]) -> f64 {
     if pred1.is_empty() || pred2.is_empty() || pred1.len() != pred2.len() {
         return 0.0;
     }
@@ -346,7 +346,7 @@ fn calculate_prediction_consistency(pred1: &[neural_trader::neural::PredictionRe
     consistency_scores.iter().sum::<f64>() / consistency_scores.len() as f64
 }
 
-fn calculate_prediction_change(pred1: &[neural_trader::neural::PredictionResult], pred2: &[neural_trader::neural::PredictionResult]) -> f64 {
+fn calculate_prediction_change(pred1: &[autonomous_platform::neural::PredictionResult], pred2: &[autonomous_platform::neural::PredictionResult]) -> f64 {
     if pred1.is_empty() || pred2.is_empty() || pred1.len() != pred2.len() {
         return 0.0;
     }
@@ -364,7 +364,7 @@ fn calculate_prediction_change(pred1: &[neural_trader::neural::PredictionResult]
 #[tokio::test]
 async fn test_training_metrics_collection() -> Result<()> {
     let config = test_utils::create_config_for_real_training();
-    let predictor = FannPredictor::new(config)?;
+    let predictor = NeuralPredictor::new(config)?;
     let training_data = test_utils::create_realistic_market_data(200);
     
     // Reset ensemble performance to start fresh

@@ -113,9 +113,19 @@ class DataValidator:
             errors.append(f"Failed to parse timestamp: {str(e)}")
             return {'is_valid': False, 'errors': errors}
         
-        # Check if timestamp is in the future
-        if dt > datetime.now(pytz.UTC):
-            errors.append("Timestamp is in the future")
+        # Check if timestamp is in the future with tolerance
+        # Allow up to 30 seconds in the future for clock skew/network latency
+        future_tolerance = pd.Timedelta(seconds=30)
+        current_time = datetime.now(pytz.UTC)
+        
+        if dt > current_time + future_tolerance:
+            # Only error if significantly in the future
+            time_diff = (dt - current_time).total_seconds()
+            errors.append(f"Timestamp is {time_diff:.1f} seconds in the future (exceeds 30s tolerance)")
+        elif dt > current_time:
+            # Minor future timestamp - just warn
+            time_diff = (dt - current_time).total_seconds()
+            warnings.append(f"Timestamp is {time_diff:.1f} seconds in the future (within tolerance)")
         
         # Check if timestamp is too old (more than 20 years)
         if dt < datetime.now(pytz.UTC) - pd.Timedelta(days=365*20):

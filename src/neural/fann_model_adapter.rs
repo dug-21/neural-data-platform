@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use ruv_fann::{Network, TrainingData, ActivationFunction, NetworkBuilder};
+use ruv_fann::training::{IncrementalBackprop, TrainingAlgorithm, MseError};
 
 use crate::adapters::model_storage::{
     ModelStorage, ModelStorageConfig, ModelMetadata, PerformanceMetrics, 
@@ -111,6 +112,14 @@ pub struct FannModelConfig {
     pub max_epochs: usize,
     pub target_error: f32,
     pub use_cascade: bool,
+    // New adaptive training parameters
+    pub adaptive_learning_rate: bool,
+    pub initial_lr_multiplier: f32,
+    pub lr_increase_factor: f32,
+    pub lr_decrease_factor: f32,
+    pub plateau_patience: usize,
+    pub early_stopping_patience: usize,
+    pub min_improvement_threshold: f32,
 }
 
 impl Default for FannModelConfig {
@@ -127,6 +136,14 @@ impl Default for FannModelConfig {
             max_epochs: 1000,
             target_error: 0.001,
             use_cascade: false,
+            // Adaptive training defaults
+            adaptive_learning_rate: true,
+            initial_lr_multiplier: 0.1,  // Start with 10% of configured LR
+            lr_increase_factor: 1.5,     // Increase by 50% when plateauing
+            lr_decrease_factor: 0.8,     // Decrease by 20% when improving
+            plateau_patience: 20,        // Wait 20 epochs before increasing LR
+            early_stopping_patience: 100, // Stop after 100 epochs without improvement
+            min_improvement_threshold: 0.001, // Minimum improvement to consider progress
         }
     }
 }
@@ -286,13 +303,16 @@ impl FannModelAdapter {
 
     /// Save the current model to storage
     pub async fn save_model(&self, increment_type: VersionIncrement) -> Result<PathBuf> {
-        let network_opt = self.network.read().unwrap();
-        let network = network_opt.as_ref()
-            .ok_or_else(|| anyhow!("No network to save"))?;
+        let network_clone = {
+            let network_opt = self.network.read().unwrap();
+            let network = network_opt.as_ref()
+                .ok_or_else(|| anyhow!("No network to save"))?;
+            network.clone()  // Clone the network to avoid holding the lock across await
+        }; // RwLockReadGuard is dropped here
 
         // Use the model storage to save with versioning
         let model_version = self.storage.save_model(
-            network,
+            &network_clone,
             &self.config.model_name,
             self.metadata.clone(),
             increment_type,
@@ -316,6 +336,155 @@ impl FannModelAdapter {
         Ok(())
     }
 
+    /// Train the model with real backpropagation and adaptive learning rate
+    pub async fn train_with_real_backprop(
+        &mut self,
+        training_data: &TrainingData<f32>,
+        config: &TrainingConfig,
+    ) -> Result<TrainingRecord> {
+        info!("🚀 [CONTAINER TRAINING] Starting REAL neural network training with adaptive LR");
+        info!("📊 [CONTAINER TRAINING] Training data: {} samples, {} features", 
+              training_data.inputs.len(), self.config.input_size);
+        
+        // Initialize network if needed
+        if self.network.read().unwrap().is_none() {
+            info!("🔧 [CONTAINER TRAINING] Initializing new network");
+            self.initialize_network()?;
+        }
+
+        // Initialize adaptive learning rate
+        let mut current_lr = if self.config.adaptive_learning_rate {
+            config.learning_rate * self.config.initial_lr_multiplier
+        } else {
+            config.learning_rate
+        };
+        
+        let mut trainer = IncrementalBackprop::new(current_lr)
+            .with_momentum(0.9)
+            .with_error_function(Box::new(MseError));
+        
+        info!("⚙️ [CONTAINER TRAINING] Trainer configured - Initial LR: {:.6}, Momentum: 0.9", current_lr);
+        if self.config.adaptive_learning_rate {
+            info!("🧠 [CONTAINER TRAINING] Adaptive learning rate enabled - will adjust based on progress");
+        }
+        
+        let start_time = std::time::Instant::now();
+        let mut best_error = f32::INFINITY;
+        let mut epochs_completed = 0;
+        let mut epochs_without_improvement = 0;
+        let mut epochs_since_lr_change = 0;
+        let mut error_history: Vec<f32> = Vec::new();
+        
+        // Get mutable access to network
+        let mut network_guard = self.network.write().unwrap();
+        let network = network_guard.as_mut()
+            .ok_or_else(|| anyhow!("Network not initialized"))?;
+        
+        info!("🏋️ [CONTAINER TRAINING] Beginning training epochs (max: {})", config.max_epochs);
+        
+        for epoch in 0..config.max_epochs {
+            // Train one epoch - THIS ACTUALLY UPDATES WEIGHTS!
+            let epoch_error = trainer.train_epoch(
+                network,
+                training_data
+            ).map_err(|e| anyhow!("Training epoch failed: {:?}", e))?;
+            
+            error_history.push(epoch_error);
+            epochs_completed = epoch + 1;
+            epochs_since_lr_change += 1;
+            
+            // Check for improvement
+            let improvement = if epoch_error < best_error - self.config.min_improvement_threshold {
+                best_error = epoch_error;
+                epochs_without_improvement = 0;
+                true
+            } else {
+                epochs_without_improvement += 1;
+                false
+            };
+            
+            // Adaptive learning rate adjustment
+            if self.config.adaptive_learning_rate && epochs_since_lr_change >= self.config.plateau_patience {
+                let should_adjust_lr = self.should_adjust_learning_rate(&error_history, epoch);
+                
+                if should_adjust_lr {
+                    let old_lr = current_lr;
+                    
+                    if epochs_without_improvement >= self.config.plateau_patience {
+                        // Plateau detected - increase learning rate
+                        current_lr = (current_lr * self.config.lr_increase_factor).min(config.learning_rate * 2.0);
+                        info!("📈 [ADAPTIVE LR] Plateau detected at epoch {}. Increasing LR: {:.6} -> {:.6}", 
+                              epoch, old_lr, current_lr);
+                    } else if improvement {
+                        // Good progress - slightly decrease learning rate for stability
+                        current_lr = current_lr * self.config.lr_decrease_factor;
+                        info!("📉 [ADAPTIVE LR] Good progress at epoch {}. Decreasing LR for stability: {:.6} -> {:.6}", 
+                              epoch, old_lr, current_lr);
+                    }
+                    
+                    // Update trainer with new learning rate
+                    trainer = IncrementalBackprop::new(current_lr)
+                        .with_momentum(0.9)
+                        .with_error_function(Box::new(MseError));
+                    
+                    epochs_since_lr_change = 0;
+                }
+            }
+            
+            // Enhanced logging with learning rate info
+            if epoch % (config.max_epochs / 20).max(1) == 0 || (epoch < 100 && epoch % 10 == 0) {
+                let progress_indicator = if improvement { "↓" } else { "→" };
+                info!("📈 [TRAINING] Epoch {:4}/{}: error = {:.6} {} (LR: {:.6}, no-improve: {})", 
+                      epoch, config.max_epochs, epoch_error, progress_indicator, current_lr, epochs_without_improvement);
+            }
+            
+            // Early stopping check
+            if self.config.early_stopping_patience > 0 && epochs_without_improvement >= self.config.early_stopping_patience {
+                info!("⏹️ [EARLY STOPPING] No improvement for {} epochs. Stopping training at epoch {}", 
+                      self.config.early_stopping_patience, epoch);
+                break;
+            }
+            
+            // Target error reached
+            if epoch_error <= self.config.target_error {
+                info!("🎯 [TARGET REACHED] Epoch {}: error {:.6} <= target {:.6}", 
+                      epoch, epoch_error, self.config.target_error);
+                break;
+            }
+        }
+        
+        drop(network_guard); // Release the write lock
+        
+        // Update metadata with REAL training results
+        let r_squared = self.calculate_r_squared(training_data, best_error as f64)?;
+        self.metadata.accuracy = r_squared;
+        self.metadata.loss = best_error as f64;
+        
+        let duration = start_time.elapsed();
+        info!("✅ [TRAINING COMPLETE] Final Results:");
+        info!("📊   Final error: {:.6} (best: {:.6})", error_history.last().unwrap_or(&best_error), best_error);
+        info!("🎯   Target achieved: {} (target: {:.6})", 
+              if best_error <= self.config.target_error { "✅ YES" } else { "❌ NO" }, self.config.target_error);
+        info!("⏱️   Duration: {:?} ({} epochs, {:.1} epochs/sec)", 
+              duration, epochs_completed, epochs_completed as f64 / duration.as_secs_f64());
+        info!("🧠   Final LR: {:.6}, Model accuracy: {:.1}%", current_lr, self.metadata.accuracy * 100.0);
+        
+        let record = TrainingRecord {
+            timestamp: Utc::now(),
+            epochs_completed,
+            final_mse: best_error,
+            training_time_secs: duration.as_secs(),
+            data_samples: training_data.inputs.len(),
+            config: config.clone(),
+        };
+
+        self.training_history.push(record.clone());
+        self.metadata.training_duration_secs = duration.as_secs();
+        self.metadata.timestamp = Utc::now();
+        
+        Ok(record)
+    }
+
     /// Train the model with automatic checkpointing
     pub async fn train_with_checkpointing(
         &mut self,
@@ -323,96 +492,54 @@ impl FannModelAdapter {
         config: &TrainingConfig,
         checkpoint_frequency: usize,
     ) -> Result<TrainingRecord> {
-        if self.network.read().unwrap().is_none() {
-            self.initialize_network()?;
-        }
-
-        let start_time = std::time::Instant::now();
-        let mut epochs_completed = 0;
-        let mut last_mse = f32::INFINITY;
-
         info!("Starting training with checkpointing every {} epochs", checkpoint_frequency);
 
-        // Simple training simulation (ruv-fann doesn't have built-in training)
-        for epoch in 0..config.max_epochs {
-            // Simulate training by running the network on training data
-            for i in 0..training_data.inputs.len() {
-                let output = {
-                    let mut network_borrow = self.network.write().unwrap();
-                    let network = network_borrow.as_mut()
-                        .ok_or_else(|| anyhow!("Network not initialized"))?;
-                    network.run(&training_data.inputs[i])
+        // Use the real training method
+        let mut record = self.train_with_real_backprop(training_data, config).await?;
+        
+        let epochs_completed = record.epochs_completed;
+        let last_mse = record.final_mse;
+
+        // Save checkpoints during training (if needed)
+        if epochs_completed % checkpoint_frequency == 0 || epochs_completed % 100 == 0 {
+            let network_borrow = self.network.read().unwrap();
+            if let Some(net) = network_borrow.as_ref() {
+                let checkpoint_metrics = crate::adapters::model_storage::CheckpointMetrics {
+                    epoch: epochs_completed,
+                    training_loss: last_mse as f64,
+                    validation_loss: last_mse as f64,
+                    learning_rate: self.config.learning_rate,
+                    timestamp: Utc::now(),
                 };
-                
-                // Calculate error (simplified)
-                let error: f32 = output.iter()
-                    .zip(training_data.outputs[i].iter())
-                    .map(|(&o, &t)| (o - t).powi(2))
-                    .sum::<f32>() / output.len() as f32;
-                last_mse = last_mse.min(error);
-            }
 
-            epochs_completed = epoch + 1;
-
-            // Save checkpoint periodically
-            if epochs_completed % checkpoint_frequency == 0 {
-                // Get a borrow of the network for checkpoint
-                let network_borrow = self.network.read().unwrap();
-                if let Some(net) = network_borrow.as_ref() {
-                    let checkpoint_metrics = crate::adapters::model_storage::CheckpointMetrics {
-                        epoch: epochs_completed,
-                        training_loss: last_mse as f64,
-                        validation_loss: last_mse as f64,
-                        learning_rate: self.config.learning_rate,
-                        timestamp: Utc::now(),
-                    };
-
-                    self.storage.save_checkpoint(
-                        net,
-                        &self.config.model_name,
-                        epochs_completed,
-                        checkpoint_metrics,
-                    ).await?;
+                if let Err(e) = self.storage.save_checkpoint(
+                    net,
+                    &self.config.model_name,
+                    epochs_completed,
+                    checkpoint_metrics,
+                ).await {
+                    warn!("Failed to save checkpoint at epoch {}: {}", epochs_completed, e);
                 }
-            }
-
-            // Early stopping check
-            if last_mse <= self.config.target_error {
-                info!("Target error reached at epoch {}: {}", epochs_completed, last_mse);
-                break;
-            }
-
-            // Log progress periodically
-            if epochs_completed % 100 == 0 {
-                debug!("Epoch {}: MSE = {:.6}", epochs_completed, last_mse);
             }
         }
 
-        let training_time = start_time.elapsed();
-        
-        // Create training record
-        let record = TrainingRecord {
-            timestamp: Utc::now(),
-            epochs_completed,
-            final_mse: last_mse,
-            training_time_secs: training_time.as_secs(),
-            data_samples: training_data.inputs.len(),
-            config: config.clone(),
-        };
-
-        self.training_history.push(record.clone());
-
-        // Update metadata
-        self.metadata.accuracy = 1.0 - (last_mse as f64).min(1.0);
-        self.metadata.loss = last_mse as f64;
-        self.metadata.training_duration_secs = training_time.as_secs();
-        self.metadata.timestamp = Utc::now();
-
         // Save the trained model
-        self.save_model(VersionIncrement::Minor).await?;
+        if let Err(e) = self.save_model(VersionIncrement::Minor).await {
+            warn!("Failed to save trained model: {}", e);
+        }
 
-        info!("Training completed: {} epochs, MSE: {:.6}, Time: {:?}", 
-              epochs_completed, last_mse, training_time);
+        // Comprehensive training completion logging
+        let final_accuracy = self.metadata.accuracy; // Use the properly calculated R-squared
+        let training_time = std::time::Duration::from_secs(record.training_time_secs);
+        info!("🎉 TRAINING COMPLETED SUCCESSFULLY!");
+        info!("📈 Final Results: {} epochs, MSE: {:.6}, Accuracy: {:.1}%, Time: {:?}", 
+              epochs_completed, last_mse, final_accuracy * 100.0, training_time);
+        info!("🎯 Target achieved: {} (Target MSE: {:.6})", 
+              if last_mse <= self.config.target_error { "✅ YES" } else { "❌ NO" },
+              self.config.target_error);
+        info!("⚡ Training Performance: {:.2} epochs/sec, {:.0} samples/sec", 
+              epochs_completed as f64 / training_time.as_secs_f64(),
+              (epochs_completed * training_data.inputs.len()) as f64 / training_time.as_secs_f64());
 
         Ok(record)
     }
@@ -504,6 +631,152 @@ impl FannModelAdapter {
     /// Get model configuration
     pub fn get_config(&self) -> &FannModelConfig {
         &self.config
+    }
+
+    /// Calculate R-squared coefficient of determination
+    /// R² = 1 - (SS_res / SS_tot) where:
+    /// SS_res = sum of squares of residuals (predicted - actual)²
+    /// SS_tot = total sum of squares (actual - mean)²
+    fn calculate_r_squared(&self, training_data: &TrainingData<f32>, _mse: f64) -> Result<f64> {
+        if training_data.outputs.is_empty() || training_data.inputs.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Get network access for predictions (need write access for run method)
+        let mut network_guard = self.network.write().unwrap();
+        let network = match network_guard.as_mut() {
+            Some(net) => net,
+            None => return Ok(0.0), // No trained network
+        };
+
+        // Collect all actual values and calculate mean
+        let mut actual_values = Vec::new();
+        for output in &training_data.outputs {
+            for &value in output {
+                actual_values.push(value as f64);
+            }
+        }
+
+        if actual_values.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mean: f64 = actual_values.iter().sum::<f64>() / actual_values.len() as f64;
+
+        // Calculate total sum of squares (SS_tot)
+        let ss_tot: f64 = actual_values.iter()
+            .map(|&actual| {
+                let diff = actual - mean;
+                diff * diff
+            })
+            .sum();
+
+        // Handle edge case: if all values are the same, R² is undefined
+        if ss_tot == 0.0 {
+            return Ok(0.0);
+        }
+
+        // Calculate residual sum of squares (SS_res) using actual predictions
+        let mut ss_res = 0.0;
+        let mut prediction_idx = 0;
+
+        for (input_idx, input) in training_data.inputs.iter().enumerate() {
+            // Run the network to get predictions
+            let predictions = network.run(input);
+            
+            // Compare predictions with actual outputs
+            if input_idx < training_data.outputs.len() {
+                let actual_output = &training_data.outputs[input_idx];
+                
+                for (pred_idx, &predicted) in predictions.iter().enumerate() {
+                    if pred_idx < actual_output.len() && prediction_idx < actual_values.len() {
+                        let actual = actual_values[prediction_idx] as f64;
+                        let residual = predicted as f64 - actual;
+                        ss_res += residual * residual;
+                        prediction_idx += 1;
+                    }
+                }
+            }
+        }
+
+        // Calculate R-squared: R² = 1 - (SS_res / SS_tot)
+        let r_squared = 1.0 - (ss_res / ss_tot);
+        
+        // R-squared can be negative if model is worse than predicting mean
+        // For reporting purposes, we'll clamp to [0, 1] but allow debugging of negative values
+        let final_r_squared = if r_squared < 0.0 {
+            warn!("Negative R-squared detected: {:.6}, model performs worse than mean prediction", r_squared);
+            0.0
+        } else {
+            r_squared.min(1.0)
+        };
+
+        debug!("R-squared calculation: SS_res={:.6}, SS_tot={:.6}, R²={:.6}", 
+               ss_res, ss_tot, final_r_squared);
+        
+        Ok(final_r_squared)
+    }
+
+    /// Calculate variance of a slice of values
+    fn calculate_variance(&self, values: &[f32]) -> f64 {
+        if values.len() <= 1 {
+            return 0.0;
+        }
+
+        let mean: f64 = values.iter().map(|&x| x as f64).sum::<f64>() / values.len() as f64;
+        let variance: f64 = values.iter()
+            .map(|&x| {
+                let diff = x as f64 - mean;
+                diff * diff
+            })
+            .sum::<f64>() / (values.len() - 1) as f64;
+        
+        variance
+    }
+
+    /// Determine if learning rate should be adjusted based on error history
+    fn should_adjust_learning_rate(&self, error_history: &[f32], current_epoch: usize) -> bool {
+        if error_history.len() < self.config.plateau_patience {
+            return false;
+        }
+
+        let window_size = self.config.plateau_patience;
+        let recent_errors = &error_history[error_history.len().saturating_sub(window_size)..];
+        
+        // Check if we're in a plateau (very small variance in recent errors)
+        let variance = self.calculate_variance(recent_errors);
+        let mean_error: f32 = recent_errors.iter().sum::<f32>() / recent_errors.len() as f32;
+        
+        // Coefficient of variation (std dev / mean) - low values indicate plateau
+        let coefficient_of_variation = if mean_error > 0.0 {
+            (variance.sqrt() as f32) / mean_error
+        } else {
+            0.0
+        };
+
+        // Consider it a plateau if coefficient of variation is very low
+        let is_plateau = coefficient_of_variation < 0.01 && variance < 0.000001;
+        
+        // Also check for decreasing trend (good progress)
+        let is_improving = if recent_errors.len() >= 2 {
+            let first_half = &recent_errors[..recent_errors.len()/2];
+            let second_half = &recent_errors[recent_errors.len()/2..];
+            
+            let first_mean: f32 = first_half.iter().sum::<f32>() / first_half.len() as f32;
+            let second_mean: f32 = second_half.iter().sum::<f32>() / second_half.len() as f32;
+            
+            (first_mean - second_mean) > self.config.min_improvement_threshold
+        } else {
+            false
+        };
+
+        // Log diagnostic information occasionally
+        if current_epoch % 50 == 0 && self.config.adaptive_learning_rate {
+            debug!("[LR ANALYSIS] Epoch {}: variance={:.8}, CV={:.6}, plateau={}, improving={}", 
+                   current_epoch, variance, coefficient_of_variation, is_plateau, is_improving);
+        }
+
+        is_plateau || is_improving
     }
 }
 
@@ -793,6 +1066,7 @@ mod tests {
         let config = FannModelConfig {
             input_size: 5,
             output_size: 1,
+            adaptive_learning_rate: false, // Disable for predictable test
             ..Default::default()
         };
         

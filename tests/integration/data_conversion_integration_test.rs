@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use chrono::Utc;
 use anyhow::Result;
 
-use neural_trader::data::TimeSeriesData;
-use neural_trader::adapters::neural::{
+use autonomous_platform::data::TimeSeriesData;
+use autonomous_platform::adapters::neural::{
     VendorFormatConverter,
     VendorDataConverter,
     SafeF32Convert,
@@ -35,7 +35,7 @@ fn create_test_data(count: usize) -> Vec<TimeSeriesData> {
             high: 51000.0 + i as f64 * 120.0,
             low: 49500.0 + i as f64 * 80.0,
             close: 50500.0 + i as f64 * 110.0,
-            volume: 1000.0 + i as f64 * 50.0,
+            volume: vec![1000.0 + i as f64 * 50.0,
             indicators,
             source: Some("integration_test".to_string()),
             entity: Some("BTC/USD".to_string()),
@@ -291,7 +291,7 @@ fn test_conversion_with_missing_indicators() -> Result<()> {
             high: 1010.0,
             low: 990.0,
             close: 1005.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             indicators,
             source: Some("test".to_string()),
             entity: None,

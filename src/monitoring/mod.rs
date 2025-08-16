@@ -5,6 +5,7 @@
 
 pub mod health;
 pub mod resource_health_integration;
+pub mod model_performance_tracker;
 
 #[cfg(test)]
 mod test_health;

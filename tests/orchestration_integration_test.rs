@@ -23,6 +23,8 @@ use autonomous_platform::{
     },
 };
 
+use crate::helpers::test_utils::create_test_market_hours;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
@@ -129,7 +131,7 @@ fn create_test_time_series(count: usize) -> Vec<TimeSeriesData> {
             high: base_price + (i as f64 * 10.0) + 50.0,
             low: base_price + (i as f64 * 10.0) - 50.0,
             close: base_price + (i as f64 * 10.0) + 25.0,
-            volume: 1000.0 + (i as f64 * 100.0),
+            volume: vec![1000.0 + (i as f64 * 100.0)],
             indicators: HashMap::new(),
             source: Some("test".to_string()),
             entity: Some("BTC/USD".to_string()),
@@ -276,7 +278,7 @@ mod event_bus_tests {
             timestamp: Utc::now(),
             event_type: "price_update".to_string(),
             price: 50000.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
             bid: 49999.0,
             ask: 50001.0,
             spread: 2.0,
@@ -354,7 +356,7 @@ mod event_bus_tests {
             timestamp: Utc::now(),
             event_type: "test".to_string(),
             price: 1000.0,
-            volume: 100.0,
+            volume: vec![100.0],
             bid: 999.0,
             ask: 1001.0,
             spread: 2.0,
@@ -370,7 +372,7 @@ mod event_bus_tests {
             timestamp: Utc::now(),
             event_type: "test".to_string(),
             price: 1000.0,
-            volume: 100.0,
+            volume: vec![100.0],
             bid: 999.0,
             ask: 1001.0,
             spread: 2.0,
@@ -406,7 +408,7 @@ mod event_bus_tests {
                 price: 1000.0 + i as f64,
                 timestamp: Utc::now(),
                 event_type: "test".to_string(),
-                volume: 100.0,
+                volume: vec![100.0],
                 bid: 999.0,
                 ask: 1001.0,
                 spread: 2.0,
@@ -445,7 +447,7 @@ mod neural_predictor_tests {
             accuracy_threshold: 0.8,
         };
 
-        let predictor = NeuralPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config).await?;
 
         // Load historical data
         let data = create_test_time_series(100);
@@ -457,7 +459,7 @@ mod neural_predictor_tests {
     #[tokio::test]
     async fn test_single_model_prediction() -> Result<()> {
         let config = NeuralConfig::default();
-        let predictor = NeuralPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config).await?;
 
         let data = create_test_time_series(50);
         let predictions = predictor.predict(&data, 5, None).await?;
@@ -479,7 +481,7 @@ mod neural_predictor_tests {
     #[tokio::test]
     async fn test_prediction_with_features() -> Result<()> {
         let config = NeuralConfig::default();
-        let predictor = NeuralPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config).await?;
 
         let data = create_test_time_series(50);
         let mut features = HashMap::new();
@@ -500,7 +502,7 @@ mod neural_predictor_tests {
     #[tokio::test]
     async fn test_feature_importance() -> Result<()> {
         let config = NeuralConfig::default();
-        let predictor = NeuralPredictor::new(config)?;
+        let predictor = NeuralPredictor::new(config).await?;
 
         let importance = predictor.get_feature_importance().await?;
 
@@ -523,11 +525,11 @@ mod daa_coordinator_tests {
     #[tokio::test]
     async fn test_daa_coordinator_initialization() -> Result<()> {
         let neural_config = NeuralConfig::default();
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await?);
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(config.clone(), neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?;
 
         // Verify initial metrics
         let metrics = coordinator.get_metrics().await;
@@ -540,7 +542,7 @@ mod daa_coordinator_tests {
     #[tokio::test]
     async fn test_daa_decision_with_no_position() -> Result<()> {
         let neural_config = NeuralConfig::default();
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await?);
         let (tx, mut rx) = mpsc::channel(100);
 
         let config = DaaConfig {
@@ -548,7 +550,7 @@ mod daa_coordinator_tests {
             min_confidence: 0.7,
             ..Default::default()
         };
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?;
 
         // Register a bullish strategy
         let strategy = Box::new(MockStrategy {
@@ -570,7 +572,7 @@ mod daa_coordinator_tests {
             ask: 50001.0,
             volume_24h: 1000000.0,
             volatility: 0.02,
-            timestamp: Utc::now(),
+            timestamp: Utc::now().timestamp(),
         };
 
         let historical_data = create_test_time_series(50);
@@ -595,14 +597,14 @@ mod daa_coordinator_tests {
     #[tokio::test]
     async fn test_daa_disabled_mode() -> Result<()> {
         let neural_config = NeuralConfig::default();
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await?);
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig {
             enabled: false, // Disabled
             ..Default::default()
         };
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?;
 
         let market_context = MarketContext {
             symbol: "TEST/USD".to_string(),
@@ -611,7 +613,7 @@ mod daa_coordinator_tests {
             ask: 1001.0,
             volume_24h: 100000.0,
             volatility: 0.02,
-            timestamp: Utc::now(),
+            timestamp: Utc::now().timestamp(),
         };
         let historical_data = create_test_time_series(50);
 
@@ -635,11 +637,11 @@ mod daa_coordinator_tests {
     #[tokio::test]
     async fn test_risk_assessment() -> Result<()> {
         let neural_config = NeuralConfig::default();
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await?);
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?;
 
         // High volatility context
         let volatile_context = MarketContext {
@@ -649,7 +651,7 @@ mod daa_coordinator_tests {
             bid: 49900.0,
             ask: 50100.0,
             volume_24h: 1000000.0,
-            timestamp: Utc::now(),
+            timestamp: Utc::now().timestamp(),
         };
 
         let historical_data = create_test_time_series(50);
@@ -668,11 +670,11 @@ mod daa_coordinator_tests {
     #[tokio::test]
     async fn test_metrics_tracking() -> Result<()> {
         let neural_config = NeuralConfig::default();
-        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config)?);
+        let neural_predictor = Arc::new(NeuralPredictor::new(neural_config).await?);
         let (tx, _rx) = mpsc::channel(100);
 
         let config = DaaConfig::default();
-        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours());
+        let coordinator = DaaCoordinator::new(config, neural_predictor, tx, create_test_market_hours(, create_test_market_hours()))?;
 
         let market_context = MarketContext {
             symbol: "TEST/USD".to_string(),
@@ -681,7 +683,7 @@ mod daa_coordinator_tests {
             ask: 1001.0,
             volume_24h: 100000.0,
             volatility: 0.02,
-            timestamp: Utc::now(),
+            timestamp: Utc::now().timestamp(),
         };
         let historical_data = create_test_time_series(50);
 

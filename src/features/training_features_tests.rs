@@ -3,7 +3,7 @@
 //! Tests all feature extraction capabilities including technical indicators,
 //! price transformations, market microstructure features, and normalization.
 
-use super::training_features::*;
+use crate::features::training_features::*;
 use crate::data::TimeSeriesData;
 use chrono::{TimeZone, Utc};
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ fn create_test_data_multi_symbol() -> HashMap<String, Vec<TimeSeriesData>> {
                 high: price + volatility,
                 low: price - volatility,
                 close: price,
-                volume: 1000000.0 * volume_multiplier * (1.0 + (i as f64 * 0.1).sin() * 0.5),
+                volume: vec![1000000.0 * volume_multiplier * (1.0 + (i as f64 * 0.1).sin() * 0.5)],
                 indicators: HashMap::new(),
                 source: Some("test".to_string()),
                 entity: Some(symbol.to_string()),
@@ -589,7 +589,7 @@ mod tests {
                 high: price + 1.0,
                 low: price - 1.0,
                 close: price,
-                volume: 1000000.0 * (1.0 + (i as f64 * 0.1).sin()),
+                volume: vec![1000000.0 * (1.0 + (i as f64 * 0.1).sin())],
                 indicators: HashMap::new(),
                 source: Some("test".to_string()),
                 entity: Some("PERF_TEST".to_string()),

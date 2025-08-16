@@ -256,7 +256,6 @@ pub use quickprop::Quickprop;
 /// Helper functions for forward propagation and gradient calculation
 pub(crate) mod helpers {
     use super::*;
-    use crate::ActivationFunction;
     
     /// Simple network representation for training algorithms
     #[derive(Debug, Clone)]

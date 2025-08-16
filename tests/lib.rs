@@ -2,6 +2,9 @@
 //!
 //! This file aggregates all test modules for easier organization
 
+// Phase 3 test infrastructure
+pub mod phase3;
+
 // Adapter tests
 pub mod adapters {
     pub mod test_mock_removal;
@@ -16,6 +19,8 @@ pub mod config {
 pub mod unit {
     pub mod adapters_test;
     pub mod momentum_strategy_test;
+    pub mod strategy_factory_test;
+    pub mod strategy_init_edge_cases_test;
     pub mod redis_adapter_test;
     pub mod strategies_test;
     pub mod timescale_adapter_test;

@@ -113,8 +113,17 @@ pub fn create_realistic_market_data(
         high: current_price + (base_price * 0.02),
         low: current_price - (base_price * 0.015),
         close: current_price,
-        volume: 1000000.0 + (rand::random::<f64>() * 500000.0),
+        volume: vec![1000000.0 + (rand::random::<f64>() * 500000.0)],
+        volume_value: 1000000.0 + (rand::random::<f64>() * 500000.0),
         indicators: create_realistic_indicators(current_price, base_price),
+        source: Some("test_generator".to_string()),
+        entity: Some(symbol.to_string()),
+        value: Some(current_price),
+        metadata: None,
+        values: vec![current_price],
+        intervals: vec![timestamp.timestamp() as u64],
+        timestamps: vec![timestamp],
+        metadata_map: HashMap::new(),
     }
 }
 
@@ -282,7 +291,7 @@ impl MarketDataBuilder {
             high: 105.0,
             low: 95.0,
             close: 102.0,
-            volume: 1000.0,
+            volume: vec![1000.0],
         }
     }
 

@@ -15,12 +15,11 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
-use tokio::io;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
-use super::errors::{AdapterError, ErrorSeverity};
-use super::vendor_bridge::{AsyncModelWrapper, SyncVendorModel, TrainingConfig};
+use super::errors::AdapterError;
+use super::vendor_bridge::{SyncVendorModel, TrainingConfig};
 
 /// Model metadata for tracking versions and performance
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,7 +139,7 @@ pub struct ModelStorageConfig {
 impl Default for ModelStorageConfig {
     fn default() -> Self {
         Self {
-            base_path: PathBuf::from("models"),
+            base_path: PathBuf::from("/opt/neural-trader/sector-models"),
             max_versions_per_model: 10,
             enable_compression: true,
             enable_encryption: false,
@@ -258,9 +257,53 @@ impl ModelStorage {
             let mut history = self.version_history.write().await;
             history.push_back(model_version.clone());
 
-            // Enforce max versions limit
-            while history.len() > self.config.max_versions_per_model {
-                if let Some(old_version) = history.pop_front() {
+            // Enforce max versions limit PER MODEL TYPE (not globally)
+            let current_model_type = &model_version.model_type;
+            
+            // Collect all versions of the current model type with their positions
+            let mut model_type_versions: Vec<(usize, ModelVersion)> = Vec::new();
+            for (index, version) in history.iter().enumerate() {
+                if version.model_type == *current_model_type {
+                    model_type_versions.push((index, version.clone()));
+                }
+            }
+
+            // If we have too many versions of this model type, remove the oldest ones
+            if model_type_versions.len() > self.config.max_versions_per_model {
+                let excess_count = model_type_versions.len() - self.config.max_versions_per_model;
+                
+                // Sort by timestamp to ensure we delete the oldest versions first
+                model_type_versions.sort_by_key(|(_, version)| version.timestamp);
+                
+                // Collect versions to delete and their indices (in reverse order for safe removal)
+                let mut versions_to_delete = Vec::new();
+                let mut indices_to_remove: Vec<usize> = model_type_versions
+                    .iter()
+                    .take(excess_count)
+                    .map(|(index, _)| *index)
+                    .collect();
+                indices_to_remove.sort_by(|a, b| b.cmp(a)); // Reverse order for safe removal
+                
+                // Remove from history and collect for deletion
+                for &index in &indices_to_remove {
+                    if let Some(old_version) = history.get(index) {
+                        versions_to_delete.push(old_version.clone());
+                    }
+                }
+                
+                // Remove from history (in reverse order to maintain valid indices)
+                for &index in &indices_to_remove {
+                    let _removed = history.remove(index);
+                }
+                
+                // Delete the old versions from disk
+                for old_version in versions_to_delete {
+                    info!(
+                        "Cleaning up old version: {} v{} (exceeded limit of {} for model type)", 
+                        old_version.model_type, 
+                        old_version.version,
+                        self.config.max_versions_per_model
+                    );
                     self.delete_version(&old_version).await?;
                 }
             }
