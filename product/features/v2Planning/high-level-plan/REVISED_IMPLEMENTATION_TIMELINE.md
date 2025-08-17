@@ -1,342 +1,417 @@
-# Revised V2 Implementation Timeline with Monolith Refactoring
+# Revised V2 Implementation Timeline: MCP-First Clean Rebuild
 
 ## Overview
 
-This revised timeline integrates monolith decomposition throughout all phases, ensuring we transform the architecture while delivering V2 features.
+Complete rebuild focusing on MCP tools (not APIs), fresh testing framework, and simplification. We're not preserving broken code - we're building better.
 
 ## Week-by-Week Implementation Plan
 
-### Week 1: Foundation & Critical Extraction
-**Focus: Safety Systems + API Gateway Extraction**
+### Week 1: MCP Foundation & Testing Framework
+**Focus: Build MCP Server and Working Tests from Scratch**
 
 #### Monday-Tuesday
-- [ ] Extract API Gateway from monolith
-- [ ] Implement Emergency Stop Service
-- [ ] Set up service mesh (Istio)
-- [ ] Create service communication framework
+- [ ] Create new MCP server structure (no REST APIs)
+- [ ] Implement EmergencyStopTool (not API)
+- [ ] Write WORKING tests for emergency stop
+- [ ] Delete broken monolith tests
 
 #### Wednesday-Thursday
-- [ ] Extract MCP Server as microservice
-- [ ] Implement 10 core MCP tools
-- [ ] Set up conversation state management
-- [ ] Deploy Redis for inter-service communication
+- [ ] Build 10 core MCP tools:
+  - `mcp.system.emergency_stop`
+  - `mcp.system.health_check`
+  - `mcp.data.get_quote`
+  - `mcp.risk.check_limits`
+  - `mcp.trading.get_positions`
+  - (5 more essential tools)
+- [ ] TDD: Test first, implement second
+- [ ] Set up conversation state in Redis
 
 #### Friday
-- [ ] Integration testing of extracted services
+- [ ] Integration testing of MCP tools
 - [ ] Performance benchmarking
-- [ ] Rollback procedure validation
+- [ ] Documentation of tool catalog
 
 **Deliverables:**
-- 3 microservices operational (API Gateway, Safety, MCP)
-- Monolith still handling 95% of functionality
-- Emergency stop system with 5-second guarantee
+- Clean MCP server (no APIs)
+- 10 working MCP tools with tests
+- All tests compile and pass
+- Emergency stop <5 seconds
+
+**Code Simplification:**
+```rust
+// Before: 15 files for safety system
+// After: 1 MCP tool + 1 test file
+pub struct EmergencyStopTool;
+impl MCPTool for EmergencyStopTool {
+    async fn execute(&self, params: Params) -> Result {
+        // Simple, direct, testable
+    }
+}
+```
 
 ---
 
-### Week 2: MCP Expansion & Data Service Prep
-**Focus: Complete MCP Foundation + Begin Data Extraction**
+### Week 2: Complete Core MCP Tools
+**Focus: Build Remaining Core Tools with TDD**
 
 #### Monday-Tuesday
-- [ ] Implement remaining 10 core MCP tools (20 total)
-- [ ] Extract Data Ingestion Service skeleton
-- [ ] Set up gRPC communication between services
-- [ ] Implement human override mechanisms
+- [ ] Implement 10 more MCP tools (20 total)
+- [ ] Each tool with comprehensive tests
+- [ ] Human override tool with guarantee
+- [ ] State management tools
 
 #### Wednesday-Thursday
-- [ ] Complete Data Ingestion Service extraction
-- [ ] Migrate data pipeline to new service
-- [ ] Set up Kubernetes deployments
-- [ ] Implement service health checks
+- [ ] Build data ingestion MCP tools:
+  - `mcp.data.ingest_market`
+  - `mcp.data.validate`
+  - `mcp.data.store_timeseries`
+- [ ] Salvage ONLY working data logic
+- [ ] Fresh integration tests
 
 #### Friday
-- [ ] End-to-end testing with extracted services
-- [ ] Load testing for data ingestion
-- [ ] Documentation and handoff
+- [ ] Tool catalog documentation
+- [ ] Performance testing
+- [ ] Claude integration testing
 
 **Deliverables:**
-- 4 microservices operational
-- 20 MCP tools complete
-- Data ingestion running as separate service
-- Monolith reduced to 85% of original
+- 20+ MCP tools operational
+- 100% test coverage
+- No broken tests
+- Simplified data ingestion
 
 ---
 
-### Week 3: Autonomous Systems & Feature Store
-**Focus: Drift Detection + Feature Store Extraction**
+### Week 3: Data Platform MCP Tools
+**Focus: Rebuild Data Layer as MCP Tools**
 
 #### Monday-Tuesday
-- [ ] Extract Feature Store Service from monolith
-- [ ] Implement drift detection in Feature Store
-- [ ] Set up feature versioning
-- [ ] Create feature serving API
+- [ ] Create Feature Engineering tools:
+  - `mcp.features.calculate_indicators`
+  - `mcp.features.generate_signals`
+  - `mcp.features.validate_features`
+- [ ] Simplify from 30+ files to 5 tools
+- [ ] TDD for all tools
 
 #### Wednesday-Thursday
-- [ ] Implement autonomous retraining triggers
-- [ ] Extract Time Series Service
-- [ ] Set up dedicated TimescaleDB instances
-- [ ] Implement anomaly detection system
-
-#### Friday
-- [ ] Integration testing of ML pipeline
-- [ ] Performance testing of feature serving
-- [ ] Validate drift detection accuracy
-
-**Deliverables:**
-- 6 microservices operational
-- Feature Store with <10ms serving
-- Drift detection operational
-- Monolith reduced to 70% of original
-
----
-
-### Week 4: Self-Healing & Neural Extraction
-**Focus: Autonomous Systems + Neural Engine Service**
-
-#### Monday-Tuesday
-- [ ] Extract Neural Engine Service
-- [ ] Migrate ruv-FANN models to service
-- [ ] Implement self-healing mechanisms
-- [ ] Set up model inference API
-
-#### Wednesday-Thursday
-- [ ] Complete anomaly response system
-- [ ] Implement circuit breakers across services
-- [ ] Set up distributed tracing (Jaeger)
-- [ ] Create recovery playbooks
-
-#### Friday
-- [ ] Full system testing with neural service
-- [ ] Chaos engineering tests
+- [ ] Time series MCP tools:
+  - `mcp.timeseries.query`
+  - `mcp.timeseries.aggregate`
+  - `mcp.timeseries.backfill`
+- [ ] Salvage working TimescaleDB queries
 - [ ] Performance optimization
 
+#### Friday
+- [ ] Data platform integration tests
+- [ ] Benchmark data tool performance
+- [ ] Documentation update
+
 **Deliverables:**
-- 7 microservices operational
-- Neural predictions via service API
-- Self-healing mechanisms active
-- Monolith reduced to 50% of original
+- Complete data platform via MCP
+- 50% code reduction through simplification
+- All tests pass
+- <100ms data query latency
 
 ---
 
-### Week 5: MLOps Platform & Model Registry
-**Focus: Model Management + Training Pipeline**
+### Week 4: Autonomous & Drift Detection
+**Focus: Build Autonomous Capabilities**
 
 #### Monday-Tuesday
-- [ ] Extract Model Registry Service
-- [ ] Implement model versioning system
-- [ ] Set up S3 for model storage
-- [ ] Create model lifecycle APIs
+- [ ] Drift detection MCP tools:
+  - `mcp.drift.detect_data`
+  - `mcp.drift.detect_model`
+  - `mcp.drift.trigger_retrain`
+- [ ] Statistical tests implementation
+- [ ] Fresh test suite
 
 #### Wednesday-Thursday
-- [ ] Extract Training Pipeline Service
-- [ ] Implement training orchestration
-- [ ] Set up Kubernetes Jobs for training
-- [ ] Create experiment tracking integration
+- [ ] Anomaly detection tools:
+  - `mcp.anomaly.detect`
+  - `mcp.anomaly.classify`
+  - `mcp.anomaly.respond`
+- [ ] Self-healing tools
+- [ ] Response playbooks
 
 #### Friday
-- [ ] Test model deployment pipeline
-- [ ] Validate training automation
-- [ ] Performance testing of registry
+- [ ] Autonomous system testing
+- [ ] Chaos engineering tests
+- [ ] Integration validation
 
 **Deliverables:**
-- 9 microservices operational
-- Complete MLOps infrastructure
-- Automated training pipeline
-- Monolith reduced to 35% of original
+- Drift detection operational
+- Anomaly response <60 seconds
+- Self-healing mechanisms
+- All via MCP tools (no APIs)
 
 ---
 
-### Week 6: Decision Engine & DAA Extraction
-**Focus: Business Logic Separation**
+### Week 5: Neural Platform Rebuild
+**Focus: Fresh Neural Implementation with ruv-FANN**
 
 #### Monday-Tuesday
-- [ ] Extract Decision Engine Service
-- [ ] Migrate DAA coordinator to service
-- [ ] Implement consensus mechanisms
-- [ ] Set up decision API
+- [ ] Abandon broken neural code
+- [ ] Implement with ruv-FANN:
+  - `mcp.neural.predict`
+  - `mcp.neural.train`
+  - `mcp.neural.evaluate`
+- [ ] Working training pipeline
+- [ ] TDD from scratch
 
 #### Wednesday-Thursday
-- [ ] Extract Execution Service
-- [ ] Implement risk validation in service
-- [ ] Set up order execution API
-- [ ] Create audit trail system
+- [ ] Model management tools:
+  - `mcp.models.register`
+  - `mcp.models.deploy`
+  - `mcp.models.rollback`
+- [ ] S3 storage integration
+- [ ] Version management
 
 #### Friday
-- [ ] End-to-end trading flow testing
-- [ ] Risk management validation
+- [ ] Neural platform testing
+- [ ] Prediction accuracy validation
 - [ ] Performance benchmarking
 
 **Deliverables:**
-- 11 microservices operational
-- Decision and execution separated
-- Complete trading flow via services
-- Monolith reduced to 20% of original
+- Working neural predictions
+- Effective model training
+- <500ms prediction latency
+- All tests pass
 
 ---
 
-### Week 7: Advanced Features & Monitoring
-**Focus: NLP Integration + Monitoring Service**
+### Week 6: MLOps & Decision Tools
+**Focus: Complete MLOps Platform**
 
 #### Monday-Tuesday
-- [ ] Extract Monitoring Service
-- [ ] Implement NLP processor in MCP Service
-- [ ] Set up real-time dashboards
-- [ ] Create alert management system
+- [ ] Experiment tracking tools:
+  - `mcp.experiments.create`
+  - `mcp.experiments.log_metrics`
+  - `mcp.experiments.compare`
+- [ ] A/B testing framework
+- [ ] Statistical analysis
 
 #### Wednesday-Thursday
-- [ ] Implement A/B Testing Framework
-- [ ] Enhance drift detection with predictions
-- [ ] Set up Grafana dashboards
-- [ ] Implement advanced analytics
+- [ ] Decision engine tools:
+  - `mcp.decisions.analyze`
+  - `mcp.decisions.consensus`
+  - `mcp.decisions.execute`
+- [ ] Simplified DAA coordination
+- [ ] Risk validation
+
+#### Friday
+- [ ] MLOps integration testing
+- [ ] Decision flow validation
+- [ ] End-to-end testing
+
+**Deliverables:**
+- Complete MLOps via MCP
+- Decision consensus working
+- Experiment tracking active
+- Simplified from 50+ files to 10 tools
+
+---
+
+### Week 7: NLP & Advanced Features
+**Focus: Natural Language Processing**
+
+#### Monday-Tuesday
+- [ ] NLP integration in MCP:
+  - `mcp.nlp.parse_command`
+  - `mcp.nlp.extract_intent`
+  - `mcp.nlp.generate_response`
+- [ ] Intent recognition >90%
+- [ ] Command validation
+
+#### Wednesday-Thursday
+- [ ] Monitoring tools:
+  - `mcp.monitor.get_metrics`
+  - `mcp.monitor.create_alert`
+  - `mcp.monitor.dashboard`
+- [ ] Real-time updates
+- [ ] Alert management
 
 #### Friday
 - [ ] NLP accuracy testing
-- [ ] Dashboard performance testing
-- [ ] Alert system validation
+- [ ] Monitoring validation
+- [ ] Integration testing
 
 **Deliverables:**
-- 12 microservices operational
-- NLP command processing active
-- Comprehensive monitoring deployed
-- Monolith reduced to 10% of original
+- NLP command processing
+- Real-time monitoring
+- Advanced analytics
+- All through MCP tools
 
 ---
 
-### Week 8: Final Decomposition & Optimization
-**Focus: Complete Microservices Transformation**
+### Week 8: Final Integration & Optimization
+**Focus: Polish and Production Readiness**
 
 #### Monday-Tuesday
-- [ ] Extract remaining monolith components
-- [ ] Migrate configuration service
-- [ ] Complete service mesh setup
-- [ ] Implement distributed caching
+- [ ] Complete remaining MCP tools (55+ total)
+- [ ] Performance optimization
+- [ ] Resource usage optimization
+- [ ] Final simplification pass
 
 #### Wednesday-Thursday
-- [ ] Performance optimization across services
-- [ ] Complete observability setup
-- [ ] Implement distributed tracing
-- [ ] Set up auto-scaling policies
+- [ ] Comprehensive integration testing
+- [ ] Load testing all tools
+- [ ] Security validation
+- [ ] Documentation completion
 
 #### Friday
-- [ ] Full system validation
-- [ ] Performance benchmarking
-- [ ] Documentation completion
 - [ ] Production readiness review
+- [ ] Final benchmarking
+- [ ] Deployment preparation
+- [ ] Team handoff
 
 **Deliverables:**
-- 15+ microservices fully operational
-- Monolith completely decomposed
-- All V2 features implemented
-- Production-ready microservices platform
+- 55+ MCP tools complete
+- Zero broken tests
+- 50% code reduction
+- Production ready
 
 ---
 
-## Service Extraction Timeline
+## MCP Tools Development Progress
 
-```mermaid
-gantt
-    title Service Extraction from Monolith
-    dateFormat  YYYY-MM-DD
-    section Week 1
-    API Gateway           :done, 2024-01-01, 2d
-    Safety Service        :done, 2024-01-01, 2d
-    MCP Server           :done, 2024-01-03, 2d
-    section Week 2
-    Data Ingestion       :done, 2024-01-08, 3d
-    section Week 3
-    Feature Store        :done, 2024-01-15, 2d
-    Time Series          :done, 2024-01-17, 2d
-    section Week 4
-    Neural Engine        :done, 2024-01-22, 3d
-    section Week 5
-    Model Registry       :done, 2024-01-29, 2d
-    Training Pipeline    :done, 2024-01-31, 2d
-    section Week 6
-    Decision Engine      :done, 2024-02-05, 2d
-    Execution Service    :done, 2024-02-07, 2d
-    section Week 7
-    Monitoring           :done, 2024-02-12, 2d
-    section Week 8
-    Final Services       :done, 2024-02-19, 3d
+| Week | Tools Built | Tests Written | Code Eliminated | Status |
+|------|------------|---------------|-----------------|---------|
+| 1 | 10 | 30 | 1MB monolith code | Clean foundation |
+| 2 | 20 | 60 | 0.5MB complexity | Core complete |
+| 3 | 30 | 90 | 1MB data code | Data platform |
+| 4 | 38 | 120 | 0.5MB redundancy | Autonomous |
+| 5 | 45 | 150 | 1MB neural code | Neural rebuilt |
+| 6 | 50 | 180 | 0.5MB DAA code | MLOps complete |
+| 7 | 55 | 200 | 0.5MB misc | NLP integrated |
+| 8 | 55+ | 220+ | 0.5MB cleanup | Production ready |
+
+## Why MCP Tools, Not APIs?
+
+### What We're NOT Building:
+```yaml
+❌ REST API endpoints
+❌ GraphQL schemas  
+❌ HTTP microservices
+❌ API gateways
+❌ Service mesh complexity
 ```
 
-## Monolith Reduction Progress
+### What We ARE Building:
+```yaml
+✅ Direct MCP tools
+✅ Claude-native interface
+✅ Function-level calls
+✅ No HTTP overhead
+✅ Simplified architecture
+```
 
-| Week | Monolith Size | Services Extracted | Functionality in Monolith |
-|------|---------------|-------------------|---------------------------|
-| 0    | 5.6MB (100%)  | 0                 | All functionality         |
-| 1    | 5.3MB (95%)   | 3                 | Most functionality        |
-| 2    | 4.8MB (85%)   | 4                 | Core business logic       |
-| 3    | 3.9MB (70%)   | 6                 | Neural, strategies, DAA   |
-| 4    | 2.8MB (50%)   | 7                 | Strategies, integration   |
-| 5    | 2.0MB (35%)   | 9                 | Integration, config       |
-| 6    | 1.1MB (20%)   | 11                | Config, utilities         |
-| 7    | 0.6MB (10%)   | 12                | Utilities only            |
-| 8    | 0MB (0%)      | 15+               | Fully decomposed          |
+### Example Comparison:
+
+```rust
+// ❌ OLD: API-based approach (DON'T DO THIS)
+#[post("/api/v1/market/data")]
+async fn get_market_data(req: HttpRequest) -> HttpResponse {
+    // Parse JSON
+    // Validate auth
+    // Handle errors
+    // Serialize response
+    // 50+ lines of boilerplate
+}
+
+// ✅ NEW: MCP tool approach (DO THIS)
+impl MCPTool for MarketDataTool {
+    async fn execute(&self, params: Params) -> Result {
+        // Direct execution
+        // 5 lines of actual logic
+    }
+}
+```
+
+## Testing Strategy
+
+### Week-by-Week Test Targets
+
+| Week | Unit Tests | Integration Tests | Performance Tests | Coverage |
+|------|------------|-------------------|-------------------|----------|
+| 1 | 20 | 5 | 3 | 90% |
+| 2 | 40 | 10 | 5 | 92% |
+| 3 | 60 | 15 | 8 | 93% |
+| 4 | 80 | 20 | 10 | 94% |
+| 5 | 100 | 25 | 12 | 95% |
+| 6 | 120 | 30 | 15 | 95% |
+| 7 | 140 | 35 | 18 | 96% |
+| 8 | 160 | 40 | 20 | 96% |
+
+### Test-First Development
+```rust
+// ALWAYS write test first
+#[test]
+fn test_emergency_stop_under_5_seconds() {
+    let tool = EmergencyStopTool::new();
+    let start = Instant::now();
+    let result = tool.execute(params);
+    assert!(start.elapsed() < Duration::from_secs(5));
+    assert!(result.is_ok());
+}
+
+// THEN implement to pass the test
+```
+
+## Simplification Targets
+
+### Before vs After
+
+| Component | Before (Files/Lines) | After (Tools/Lines) | Reduction |
+|-----------|---------------------|--------------------:|-----------|
+| Safety | 15 files / 3000 lines | 2 tools / 300 lines | 90% |
+| Data | 30 files / 6000 lines | 5 tools / 800 lines | 87% |
+| Neural | 35 files / 8000 lines | 3 tools / 600 lines | 92% |
+| DAA | 20 files / 4000 lines | 4 tools / 500 lines | 88% |
+| Features | 25 files / 5000 lines | 5 tools / 700 lines | 86% |
+| **Total** | **235 files / 50K lines** | **55 tools / 5K lines** | **90%** |
 
 ## Risk Management
 
-### Parallel Operations
-During extraction, both paths operate simultaneously:
-```yaml
-Request Flow:
-  1. API Gateway receives request
-  2. Router checks service availability
-  3. If service exists: Route to microservice
-  4. If not: Route to monolith
-  5. Response returned to client
-```
+### What We're NOT Preserving
+- Broken tests (delete completely)
+- Ineffective neural training (rebuild)
+- Complex API layers (eliminate)
+- Unnecessary abstractions (simplify)
+- Technical debt (remove)
 
-### Rollback Points
-Each week has defined rollback triggers:
-- Week 1-2: Safety system failures → Full rollback
-- Week 3-4: ML performance degradation → Partial rollback
-- Week 5-6: Data inconsistency → Service-specific rollback
-- Week 7-8: Performance issues → Optimization without rollback
-
-## Resource Allocation
-
-### Team Assignment by Week
-
-| Week | Team Focus | Members | Primary Goal |
-|------|------------|---------|--------------|
-| 1    | Safety & Gateway | 2 Senior Engineers | Critical extraction |
-| 2    | MCP & Data | 2 Engineers + 1 DevOps | Service foundation |
-| 3    | Autonomous & Features | 1 ML Engineer + 1 Backend | ML infrastructure |
-| 4    | Neural & Self-healing | 1 ML Engineer + 1 SRE | Neural extraction |
-| 5    | MLOps Platform | 2 Engineers | Model management |
-| 6    | Decision & Execution | 2 Senior Engineers | Business logic |
-| 7    | NLP & Monitoring | 1 NLP Specialist + 1 DevOps | Advanced features |
-| 8    | Optimization | Full team | Final polish |
+### What We ARE Building
+- Working tests from day 1
+- Effective neural models with ruv-FANN
+- Direct MCP tools (no APIs)
+- Simple, maintainable code
+- Clean architecture
 
 ## Success Criteria
 
-### Weekly Checkpoints
+### Weekly Validation
+- **Week 1**: All tests compile and pass
+- **Week 2**: 20 MCP tools working
+- **Week 3**: Data platform simplified 80%
+- **Week 4**: Autonomous features operational
+- **Week 5**: Neural predictions working
+- **Week 6**: MLOps complete
+- **Week 7**: NLP integrated
+- **Week 8**: 90% code reduction achieved
 
-**Week 1**: Emergency stop working, 3 services live
-**Week 2**: 20 MCP tools operational, data flowing through services
-**Week 3**: Drift detection active, features served via API
-**Week 4**: Neural predictions via service, self-healing active
-**Week 5**: Models managed via registry, training automated
-**Week 6**: Trading decisions via services, execution separated
-**Week 7**: NLP commands working, monitoring comprehensive
-**Week 8**: Zero monolith code, all services operational
-
-### Final Validation
-- [ ] All 55+ MCP tools implemented
-- [ ] Emergency stop < 5 seconds
-- [ ] Feature serving < 10ms
-- [ ] Model deployment automated
-- [ ] 15+ microservices operational
-- [ ] Zero monolith dependencies
-- [ ] 99.9% availability maintained
+### Final Metrics
+- ✅ 55+ MCP tools (zero APIs)
+- ✅ 100% test coverage (all passing)
+- ✅ 90% code reduction
+- ✅ <500ms tool execution
+- ✅ Zero technical debt
+- ✅ Production ready
 
 ## Conclusion
 
-This revised timeline successfully integrates monolith decomposition throughout the V2 implementation, ensuring we:
-1. Transform architecture while delivering features
-2. Maintain system stability with gradual extraction
-3. Achieve full microservices architecture by Week 8
-4. Enable independent scaling and deployment
-5. Reduce risk through incremental changes
+This timeline delivers a **clean, simple, MCP-first platform** by:
+1. **Starting fresh** with working tests
+2. **Building MCP tools**, not APIs
+3. **Simplifying dramatically** (90% code reduction)
+4. **Ensuring quality** through TDD
+5. **Eliminating debt** instead of preserving it
 
-The parallel approach of extracting services while implementing new features maximizes efficiency and ensures continuous value delivery throughout the 8-week transformation.
+The result is a maintainable, testable, production-ready platform that Claude can control entirely through MCP tools.
