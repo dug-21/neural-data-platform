@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-08-17T00:00:00.000Z" agent="5.0" etag="neural-trader-action-layer" version="24.7.17">
+  <diagram name="Action Layer - Trade Execution Container" id="action-layer-component">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Container Boundary -->
+        <mxCell id="container-boundary" value="Action Layer - Trade Execution Container&#xa;[Technology: Rust, Tokio Runtime, FIX Protocol]" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;spacingTop=20;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1574" height="1089" as="geometry" />
+        </mxCell>
+        
+        <!-- Core Execution Components -->
+        <!-- Trade Execution Engine -->
+        <mxCell id="trade-execution-engine" value="Trade Execution Engine&#xa;[Component: Order Management System]&#xa;&#xa;• Order creation and validation&#xa;• Order lifecycle management&#xa;• Fill processing and reporting&#xa;• Partial fill handling&#xa;• Order amendment/cancellation&#xa;• Multi-asset class support" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="120" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Risk Management System -->
+        <mxCell id="risk-management-system" value="Risk Management System&#xa;[Component: Real-time Risk Engine]&#xa;&#xa;• Position limit enforcement&#xa;• Stop loss automation&#xa;• Maximum drawdown controls&#xa;• Sector/instrument exposure limits&#xa;• Real-time risk metrics&#xa;• Risk override capabilities" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="400" y="120" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Portfolio Manager -->
+        <mxCell id="portfolio-manager" value="Portfolio Manager&#xa;[Component: Position Tracking System]&#xa;&#xa;• Real-time position tracking&#xa;• P&amp;L calculation (realized/unrealized)&#xa;• Portfolio valuation&#xa;• Performance analytics&#xa;• Cash management&#xa;• Margin calculation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="720" y="120" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Order Router -->
+        <mxCell id="order-router" value="Order Router&#xa;[Component: Smart Order Routing]&#xa;&#xa;• Broker selection algorithm&#xa;• Order slicing and distribution&#xa;• Latency optimization&#xa;• Liquidity aggregation&#xa;• Best execution compliance&#xa;• Dark pool routing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="120" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Settlement and Analytics Layer -->
+        <!-- Settlement Processor -->
+        <mxCell id="settlement-processor" value="Settlement Processor&#xa;[Component: Trade Settlement System]&#xa;&#xa;• Trade settlement automation&#xa;• Cash settlement processing&#xa;• Reconciliation engine&#xa;• Corporate actions handling&#xa;• Failed trade management&#xa;• Settlement reporting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="300" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Execution Analytics -->
+        <mxCell id="execution-analytics" value="Execution Analytics&#xa;[Component: Performance Analysis]&#xa;&#xa;• Trade cost analysis&#xa;• Slippage measurement&#xa;• Market impact assessment&#xa;• Execution quality metrics&#xa;• Benchmark comparison&#xa;• Performance attribution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="400" y="300" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Compliance Monitor -->
+        <mxCell id="compliance-monitor" value="Compliance Monitor&#xa;[Component: Regulatory Compliance]&#xa;&#xa;• Regulatory rule enforcement&#xa;• Trade surveillance&#xa;• Audit trail generation&#xa;• Compliance reporting&#xa;• Suspicious activity detection&#xa;• Record keeping automation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="720" y="300" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Emergency Stop Handler -->
+        <mxCell id="emergency-stop-handler" value="Emergency Stop Handler&#xa;[Component: Circuit Breaker System]&#xa;&#xa;• Emergency shutdown triggers&#xa;• Position liquidation protocols&#xa;• Risk threshold breaches&#xa;• System failure responses&#xa;• Manual override capabilities&#xa;• Recovery procedures" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcccc;strokeColor=#d79b00;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="300" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- MCP Tool Interface -->
+        <mxCell id="mcp-interface" value="MCP Tool Interface&#xa;[Component: External API Layer]&#xa;&#xa;Exposed Trading Tools:&#xa;• mcp.trading.execute(symbol, quantity, side, type)&#xa;• mcp.trading.close(position_id, quantity)&#xa;• mcp.positions.query(filters, aggregation)&#xa;• mcp.risk.override(risk_type, new_limit)&#xa;• mcp.orders.cancel(order_id, reason)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="480" width="1240" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Broker Connectors -->
+        <mxCell id="alpaca-connector" value="Alpaca Connector&#xa;[Component: Broker Interface]&#xa;&#xa;• Alpaca API integration&#xa;• Real-time order execution&#xa;• Market data feed&#xa;• Commission-free trading&#xa;• Position synchronization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="640" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ibkr-connector" value="IBKR Connector&#xa;[Component: Broker Interface]&#xa;&#xa;• Interactive Brokers TWS API&#xa;• Advanced order types&#xa;• Global market access&#xa;• Institutional features&#xa;• Risk management tools" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="300" y="640" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="generic-connector" value="Generic Broker Connector&#xa;[Component: Pluggable Interface]&#xa;&#xa;• FIX protocol support&#xa;• REST API abstraction&#xa;• WebSocket connections&#xa;• Custom broker integration&#xa;• Protocol translation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="520" y="640" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- External Systems -->
+        <!-- Model Execution Container -->
+        <mxCell id="model-execution" value="Model Execution Container&#xa;[Software System]&#xa;&#xa;Provides autonomous trading&#xa;decisions and signals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="750" y="640" width="220" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Market Data System -->
+        <mxCell id="market-data-system" value="Market Data System&#xa;[Software System]&#xa;&#xa;Real-time market data&#xa;for execution decisions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="990" y="640" width="220" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Regulatory System -->
+        <mxCell id="regulatory-system" value="Regulatory Reporting&#xa;[Software System]&#xa;&#xa;Compliance and audit&#xa;data submission" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="640" width="220" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Internal Component Relationships -->
+        <!-- Trading Decision Flow -->
+        <mxCell id="execution-to-router" value="Order Requests" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="trade-execution-engine" target="order-router">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="190" as="sourcePoint" />
+            <mxPoint x="1040" y="190" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Risk Management Integration -->
+        <mxCell id="risk-to-execution" value="Risk Validation" style="endArrow=classic;html=1;rounded=0;fontSize=10;strokeColor=#d79b00;" edge="1" parent="1" source="risk-management-system" target="trade-execution-engine">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="400" y="190" as="sourcePoint" />
+            <mxPoint x="360" y="190" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="risk-to-portfolio" value="Position Limits" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="risk-management-system" target="portfolio-manager">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="680" y="190" as="sourcePoint" />
+            <mxPoint x="720" y="190" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Portfolio Position Updates -->
+        <mxCell id="execution-to-portfolio" value="Trade Updates" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="trade-execution-engine" target="portfolio-manager">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="190" as="sourcePoint" />
+            <mxPoint x="720" y="190" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Settlement Processing -->
+        <mxCell id="execution-to-settlement" value="Executed Trades" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="trade-execution-engine" target="settlement-processor">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="220" y="260" as="sourcePoint" />
+            <mxPoint x="220" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Analytics and Monitoring -->
+        <mxCell id="execution-to-analytics" value="Execution Data" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="trade-execution-engine" target="execution-analytics">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="260" as="sourcePoint" />
+            <mxPoint x="400" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Compliance Monitoring -->
+        <mxCell id="execution-to-compliance" value="Trade Records" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="trade-execution-engine" target="compliance-monitor">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="260" as="sourcePoint" />
+            <mxPoint x="720" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Emergency Stop Connections -->
+        <mxCell id="risk-to-emergency" value="Risk Alerts" style="endArrow=classic;html=1;rounded=0;fontSize=10;strokeColor=#d79b00;" edge="1" parent="1" source="risk-management-system" target="emergency-stop-handler">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="680" y="260" as="sourcePoint" />
+            <mxPoint x="1040" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="emergency-to-execution" value="Emergency Stop" style="endArrow=classic;html=1;rounded=0;fontSize=10;strokeColor=#d79b00;fillColor=#ffcccc;" edge="1" parent="1" source="emergency-stop-handler" target="trade-execution-engine">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1040" y="370" as="sourcePoint" />
+            <mxPoint x="360" y="260" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- MCP Interface Connections -->
+        <mxCell id="execution-to-mcp" value="Trading APIs" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="trade-execution-engine" target="mcp-interface">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="220" y="440" as="sourcePoint" />
+            <mxPoint x="220" y="480" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="portfolio-to-mcp" value="Position APIs" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="portfolio-manager" target="mcp-interface">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="860" y="440" as="sourcePoint" />
+            <mxPoint x="860" y="480" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="risk-to-mcp" value="Risk APIs" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="risk-management-system" target="mcp-interface">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="540" y="440" as="sourcePoint" />
+            <mxPoint x="540" y="480" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Broker Connector Relationships -->
+        <mxCell id="router-to-alpaca" value="Order Routing" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="order-router" target="alpaca-connector">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1040" y="260" as="sourcePoint" />
+            <mxPoint x="180" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="router-to-ibkr" value="Order Routing" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="order-router" target="ibkr-connector">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1180" y="260" as="sourcePoint" />
+            <mxPoint x="400" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="router-to-generic" value="Order Routing" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="order-router" target="generic-connector">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1180" y="260" as="sourcePoint" />
+            <mxPoint x="620" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- External System Relationships -->
+        <!-- Model Execution to Trade Execution -->
+        <mxCell id="model-to-execution" value="Trading Decisions&#xa;[Async Message Queue]" style="endArrow=classic;html=1;rounded=0;fontSize=10;strokeColor=#b85450;" edge="1" parent="1" source="model-execution" target="trade-execution-engine">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="750" y="640" as="sourcePoint" />
+            <mxPoint x="360" y="260" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Market Data to Execution -->
+        <mxCell id="market-data-to-execution" value="Real-time Prices&#xa;[WebSocket Feed]" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="market-data-system" target="order-router">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1100" y="640" as="sourcePoint" />
+            <mxPoint x="1180" y="260" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Compliance Reporting -->
+        <mxCell id="compliance-to-regulatory" value="Compliance Reports&#xa;[HTTPS/SFTP]" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="compliance-monitor" target="regulatory-system">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1000" y="370" as="sourcePoint" />
+            <mxPoint x="1340" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Emergency Signal from Model Execution -->
+        <mxCell id="model-emergency-signal" value="Emergency Stop Signal&#xa;[Direct Channel]" style="endArrow=classic;html=1;rounded=0;fontSize=10;strokeColor=#d79b00;fillColor=#ffcccc;" edge="1" parent="1" source="model-execution" target="emergency-stop-handler">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="970" y="640" as="sourcePoint" />
+            <mxPoint x="1180" y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Legend -->
+        <mxCell id="legend-title" value="Legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="800" width="100" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-component" value="Component" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="840" width="80" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-interface" value="Interface" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="180" y="840" width="80" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-broker" value="Broker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="280" y="840" width="80" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-external" value="External System" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="380" y="840" width="100" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-emergency" value="Emergency" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcccc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="500" y="840" width="80" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-data-flow" value="Data Flow" style="endArrow=classic;html=1;rounded=0;fontSize=10;" edge="1" parent="1">
+          <mxGeometry width="50" height="30" relative="1" as="geometry">
+            <mxPoint x="600" y="855" as="sourcePoint" />
+            <mxPoint x="660" y="855" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="legend-emergency-signal" value="Emergency Signal" style="endArrow=classic;html=1;rounded=0;fontSize=10;strokeColor=#d79b00;fillColor=#ffcccc;" edge="1" parent="1">
+          <mxGeometry width="50" height="30" relative="1" as="geometry">
+            <mxPoint x="680" y="855" as="sourcePoint" />
+            <mxPoint x="740" y="855" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Key Characteristics Box -->
+        <mxCell id="characteristics-box" value="Key Characteristics&#xa;&#xa;• Sub-millisecond order execution&#xa;• Multi-asset class support&#xa;• Real-time risk management&#xa;• Regulatory compliance&#xa;• Smart order routing&#xa;• Emergency stop mechanisms&#xa;• Audit trail generation&#xa;• Best execution optimization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="900" width="280" height="180" as="geometry" />
+        </mxCell>
+        
+        <!-- Technology Stack Box -->
+        <mxCell id="tech-stack-box" value="Technology Stack&#xa;&#xa;• Rust (Core Runtime)&#xa;• Tokio (Async Runtime)&#xa;• FIX Protocol Engine&#xa;• Message Queues (Redis/RabbitMQ)&#xa;• WebSocket Connections&#xa;• PostgreSQL (Trade Store)&#xa;• Time-series DB (Metrics)&#xa;• Hardware timestamping" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="400" y="900" width="280" height="180" as="geometry" />
+        </mxCell>
+        
+        <!-- Performance Requirements Box -->
+        <mxCell id="performance-box" value="Performance Requirements&#xa;&#xa;• Order Latency: &lt;500μs&#xa;• Throughput: 50k orders/sec&#xa;• Risk Check Time: &lt;100μs&#xa;• Settlement Time: T+0 to T+2&#xa;• Availability: 99.99%&#xa;• Order Accuracy: 99.999%&#xa;• Slippage: &lt;0.1 bps&#xa;• Recovery Time: &lt;30 seconds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="720" y="900" width="280" height="180" as="geometry" />
+        </mxCell>
+        
+        <!-- MCP Interface Specifications Box -->
+        <mxCell id="interface-spec-box" value="MCP Interface Specifications&#xa;&#xa;mcp.trading.execute(symbol, qty, side, type, price)&#xa;mcp.trading.close(position_id, percentage)&#xa;mcp.positions.query(symbol, status, date_range)&#xa;mcp.risk.override(rule_id, new_limit, duration)&#xa;mcp.orders.cancel(order_id, reason_code)&#xa;&#xa;Response: JSON with execution details&#xa;Authentication: mTLS + API Key&#xa;Rate Limiting: 10k req/sec per client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="900" width="280" height="180" as="geometry" />
+        </mxCell>
+        
+        <!-- Regulatory Compliance Box -->
+        <mxCell id="compliance-box" value="Regulatory Compliance&#xa;&#xa;• MiFID II Best Execution&#xa;• SEC Rule 606 Reporting&#xa;• CFTC Position Reporting&#xa;• Dodd-Frank Compliance&#xa;• Anti-Money Laundering (AML)&#xa;• Know Your Customer (KYC)&#xa;• Market Abuse Regulation&#xa;• Transaction Cost Analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="900" width="240" height="180" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
