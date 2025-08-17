@@ -6,118 +6,118 @@
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
         
-        <!-- Container Boundary -->
+        
         <mxCell id="container-boundary" value="ML Ops Platform Container&#xa;[Technology: Rust + ruv-FANN]&#xa;&#xa;Machine Learning Operations and Feature Engineering Platform providing&#xa;feature computation, model training, quality monitoring, and serving capabilities" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="40" y="40" width="1840" height="1000" as="geometry" />
         </mxCell>
         
-        <!-- Feature Engineering Pipeline -->
+        
         <mxCell id="feature-pipeline" value="Feature Engineering Pipeline&#xa;[Component: Rust + ruv-FANN]&#xa;&#xa;• Feature calculation and aggregation&#xa;• Time-series feature computation&#xa;• Technical indicator generation&#xa;• Real-time and batch processing&#xa;• Feature validation and enrichment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="80" y="120" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Feature Store -->
+        
         <mxCell id="feature-store" value="Feature Store&#xa;[Component: Rust + TimescaleDB]&#xa;&#xa;• Feature storage and versioning&#xa;• Time-series feature management&#xa;• Feature point-in-time serving&#xa;• Feature metadata and schemas&#xa;• Historical feature access" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="400" y="120" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Data Quality Monitor -->
+        
         <mxCell id="data-quality" value="Data Quality Monitor&#xa;[Component: Rust + Statistical Analysis]&#xa;&#xa;• Feature drift detection&#xa;• Anomaly detection and alerting&#xa;• Data validation and profiling&#xa;• Quality metrics collection&#xa;• Distribution monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="720" y="120" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Training Pipeline Manager -->
+        
         <mxCell id="training-manager" value="Training Pipeline Manager&#xa;[Component: Rust + ruv-FANN]&#xa;&#xa;• Model training orchestration&#xa;• Hyperparameter optimization&#xa;• Training job scheduling&#xa;• Distributed training coordination&#xa;• Pipeline state management" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="1040" y="120" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Model Registry -->
+        
         <mxCell id="model-registry" value="Model Registry&#xa;[Component: Rust + Metadata Store]&#xa;&#xa;• Model versioning and artifacts&#xa;• Model metadata management&#xa;• Performance metrics tracking&#xa;• Model lineage and provenance&#xa;• A/B testing coordination" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="1360" y="120" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- MCP Tool Interface -->
+        
         <mxCell id="mcp-interface" value="MCP Tool Interface&#xa;[Component: Rust + MCP Protocol]&#xa;&#xa;• mcp.features.calculate&#xa;• mcp.features.store&#xa;• mcp.drift.detect&#xa;• mcp.quality.validate&#xa;• mcp.training.start&#xa;• mcp.models.register" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="80" y="300" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Feature Catalog -->
+        
         <mxCell id="feature-catalog" value="Feature Catalog&#xa;[Component: Rust + Graph Database]&#xa;&#xa;• Feature discovery and search&#xa;• Feature lineage tracking&#xa;• Usage analytics and metrics&#xa;• Feature dependency mapping&#xa;• Governance and compliance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="400" y="300" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Online/Offline Serving Layer -->
+        
         <mxCell id="serving-layer" value="Online/Offline Serving Layer&#xa;[Component: Rust + Cache + Storage]&#xa;&#xa;• Real-time feature serving&#xa;• Batch feature serving&#xa;• Feature caching and optimization&#xa;• Low-latency feature retrieval&#xa;• Serving infrastructure scaling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="720" y="300" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Experiment Tracker -->
+        
         <mxCell id="experiment-tracker" value="Experiment Tracker&#xa;[Component: Rust + Experiment Store]&#xa;&#xa;• Experiment lifecycle management&#xa;• Parameter and metric tracking&#xa;• Experiment comparison tools&#xa;• Result visualization and analysis&#xa;• Collaboration and sharing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="1040" y="300" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- MLOps Metrics Collector -->
+        
         <mxCell id="metrics-collector" value="MLOps Metrics Collector&#xa;[Component: Rust + Time-Series DB]&#xa;&#xa;• Training metrics collection&#xa;• Serving performance metrics&#xa;• Resource utilization tracking&#xa;• Cost and efficiency analytics&#xa;• Alerting and monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="1360" y="300" width="280" height="140" as="geometry" />
         </mxCell>
         
-        <!-- Event Bus Integration -->
+        
         <mxCell id="event-bus-external" value="Event Bus Container&#xa;[External System]&#xa;&#xa;Market data streams, trade events,&#xa;portfolio updates, and system events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="80" y="480" width="280" height="100" as="geometry" />
         </mxCell>
         
-        <!-- Model Execution Container -->
+        
         <mxCell id="model-execution-external" value="Model Execution Container&#xa;[External System]&#xa;&#xa;Neural network inference engine&#xa;and prediction serving" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="1360" y="480" width="280" height="100" as="geometry" />
         </mxCell>
         
-        <!-- Horizontal Scaling Infrastructure -->
+        
         <mxCell id="scaling-infrastructure" value="Horizontal Scaling Infrastructure&#xa;[Component: Rust + Kubernetes]&#xa;&#xa;• Auto-scaling based on load&#xa;• Load balancing and distribution&#xa;• Resource pool management&#xa;• Health monitoring and recovery&#xa;• Container orchestration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="720" y="480" width="280" height="120" as="geometry" />
         </mxCell>
         
-        <!-- Data Flow Arrows -->
-        <!-- Event Bus to Feature Pipeline -->
+        
+        
         <mxCell id="edge1" value="Market Data&#xa;Streams" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="event-bus-external" target="feature-pipeline">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Feature Pipeline to Feature Store -->
+        
         <mxCell id="edge2" value="Computed&#xa;Features" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="feature-pipeline" target="feature-store">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Feature Store to Data Quality -->
+        
         <mxCell id="edge3" value="Feature&#xa;Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="feature-store" target="data-quality">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Feature Store to Training Manager -->
+        
         <mxCell id="edge4" value="Training&#xa;Features" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="feature-store" target="training-manager">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Training Manager to Model Registry -->
+        
         <mxCell id="edge5" value="Trained&#xa;Models" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="training-manager" target="model-registry">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Model Registry to Model Execution -->
+        
         <mxCell id="edge6" value="Model&#xa;Artifacts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="model-registry" target="model-execution-external">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Feature Store to Serving Layer -->
+        
         <mxCell id="edge7" value="Feature&#xa;Serving" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="feature-store" target="serving-layer">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Serving Layer to Model Execution -->
+        
         <mxCell id="edge8" value="Real-time&#xa;Features" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;" edge="1" parent="1" source="serving-layer" target="model-execution-external">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- MCP Interface connections -->
+        
         <mxCell id="edge9" value="MCP&#xa;Commands" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;dashed=1;" edge="1" parent="1" source="mcp-interface" target="feature-pipeline">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -130,7 +130,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Feature Catalog connections -->
+        
         <mxCell id="edge12" value="Feature&#xa;Metadata" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;dashed=1;" edge="1" parent="1" source="feature-catalog" target="feature-store">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -139,7 +139,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Experiment Tracker connections -->
+        
         <mxCell id="edge14" value="Experiment&#xa;Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;dashed=1;" edge="1" parent="1" source="experiment-tracker" target="training-manager">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -148,7 +148,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Metrics Collector connections -->
+        
         <mxCell id="edge16" value="Performance&#xa;Metrics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;dashed=1;" edge="1" parent="1" source="metrics-collector" target="training-manager">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -157,7 +157,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Scaling Infrastructure connections -->
+        
         <mxCell id="edge18" value="Scaling&#xa;Control" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#000000;dashed=1;strokeColor=#9673a6;" edge="1" parent="1" source="scaling-infrastructure" target="feature-pipeline">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -170,42 +170,42 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         
-        <!-- Legend -->
+        
         <mxCell id="legend" value="Legend&#xa;━━━ Data Flow&#xa;┅┅┅ Control/Management&#xa;┅┅┅ Scaling Control" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="80" y="620" width="200" height="80" as="geometry" />
         </mxCell>
         
-        <!-- Technology Stack -->
+        
         <mxCell id="tech-stack" value="Technology Stack&#xa;• Rust + ruv-FANN Neural Library&#xa;• TimescaleDB for time-series data&#xa;• Redis for caching&#xa;• Kubernetes for orchestration&#xa;• Prometheus for metrics&#xa;• Graph Database for lineage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="320" y="620" width="280" height="120" as="geometry" />
         </mxCell>
         
-        <!-- Horizontal Scaling Features -->
+        
         <mxCell id="scaling-features" value="Horizontal Scaling Features&#xa;• Auto-scaling pipelines by load&#xa;• Distributed feature computation&#xa;• Load-balanced serving endpoints&#xa;• Fault-tolerant training jobs&#xa;• Resource pool management&#xa;• Cross-AZ deployment support" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="640" y="620" width="280" height="120" as="geometry" />
         </mxCell>
         
-        <!-- Integration Points -->
+        
         <mxCell id="integration-points" value="Key Integration Points&#xa;• Consumes from Event Bus streams&#xa;• Sends models to Model Execution&#xa;• Exposes MCP tool interface&#xa;• Provides real-time feature serving&#xa;• Supports batch and streaming modes&#xa;• Built-in quality monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="960" y="620" width="280" height="120" as="geometry" />
         </mxCell>
         
-        <!-- MCP Tool Endpoints -->
+        
         <mxCell id="mcp-endpoints" value="MCP Tool Endpoints&#xa;• mcp.features.calculate&#xa;• mcp.features.store&#xa;• mcp.drift.detect&#xa;• mcp.quality.validate&#xa;• mcp.training.start&#xa;• mcp.models.register" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="1280" y="620" width="200" height="120" as="geometry" />
         </mxCell>
         
-        <!-- Quality Attributes -->
+        
         <mxCell id="quality-attributes" value="Quality Attributes&#xa;• Scalability: Horizontal scaling&#xa;• Performance: Sub-second feature serving&#xa;• Reliability: 99.9% uptime SLA&#xa;• Observability: Full metrics/tracing&#xa;• Security: End-to-end encryption&#xa;• Maintainability: Modular architecture" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;verticalAlign=top;align=left;spacingTop=10;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="1520" y="620" width="280" height="120" as="geometry" />
         </mxCell>
         
-        <!-- Title -->
+        
         <mxCell id="title" value="C4 Component Diagram: ML Ops Platform Container" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="750" y="760" width="420" height="30" as="geometry" />
         </mxCell>
         
-        <!-- Version and Date -->
+        
         <mxCell id="version" value="Version: 1.0 | Date: 2025-08-17 | Neural Trader V2 Platform" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontColor=#666666;" vertex="1" parent="1">
           <mxGeometry x="750" y="790" width="420" height="20" as="geometry" />
         </mxCell>
