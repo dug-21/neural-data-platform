@@ -17,7 +17,7 @@
           </mxCell>
         </object>
         
-        <object placeholders="1" c4Name="Domain Registry" c4Type="Component" c4Technology="Rust + Configuration Store" c4Description="Manages domain definitions and connector mappings" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="domain-registry">
+        <object placeholders="1" c4Name="Domain Registry" c4Type="Component" c4Technology="Rust + Configuration Store" c4Description="Central metadata store: market hours, data schemas, stream channels, domain config" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="domain-registry">
           <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#7B1FA2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#4A148C;" vertex="1" parent="1">
             <mxGeometry x="400" y="120" width="220" height="120" as="geometry" />
           </mxCell>
