@@ -1,0 +1,275 @@
+<mxfile host="app.diagrams.net" agent="Claude" version="1.0.0">
+  <diagram name="Data Ingestion Components" id="data-ingestion-components">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Container Boundary -->
+        <object placeholders="1" c4Name="Data Ingestion Container" c4Type="Container Boundary" c4Description="High-volume market data collection, validation, and streaming infrastructure" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="container-boundary">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#E6E6E6;fontColor=#000000;align=center;arcSize=5;strokeColor=#666666;metaEdit=1;resizable=0;dashed=1;dashPattern=8 8;" vertex="1" parent="1">
+            <mxGeometry x="50" y="50" width="1200" height="850" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Market Data Connectors -->
+        <object placeholders="1" c4Name="Market Data Connectors" c4Type="Component" c4Technology="WebSocket/REST APIs" c4Description="Polygon, Alpaca, and custom feed connections with auto-reconnect" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="market-connectors">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#FFA500;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#CC8400;" vertex="1" parent="1">
+            <mxGeometry x="100" y="150" width="200" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Connection Pool Manager -->
+        <object placeholders="1" c4Name="Connection Pool Manager" c4Type="Component" c4Technology="Node.js Connection Pool" c4Description="Manages WebSocket connections, health checks, and failover" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="connection-pool">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
+            <mxGeometry x="100" y="320" width="200" height="100" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Rate Limiter -->
+        <object placeholders="1" c4Name="Rate Limiter" c4Type="Component" c4Technology="Redis + Token Bucket" c4Description="API rate limit management per provider with burst handling" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="rate-limiter">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
+            <mxGeometry x="100" y="470" width="200" height="100" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Data Validators -->
+        <object placeholders="1" c4Name="Data Validators" c4Type="Component" c4Technology="JSON Schema + Custom Rules" c4Description="Schema validation, data quality checks, and anomaly detection" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="data-validators">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#9AC7BF;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#6B9C93;" vertex="1" parent="1">
+            <mxGeometry x="400" y="200" width="200" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Data Transformers -->
+        <object placeholders="1" c4Name="Data Transformers" c4Type="Component" c4Technology="Stream Processing" c4Description="Data normalization, enrichment, and format standardization" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="data-transformers">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#9AC7BF;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#6B9C93;" vertex="1" parent="1">
+            <mxGeometry x="400" y="370" width="200" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Stream Publishers -->
+        <object placeholders="1" c4Name="Stream Publishers" c4Type="Component" c4Technology="Redis Streams" c4Description="Publishes processed market data to Redis Streams for real-time consumption" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="stream-publishers">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#D63384;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#A02A6B;" vertex="1" parent="1">
+            <mxGeometry x="700" y="285" width="200" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- MCP Tool Interface -->
+        <object placeholders="1" c4Name="MCP Tool Interface" c4Type="Component" c4Technology="MCP Protocol" c4Description="Control plane tools for start/stop/config operations" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="mcp-interface">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#6610F2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#4D0DB8;" vertex="1" parent="1">
+            <mxGeometry x="950" y="150" width="200" height="100" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Error Handler & Retry Logic -->
+        <object placeholders="1" c4Name="Error Handler & Retry Logic" c4Type="Component" c4Technology="Circuit Breaker + Exponential Backoff" c4Description="Handles failures, implements retry strategies, and circuit breaker patterns" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="error-handler">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
+            <mxGeometry x="400" y="550" width="200" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Metrics Collector -->
+        <object placeholders="1" c4Name="Metrics Collector" c4Type="Component" c4Technology="Prometheus + OpenTelemetry" c4Description="Collects performance metrics, data throughput, and system health" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="metrics-collector">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
+            <mxGeometry x="950" y="320" width="200" height="100" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- External Systems -->
+        <object placeholders="1" c4Name="Redis Streams" c4Type="External System" c4Technology="Redis" c4Description="High-performance streaming data store" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="redis-streams">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#999999;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#666666;" vertex="1" parent="1">
+            <mxGeometry x="700" y="500" width="200" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Market Data Providers" c4Type="External System" c4Technology="WebSocket/REST APIs" c4Description="Polygon, Alpaca, and custom data feeds" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="market-providers">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#999999;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#666666;" vertex="1" parent="1">
+            <mxGeometry x="100" y="700" width="200" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="MCP Server" c4Type="External System" c4Technology="MCP Protocol" c4Description="Control plane gateway for administrative operations" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="mcp-server">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#999999;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#666666;" vertex="1" parent="1">
+            <mxGeometry x="950" y="500" width="200" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Data Flow Relationships (High Volume) -->
+        <mxCell id="data-flow-1" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=3;endFill=1;strokeColor=#D63384;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="market-connectors" target="data-validators">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <mxPoint x="320" y="210" as="sourcePoint" />
+            <mxPoint x="400" y="210" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="data-flow-label-1" value="Raw Market Data&#xa;(High Volume)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#D63384;" vertex="1" connectable="0" parent="data-flow-1">
+          <mxGeometry x="-0.1" y="-1" relative="1" as="geometry">
+            <mxPoint x="10" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="data-flow-2" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=3;endFill=1;strokeColor=#D63384;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="data-validators" target="data-transformers">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="data-flow-label-2" value="Validated Data" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#D63384;" vertex="1" connectable="0" parent="data-flow-2">
+          <mxGeometry x="-0.1" y="-1" relative="1" as="geometry">
+            <mxPoint x="10" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="data-flow-3" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=3;endFill=1;strokeColor=#D63384;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="data-transformers" target="stream-publishers">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="data-flow-label-3" value="Normalized Data" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#D63384;" vertex="1" connectable="0" parent="data-flow-3">
+          <mxGeometry x="-0.1" y="-1" relative="1" as="geometry">
+            <mxPoint x="10" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="data-flow-4" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=3;endFill=1;strokeColor=#D63384;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="stream-publishers" target="redis-streams">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="data-flow-label-4" value="Real-time Streams&#xa;(High Throughput)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#D63384;" vertex="1" connectable="0" parent="data-flow-4">
+          <mxGeometry x="-0.1" y="-1" relative="1" as="geometry">
+            <mxPoint x="10" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="external-data-flow" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=3;endFill=1;strokeColor=#FFA500;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="market-providers" target="market-connectors">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="external-data-label" value="Live Market Data&#xa;(WebSocket/REST)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#FFA500;" vertex="1" connectable="0" parent="external-data-flow">
+          <mxGeometry x="-0.1" y="-1" relative="1" as="geometry">
+            <mxPoint x="10" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Control Plane Relationships (Low Volume) -->
+        <mxCell id="control-1" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#6610F2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;dashPattern=5 5;" edge="1" parent="1" source="mcp-server" target="mcp-interface">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="control-label-1" value="MCP Tool Calls&#xa;(Control Plane)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#6610F2;" vertex="1" connectable="0" parent="control-1">
+          <mxGeometry x="-0.1" y="-1" relative="1" as="geometry">
+            <mxPoint x="10" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="control-2" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#6610F2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;dashPattern=5 5;" edge="1" parent="1" source="mcp-interface" target="market-connectors">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="100" />
+              <mxPoint x="200" y="100" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="control-label-2" value="Start/Stop/Configure" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#6610F2;" vertex="1" connectable="0" parent="control-2">
+          <mxGeometry x="-0.1" y="-1" relative="1" as="geometry">
+            <mxPoint x="10" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="control-3" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#6610F2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;dashPattern=5 5;" edge="1" parent="1" source="mcp-interface" target="stream-publishers">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1050" y="280" />
+              <mxPoint x="800" y="280" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Internal Component Relationships -->
+        <mxCell id="internal-1" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#63BEF2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="connection-pool" target="market-connectors">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="internal-2" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#63BEF2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="rate-limiter" target="market-connectors">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="internal-3" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#63BEF2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="error-handler" target="data-validators">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="internal-4" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#63BEF2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="error-handler" target="data-transformers">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="internal-5" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#63BEF2;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="error-handler" target="stream-publishers">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Metrics Collection -->
+        <mxCell id="metrics-1" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#198754;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;dashPattern=3 3;" edge="1" parent="1" source="market-connectors" target="metrics-collector">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="180" />
+              <mxPoint x="950" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="metrics-2" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#198754;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;dashPattern=3 3;" edge="1" parent="1" source="data-validators" target="metrics-collector">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="180" />
+              <mxPoint x="950" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="metrics-3" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#198754;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;dashPattern=3 3;" edge="1" parent="1" source="stream-publishers" target="metrics-collector">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="800" y="270" />
+              <mxPoint x="950" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Legend -->
+        <object placeholders="1" c4Name="Legend" c4Type="Legend" c4Description="" label="&lt;font style=&quot;font-size: 14px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;" id="legend-title">
+          <mxCell style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+            <mxGeometry x="950" y="650" width="100" height="30" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <mxCell id="legend-data" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#D63384;strokeWidth=3;endFill=1;strokeColor=#D63384;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="950" y="690" as="sourcePoint" />
+            <mxPoint x="1000" y="690" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-data-label" value="Data Plane (High Volume)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="680" width="150" height="20" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-control" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#6610F2;strokeWidth=1;endFill=1;strokeColor=#6610F2;dashed=1;dashPattern=5 5;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="950" y="720" as="sourcePoint" />
+            <mxPoint x="1000" y="720" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-control-label" value="Control Plane (Low Volume)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="710" width="150" height="20" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-metrics" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#198754;strokeWidth=1;endFill=1;strokeColor=#198754;dashed=1;dashPattern=3 3;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="950" y="750" as="sourcePoint" />
+            <mxPoint x="1000" y="750" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-metrics-label" value="Metrics Collection" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="740" width="150" height="20" as="geometry" />
+        </mxCell>
+        
+        <!-- Title -->
+        <object placeholders="1" c4Name="[Component] Data Ingestion Container" c4Type="ComponentDiagramTitle" c4Description="High-volume market data collection and streaming components for V2 Neural Trader" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;%c4Description%&lt;/div&gt;" id="title">
+          <mxCell style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+            <mxGeometry x="50" y="10" width="600" height="40" as="geometry" />
+          </mxCell>
+        </object>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
