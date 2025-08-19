@@ -1,0 +1,416 @@
+// Event Bus → ML Ops Interface
+// Feature extraction and training data contracts
+
+syntax = "proto3";
+
+package neural_trader.interfaces.mlops;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/neural-trader/interfaces/mlops";
+option java_package = "io.neuraltrader.interfaces.mlops";
+
+// Feature extraction request from event stream
+message FeatureExtractionRequest {
+  string request_id = 1;
+  string pipeline_id = 2;
+  
+  // Source data reference
+  DataSource source = 3;
+  
+  // Feature extraction configuration
+  FeatureConfig config = 4;
+  
+  // Time window for features
+  TimeWindow window = 5;
+  
+  // Quality requirements
+  QualityRequirements quality = 6;
+  
+  // Processing options
+  ProcessingOptions options = 7;
+}
+
+message DataSource {
+  enum SourceType {
+    SOURCE_TYPE_UNSPECIFIED = 0;
+    SOURCE_TYPE_STREAM = 1;
+    SOURCE_TYPE_BATCH = 2;
+    SOURCE_TYPE_HYBRID = 3;
+  }
+  
+  SourceType type = 1;
+  string topic = 2;
+  string query = 3;
+  repeated string partitions = 4;
+  map<string, string> filters = 5;
+}
+
+message FeatureConfig {
+  string feature_set_id = 1;
+  string version = 2;
+  
+  repeated FeatureDefinition features = 3;
+  repeated Aggregation aggregations = 4;
+  repeated Transformation transformations = 5;
+}
+
+message FeatureDefinition {
+  string name = 1;
+  string expression = 2;
+  DataType type = 3;
+  
+  enum DataType {
+    DATA_TYPE_UNSPECIFIED = 0;
+    DATA_TYPE_FLOAT = 1;
+    DATA_TYPE_INT = 2;
+    DATA_TYPE_STRING = 3;
+    DATA_TYPE_BOOL = 4;
+    DATA_TYPE_VECTOR = 5;
+    DATA_TYPE_TENSOR = 6;
+  }
+  
+  // Statistical properties
+  message Statistics {
+    float min = 1;
+    float max = 2;
+    float mean = 3;
+    float std_dev = 4;
+    repeated float percentiles = 5;
+  }
+  Statistics expected_stats = 4;
+  
+  // Validation rules
+  repeated ValidationRule validation = 5;
+}
+
+message ValidationRule {
+  enum RuleType {
+    RULE_TYPE_UNSPECIFIED = 0;
+    RULE_TYPE_RANGE = 1;
+    RULE_TYPE_REGEX = 2;
+    RULE_TYPE_ENUM = 3;
+    RULE_TYPE_NULL_CHECK = 4;
+    RULE_TYPE_UNIQUENESS = 5;
+    RULE_TYPE_DISTRIBUTION = 6;
+  }
+  
+  RuleType type = 1;
+  string expression = 2;
+  Severity severity = 3;
+  string error_message = 4;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_WARNING = 1;
+  SEVERITY_ERROR = 2;
+  SEVERITY_CRITICAL = 3;
+}
+
+message Aggregation {
+  string name = 1;
+  string function = 2; // sum, mean, max, min, std, percentile
+  string field = 3;
+  TimeWindow window = 4;
+  string group_by = 5;
+}
+
+message Transformation {
+  string name = 1;
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_NORMALIZATION = 1;
+    TYPE_STANDARDIZATION = 2;
+    TYPE_LOG = 3;
+    TYPE_POLYNOMIAL = 4;
+    TYPE_CATEGORICAL_ENCODING = 5;
+    TYPE_EMBEDDING = 6;
+    TYPE_CUSTOM = 7;
+  }
+  Type type = 2;
+  map<string, string> params = 3;
+}
+
+message TimeWindow {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  int64 duration_seconds = 3;
+  string sliding_window = 4; // e.g., "5m", "1h"
+  string tumbling_window = 5;
+}
+
+message QualityRequirements {
+  float min_completeness = 1;
+  int64 max_latency_ms = 2;
+  float min_quality_score = 3;
+  bool allow_missing = 4;
+  bool allow_outliers = 5;
+  
+  message DataDriftThreshold {
+    string metric = 1;
+    float threshold = 2;
+  }
+  repeated DataDriftThreshold drift_thresholds = 6;
+}
+
+message ProcessingOptions {
+  bool async = 1;
+  int32 parallelism = 2;
+  int64 timeout_ms = 3;
+  bool cache_enabled = 4;
+  int64 cache_ttl_seconds = 5;
+  bool incremental = 6;
+}
+
+// Feature extraction response
+message FeatureExtractionResponse {
+  string request_id = 1;
+  bool success = 2;
+  
+  FeatureSet feature_set = 3;
+  ExtractionMetrics metrics = 4;
+  repeated DataQualityIssue issues = 5;
+}
+
+message FeatureSet {
+  string id = 1;
+  string version = 2;
+  google.protobuf.Timestamp created_at = 3;
+  
+  repeated Feature features = 4;
+  map<string, google.protobuf.Value> metadata = 5;
+  
+  // Storage location
+  string storage_path = 6;
+  string format = 7; // parquet, tfrecord, etc.
+}
+
+message Feature {
+  string name = 1;
+  google.protobuf.Value value = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  map<string, string> tags = 4;
+}
+
+message ExtractionMetrics {
+  int64 records_processed = 1;
+  int64 features_extracted = 2;
+  int64 processing_time_ms = 3;
+  float completeness = 4;
+  float quality_score = 5;
+  
+  map<string, float> feature_statistics = 6;
+}
+
+message DataQualityIssue {
+  Severity severity = 1;
+  string type = 2;
+  string field = 3;
+  string description = 4;
+  int64 occurrences = 5;
+  google.protobuf.Value sample = 6;
+}
+
+// Training data preparation
+message TrainingDataRequest {
+  string request_id = 1;
+  string model_id = 2;
+  
+  DatasetConfig dataset = 3;
+  SplitConfig split = 4;
+  SamplingConfig sampling = 5;
+  AugmentationConfig augmentation = 6;
+}
+
+message DatasetConfig {
+  string name = 1;
+  string version = 2;
+  
+  repeated string feature_sets = 3;
+  string label_column = 4;
+  
+  TimeWindow time_range = 5;
+  map<string, string> filters = 6;
+}
+
+message SplitConfig {
+  float train_ratio = 1;
+  float validation_ratio = 2;
+  float test_ratio = 3;
+  
+  enum SplitStrategy {
+    SPLIT_STRATEGY_UNSPECIFIED = 0;
+    SPLIT_STRATEGY_RANDOM = 1;
+    SPLIT_STRATEGY_TIME_BASED = 2;
+    SPLIT_STRATEGY_STRATIFIED = 3;
+    SPLIT_STRATEGY_GROUP = 4;
+  }
+  SplitStrategy strategy = 4;
+  
+  string group_column = 5;
+  google.protobuf.Timestamp split_timestamp = 6;
+}
+
+message SamplingConfig {
+  enum SamplingMethod {
+    SAMPLING_METHOD_UNSPECIFIED = 0;
+    SAMPLING_METHOD_RANDOM = 1;
+    SAMPLING_METHOD_STRATIFIED = 2;
+    SAMPLING_METHOD_SYSTEMATIC = 3;
+    SAMPLING_METHOD_CLUSTER = 4;
+    SAMPLING_METHOD_SMOTE = 5; // For imbalanced data
+  }
+  
+  SamplingMethod method = 1;
+  float sample_rate = 2;
+  map<string, float> class_weights = 3;
+  int32 random_seed = 4;
+}
+
+message AugmentationConfig {
+  bool enabled = 1;
+  
+  repeated AugmentationTechnique techniques = 2;
+}
+
+message AugmentationTechnique {
+  string name = 1;
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_NOISE_INJECTION = 1;
+    TYPE_TIME_WARPING = 2;
+    TYPE_SYNTHETIC_MINORITY = 3;
+    TYPE_FEATURE_COMBINATION = 4;
+  }
+  Type type = 2;
+  map<string, float> params = 3;
+}
+
+// Training data response
+message TrainingDataResponse {
+  string request_id = 1;
+  bool success = 2;
+  
+  TrainingDataset dataset = 3;
+  DatasetMetrics metrics = 4;
+}
+
+message TrainingDataset {
+  string id = 1;
+  string version = 2;
+  
+  DatasetSplit train = 3;
+  DatasetSplit validation = 4;
+  DatasetSplit test = 5;
+  
+  map<string, string> metadata = 6;
+}
+
+message DatasetSplit {
+  string path = 1;
+  int64 num_samples = 2;
+  int64 num_features = 3;
+  map<string, int64> class_distribution = 4;
+  
+  message Statistics {
+    map<string, FeatureStatistics> features = 1;
+  }
+  Statistics stats = 5;
+}
+
+message FeatureStatistics {
+  float min = 1;
+  float max = 2;
+  float mean = 3;
+  float std = 4;
+  float missing_ratio = 5;
+  int64 unique_values = 6;
+}
+
+message DatasetMetrics {
+  int64 total_samples = 1;
+  int64 total_features = 2;
+  float dataset_size_mb = 3;
+  int64 preparation_time_ms = 4;
+  
+  map<string, float> quality_metrics = 5;
+}
+
+// Model serving request preparation
+message ModelServingDataRequest {
+  string request_id = 1;
+  string model_id = 2;
+  
+  repeated InputData inputs = 3;
+  PreprocessingConfig preprocessing = 4;
+}
+
+message InputData {
+  string id = 1;
+  map<string, google.protobuf.Value> features = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message PreprocessingConfig {
+  bool normalize = 1;
+  bool handle_missing = 2;
+  string missing_strategy = 3; // mean, median, forward_fill, etc.
+  map<string, Transformation> transformations = 4;
+}
+
+// Services
+service FeatureExtractionService {
+  // Extract features from event stream
+  rpc ExtractFeatures(FeatureExtractionRequest) returns (FeatureExtractionResponse);
+  
+  // Stream feature extraction
+  rpc ExtractFeaturesStream(stream FeatureExtractionRequest) returns (stream FeatureExtractionResponse);
+  
+  // Get feature statistics
+  rpc GetFeatureStatistics(FeatureStatisticsRequest) returns (FeatureStatisticsResponse);
+}
+
+service TrainingDataService {
+  // Prepare training data
+  rpc PrepareTrainingData(TrainingDataRequest) returns (TrainingDataResponse);
+  
+  // Validate training data
+  rpc ValidateTrainingData(TrainingDataValidationRequest) returns (TrainingDataValidationResponse);
+  
+  // Monitor data drift
+  rpc MonitorDataDrift(DataDriftRequest) returns (DataDriftResponse);
+}
+
+// Additional messages for service methods
+message FeatureStatisticsRequest {
+  string feature_set_id = 1;
+  TimeWindow window = 2;
+}
+
+message FeatureStatisticsResponse {
+  map<string, FeatureStatistics> statistics = 1;
+}
+
+message TrainingDataValidationRequest {
+  string dataset_id = 1;
+  repeated ValidationRule rules = 2;
+}
+
+message TrainingDataValidationResponse {
+  bool valid = 1;
+  repeated DataQualityIssue issues = 2;
+}
+
+message DataDriftRequest {
+  string reference_dataset = 1;
+  string target_dataset = 2;
+  repeated string metrics = 3; // KS, PSI, etc.
+}
+
+message DataDriftResponse {
+  map<string, float> drift_scores = 1;
+  bool drift_detected = 2;
+  repeated string drifted_features = 3;
+}

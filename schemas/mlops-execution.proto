@@ -1,0 +1,480 @@
+// ML Ops → Model Execution Interface
+// Model artifact standards and prediction protocols
+
+syntax = "proto3";
+
+package neural_trader.interfaces.execution;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/neural-trader/interfaces/execution";
+option java_package = "io.neuraltrader.interfaces.execution";
+
+// Model artifact specification
+message ModelArtifact {
+  string model_id = 1;
+  string name = 2;
+  string version = 3;
+  
+  ModelMetadata metadata = 4;
+  ModelSpecification spec = 5;
+  ServingConfig serving = 6;
+  PerformanceProfile performance = 7;
+  
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message ModelMetadata {
+  string framework = 1; // tensorflow, pytorch, xgboost, etc.
+  string framework_version = 2;
+  string algorithm = 3;
+  string task_type = 4; // classification, regression, ranking, etc.
+  
+  repeated string tags = 5;
+  map<string, string> labels = 6;
+  
+  TrainingInfo training = 7;
+  ValidationMetrics validation = 8;
+}
+
+message TrainingInfo {
+  string dataset_id = 1;
+  string experiment_id = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp completed_at = 4;
+  
+  map<string, google.protobuf.Value> hyperparameters = 5;
+  int64 training_samples = 6;
+  int32 epochs = 7;
+}
+
+message ValidationMetrics {
+  map<string, float> metrics = 1; // accuracy, precision, recall, f1, etc.
+  
+  message ConfusionMatrix {
+    repeated int64 matrix = 1;
+    repeated string classes = 2;
+  }
+  ConfusionMatrix confusion_matrix = 2;
+  
+  message ROCCurve {
+    repeated float fpr = 1;
+    repeated float tpr = 2;
+    float auc = 3;
+  }
+  ROCCurve roc_curve = 3;
+}
+
+message ModelSpecification {
+  // Input specification
+  message InputSpec {
+    string name = 1;
+    DataType type = 2;
+    repeated int64 shape = 3;
+    bool required = 4;
+    google.protobuf.Value default_value = 5;
+    
+    message Range {
+      float min = 1;
+      float max = 2;
+    }
+    Range range = 6;
+  }
+  repeated InputSpec inputs = 1;
+  
+  // Output specification
+  message OutputSpec {
+    string name = 1;
+    DataType type = 2;
+    repeated int64 shape = 3;
+    
+    // For classification
+    repeated string classes = 4;
+    bool probabilities = 5;
+  }
+  repeated OutputSpec outputs = 2;
+  
+  // Preprocessing pipeline
+  repeated PreprocessingStep preprocessing = 3;
+  
+  // Postprocessing pipeline
+  repeated PostprocessingStep postprocessing = 4;
+}
+
+enum DataType {
+  DATA_TYPE_UNSPECIFIED = 0;
+  DATA_TYPE_FLOAT32 = 1;
+  DATA_TYPE_FLOAT64 = 2;
+  DATA_TYPE_INT32 = 3;
+  DATA_TYPE_INT64 = 4;
+  DATA_TYPE_STRING = 5;
+  DATA_TYPE_BOOL = 6;
+  DATA_TYPE_BYTES = 7;
+}
+
+message PreprocessingStep {
+  string name = 1;
+  string type = 2;
+  map<string, google.protobuf.Value> params = 3;
+}
+
+message PostprocessingStep {
+  string name = 1;
+  string type = 2;
+  map<string, google.protobuf.Value> params = 3;
+}
+
+message ServingConfig {
+  string endpoint = 1;
+  
+  enum ServingFormat {
+    SERVING_FORMAT_UNSPECIFIED = 0;
+    SERVING_FORMAT_TENSORFLOW = 1;
+    SERVING_FORMAT_ONNX = 2;
+    SERVING_FORMAT_TORCHSCRIPT = 3;
+    SERVING_FORMAT_PMML = 4;
+    SERVING_FORMAT_CUSTOM = 5;
+  }
+  ServingFormat format = 2;
+  
+  // Model location
+  message Storage {
+    string type = 1; // s3, gcs, local, registry
+    string uri = 2;
+    string checksum = 3;
+    int64 size_bytes = 4;
+  }
+  Storage storage = 3;
+  
+  // Runtime configuration
+  message Runtime {
+    string engine = 1; // tensorflow-serving, torchserve, triton, etc.
+    string version = 2;
+    map<string, string> environment = 3;
+    repeated string dependencies = 4;
+  }
+  Runtime runtime = 4;
+  
+  // Deployment settings
+  DeploymentConfig deployment = 5;
+}
+
+message DeploymentConfig {
+  int32 min_replicas = 1;
+  int32 max_replicas = 2;
+  
+  message Resources {
+    string cpu = 1; // e.g., "2000m"
+    string memory = 2; // e.g., "4Gi"
+    string gpu = 3; // e.g., "1"
+  }
+  Resources requests = 3;
+  Resources limits = 4;
+  
+  message AutoScaling {
+    bool enabled = 1;
+    int32 target_utilization = 2;
+    int32 scale_up_rate = 3;
+    int32 scale_down_rate = 4;
+  }
+  AutoScaling autoscaling = 5;
+}
+
+message PerformanceProfile {
+  // Latency SLAs
+  message LatencySLA {
+    int64 p50_ms = 1;
+    int64 p95_ms = 2;
+    int64 p99_ms = 3;
+  }
+  LatencySLA latency = 1;
+  
+  // Throughput capabilities
+  message Throughput {
+    int32 max_batch_size = 1;
+    int32 requests_per_second = 2;
+  }
+  Throughput throughput = 2;
+  
+  // Resource usage
+  message ResourceUsage {
+    float cpu_cores = 1;
+    float memory_gb = 2;
+    float gpu_memory_gb = 3;
+  }
+  ResourceUsage resources = 3;
+  
+  // Model size
+  int64 model_size_bytes = 4;
+  int64 load_time_ms = 5;
+}
+
+// Prediction request
+message PredictionRequest {
+  string request_id = 1;
+  string model_id = 2;
+  string model_version = 3;
+  
+  repeated InputTensor inputs = 4;
+  PredictionOptions options = 5;
+  
+  google.protobuf.Timestamp timestamp = 6;
+  map<string, string> metadata = 7;
+}
+
+message InputTensor {
+  string name = 1;
+  DataType dtype = 2;
+  repeated int64 shape = 3;
+  
+  oneof data {
+    FloatTensor float_data = 4;
+    IntTensor int_data = 5;
+    StringTensor string_data = 6;
+    BytesTensor bytes_data = 7;
+  }
+}
+
+message FloatTensor {
+  repeated float values = 1 [packed = true];
+}
+
+message IntTensor {
+  repeated int64 values = 1 [packed = true];
+}
+
+message StringTensor {
+  repeated string values = 1;
+}
+
+message BytesTensor {
+  repeated bytes values = 1;
+}
+
+message PredictionOptions {
+  int32 timeout_ms = 1;
+  bool explain = 2;
+  float confidence_threshold = 3;
+  int32 top_k = 4;
+  bool include_metadata = 5;
+}
+
+// Prediction response
+message PredictionResponse {
+  string request_id = 1;
+  string model_id = 2;
+  string model_version = 3;
+  
+  repeated OutputTensor outputs = 4;
+  PredictionMetadata metadata = 5;
+  Explanation explanation = 6;
+  
+  google.protobuf.Timestamp timestamp = 7;
+}
+
+message OutputTensor {
+  string name = 1;
+  DataType dtype = 2;
+  repeated int64 shape = 3;
+  
+  oneof data {
+    FloatTensor float_data = 4;
+    IntTensor int_data = 5;
+    StringTensor string_data = 6;
+    BytesTensor bytes_data = 7;
+  }
+  
+  // For classification outputs
+  repeated ClassProbability class_probs = 8;
+}
+
+message ClassProbability {
+  string class_name = 1;
+  float probability = 2;
+}
+
+message PredictionMetadata {
+  int64 inference_time_ms = 1;
+  int64 preprocessing_time_ms = 2;
+  int64 postprocessing_time_ms = 3;
+  
+  string serving_engine = 4;
+  string hardware = 5; // CPU, GPU, TPU
+  
+  map<string, float> confidence_scores = 6;
+}
+
+message Explanation {
+  enum Method {
+    METHOD_UNSPECIFIED = 0;
+    METHOD_SHAP = 1;
+    METHOD_LIME = 2;
+    METHOD_INTEGRATED_GRADIENTS = 3;
+    METHOD_ATTENTION_WEIGHTS = 4;
+  }
+  Method method = 1;
+  
+  repeated FeatureImportance feature_importance = 2;
+  map<string, google.protobuf.Value> details = 3;
+}
+
+message FeatureImportance {
+  string feature_name = 1;
+  float importance = 2;
+  float contribution = 3;
+}
+
+// Batch prediction
+message BatchPredictionRequest {
+  string batch_id = 1;
+  string model_id = 2;
+  string model_version = 3;
+  
+  repeated PredictionRequest requests = 4;
+  BatchOptions options = 5;
+}
+
+message BatchOptions {
+  int32 batch_size = 1;
+  int32 parallelism = 2;
+  bool async = 3;
+  string callback_url = 4;
+}
+
+message BatchPredictionResponse {
+  string batch_id = 1;
+  repeated PredictionResponse responses = 2;
+  BatchMetrics metrics = 3;
+}
+
+message BatchMetrics {
+  int32 total_requests = 1;
+  int32 successful_requests = 2;
+  int32 failed_requests = 3;
+  int64 total_time_ms = 4;
+  float avg_latency_ms = 5;
+}
+
+// Model versioning
+message ModelVersion {
+  string model_id = 1;
+  string version = 2;
+  
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_TRAINING = 1;
+    STATUS_VALIDATING = 2;
+    STATUS_READY = 3;
+    STATUS_SERVING = 4;
+    STATUS_DEPRECATED = 5;
+    STATUS_RETIRED = 6;
+  }
+  Status status = 3;
+  
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp deployed_at = 5;
+  
+  repeated CanaryDeployment canaries = 6;
+}
+
+message CanaryDeployment {
+  string version = 1;
+  float traffic_percentage = 2;
+  google.protobuf.Timestamp started_at = 3;
+  map<string, float> metrics = 4;
+}
+
+// Performance monitoring
+message ModelPerformanceMetrics {
+  string model_id = 1;
+  string version = 2;
+  
+  google.protobuf.Timestamp window_start = 3;
+  google.protobuf.Timestamp window_end = 4;
+  
+  message LatencyMetrics {
+    float p50 = 1;
+    float p95 = 2;
+    float p99 = 3;
+    float mean = 4;
+  }
+  LatencyMetrics latency = 5;
+  
+  message AccuracyMetrics {
+    float accuracy = 1;
+    float precision = 2;
+    float recall = 3;
+    float f1_score = 4;
+  }
+  AccuracyMetrics accuracy = 6;
+  
+  int64 total_predictions = 7;
+  int64 failed_predictions = 8;
+  float error_rate = 9;
+  
+  map<string, float> custom_metrics = 10;
+}
+
+// Services
+service ModelExecutionService {
+  // Single prediction
+  rpc Predict(PredictionRequest) returns (PredictionResponse);
+  
+  // Streaming predictions
+  rpc PredictStream(stream PredictionRequest) returns (stream PredictionResponse);
+  
+  // Batch prediction
+  rpc PredictBatch(BatchPredictionRequest) returns (BatchPredictionResponse);
+  
+  // Model management
+  rpc DeployModel(ModelArtifact) returns (ModelVersion);
+  rpc UpdateModel(ModelArtifact) returns (ModelVersion);
+  rpc GetModel(ModelQuery) returns (ModelArtifact);
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  
+  // Version management
+  rpc PromoteVersion(PromoteVersionRequest) returns (ModelVersion);
+  rpc RollbackVersion(RollbackVersionRequest) returns (ModelVersion);
+  
+  // Performance monitoring
+  rpc GetPerformanceMetrics(MetricsQuery) returns (ModelPerformanceMetrics);
+}
+
+// Additional service messages
+message ModelQuery {
+  string model_id = 1;
+  string version = 2;
+}
+
+message ListModelsRequest {
+  repeated string tags = 1;
+  map<string, string> labels = 2;
+  ModelVersion.Status status = 3;
+}
+
+message ListModelsResponse {
+  repeated ModelArtifact models = 1;
+}
+
+message PromoteVersionRequest {
+  string model_id = 1;
+  string from_version = 2;
+  string to_version = 3;
+  float canary_percentage = 4;
+}
+
+message RollbackVersionRequest {
+  string model_id = 1;
+  string target_version = 2;
+  string reason = 3;
+}
+
+message MetricsQuery {
+  string model_id = 1;
+  string version = 2;
+  google.protobuf.Timestamp start = 3;
+  google.protobuf.Timestamp end = 4;
+}
