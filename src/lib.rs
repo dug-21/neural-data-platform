@@ -93,6 +93,7 @@ pub mod utils;
 pub mod multi_channel;
 pub mod helpers;
 pub mod validation;
+pub mod action_layer; // MVP Trading Execution Engine
 
 // Re-export commonly used types
 pub use anyhow::Result;
