@@ -1,0 +1,202 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="MVP-Container-Diagram" id="mvp-container">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Title -->
+        <mxCell id="title" value="Neural Trader MVP - Container Diagram (C4 Model)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="10" width="350" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- External User -->
+        <mxCell id="trader" value="Trader&#xa;[Person]&#xa;&#xa;Monitors trading performance&#xa;and system health" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427B;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="50" y="80" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- External System -->
+        <mxCell id="alpaca" value="Alpaca Markets&#xa;[External System]&#xa;&#xa;Provides real-time market data&#xa;and paper trading execution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="50" y="200" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- System Boundary -->
+        <mxCell id="boundary" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;strokeWidth=2;dashed=1" vertex="1" parent="1">
+          <mxGeometry x="220" y="50" width="890" height="700" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="boundaryLabel" value="Neural Trader MVP System" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="230" y="60" width="160" height="20" as="geometry" />
+        </mxCell>
+        
+        <!-- Web Dashboard -->
+        <mxCell id="dashboard" value="Web Dashboard&#xa;[Container: Grafana]&#xa;&#xa;Simple monitoring dashboard&#xa;showing system health, trading&#xa;performance, and data flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="250" y="100" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Data Ingestion Service -->
+        <mxCell id="ingestion" value="Data Ingestion Service&#xa;[Container: Python]&#xa;&#xa;WebSocket streaming, data&#xa;normalization, validation,&#xa;and publishing to event bus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="250" y="250" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Event Bus -->
+        <mxCell id="eventbus" value="Event Bus&#xa;[Container: Redis Streams]&#xa;&#xa;Message backbone for&#xa;real-time data distribution&#xa;and service coordination" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="450" y="250" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural Model Service -->
+        <mxCell id="neural" value="Neural Model Service&#xa;[Container: Rust]&#xa;&#xa;Single MLP neural network&#xa;for price prediction and&#xa;basic feature engineering" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="650" y="250" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Trading Service -->
+        <mxCell id="trading" value="Trading Service&#xa;[Container: Rust]&#xa;&#xa;Decision engine with basic&#xa;risk controls and paper&#xa;trading execution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="850" y="250" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- TimescaleDB -->
+        <mxCell id="timescale" value="Time-Series Database&#xa;[Container: TimescaleDB]&#xa;&#xa;Stores historical market data,&#xa;predictions, and trading&#xa;decisions for analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="350" y="420" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Redis Cache -->
+        <mxCell id="cache" value="Cache Store&#xa;[Container: Redis]&#xa;&#xa;Real-time data caching&#xa;for low-latency access&#xa;to recent market data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="550" y="420" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Model Storage -->
+        <mxCell id="models" value="Model Storage&#xa;[Container: File System]&#xa;&#xa;Simple file-based storage&#xa;for neural network weights&#xa;and configuration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="750" y="420" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Metrics Service -->
+        <mxCell id="metrics" value="Metrics Service&#xa;[Container: Prometheus]&#xa;&#xa;Collects and stores system&#xa;metrics for monitoring&#xa;and alerting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=11;verticalAlign=top;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="450" y="580" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Connections -->
+        
+        <!-- User to Dashboard -->
+        <mxCell id="edge1" value="Views system status" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=10" edge="1" parent="1" source="trader" target="dashboard">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Alpaca to Ingestion -->
+        <mxCell id="edge2" value="WebSocket data stream&#xa;[HTTPS/WSS]" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=10" edge="1" parent="1" source="alpaca" target="ingestion">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Ingestion to Event Bus -->
+        <mxCell id="edge3" value="Publishes market data&#xa;[Redis Pub/Sub]" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=10" edge="1" parent="1" source="ingestion" target="eventbus">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Event Bus to Neural -->
+        <mxCell id="edge4" value="Subscribes to data&#xa;[Redis Streams]" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=10" edge="1" parent="1" source="eventbus" target="neural">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural to Trading -->
+        <mxCell id="edge5" value="Publishes predictions&#xa;[Redis Pub/Sub]" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=10" edge="1" parent="1" source="neural" target="trading">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Trading back to Alpaca -->
+        <mxCell id="edge6" value="Paper trading orders&#xa;[REST API]" style="endArrow=classic;html=1;fontSize=10;curved=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0" edge="1" parent="1" source="trading" target="alpaca">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="920" y="50" />
+              <mxPoint x="110" y="50" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Storage connections -->
+        
+        <!-- Ingestion to TimescaleDB -->
+        <mxCell id="edge7" value="Stores historical data&#xa;[SQL]" style="endArrow=classic;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0" edge="1" parent="1" source="ingestion" target="timescale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Event Bus to Cache -->
+        <mxCell id="edge8" value="Caches real-time data&#xa;[Redis Protocol]" style="endArrow=classic;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0" edge="1" parent="1" source="eventbus" target="cache">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural to Model Storage -->
+        <mxCell id="edge9" value="Loads/saves models&#xa;[File I/O]" style="endArrow=classic;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0" edge="1" parent="1" source="neural" target="models">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural reads from Cache -->
+        <mxCell id="edge10" value="Reads real-time data" style="endArrow=classic;html=1;fontSize=10;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;dashed=1" edge="1" parent="1" source="neural" target="cache">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural reads from TimescaleDB -->
+        <mxCell id="edge11" value="Reads historical data" style="endArrow=classic;html=1;fontSize=10;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;dashed=1" edge="1" parent="1" source="neural" target="timescale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Trading logs to TimescaleDB -->
+        <mxCell id="edge12" value="Logs trading decisions" style="endArrow=classic;html=1;fontSize=10;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0" edge="1" parent="1" source="trading" target="timescale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Metrics connections -->
+        
+        <!-- All services to Metrics -->
+        <mxCell id="edge13" value="Exports metrics" style="endArrow=classic;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1" edge="1" parent="1" source="ingestion" target="metrics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge14" value="Exports metrics" style="endArrow=classic;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;dashed=1" edge="1" parent="1" source="eventbus" target="metrics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge15" value="Exports metrics" style="endArrow=classic;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;dashed=1" edge="1" parent="1" source="neural" target="metrics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="edge16" value="Exports metrics" style="endArrow=classic;html=1;fontSize=10;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;dashed=1" edge="1" parent="1" source="trading" target="metrics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Dashboard reads from Metrics -->
+        <mxCell id="edge17" value="Queries metrics&#xa;[PromQL]" style="endArrow=classic;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;curved=1" edge="1" parent="1" source="dashboard" target="metrics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Legend -->
+        <mxCell id="legend" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;strokeWidth=1;dashed=1" vertex="1" parent="1">
+          <mxGeometry x="50" y="600" width="120" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legendTitle" value="Legend" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="610" width="60" height="20" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legendPerson" value="Person" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427B;fontColor=#FFFFFF;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="60" y="635" width="40" height="15" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legendContainer" value="Container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#FFFFFF;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="60" y="655" width="40" height="15" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legendExternal" value="External" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;fontColor=#FFFFFF;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="60" y="675" width="40" height="15" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legendSync" value="—— Sync" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="110" y="630" width="60" height="20" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legendAsync" value="- - - - Async" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="110" y="650" width="70" height="20" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
