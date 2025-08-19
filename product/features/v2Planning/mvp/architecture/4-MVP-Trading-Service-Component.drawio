@@ -1,196 +1,282 @@
-<mxfile host="app.diagrams.net" agent="Claude" version="1.0.0">
-  <diagram name="MVP Trading Service Component" id="mvp-trading-service-component">
-    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+<mxfile host="app.diagrams.net" agent="Claude" version="2.0.0">
+  <diagram name="MVP Trading Action Layer" id="mvp-trading-action-layer">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
         
-        <object placeholders="1" c4Name="Trading Service Container" c4Type="Container Boundary" c4Description="Simplified trading execution with paper trading and basic risk controls" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="container-boundary">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#E6E6E6;fontColor=#000000;align=center;arcSize=5;strokeColor=#666666;metaEdit=1;resizable=0;dashed=1;dashPattern=8 8;" vertex="1" parent="1">
-            <mxGeometry x="50" y="50" width="1000" height="750" as="geometry" />
+        <!-- TRADING ACTION LAYER CONTAINER -->
+        <object placeholders="1" c4Name="Trading Action Layer Container" c4Type="Domain Container" c4Description="Domain-specific implementation with standardized Action Execution interface" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="container-boundary">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#E3F2FD;fontColor=#000000;align=center;arcSize=5;strokeColor=#2196F3;metaEdit=1;resizable=0;dashed=1;dashPattern=8 8;" vertex="1" parent="1">
+            <mxGeometry x="50" y="50" width="1300" height="900" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Signal Processor" c4Type="Component" c4Technology="Rust" c4Description="Receives neural model predictions, converts to trade signals" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="signal-processor">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="100" y="150" width="200" height="100" as="geometry" />
+
+        <!-- STANDARDIZED INTERFACE -->
+        <object placeholders="1" c4Name="ActionExecutionService Interface" c4Type="gRPC Interface" c4Technology="Protocol Buffers" c4Description="Standard interface: ExecuteAction, ValidateAction, GetCapabilities, GetActionStatus" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="action-execution-interface">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#FF9800;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#F57C00;" vertex="1" parent="1">
+            <mxGeometry x="100" y="100" width="1200" height="80" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Order Manager" c4Type="Component" c4Technology="Rust/Tokio" c4Description="Creates and manages orders, tracks lifecycle" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="order-manager">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="350" y="150" width="200" height="100" as="geometry" />
+
+        <!-- DOMAIN-SPECIFIC COMPONENTS -->
+        <object placeholders="1" c4Name="Trading Signal Processor" c4Type="Domain Component" c4Technology="Rust/gRPC" c4Description="Domain-specific signal interpretation: Buy/Sell/Hold decisions from ML predictions" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-signal-processor">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="100" y="220" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Risk Controller" c4Type="Component" c4Technology="Rust" c4Description="Position limits (5%), daily loss limit (2%), stop-loss (5%)" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="risk-controller">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="600" y="150" width="200" height="100" as="geometry" />
+
+        <object placeholders="1" c4Name="Trading Order Manager" c4Type="Domain Component" c4Technology="Rust/Tokio" c4Description="Domain-specific order lifecycle: creation, modification, cancellation for trading orders" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-order-manager">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="380" y="220" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Position Tracker" c4Type="Component" c4Technology="In-Memory Store" c4Description="Tracks open positions, P&L, and portfolio value" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="position-tracker">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="850" y="150" width="150" height="100" as="geometry" />
+
+        <object placeholders="1" c4Name="Trading Risk Controller" c4Type="Domain Component" c4Technology="Rust" c4Description="Domain-specific risk management: position limits (5%), stop-loss (5%), daily loss (2%)" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-risk-controller">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="660" y="220" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Alpaca Connector" c4Type="Component" c4Technology="REST/WebSocket" c4Description="Paper trading API integration ($100k virtual capital)" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="alpaca-connector">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="100" y="300" width="200" height="100" as="geometry" />
+
+        <object placeholders="1" c4Name="Trading Position Tracker" c4Type="Domain Component" c4Technology="In-Memory/Redis" c4Description="Domain-specific position management: P&L tracking, portfolio value for trading positions" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-position-tracker">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="940" y="220" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Emergency Stop" c4Type="Component" c4Technology="Rust" c4Description="Manual kill switch, automatic halt on breaches" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="emergency-stop">
+
+        <object placeholders="1" c4Name="Trading Broker Connector" c4Type="Domain Component" c4Technology="REST/WebSocket" c4Description="Domain-specific broker integration: Alpaca Markets API for paper trading ($100k virtual)" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-broker-connector">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="100" y="380" width="250" height="120" as="geometry" />
+          </mxCell>
+        </object>
+
+        <object placeholders="1" c4Name="Trading Emergency Stop" c4Type="Domain Component" c4Technology="Rust" c4Description="Domain-specific emergency controls: manual kill switch, automatic halt on risk breaches" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-emergency-stop">
           <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#FF6666;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#CC0000;" vertex="1" parent="1">
-            <mxGeometry x="350" y="300" width="200" height="100" as="geometry" />
+            <mxGeometry x="380" y="380" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Audit Logger" c4Type="Component" c4Technology="File Logger" c4Description="Logs all trades, decisions, and risk events" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="audit-logger">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="600" y="300" width="200" height="100" as="geometry" />
+
+        <object placeholders="1" c4Name="Trading Audit Logger" c4Type="Domain Component" c4Technology="Structured Logging" c4Description="Domain-specific audit trail: all trades, decisions, and risk events for compliance" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-audit-logger">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="660" y="380" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="REST API" c4Type="Component" c4Technology="Actix-Web" c4Description="Control endpoints: start/stop, positions, P&L, settings" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="rest-api">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="850" y="300" width="150" height="100" as="geometry" />
+
+        <object placeholders="1" c4Name="Trading Kafka Consumer" c4Type="Domain Component" c4Technology="Rust/rdkafka" c4Description="Domain-specific Kafka consumer: trading.signals.* partitioned by strategy" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-kafka-consumer">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="940" y="380" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="WebSocket Server" c4Type="Component" c4Technology="Tokio-Tungstenite" c4Description="Real-time updates for positions and P&L" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="websocket-server">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#63BEF2;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2086C9;" vertex="1" parent="1">
-            <mxGeometry x="475" y="450" width="150" height="100" as="geometry" />
+
+        <object placeholders="1" c4Name="Trading API Gateway" c4Type="Domain Component" c4Technology="Actix-Web/gRPC" c4Description="Domain-specific API: start/stop trading, positions, P&L, trading settings" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-api-gateway">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#2196F3;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#1976D2;" vertex="1" parent="1">
+            <mxGeometry x="520" y="540" width="250" height="120" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Neural Model" c4Type="External Container" c4Description="Trading signals" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="neural-model">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#999999;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#666666;" vertex="1" parent="1">
-            <mxGeometry x="125" y="600" width="150" height="80" as="geometry" />
+
+        <!-- GENERIC PLATFORM SERVICES -->
+        <object placeholders="1" c4Name="Kafka Cluster" c4Type="Generic Service" c4Technology="Apache Kafka" c4Description="Domain-agnostic event streaming with topic-based partitioning" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="kafka-cluster">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#4CAF50;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2E7D32;" vertex="1" parent="1">
+            <mxGeometry x="100" y="710" width="250" height="100" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Alpaca API" c4Type="External System" c4Description="Broker API" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="alpaca-api">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#999999;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#666666;" vertex="1" parent="1">
-            <mxGeometry x="325" y="600" width="150" height="80" as="geometry" />
+
+        <object placeholders="1" c4Name="TimescaleDB" c4Type="Generic Service" c4Technology="PostgreSQL Extension" c4Description="Domain-agnostic time-series storage for trade history and audit logs" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="timescaledb">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#4CAF50;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2E7D32;" vertex="1" parent="1">
+            <mxGeometry x="380" y="710" width="250" height="100" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="TimescaleDB" c4Type="External Container" c4Description="Trade history" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="timescaledb">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#999999;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#666666;" vertex="1" parent="1">
-            <mxGeometry x="625" y="600" width="150" height="80" as="geometry" />
+
+        <object placeholders="1" c4Name="Monitoring Platform" c4Type="Generic Service" c4Technology="Prometheus/Grafana" c4Description="Domain-agnostic metrics collection and alerting" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="monitoring-platform">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#4CAF50;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#2E7D32;" vertex="1" parent="1">
+            <mxGeometry x="660" y="710" width="250" height="100" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="API Gateway" c4Type="External Container" c4Description="User interface" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="api-gateway">
-          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#999999;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#666666;" vertex="1" parent="1">
-            <mxGeometry x="825" y="600" width="150" height="80" as="geometry" />
+
+        <!-- EXTERNAL SYSTEMS -->
+        <object placeholders="1" c4Name="Trading Model Execution" c4Type="Domain Container" c4Technology="gRPC Interface" c4Description="Provides trading signals via standardized ModelExecutionService interface" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-model-execution">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#736782;" vertex="1" parent="1">
+            <mxGeometry x="940" y="710" width="250" height="100" as="geometry" />
           </mxCell>
         </object>
-        
-        <mxCell id="flow-1" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="neural-model" target="signal-processor">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-2" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="signal-processor" target="order-manager">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-3" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="order-manager" target="risk-controller">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-4" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#CC0000;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="risk-controller" target="order-manager">
-          <mxGeometry width="240" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="700" y="175" />
-              <mxPoint x="450" y="175" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        
-        <mxCell id="flow-5" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="risk-controller" target="position-tracker">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-6" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="order-manager" target="alpaca-connector">
-          <mxGeometry width="240" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="450" y="275" />
-              <mxPoint x="200" y="275" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        
-        <mxCell id="flow-7" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="alpaca-connector" target="alpaca-api">
-          <mxGeometry width="240" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="200" y="600" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        
-        <mxCell id="flow-8" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#CC0000;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="emergency-stop" target="order-manager">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-9" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#CC0000;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="risk-controller" target="emergency-stop">
-          <mxGeometry width="240" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="700" y="350" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        
-        <mxCell id="flow-10" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;" edge="1" parent="1" source="order-manager" target="audit-logger">
-          <mxGeometry width="240" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="450" y="350" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        
-        <mxCell id="flow-11" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;" edge="1" parent="1" source="audit-logger" target="timescaledb">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-12" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="position-tracker" target="rest-api">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-13" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="rest-api" target="api-gateway">
-          <mxGeometry width="240" relative="1" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="flow-14" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="position-tracker" target="websocket-server">
-          <mxGeometry width="240" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="925" y="500" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        
-        <mxCell id="flow-15" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="websocket-server" target="api-gateway">
-          <mxGeometry width="240" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="550" y="640" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        
-        <object placeholders="1" c4Name="[Component] MVP Trading Service" c4Type="ComponentDiagramTitle" c4Description="Paper trading execution with basic risk management and emergency controls" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;%c4Description%&lt;/div&gt;" id="title">
+
+        <object placeholders="1" c4Name="Alpaca Markets API" c4Type="External System" c4Technology="REST/WebSocket" c4Description="Brokerage API for paper trading and order execution" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="alpaca-api">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#736782;" vertex="1" parent="1">
+            <mxGeometry x="1220" y="710" width="200" height="100" as="geometry" />
+          </mxCell>
+        </object>
+
+        <object placeholders="1" c4Name="Trading Web UI" c4Type="External System" c4Technology="React/WebSocket" c4Description="Trading dashboard and control interface" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="trading-web-ui">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#736782;" vertex="1" parent="1">
+            <mxGeometry x="1220" y="540" width="200" height="120" as="geometry" />
+          </mxCell>
+        </object>
+
+        <!-- TITLE -->
+        <object placeholders="1" c4Name="[Component] MVP Trading Action Layer Service" c4Type="ComponentDiagramTitle" c4Description="Domain-specific implementation with standardized Action Execution interface and Kafka streaming" label="&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;%c4Description%&lt;/div&gt;" id="title">
           <mxCell style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
-            <mxGeometry x="50" y="10" width="500" height="40" as="geometry" />
+            <mxGeometry x="50" y="10" width="600" height="40" as="geometry" />
           </mxCell>
         </object>
-        
-        <object placeholders="1" c4Name="Risk Limits" c4Type="Note" c4Description="• Position size: 5% max&#10;• Daily loss: 2% max&#10;• Stop loss: 5% per trade&#10;• Paper trading: $100k&#10;• Emergency stop: <1 sec" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;font-size: 10px&quot;&gt;%c4Description%&lt;/div&gt;" id="risk-limits">
+
+        <!-- DATA FLOWS -->
+        <mxCell id="kafka-to-consumer" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#4CAF50;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="kafka-cluster" target="trading-kafka-consumer">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="225" y="680" />
+              <mxPoint x="1065" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="consumer-to-signal" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#2196F3;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-kafka-consumer" target="trading-signal-processor">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1065" y="350" />
+              <mxPoint x="225" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="signal-to-order" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#2196F3;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-signal-processor" target="trading-order-manager">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="order-to-risk" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#2196F3;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-order-manager" target="trading-risk-controller">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="risk-to-position" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#2196F3;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-risk-controller" target="trading-position-tracker">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="risk-to-order-feedback" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#CC0000;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-risk-controller" target="trading-order-manager">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="785" y="200" />
+              <mxPoint x="505" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="order-to-broker" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#2196F3;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-order-manager" target="trading-broker-connector">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="505" y="350" />
+              <mxPoint x="225" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="broker-to-alpaca" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-broker-connector" target="alpaca-api">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="225" y="680" />
+              <mxPoint x="1320" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="risk-to-emergency" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#CC0000;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-risk-controller" target="trading-emergency-stop">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="785" y="350" />
+              <mxPoint x="505" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="emergency-to-order" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#CC0000;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-emergency-stop" target="trading-order-manager">
+          <mxGeometry width="240" relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="order-to-audit" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#2196F3;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;" edge="1" parent="1" source="trading-order-manager" target="trading-audit-logger">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="505" y="350" />
+              <mxPoint x="785" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="audit-to-timescale" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#4CAF50;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;" edge="1" parent="1" source="trading-audit-logger" target="timescaledb">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="785" y="680" />
+              <mxPoint x="505" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="position-to-api" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#2196F3;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-position-tracker" target="trading-api-gateway">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1065" y="520" />
+              <mxPoint x="645" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="api-to-ui" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-api-gateway" target="trading-web-ui">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="770" y="600" />
+              <mxPoint x="1220" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="interface-to-signal" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#FF9800;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;" edge="1" parent="1" source="action-execution-interface" target="trading-signal-processor">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="225" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="model-to-kafka" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;" edge="1" parent="1" source="trading-model-execution" target="kafka-cluster">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1065" y="850" />
+              <mxPoint x="225" y="850" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="components-to-monitoring" style="endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#4CAF50;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;dashed=1;" edge="1" parent="1" source="trading-position-tracker" target="monitoring-platform">
+          <mxGeometry width="240" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1065" y="680" />
+              <mxPoint x="785" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- NOTES -->
+        <object placeholders="1" c4Name="Architecture Layers" c4Type="Note" c4Description="🟠 INTERFACE: Standard gRPC contracts&#10;🔵 DOMAIN: Trading-specific implementations&#10;🟢 PLATFORM: Generic, shared services&#10;⚫ EXTERNAL: External systems &amp; UIs&#10;&#10;▪️ Kafka topics: trading.signals.* → action execution&#10;▪️ Partitioning: by strategy for load balancing&#10;▪️ All inter-service: gRPC with protobuf schemas" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;font-size: 10px&quot;&gt;%c4Description%&lt;/div&gt;" id="layers-note">
+          <mxCell style="text;html=1;strokeColor=#1976D2;fillColor=#BBDEFB;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fontColor=#0D47A1;" vertex="1" parent="1">
+            <mxGeometry x="100" y="850" width="350" height="140" as="geometry" />
+          </mxCell>
+        </object>
+
+        <object placeholders="1" c4Name="Risk Limits" c4Type="Note" c4Description="• Position size: 5% max per symbol&#10;• Daily loss: 2% portfolio max&#10;• Stop loss: 5% per trade&#10;• Paper trading: $100k virtual&#10;• Emergency stop: &lt;1 second&#10;• Risk validation: &lt;100μs" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;font-size: 10px&quot;&gt;%c4Description%&lt;/div&gt;" id="risk-note">
           <mxCell style="text;html=1;strokeColor=#CC0000;fillColor=#FFCCCC;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fontColor=#660000;" vertex="1" parent="1">
-            <mxGeometry x="100" y="700" width="180" height="90" as="geometry" />
+            <mxGeometry x="500" y="850" width="250" height="140" as="geometry" />
           </mxCell>
         </object>
-        
+
+        <object placeholders="1" c4Name="gRPC Interfaces" c4Type="Note" c4Description="ActionExecutionService:&#10;• ExecuteAction(signal) → response&#10;• ValidateAction(action) → validation&#10;• GetCapabilities() → capabilities&#10;• GetActionStatus(id) → status&#10;&#10;All with standard error handling&#10;and timeout configurations" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;font-size: 10px&quot;&gt;%c4Description%&lt;/div&gt;" id="grpc-note">
+          <mxCell style="text;html=1;strokeColor=#F57C00;fillColor=#FFE0B2;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fontColor=#E65100;" vertex="1" parent="1">
+            <mxGeometry x="800" y="850" width="250" height="140" as="geometry" />
+          </mxCell>
+        </object>
+
+        <object placeholders="1" c4Name="Performance Targets" c4Type="Note" c4Description="• Signal processing: &lt;10ms&#10;• Order validation: &lt;5ms&#10;• Risk check: &lt;1ms&#10;• Order execution: &lt;50ms&#10;• Position update: &lt;5ms&#10;• API response: &lt;100ms" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;font-size: 10px&quot;&gt;%c4Description%&lt;/div&gt;" id="performance-note">
+          <mxCell style="text;html=1;strokeColor=#2E7D32;fillColor=#C8E6C9;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fontColor=#1B5E20;" vertex="1" parent="1">
+            <mxGeometry x="1100" y="850" width="250" height="140" as="geometry" />
+          </mxCell>
+        </object>
+
       </root>
     </mxGraphModel>
   </diagram>
