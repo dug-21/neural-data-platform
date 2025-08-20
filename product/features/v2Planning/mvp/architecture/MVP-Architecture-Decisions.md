@@ -36,20 +36,33 @@ The MVP architecture represents a **radical simplification** of the V2 design, f
 - No consensus validation
 - Higher variance in predictions
 
-### 3. Redis Streams Event Bus
-**Decision**: Use Redis streams instead of Kafka or complex messaging systems.
+### 3. Redis Streams Event Bus (MVP Choice)
+**Decision**: Use Redis Streams as MVP EventBus with clear Kafka migration path.
 
 **Rationale**:
-- Already proven in production
-- Simple pub/sub with persistence
-- Low latency (<10ms)
-- Minimal operational overhead
-- Native Python/Rust clients
+- **Production Ready**: Consumer groups, persistence, monitoring
+- **Target Performance**: 100K messages/second (meets MVP requirements)
+- **Low Latency**: <10ms for trading, <50ms for analytics
+- **Operational Simplicity**: Single Redis instance deployment
+- **Cost Effective**: Minimal infrastructure overhead
+- **Future Proof**: Clean migration path to Kafka when scaling needs exceed Redis
+
+**MVP Stream Design**:
+- Domain-based stream keys (trading:market-data, trading:signals, trading:actions)
+- Service-based consumer groups (ingestion-group, model-exec-group, action-group)
+- Proper error handling with dead letter queues
+- Comprehensive monitoring and metrics
+
+**Migration Triggers to Kafka**:
+- Stream length consistently > 1M messages
+- Consumer lag > 1 second
+- Memory usage > 80% of Redis capacity
+- Multi-datacenter replication needs
 
 **Trade-offs**:
-- Limited to single-node throughput
-- No complex routing or filtering
-- Manual offset management
+- Single-node throughput limit (~100K msgs/sec vs Kafka's 1M+ msgs/sec)
+- No built-in multi-datacenter replication
+- Manual consumer group management vs Kafka's automatic rebalancing
 
 ### 4. File-Based Model Storage
 **Decision**: Store models as timestamped files on local filesystem.
@@ -160,23 +173,29 @@ The MVP architecture represents a **radical simplification** of the V2 design, f
 ## Performance Targets
 
 ### Latency Requirements
-- Data ingestion: <50ms
-- Feature calculation: <100ms
-- Neural prediction: <500ms
-- Order execution: <1 second
-- End-to-end: <2 seconds
+- **EventBus latency**: <10ms (Redis Streams)
+- **Data ingestion**: <50ms (Alpaca WebSocket to Redis)
+- **Feature calculation**: <100ms (20 technical indicators)
+- **Neural prediction**: <10ms (ruv-FANN inference)
+- **Order execution**: <1 second (Alpaca API call)
+- **End-to-end pipeline**: <2 seconds (market data to order placement)
 
 ### Throughput Requirements
-- 1,000 messages/second
-- 10 symbols tracked
-- 100 predictions/minute
-- 50 orders/day max
+- **EventBus**: 100,000 messages/second (Redis Streams)
+- **Market Data**: 1,000 quotes/second (10 symbols @ 100Hz)
+- **Model Predictions**: 100 predictions/minute
+- **Order Execution**: 50 orders/day max
+- **System Events**: 500 events/second (monitoring, health checks)
 
 ### Resource Requirements
-- 4 CPU cores
-- 8GB RAM
-- 100GB SSD
-- 100Mbps network
+- **CPU**: 4 cores (2 for Redis, 2 for services)
+- **Memory**: 8GB RAM (4GB for Redis, 4GB for services)
+- **Storage**: 100GB SSD (Redis persistence + TimescaleDB)
+- **Network**: 100Mbps (adequate for 100K msgs/sec)
+- **Redis Specific**: 
+  - Memory usage: ~4GB for 1M message backlog
+  - Persistence: RDB + AOF for durability
+  - Connection pooling: 50-100 connections
 
 ## Migration Path to V2
 
@@ -191,23 +210,30 @@ The MVP architecture represents a **radical simplification** of the V2 design, f
 - Implement model ensemble
 - Live trading with small capital
 - Advanced risk management
+- **EventBus**: Continue with Redis Streams (adequate for enhanced MVP)
 
 ### Phase 3: Scale Out (Month 4-6)
 - Kubernetes deployment
 - Multiple asset classes
 - Advanced ML Ops
 - Full MCP integration
+- **EventBus Migration**: Evaluate Kafka migration based on throughput metrics
 
 ### Phase 4: Full V2 (Month 7-12)
 - Complete feature parity
 - DAA agents
 - Multi-strategy
 - Production scale
+- **EventBus**: Full Kafka deployment for 1M+ messages/second
 
 ## Risk Mitigation
 
 ### Technical Risks
 - **Model failure**: Paper trading limits impact
+- **EventBus failure**: Redis persistence (RDB+AOF) + automatic failover
+- **Message loss**: Consumer group acknowledgments + dead letter queues
+- **Redis memory overflow**: Stream trimming + monitoring alerts
+- **Consumer lag**: Monitoring + automatic scaling alerts
 - **Data loss**: Redis persistence + TimescaleDB backup
 - **System crash**: Automatic restart with position recovery
 - **Network issues**: Graceful degradation, cached data
@@ -225,10 +251,13 @@ The MVP architecture represents a **radical simplification** of the V2 design, f
 ## Success Criteria
 
 ### Technical Success
-- [ ] <2 second end-to-end latency
-- [ ] 99% uptime during market hours
-- [ ] Zero data loss events
-- [ ] <1% prediction errors
+- [ ] **EventBus Performance**: <10ms Redis Streams latency
+- [ ] **Throughput**: Handle 100K messages/second without consumer lag
+- [ ] **End-to-end latency**: <2 seconds (market data to order execution)
+- [ ] **Uptime**: 99% during market hours (including Redis)
+- [ ] **Data Durability**: Zero message loss with consumer group acknowledgments
+- [ ] **Model Performance**: <1% prediction errors with <10ms inference time
+- [ ] **Consumer Health**: All consumer groups lag <100 messages
 
 ### Business Success
 - [ ] Positive Sharpe ratio (>0.3)
@@ -244,12 +273,22 @@ The MVP architecture represents a **radical simplification** of the V2 design, f
 
 ## Conclusion
 
-This MVP architecture **validates the core hypothesis with minimal complexity**. By focusing on essential components and proven technologies, we can:
+This Redis Streams-based MVP architecture **validates the core neural trading hypothesis with production-ready messaging infrastructure**. The choice of Redis Streams over Kafka for MVP provides:
 
-1. **Deploy in 2-4 weeks** instead of 3-6 months
-2. **Prove neural trading viability** with real market data
-3. **Build incrementally** toward the full V2 vision
-4. **Minimize risk** through paper trading and strict controls
-5. **Learn quickly** through rapid iteration
+### Key Benefits:
+1. **Rapid Deployment**: Deploy in 2-4 weeks with single Redis instance
+2. **Production Ready**: 100K msgs/sec throughput with <10ms latency
+3. **Operational Simplicity**: No complex cluster management required
+4. **Cost Effective**: Minimal infrastructure overhead for MVP validation
+5. **Future Proof**: Clean interface abstraction enables seamless Kafka migration
 
-The architecture maintains **clean interfaces** and **clear upgrade paths**, ensuring that MVP investments directly contribute to the final production system.
+### Strategic Advantages:
+1. **Prove neural trading viability** with real market data and production messaging
+2. **Build incrementally** toward full V2 vision with maintained interfaces
+3. **Minimize complexity** while ensuring production reliability
+4. **Learn quickly** through rapid iteration and monitoring
+5. **Scale confidently** with clear migration path to Kafka
+
+The architecture maintains **clean EventBus interfaces** and **clear upgrade paths**, ensuring MVP investments directly contribute to the final production system capable of handling 1M+ messages/second when needed.
+
+**Redis Streams provides the perfect MVP foundation**: production-ready messaging with operational simplicity, allowing the team to focus on proving the neural trading concept rather than managing complex infrastructure.
