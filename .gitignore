@@ -163,7 +163,9 @@ docs/_build/
 site/
 
 # Project specific
-/.claude/
+/.claude/.hive-mind/
+/.claude/.swarm/
+/.claude/checkpoints/
 /memory/
 /reports/
 /.roomodes
