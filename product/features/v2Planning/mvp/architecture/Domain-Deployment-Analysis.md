@@ -123,15 +123,27 @@ message ActionRequest {
 - **Model Execution**: Trading-specific model runner implementing standard interface  
 - **Action Layer**: Trading-specific action executor implementing standard interface
 
-### 5. Trading Domain Interaction Patterns
+### 5. Trading Domain Interaction Patterns - CORRECTED
 
 ```
 External Data -> Trading Data Ingestion -> EventBus (Generic)
                                             ↓
-EventBus (Generic) -> Trading Model Execution -> Generic ML Ops
+                                  [SPLIT FLOW - CRITICAL]
                                             ↓
-Trading Model Execution -> Trading Action Layer -> External Brokers
+                         EventBus -> ML Ops Platform (Generic)
+                                            ↓ [trained models]
+                         EventBus -> Trading Model Execution
+                                  ↑ [real-time data]  ↑ [models]
+                                            ↓
+                    Trading Model Execution -> Trading Action Layer -> External Brokers
 ```
+
+**CORRECTED FLOW PATTERN:**
+1. **EventBus feeds ML Ops Platform**: Feature extraction and model training (GENERIC)
+2. **ML Ops provides trained models**: To Model Execution services (CROSS-LAYER)
+3. **EventBus feeds Model Execution**: Real-time data for inference (DATA FLOW)
+4. **Model Execution processes**: Combines models + real-time data → predictions
+5. **No bidirectional ML Ops ↔ Model Execution**: This was architecturally incorrect
 
 ### 6. Required Architecture Updates
 

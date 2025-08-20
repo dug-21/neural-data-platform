@@ -220,12 +220,48 @@ pub struct InterfaceMetrics {
 
 ## Layer 2: Event Bus → ML Ops Contract
 
+**CRITICAL**: ML Ops Platform is GENERIC and processes EventBus data to:
+1. Extract features from raw event data
+2. Train models using extracted features  
+3. Serve trained models to Model Execution services
+4. NOT directly involved in real-time prediction (that's Model Execution)
+
 ### Interface Definition
 
 ```rust
 #[async_trait]
 pub trait MLOpsInterface {
-    /// Retrieve features for model input
+    /// Process event stream data to extract features
+    /// SLA: <50ms p95 for feature extraction pipeline
+    async fn extract_features(
+        &self,
+        event_batch: Vec<StreamEvent>
+    ) -> Result<FeatureVector, FeatureError>;
+    
+    /// Store extracted features for model training
+    /// SLA: <20ms p95 for feature storage
+    async fn store_features(
+        &self,
+        features: FeatureVector,
+        metadata: FeatureMetadata
+    ) -> Result<StorageResult, StorageError>;
+    
+    /// Train model using accumulated features
+    /// SLA: <30s for training completion
+    async fn train_model(
+        &self,
+        training_request: TrainingRequest
+    ) -> Result<TrainedModel, TrainingError>;
+    
+    /// Deploy trained model to model registry
+    /// SLA: <10s for model deployment
+    async fn deploy_model(
+        &self,
+        model: TrainedModel,
+        deployment_config: DeploymentConfig
+    ) -> Result<ModelDeployment, DeploymentError>;
+    
+    /// Retrieve features for model input (cached/computed)
     /// SLA: <10ms p95 (cached), <100ms p95 (computed)
     async fn get_features(
         &self,
@@ -398,13 +434,37 @@ pub enum DeploymentStrategy {
 
 ---
 
-## Layer 3: ML Ops → Model Execution Contract
+## Layer 3: Model Execution Service Contract
+
+**CRITICAL CLARIFICATION**: Model Execution receives:
+1. **Trained models from ML Ops Platform** (via model registry)
+2. **Real-time data from Event Bus** (for inference)
+3. **NO direct ML Ops communication during runtime**
+
+This is a DOMAIN-SPECIFIC service that uses GENERIC ML Ops outputs.
 
 ### Interface Definition
 
 ```rust
 #[async_trait]
 pub trait ModelExecutionInterface {
+    /// Load trained model from ML Ops model registry
+    /// SLA: <5s for model loading, cached after first load
+    async fn load_model(
+        &self,
+        model_id: ModelId,
+        version: ModelVersion
+    ) -> Result<LoadedModel, ModelLoadError>;
+    
+    /// Make prediction using loaded model + real-time data
+    /// SLA: <20ms p95 for inference
+    async fn predict(
+        &self,
+        model: &LoadedModel,
+        real_time_data: EventBusData,
+        prediction_context: PredictionContext
+    ) -> Result<Prediction, PredictionError>;
+    
     /// Make decision based on model predictions
     /// SLA: <100ms p95, includes risk validation
     async fn make_decision(

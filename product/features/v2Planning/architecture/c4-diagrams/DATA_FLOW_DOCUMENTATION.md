@@ -40,7 +40,7 @@ The V2 Neural Trader platform implements a dual-plane architecture:
 
 ## Data Flow Patterns
 
-### Primary Data Flow (Market Data → Trading)
+### Primary Data Flow (Market Data → Trading) - CORRECTED
 
 ```
 [External Market Data Sources]
@@ -52,22 +52,29 @@ The V2 Neural Trader platform implements a dual-plane architecture:
 [Event Bus Platform]
     • Partitions by symbol/timestamp
     • Routes to consumers
-         ↓ (Streaming)
-[ML Ops Platform]
-    • Calculates features
-    • Trains models
-         ↓ (Features + Models)
-[Model Execution Container]
-    • Neural inference
-    • DAA consensus
-    • Strategy execution
-         ↓ (Trading Decisions)
-[Action Layer Container]
-    • Risk validation
-    • Order execution
-         ↓ (Orders)
-[External Brokers]
+    ↙ (Stream 1)        ↘ (Stream 2)
+[ML Ops Platform]     [Model Execution Container]
+ • Calculates features    ↑ (Trained Models)
+ • Trains models          ↑ (From ML Ops)
+ • Stores feature vectors  • Real-time data
+         ↓ (Trained Models)   • Neural inference
+[Model Registry/Store]     • DAA consensus
+                          • Strategy execution
+                               ↓ (Trading Decisions)
+                    [Action Layer Container]
+                          • Risk validation
+                          • Order execution
+                               ↓ (Orders)
+                    [External Brokers]
 ```
+
+**CRITICAL DATA FLOW CORRECTIONS:**
+
+1. **SPLIT EVENT BUS OUTPUT**: Event Bus sends data to BOTH ML Ops and Model Execution
+2. **ML OPS ROLE**: Processes EventBus data → Extracts features → Trains models → Stores models
+3. **MODEL EXECUTION ROLE**: Gets trained models from ML Ops + real-time data from EventBus → Makes predictions
+4. **NO BIDIRECTIONAL FLOW**: ML Ops does NOT directly communicate with Model Execution during runtime
+5. **SEQUENTIAL DEPENDENCY**: ML Ops must complete feature extraction and training BEFORE Model Execution can predict
 
 ### Control Flow (MCP Administrative)
 

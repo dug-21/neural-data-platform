@@ -105,14 +105,22 @@ service ActionExecutionService {
 
 ## Trading Domain Interaction Patterns
 
-### Data Flow Architecture
+### Data Flow Architecture - CORRECTED
 ```
 1. Alpaca API → Trading Data Ingestion → EventBus (Generic)
-2. EventBus (Generic) → Trading Model Execution ↔ ML Ops (Generic)
-3. Trading Model Execution → Trading Action Layer → Risk Controller
-4. Risk Controller → Alpaca Connector → Alpaca API
-5. All Components → Monitoring (Generic) [via standard metrics]
+2. EventBus (Generic) → ML Ops Platform (Generic) [feature extraction & training]
+3. ML Ops Platform (Generic) → Trading Model Execution [provides trained models]
+4. EventBus (Generic) → Trading Model Execution [real-time data for inference]
+5. Trading Model Execution → Trading Action Layer → Risk Controller
+6. Risk Controller → Alpaca Connector → Alpaca API
+7. All Components → Monitoring (Generic) [via standard metrics]
 ```
+
+**CRITICAL FLOW CORRECTION:**
+- **ML Ops is GENERIC**: Processes EventBus data to extract features and train models
+- **Model Execution is DOMAIN-SPECIFIC**: Uses trained models from ML Ops with real-time data from EventBus
+- **NO bidirectional flow**: ML Ops → Model Execution (models), EventBus → Model Execution (data)
+- **Sequential processing**: Feature extraction → Model training → Model serving → Prediction → Action
 
 ### Service Discovery Flow
 ```
