@@ -1,10 +1,13 @@
 [workspace]
 members = [
+    "config-store",
     "mcp-trading-server",
+    # other future v2 components
 ]
 exclude = [
+    "vendor",
     "vendor/ruv-fann",
-    "vendor/ruv-fann/ruv-swarm",
+    "vendor/ruv-fann/ruv-swarm", 
     "vendor/ruv-fann/neuro-divergent",
 ]
 resolver = "2"
@@ -38,6 +41,7 @@ daa = { version = "0.5", optional = true }
 
 # Configuration
 config = "0.14"
+config-store = { path = "./config-store" }
 serde = { version = "1.0", features = ["derive"] }
 serde_toml = "0.0.1"
 serde_yaml = "0.9"
@@ -126,11 +130,15 @@ hyper-util = { version = "0.1", features = ["full"] }
 
 # Macros for collections
 maplit = "1.0"
+prost = { version = "0.14.1", features = ["derive"], optional = true }
+tonic = { version = "0.14.1", features = ["transport"], optional = true }
 
 [features]
 default = ["neural", "daa-features"]
 neural = []  # No longer optional - neuro-divergent is always included
 daa-features = ["dep:daa"]
+prost = ["dep:prost"]
+tonic = ["dep:tonic"]
 
 [dev-dependencies]
 # Testing
@@ -172,6 +180,10 @@ path = "examples/adapter_integration.rs"
 name = "autonomous_trading_demo"
 path = "examples/autonomous_trading_demo.rs"
 
+[[example]]
+name = "config_store_usage"
+path = "examples/config_store_usage.rs"
+
 # Phase 2 Test Configurations
 [[test]]
 name = "phase2_tdd_tests"
@@ -212,3 +224,6 @@ codegen-units = 1
 panic = "abort"
 strip = true
 debug = false
+
+[build-dependencies]
+tonic-build = "0.10"
