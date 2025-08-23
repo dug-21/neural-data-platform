@@ -1,0 +1,36 @@
+# Integration Test Requirements
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-html==4.1.1
+pytest-xdist==3.5.0
+pytest-mock==3.12.0
+pytest-timeout==2.2.0
+pytest-rerunfailures==12.0
+coverage[toml]==7.3.2
+aiohttp==3.9.1
+httpx==0.25.2
+asyncpg==0.29.0
+redis==5.0.1
+psycopg2-binary==2.9.9
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Data ingestion dependencies (for testing integration)
+pandas==2.1.4
+numpy==1.25.2
+requests==2.31.0
+
+# Monitoring and observability
+structlog==23.2.0
+python-json-logger==2.0.7
+
+# Additional testing utilities
+factory-boy==3.3.0
+freezegun==1.2.2
+responses==0.24.1
+testcontainers==3.7.1
+
+# Performance testing
+locust==2.17.0
+memory-profiler==0.61.0
