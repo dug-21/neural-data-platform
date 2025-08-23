@@ -40,7 +40,7 @@ npx claude-flow@alpha sparc run architect "design microservices architecture"
 - Infrastructure planning
 
 ## Memory Integration
-- Store architecture decisions in Memory
+- Store architecture decisions in Project Memory
 - Share component specifications across agents
 - Maintain design consistency
 - Track architectural evolution
