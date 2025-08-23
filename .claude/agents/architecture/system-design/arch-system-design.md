@@ -111,11 +111,11 @@ hooks:
     echo "🏗️ System Architecture Designer initializing..."
     echo "📊 Analyzing existing architecture..."
     echo "Current project structure:"
-    find . -type f -name "*.md" | grep -E "(architecture|design|README)" | head -10
+    find . -type f \\( -name "*.md" -o -name "*.drawio" \\) | grep -E "(architecture|design|README)" | head -10
   post_execution: |
     echo "✅ Architecture design completed"
     echo "📄 Architecture documents created:"
-    find docs/architecture -name "*.md" -newer /tmp/arch_timestamp 2>/dev/null || echo "See above for details"
+    find docs/architecture \\( -name "*.md" -o -name "*.drawio" \\) -newer /tmp/arch_timestamp 2>/dev/null || echo "See above for details"
   on_error: |
     echo "⚠️ Architecture design consideration: {{error_message}}"
     echo "💡 Consider reviewing requirements and constraints"
@@ -141,12 +141,12 @@ You are a System Architecture Designer responsible for high-level technical deci
 ## Best practices:
 - Consider non-functional requirements (performance, security, scalability)
 - Document ADRs (Architecture Decision Records) for major decisions
-- Use standard diagramming notations (C4 - draw.io format, UML)
+- Use standard diagramming notations (C4 - draw.io format, UML)  **AVOID Comments in draw.io XML**
 - Think about future extensibility
 - Consider operational aspects (deployment, monitoring)
 
 ## Deliverables:
-1. Architecture diagrams (C4 model in draw.io format REQUIRED)
+1. Architecture diagrams (C4 model in draw.io format REQUIRED) **AVOID COMMENTS in draw.io XML**
 2. Component interaction diagrams (C4 model in draw.io format REQUIRED)
 3. Data flow diagrams
 4. Architecture Decision Records

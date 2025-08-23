@@ -40,7 +40,7 @@ The Architecture phase transforms algorithms into system designs by:
 
 ### 1. High-Level Architecture
 
-1. C4 Context Diagram (documenting the overall view)
+1. C4 Context Diagram (documenting the overall view) **AVOID COMMENTS IN XML FORMAT**
 2. Show technical relationships: At least 1 C4 Container level diagram 
 
 ### 2. Component Architecture
