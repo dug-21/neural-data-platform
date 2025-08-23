@@ -1,0 +1,152 @@
+<mxGraphModel dx="1434" dy="844" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    
+    <!-- Current Infrastructure Layer -->
+    <mxCell id="current-title" value="Neural Trader - Current Docker Infrastructure (Production Ready)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="20" width="600" height="30" as="geometry"/>
+    </mxCell>
+    
+    <!-- Network Layers -->
+    <mxCell id="monitoring-network" value="Monitoring Network" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="80" width="280" height="400" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="internal-network" value="Neural Trader Internal Network" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="360" y="80" width="400" height="400" as="geometry"/>
+    </mxCell>
+    
+    <!-- Monitoring Stack -->
+    <mxCell id="prometheus" value="Prometheus&#xa;(neural-trader/prometheus:prod)&#xa;Port: 9093&#xa;✅ Production Ready" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="60" y="120" width="120" height="80" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="grafana" value="Grafana&#xa;(neural-trader/grafana:prod)&#xa;Port: 3000&#xa;✅ Production Ready" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="60" y="220" width="120" height="80" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="node-exporter" value="Node Exporter&#xa;(System Metrics)&#xa;✅ Configured" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="200" y="120" width="100" height="60" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="redis-exporter" value="Redis Exporter&#xa;(Cache Metrics)&#xa;✅ Configured" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="200" y="190" width="100" height="60" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="postgres-exporter" value="Postgres Exporter&#xa;(DB Metrics)&#xa;✅ Configured" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="200" y="260" width="100" height="60" as="geometry"/>
+    </mxCell>
+    
+    <!-- Core Infrastructure -->
+    <mxCell id="timescaledb" value="TimescaleDB&#xa;(neural-trader/timescaledb:prod)&#xa;Port: 5433&#xa;Memory: 2GB&#xa;✅ Production Ready" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;" vertex="1" parent="1">
+      <mxGeometry x="380" y="120" width="160" height="90" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="redis" value="Redis&#xa;(redis:7-alpine)&#xa;Port: 6379&#xa;Memory: 768MB&#xa;⚠️ Basic Cache Only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#ffc107;" vertex="1" parent="1">
+      <mxGeometry x="560" y="120" width="160" height="90" as="geometry"/>
+    </mxCell>
+    
+    <!-- Application Services -->
+    <mxCell id="neural-trader-app" value="Neural Trader App&#xa;(neural-trader:prod)&#xa;Ports: 8080, 9092&#xa;Memory: 4GB, CPU: 2&#xa;✅ Production Ready" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;" vertex="1" parent="1">
+      <mxGeometry x="380" y="240" width="160" height="100" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="data-ingestion" value="Data Ingestion&#xa;(neural-trader/data-ingestion:prod)&#xa;Port: 8002&#xa;Memory: 2GB&#xa;✅ Alpaca Integration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;" vertex="1" parent="1">
+      <mxGeometry x="560" y="240" width="160" height="100" as="geometry"/>
+    </mxCell>
+    
+    <!-- Storage Volumes -->
+    <mxCell id="volumes-title" value="Persistent Volumes (Production Ready)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="520" width="300" height="20" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="volumes" value="• timescaledb_data (PostgreSQL)&#xa;• redis_data (Cache)&#xa;• prometheus_data (Metrics)&#xa;• grafana_data (Dashboards)&#xa;• neural_trader_models (ML Models)&#xa;• neural_trader_logs (Application Logs)&#xa;• data_ingestion_logs (Ingestion Logs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8f9fa;strokeColor=#6c757d;align=left;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="40" y="550" width="300" height="120" as="geometry"/>
+    </mxCell>
+    
+    <!-- Missing Components -->
+    <mxCell id="missing-title" value="Missing Components for V2 MVP" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#dc3545;" vertex="1" parent="1">
+      <mxGeometry x="400" y="520" width="300" height="20" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="domain-registry-missing" value="Domain Registry Service&#xa;❌ Not Deployed&#xa;Port: 50051 (gRPC)&#xa;Required for V2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8d7da;strokeColor=#dc3545;" vertex="1" parent="1">
+      <mxGeometry x="400" y="550" width="140" height="80" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="redis-streams-missing" value="Redis Streams Config&#xa;❌ Not Configured&#xa;Consumer Groups&#xa;EventBus Patterns" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8d7da;strokeColor=#dc3545;" vertex="1" parent="1">
+      <mxGeometry x="560" y="550" width="140" height="80" as="geometry"/>
+    </mxCell>
+    
+    <!-- Enhancement Layer -->
+    <mxCell id="enhancement-title" value="V2 MVP Enhancement Plan" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#0056b3;" vertex="1" parent="1">
+      <mxGeometry x="20" y="710" width="600" height="30" as="geometry"/>
+    </mxCell>
+    
+    <!-- Phase Timeline -->
+    <mxCell id="phase1" value="Phase 1 (1.5 weeks)&#xa;• Add Redis Streams Config&#xa;• Deploy Domain Registry&#xa;• gRPC Service Mesh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#0056b3;align=left;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="40" y="760" width="180" height="80" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="phase2" value="Phase 2 (2 weeks)&#xa;• Enhance Data Ingestion&#xa;• Feature Engineering&#xa;• Neural Model Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#0056b3;align=left;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="240" y="760" width="180" height="80" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="phase3" value="Phase 3 (2 weeks)&#xa;• Model Execution Service&#xa;• Action Execution Service&#xa;• Risk Management" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#0056b3;align=left;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="440" y="760" width="180" height="80" as="geometry"/>
+    </mxCell>
+    
+    <mxCell id="phase4" value="Phase 4 (0.5 weeks)&#xa;• Final Integration&#xa;• Production Testing&#xa;• Go-Live Preparation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1ecf1;strokeColor=#0c5460;align=left;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="40" y="860" width="180" height="80" as="geometry"/>
+    </mxCell>
+    
+    <!-- Key Benefits -->
+    <mxCell id="benefits" value="Key Benefits:&#xa;• 70% infrastructure exists&#xa;• Timeline reduced 33% (8 vs 12 weeks)&#xa;• Production-tested components&#xa;• Comprehensive monitoring ready&#xa;• Zero-downtime enhancement approach" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;align=left;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="240" y="860" width="380" height="80" as="geometry"/>
+    </mxCell>
+    
+    <!-- Connections -->
+    <mxCell id="prometheus-grafana" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="prometheus" target="grafana">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="120" y="200" as="sourcePoint"/>
+        <mxPoint x="170" y="150" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    
+    <mxCell id="exporters-prometheus" value="" style="endArrow=classic;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="prometheus">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="200" y="160" as="sourcePoint"/>
+        <mxPoint x="250" y="110" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    
+    <mxCell id="app-db" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="neural-trader-app" target="timescaledb">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="460" y="240" as="sourcePoint"/>
+        <mxPoint x="460" y="210" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    
+    <mxCell id="app-redis" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="neural-trader-app" target="redis">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="540" y="240" as="sourcePoint"/>
+        <mxPoint x="580" y="210" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    
+    <mxCell id="ingestion-db" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="data-ingestion" target="timescaledb">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="580" y="240" as="sourcePoint"/>
+        <mxPoint x="520" y="210" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    
+    <mxCell id="ingestion-redis" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="data-ingestion" target="redis">
+      <mxGeometry width="50" height="50" relative="1" as="geometry">
+        <mxPoint x="640" y="240" as="sourcePoint"/>
+        <mxPoint x="640" y="210" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    
+  </root>
+</mxGraphModel>

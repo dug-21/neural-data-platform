@@ -1,0 +1,8 @@
+# Config Store Migration Script Dependencies
+redis>=5.0.0
+PyYAML>=6.0.1
+toml>=0.10.2
+python-dotenv>=1.0.0
+asyncio-mqtt>=0.14.0
+pydantic>=2.5.0
+jsonschema>=4.20.0
