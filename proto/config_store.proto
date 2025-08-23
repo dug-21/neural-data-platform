@@ -1,0 +1,324 @@
+syntax = "proto3";
+
+package neural_platform.config;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// ConfigStoreService provides configuration management with namespace isolation,
+// schema validation, and real-time updates for neural-trader platform services
+service ConfigStoreService {
+  // Get configuration by namespace path with optional versioning
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  
+  // Get multiple configuration values in a single request for performance
+  rpc GetBulkConfig(GetBulkConfigRequest) returns (GetBulkConfigResponse);
+  
+  // Set configuration value with schema validation (admin/authorized services only)
+  rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
+  
+  // Watch for real-time configuration changes with streaming updates
+  rpc WatchConfig(WatchConfigRequest) returns (stream ConfigChangeEvent);
+  
+  // Get configuration schema for validation and documentation
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+  
+  // Health check endpoint for monitoring
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthStatus);
+}
+
+// Configuration request with hierarchical path and context
+message GetConfigRequest {
+  string namespace_path = 1;              // e.g., "/neural-trading/data-ingestion"
+  string key = 2;                         // Configuration key within namespace
+  string version = 3;                     // Optional version constraint (default: latest)
+  map<string, string> context = 4;       // Environment context for conditional configs
+  bool include_metadata = 5;              // Include modification timestamps and audit info
+}
+
+// Configuration response with typed value support
+message GetConfigResponse {
+  bool success = 1;
+  string namespace_path = 2;
+  string key = 3;
+  string version = 4;
+  ConfigValue value = 5;                  // Strongly typed configuration value
+  ConfigMetadata metadata = 6;            // Optional metadata when requested
+  string error_message = 7;               // Error details if success=false
+}
+
+// Bulk configuration request for multiple keys
+message GetBulkConfigRequest {
+  string namespace_path = 1;
+  repeated string keys = 2;               // List of configuration keys to retrieve
+  string version = 3;                     // Version constraint applies to all keys
+  map<string, string> context = 4;
+  bool include_metadata = 5;
+}
+
+// Bulk configuration response
+message GetBulkConfigResponse {
+  bool success = 1;
+  string namespace_path = 2;
+  string version = 3;
+  map<string, ConfigValue> values = 4;   // Key -> ConfigValue mapping
+  map<string, ConfigMetadata> metadata = 5; // Key -> Metadata mapping (if requested)
+  repeated string missing_keys = 6;       // Keys that were not found
+  string error_message = 7;
+}
+
+// Set configuration request with validation
+message SetConfigRequest {
+  string namespace_path = 1;
+  string key = 2;
+  ConfigValue value = 3;
+  string change_reason = 4;               // Audit trail: reason for change
+  bool validate_only = 5;                 // Validate without persisting (dry-run)
+  string expected_version = 6;            // Optimistic concurrency control
+}
+
+// Set configuration response
+message SetConfigResponse {
+  bool success = 1;
+  string namespace_path = 2;
+  string key = 3;
+  string new_version = 4;                 // Version after successful update
+  repeated string validation_errors = 5;  // Schema validation errors
+  string error_message = 6;
+}
+
+// Watch configuration changes request
+message WatchConfigRequest {
+  string namespace_path = 1;
+  repeated string keys = 2;               // Specific keys to watch (empty = all)
+  bool include_initial_values = 3;        // Send current values immediately
+}
+
+// Real-time configuration change event
+message ConfigChangeEvent {
+  string namespace_path = 1;
+  string key = 2;
+  ChangeType change_type = 3;
+  ConfigValue old_value = 4;              // Previous value (for UPDATED/DELETED)
+  ConfigValue new_value = 5;              // New value (for CREATED/UPDATED)
+  google.protobuf.Timestamp timestamp = 6;
+  string change_reason = 7;               // Audit trail
+  string changed_by = 8;                  // Service/user that made the change
+  string version = 9;                     // Version after change
+}
+
+// Schema request for namespace configuration
+message GetSchemaRequest {
+  string namespace_path = 1;
+  string schema_version = 2;              // Optional specific schema version
+}
+
+// Schema response with JSON Schema definition
+message GetSchemaResponse {
+  bool success = 1;
+  string namespace_path = 2;
+  string schema_version = 3;
+  string json_schema = 4;                 // JSON Schema definition as string
+  repeated string supported_versions = 5; // Available schema versions
+  string error_message = 6;
+}
+
+// Strongly typed configuration value supporting multiple data types
+message ConfigValue {
+  ValueType type = 1;
+  oneof value {
+    string string_value = 2;
+    int64 int_value = 3;
+    double float_value = 4;
+    bool bool_value = 5;
+    google.protobuf.Struct json_value = 6; // Complex nested objects/arrays
+    bytes binary_value = 7;                // Binary configuration data
+  }
+}
+
+// Configuration metadata for audit and versioning
+message ConfigMetadata {
+  google.protobuf.Timestamp created_at = 1;
+  google.protobuf.Timestamp modified_at = 2;
+  string created_by = 3;                  // Service/user that created
+  string modified_by = 4;                 // Service/user that last modified
+  string version = 5;                     // Configuration version
+  repeated string tags = 6;               // Organizational tags
+  map<string, string> annotations = 7;   // Additional metadata
+}
+
+// Health status for monitoring integration
+message HealthStatus {
+  bool healthy = 1;
+  string status = 2;                      // "SERVING", "NOT_SERVING", "UNKNOWN"
+  map<string, string> details = 3;       // Component-specific health info
+  google.protobuf.Timestamp timestamp = 4;
+  string version = 5;                     // Service version
+}
+
+// Enumeration for supported value types
+enum ValueType {
+  VALUE_TYPE_UNSPECIFIED = 0;
+  VALUE_TYPE_STRING = 1;
+  VALUE_TYPE_INT = 2;
+  VALUE_TYPE_FLOAT = 3;
+  VALUE_TYPE_BOOL = 4;
+  VALUE_TYPE_JSON = 5;
+  VALUE_TYPE_BINARY = 6;
+}
+
+// Enumeration for configuration change types
+enum ChangeType {
+  CHANGE_TYPE_UNSPECIFIED = 0;
+  CHANGE_TYPE_CREATED = 1;
+  CHANGE_TYPE_UPDATED = 2;
+  CHANGE_TYPE_DELETED = 3;
+}
+
+// Configuration validation error details
+message ValidationError {
+  string field_path = 1;                  // JSON path to invalid field
+  string error_code = 2;                  // Validation error code
+  string message = 3;                     // Human-readable error message
+  google.protobuf.Any expected_value = 4; // Expected value format/type
+  google.protobuf.Any actual_value = 5;   // Actual invalid value
+}
+
+// Extended configuration service for administrative operations
+service ConfigManagementService {
+  // List all available namespaces
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+  
+  // Get namespace configuration structure
+  rpc GetNamespaceInfo(GetNamespaceInfoRequest) returns (GetNamespaceInfoResponse);
+  
+  // Validate configuration against schema without persisting
+  rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse);
+  
+  // Get audit trail for configuration changes
+  rpc GetAuditTrail(GetAuditTrailRequest) returns (GetAuditTrailResponse);
+  
+  // Backup namespace configuration
+  rpc BackupNamespace(BackupNamespaceRequest) returns (BackupNamespaceResponse);
+  
+  // Restore namespace from backup
+  rpc RestoreNamespace(RestoreNamespaceRequest) returns (RestoreNamespaceResponse);
+}
+
+// Namespace listing request
+message ListNamespacesRequest {
+  string prefix = 1;                      // Filter namespaces by prefix
+  bool include_stats = 2;                 // Include usage statistics
+}
+
+// Namespace listing response
+message ListNamespacesResponse {
+  bool success = 1;
+  repeated NamespaceInfo namespaces = 2;
+  string error_message = 3;
+}
+
+// Namespace information
+message NamespaceInfo {
+  string path = 1;
+  string description = 2;
+  int32 key_count = 3;                   // Number of configuration keys
+  google.protobuf.Timestamp last_modified = 4;
+  repeated string tags = 5;
+  string schema_version = 6;
+}
+
+// Get namespace info request
+message GetNamespaceInfoRequest {
+  string namespace_path = 1;
+  bool include_keys = 2;                  // Include list of all keys
+}
+
+// Get namespace info response
+message GetNamespaceInfoResponse {
+  bool success = 1;
+  NamespaceInfo info = 2;
+  repeated string keys = 3;               // All configuration keys (if requested)
+  string error_message = 4;
+}
+
+// Configuration validation request
+message ValidateConfigRequest {
+  string namespace_path = 1;
+  string key = 2;
+  ConfigValue value = 3;
+  string schema_version = 4;              // Specific schema version to validate against
+}
+
+// Configuration validation response
+message ValidateConfigResponse {
+  bool valid = 1;
+  repeated ValidationError errors = 2;
+  string schema_version = 3;              // Schema version used for validation
+}
+
+// Audit trail request
+message GetAuditTrailRequest {
+  string namespace_path = 1;
+  string key = 2;                         // Optional: filter by specific key
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  int32 limit = 5;                        // Maximum number of entries
+  string next_token = 6;                  // Pagination token
+}
+
+// Audit trail response
+message GetAuditTrailResponse {
+  bool success = 1;
+  repeated AuditEntry entries = 2;
+  string next_token = 3;                  // Pagination token for next page
+  string error_message = 4;
+}
+
+// Audit trail entry
+message AuditEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  string namespace_path = 2;
+  string key = 3;
+  ChangeType change_type = 4;
+  ConfigValue old_value = 5;
+  ConfigValue new_value = 6;
+  string changed_by = 7;
+  string change_reason = 8;
+  string version = 9;
+  string session_id = 10;                 // Request session identifier
+}
+
+// Backup namespace request
+message BackupNamespaceRequest {
+  string namespace_path = 1;
+  string backup_name = 2;                 // Optional backup identifier
+  bool include_metadata = 3;              // Include audit trails and metadata
+}
+
+// Backup namespace response
+message BackupNamespaceResponse {
+  bool success = 1;
+  string backup_id = 2;                   // Unique backup identifier
+  google.protobuf.Timestamp created_at = 3;
+  int32 config_count = 4;                 // Number of configurations backed up
+  string error_message = 5;
+}
+
+// Restore namespace request
+message RestoreNamespaceRequest {
+  string backup_id = 1;
+  string target_namespace_path = 2;       // Where to restore (can be different from original)
+  bool overwrite_existing = 3;            // Overwrite existing configurations
+  bool dry_run = 4;                       // Validate restore without executing
+}
+
+// Restore namespace response
+message RestoreNamespaceResponse {
+  bool success = 1;
+  int32 restored_count = 2;               // Number of configurations restored
+  repeated string conflicts = 3;          // Keys that would conflict (in dry-run)
+  string error_message = 4;
+}
