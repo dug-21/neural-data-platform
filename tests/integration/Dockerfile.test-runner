@@ -1,0 +1,243 @@
+# Test Runner Container for Config-Store Integration Tests
+FROM python:3.11-slim
+
+LABEL maintainer="Neural Trader Team"
+LABEL description="Integration Test Runner for Config-Store Testing"
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTEST_PLUGINS=pytest_html,pytest_cov,pytest_xdist
+ENV COVERAGE_PROCESS_START=/app/.coveragerc
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    netcat-openbsd \
+    postgresql-client \
+    redis-tools \
+    git \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY tests/integration/requirements-test.txt .
+RUN pip install --no-cache-dir -r requirements-test.txt
+
+# Install additional testing tools
+RUN pip install --no-cache-dir \
+    pytest==7.4.3 \
+    pytest-asyncio==0.21.1 \
+    pytest-cov==4.1.0 \
+    pytest-html==4.1.1 \
+    pytest-xdist==3.5.0 \
+    pytest-mock==3.12.0 \
+    pytest-timeout==2.2.0 \
+    pytest-rerunfailures==12.0 \
+    coverage[toml]==7.3.2 \
+    aiohttp==3.9.1 \
+    httpx==0.25.2 \
+    asyncpg==0.29.0 \
+    redis==5.0.1 \
+    psycopg2-binary==2.9.9
+
+# Copy test configuration files
+COPY tests/integration/pytest.ini .
+COPY tests/integration/.coveragerc .
+
+# Create directories for test results and coverage
+RUN mkdir -p /app/test-results /app/coverage /app/reports
+
+# Create test script
+RUN cat > /app/run_integration_tests.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "Starting Config-Store Integration Test Suite"
+echo "============================================="
+
+# Wait for dependencies to be ready
+echo "Waiting for services to be ready..."
+
+# Wait for PostgreSQL
+until pg_isready -h ${POSTGRES_HOST:-postgres-test} -p ${POSTGRES_PORT:-5432} -U ${POSTGRES_USER:-postgres}; do
+    echo "Waiting for PostgreSQL..."
+    sleep 2
+done
+echo "PostgreSQL is ready!"
+
+# Wait for Redis
+until redis-cli -h ${REDIS_HOST:-redis-test} -p ${REDIS_PORT:-6379} ping; do
+    echo "Waiting for Redis..."
+    sleep 2
+done
+echo "Redis is ready!"
+
+# Wait for Config Store service
+until curl -f ${CONFIG_STORE_URL:-http://config-store-mock:8080}/health; do
+    echo "Waiting for Config Store..."
+    sleep 5
+done
+echo "Config Store is ready!"
+
+# Wait for Data Ingestion service
+until curl -f ${DATA_INGESTION_URL:-http://data-ingestion-test:8000}/health; do
+    echo "Waiting for Data Ingestion..."
+    sleep 5
+done
+echo "Data Ingestion is ready!"
+
+# Run the integration tests
+echo "Running integration tests..."
+
+# Set test environment
+export PYTHONPATH="/app:/app/tests"
+
+# Default pytest arguments if not provided
+if [ -z "$PYTEST_ARGS" ]; then
+    PYTEST_ARGS="-v --tb=short --junit-xml=/app/test-results/integration-tests.xml"
+fi
+
+# Run tests with coverage
+python -m pytest \
+    /app/tests/test_data_ingestion_config.py \
+    --cov=/app/tests \
+    --cov-report=html:/app/coverage/html \
+    --cov-report=xml:/app/coverage/coverage.xml \
+    --cov-report=term-missing \
+    --cov-fail-under=${COVERAGE_MIN_PERCENTAGE:-85} \
+    --html=/app/reports/report.html \
+    --self-contained-html \
+    --maxfail=5 \
+    --timeout=${TEST_TIMEOUT:-300} \
+    $PYTEST_ARGS
+
+# Generate summary report
+echo "Generating test summary..."
+python -c "
+import json
+import time
+from pathlib import Path
+
+# Create test summary
+summary = {
+    'timestamp': time.time(),
+    'test_suite': 'Config-Store Integration Tests',
+    'environment': {
+        'postgres_host': '${POSTGRES_HOST:-postgres-test}',
+        'redis_host': '${REDIS_HOST:-redis-test}',
+        'config_store_url': '${CONFIG_STORE_URL:-http://config-store-mock:8080}',
+        'data_ingestion_url': '${DATA_INGESTION_URL:-http://data-ingestion-test:8000}'
+    },
+    'status': 'completed'
+}
+
+Path('/app/test-results/summary.json').write_text(json.dumps(summary, indent=2))
+"
+
+echo "Integration tests completed successfully!"
+EOF
+
+RUN chmod +x /app/run_integration_tests.sh
+
+# Create health check script
+RUN cat > /app/health_check.py << 'EOF'
+#!/usr/bin/env python3
+"""Health check script for integration test environment."""
+
+import asyncio
+import asyncpg
+import httpx
+import redis
+import sys
+import os
+
+async def check_postgres():
+    """Check PostgreSQL connection."""
+    try:
+        conn = await asyncpg.connect(
+            host=os.getenv('POSTGRES_HOST', 'postgres-test'),
+            port=int(os.getenv('POSTGRES_PORT', 5432)),
+            database=os.getenv('POSTGRES_DB', 'neural_trader_test'),
+            user=os.getenv('POSTGRES_USER', 'postgres'),
+            password=os.getenv('POSTGRES_PASSWORD', 'test_password_123')
+        )
+        await conn.fetchval('SELECT 1')
+        await conn.close()
+        return True
+    except Exception as e:
+        print(f"PostgreSQL health check failed: {e}")
+        return False
+
+def check_redis():
+    """Check Redis connection."""
+    try:
+        r = redis.Redis(
+            host=os.getenv('REDIS_HOST', 'redis-test'),
+            port=int(os.getenv('REDIS_PORT', 6379)),
+            password=os.getenv('REDIS_PASSWORD', 'test_redis_pass'),
+            decode_responses=True
+        )
+        r.ping()
+        return True
+    except Exception as e:
+        print(f"Redis health check failed: {e}")
+        return False
+
+async def check_http_service(url, name):
+    """Check HTTP service health."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{url}/health")
+            response.raise_for_status()
+            return True
+    except Exception as e:
+        print(f"{name} health check failed: {e}")
+        return False
+
+async def main():
+    """Run all health checks."""
+    checks = [
+        ("PostgreSQL", check_postgres()),
+        ("Redis", check_redis()),
+        ("Config Store", check_http_service(
+            os.getenv('CONFIG_STORE_URL', 'http://config-store-mock:8080'),
+            'Config Store'
+        )),
+        ("Data Ingestion", check_http_service(
+            os.getenv('DATA_INGESTION_URL', 'http://data-ingestion-test:8000'),
+            'Data Ingestion'
+        ))
+    ]
+    
+    all_healthy = True
+    for name, check in checks:
+        if asyncio.iscoroutine(check):
+            result = await check
+        else:
+            result = check
+        
+        status = "✓" if result else "✗"
+        print(f"{status} {name}")
+        
+        if not result:
+            all_healthy = False
+    
+    if all_healthy:
+        print("\nAll services are healthy!")
+        sys.exit(0)
+    else:
+        print("\nSome services are not healthy!")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+EOF
+
+RUN chmod +x /app/health_check.py
+
+# Set default command
+CMD ["/app/run_integration_tests.sh"]
