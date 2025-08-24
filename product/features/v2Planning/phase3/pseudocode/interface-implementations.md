@@ -1,41 +1,57 @@
-# Interface Implementations - Neural Trader V2 Refactoring
+# Interface Implementations - Neural Trader V2 Binary Architecture
 
 ## Overview
 
-This document provides detailed pseudocode for implementing service interfaces, gRPC communications, message transformations, and service registration patterns in the refactored neural-trader architecture.
+This document provides detailed pseudocode for implementing Redis Streams pub/sub interfaces, binary communication patterns, and message transformations in the separated ML Ops and Trading binaries architecture.
 
 ---
 
-## 1. gRPC Service Implementations
+## 1. Redis Streams Interface Implementations
 
-### 1.1 Model Management Service
+### 1.1 ML Ops Binary Redis Streams Interface
 
 ```
-ALGORITHM: ImplementModelManagementService
-INPUT: service_definition (ServiceDefinition)
-OUTPUT: grpc_service (GrpcService)
+ALGORITHM: ImplementMLOpsStreamsInterface
+INPUT: stream_config (StreamConfig)
+OUTPUT: ml_ops_interface (MLOpsStreamsInterface)
 
 BEGIN
-    // Define proto service structure
-    proto_definition ← ProtoDefinition{
-        service_name: "ModelManagementService",
-        package: "neural_trader.model",
-        methods: [
-            "SaveModel", "LoadModel", "ListModels", 
-            "DeleteModel", "GetModelMetrics", "UpdateModel"
+    // Initialize Redis streams connections
+    redis_client ← RedisClient.connect(stream_config.redis_url)
+    
+    // Define stream topology
+    stream_topology ← StreamTopology{
+        input_streams: [
+            "market-data",      // Raw market data from data ingestion
+            "model-updates",    // Model update requests from Trading binary
+            "training-requests" // Training requests from Trading binary
+        ],
+        output_streams: [
+            "feature-vectors",  // Processed features to Trading binary
+            "model-predictions", // Inference results to Trading binary
+            "training-metrics", // Training progress to Trading binary
+            "model-artifacts"   // Trained models to Trading binary
         ]
     }
     
-    // Generate service implementation
-    service_implementation ← ServiceImplementation{
-        trait_name: "ModelManagementService",
-        methods: GenerateServiceMethods(proto_definition.methods),
-        storage_backend: InitializeStorageBackend(),
-        metrics_collector: InitializeMetricsCollector(),
-        error_handler: InitializeErrorHandler()
+    // Initialize stream handlers
+    ml_ops_interface ← MLOpsStreamsInterface{
+        redis_client: redis_client,
+        stream_topology: stream_topology,
+        message_handlers: InitializeMessageHandlers(),
+        error_recovery: InitializeErrorRecovery(),
+        metrics_collector: InitializeMetricsCollector()
     }
     
-    RETURN GenerateGrpcService(service_implementation)
+    // Setup stream processors
+    ml_ops_interface.processors ← [
+        CreateMarketDataProcessor(),
+        CreateFeatureEngineeringProcessor(),
+        CreateRuvFANNTrainingProcessor(),
+        CreateModelInferenceProcessor()
+    ]
+    
+    RETURN ml_ops_interface
 END
 
 SUBROUTINE: GenerateServiceMethods
@@ -138,23 +154,58 @@ BEGIN
 END
 ```
 
-### 1.2 Feature Engineering Service
+### 1.2 Trading Binary Redis Streams Interface
 
 ```
-ALGORITHM: ImplementFeatureEngineeringService
-INPUT: feature_processors (List<FeatureProcessor>)
-OUTPUT: grpc_service (GrpcService)
+ALGORITHM: ImplementTradingStreamsInterface
+INPUT: stream_config (StreamConfig)
+OUTPUT: trading_interface (TradingStreamsInterface)
 
 BEGIN
-    proto_definition ← ProtoDefinition{
-        service_name: "FeatureEngineeringService", 
-        package: "neural_trader.features",
-        methods: [
-            "ComputeFeatures", "ValidateFeatures", "GetFeatureSchema",
-            "StreamFeatures", "BatchProcessFeatures"
+    // Initialize Redis streams connections
+    redis_client ← RedisClient.connect(stream_config.redis_url)
+    
+    // Define stream topology
+    stream_topology ← StreamTopology{
+        input_streams: [
+            "feature-vectors",   // Features from ML Ops binary
+            "model-predictions", // Inference results from ML Ops binary
+            "training-metrics",  // Training progress from ML Ops binary
+            "model-artifacts",   // Trained models from ML Ops binary
+            "market-events"      // External market events
         ],
-        streaming_methods: ["StreamFeatures"]
+        output_streams: [
+            "trading-signals",   // Generated trading decisions
+            "model-requests",    // Model inference requests to ML Ops
+            "training-requests", // Training requests to ML Ops
+            "execution-orders",  // Orders to execution system
+            "risk-alerts"        // Risk management alerts
+        ]
     }
+    
+    // Initialize DAA Coordinator
+    daa_coordinator ← InitializeDAA(){
+        coordination_patterns: ["consensus", "adaptive", "learning"],
+        decision_strategies: ["majority_vote", "confidence_weighted", "expertise_based"],
+        learning_config: {
+            experience_buffer_size: 10000,
+            adaptation_rate: 0.01,
+            feedback_integration: true
+        }
+    }
+    
+    // Initialize stream interface
+    trading_interface ← TradingStreamsInterface{
+        redis_client: redis_client,
+        stream_topology: stream_topology,
+        daa_coordinator: daa_coordinator,
+        message_handlers: InitializeMessageHandlers(),
+        decision_engine: InitializeDecisionEngine(),
+        risk_manager: InitializeRiskManager()
+    }
+    
+    RETURN trading_interface
+END
     
     // Implementation with streaming support
     service_implementation ← ServiceImplementation{
@@ -230,23 +281,29 @@ BEGIN
 END
 ```
 
-### 1.3 Trading Decision Service
+### 1.3 Binary Communication Message Flow
 
 ```
-ALGORITHM: ImplementTradingDecisionService
-INPUT: trading_rules (List<TradingRule>)
-OUTPUT: grpc_service (GrpcService)
+ALGORITHM: ImplementBinaryCommunicationFlow
+INPUT: communication_config (CommunicationConfig)
+OUTPUT: binary_comm_system (BinaryCommunicationSystem)
 
 BEGIN
-    proto_definition ← ProtoDefinition{
-        service_name: "TradingDecisionService",
-        package: "neural_trader.trading", 
-        methods: [
-            "MakeDecision", "ValidateDecision", "GetDecisionHistory",
-            "StreamDecisions", "UpdateStrategy", "GetRiskMetrics"
-        ],
-        streaming_methods: ["StreamDecisions"]
+    binary_comm_system ← BinaryCommunicationSystem{
+        ml_ops_interface: CreateMLOpsInterface(),
+        trading_interface: CreateTradingInterface(),
+        message_router: InitializeMessageRouter(),
+        stream_monitor: InitializeStreamMonitor(),
+        error_recovery: InitializeErrorRecovery()
     }
+    
+    // Define communication patterns
+    communication_patterns ← [
+        CreateRequestResponsePattern("model-inference"),
+        CreateStreamingPattern("feature-processing"),
+        CreatePublishSubscribePattern("trading-signals"),
+        CreateFeedbackPattern("performance-metrics")
+    ]
     
     service_implementation ← ServiceImplementation{
         trait_name: "TradingDecisionService",
@@ -333,9 +390,9 @@ END
 
 ---
 
-## 2. Message Transformation Algorithms
+## 2. Redis Streams Message Processing
 
-### 2.1 Protocol Buffer Message Transformation
+### 2.1 Stream Message Serialization and Deserialization
 
 ```
 ALGORITHM: TransformMessageFormats
@@ -487,9 +544,9 @@ END
 
 ---
 
-## 3. Service Registration and Discovery
+## 3. Binary Health Monitoring
 
-### 3.1 Service Registry Implementation
+### 3.1 Binary Health Check Implementation
 
 ```
 ALGORITHM: ImplementServiceRegistry
@@ -751,9 +808,9 @@ END
 
 ---
 
-## 4. Inter-Service Communication Patterns
+## 4. DAA Coordination Patterns
 
-### 4.1 Request-Response Pattern Implementation
+### 4.1 Agent Consensus Implementation
 
 ```
 ALGORITHM: ImplementRequestResponsePattern
@@ -958,9 +1015,9 @@ END
 
 ---
 
-## 5. Error Handling and Resilience Patterns
+## 5. Stream Processing Resilience
 
-### 5.1 Circuit Breaker Implementation
+### 5.1 Redis Streams Error Recovery
 
 ```
 ALGORITHM: ImplementCircuitBreaker

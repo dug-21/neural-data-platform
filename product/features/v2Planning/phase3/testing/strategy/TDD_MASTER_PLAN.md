@@ -1,8 +1,18 @@
 # Neural Trader V2 - Test-Driven Development Master Plan
+## Binary Separation Architecture Edition
 
 ## Executive Summary
 
-This is a **greenfield build** with **quality first** approach. No code ships without tests. Every function, every service, every integration point must be validated through comprehensive testing before implementation.
+This is a **greenfield build** with **quality first** approach for the **binary separation architecture**. No code ships without tests. Every binary, every function, every Redis Streams integration point must be validated through comprehensive testing before implementation.
+
+### Binary Architecture Overview
+The system consists of four independent binaries:
+1. **config-store** (Rust) - gRPC configuration service
+2. **data-ingestion** (Python) - Market data streaming service  
+3. **ruv-FANN** (Rust) - Neural network processing binary
+4. **DAA Coordinator** (Rust) - Distributed agent coordination
+
+**Communication**: All cross-binary communication via **Redis Streams**
 
 ## Core TDD Principles
 
@@ -32,29 +42,92 @@ REFACTOR: Improve code while keeping tests green
 
 ## Testing Categories & Coverage Requirements
 
-### Unit Tests (70% of test suite)
-- **Coverage**: 95%+ statement coverage
+### Binary-Specific Unit Tests (70% of test suite)
+- **Coverage**: 95%+ statement coverage per binary
 - **Speed**: <50ms per test
-- **Isolation**: No external dependencies
-- **Scope**: Individual functions/methods/classes
+- **Isolation**: No external dependencies or cross-binary calls
+- **Scope**: Individual functions/methods/classes within each binary
 
-**Example Structure:**
-```typescript
-describe('PriceCalculator', () => {
-  describe('calculateRisk', () => {
-    it('should return high risk for volatility > 0.8')
-    it('should return low risk for volatility < 0.2')
-    it('should handle edge case of zero price')
-    it('should throw on negative volatility')
-  })
-})
+**Example Structure per Binary:**
+
+#### Config-Store (Rust)
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio_test;
+
+    #[tokio::test]
+    async fn test_config_retrieval() {
+        let service = ConfigStoreService::new();
+        let request = GetConfigRequest { key: "test_key".to_string() };
+        
+        let response = service.get_config(Request::new(request)).await;
+        assert!(response.is_ok());
+    }
+    
+    #[test]
+    fn test_validation_rules() {
+        let validator = ConfigValidator::new();
+        assert!(validator.validate_config("valid_config").is_ok());
+        assert!(validator.validate_config("invalid_config").is_err());
+    }
+}
 ```
 
-### Integration Tests (20% of test suite)
-- **Coverage**: All service boundaries
+#### Data-Ingestion (Python)
+```python
+import pytest
+from unittest.mock import AsyncMock
+from data_ingestion.stream_processor import StreamProcessor
+
+class TestStreamProcessor:
+    @pytest.mark.asyncio
+    async def test_market_data_processing(self):
+        processor = StreamProcessor()
+        mock_data = {"symbol": "BTCUSD", "price": 50000}
+        
+        result = await processor.process_market_data(mock_data)
+        assert result["symbol"] == "BTCUSD"
+        assert result["price"] == 50000
+    
+    def test_data_validation(self):
+        processor = StreamProcessor()
+        assert processor.validate_data({"price": 100}) == True
+        assert processor.validate_data({"invalid": "data"}) == False
+```
+
+### Binary Integration Tests (20% of test suite)
+- **Coverage**: All binary boundaries and Redis Streams communication
 - **Speed**: <500ms per test
-- **Scope**: Service-to-service communication
-- **Focus**: Data flow and API contracts
+- **Scope**: Binary-to-binary communication via Redis Streams
+- **Focus**: Message flow, serialization, and Redis Streams contracts
+
+#### Redis Streams Integration Testing
+```rust
+// Cross-binary integration test
+#[tokio::test]
+async fn test_config_to_data_ingestion_flow() {
+    let redis_client = redis::Client::open("redis://localhost:6379").unwrap();
+    
+    // Simulate config-store publishing configuration
+    let config_msg = ConfigMessage {
+        key: "market_symbols".to_string(),
+        value: "BTCUSD,ETHUSD".to_string(),
+        timestamp: SystemTime::now(),
+    };
+    
+    // Publish to Redis Stream
+    redis_client.xadd("config-updates", "*", &[("data", serde_json::to_string(&config_msg).unwrap())]).await.unwrap();
+    
+    // Verify data-ingestion binary receives and processes
+    let consumer = RedisStreamConsumer::new("data-ingestion-group", "config-updates");
+    let messages = consumer.read_pending().await.unwrap();
+    
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].get_field::<String>("data").unwrap().contains("BTCUSD"), true);
+}
+```
 
 ### End-to-End Tests (10% of test suite)
 - **Coverage**: Critical user journeys
@@ -64,50 +137,58 @@ describe('PriceCalculator', () => {
 
 ## Implementation Strategy
 
-### Phase 1: Foundation (Week 1-2)
-1. **Test Infrastructure Setup**
-   - Jest/Vitest configuration
-   - Mock service framework
-   - Test data generators
-   - CI/CD pipeline integration
+### Phase 1: Binary Foundation (Week 1-2)
+1. **Binary-Specific Test Infrastructure**
+   - **Rust binaries**: Cargo test configuration with tokio-test
+   - **Python binary**: pytest configuration with asyncio support
+   - Redis Streams mock framework
+   - Binary-specific test data generators
+   - CI/CD pipeline per binary
 
-2. **Core Service Tests**
-   - Data ingestion service tests
-   - Config store service tests
-   - Basic API endpoint tests
+2. **Per-Binary Core Tests**
+   - **config-store**: gRPC service tests, configuration validation
+   - **data-ingestion**: Streaming pipeline tests, Python async tests
+   - **ruv-FANN**: Neural network processing tests, FANN integration
+   - **DAA Coordinator**: Agent coordination tests, consensus algorithms
 
-### Phase 2: Business Logic (Week 3-4)
-1. **Algorithm Testing**
-   - Trading strategy tests
-   - Risk calculation tests
-   - Portfolio management tests
+### Phase 2: Binary Business Logic (Week 3-4)
+1. **Binary-Specific Algorithm Testing**
+   - **ruv-FANN**: Neural network trading strategies, FANN model tests
+   - **DAA Coordinator**: Multi-agent decision algorithms, consensus tests
+   - **data-ingestion**: Real-time data processing, streaming algorithms
+   - **config-store**: Configuration consistency, validation algorithms
 
-2. **Data Pipeline Tests**
-   - Stream processing tests
-   - Database interaction tests
-   - Cache layer tests
+2. **Redis Streams Data Pipeline Tests**
+   - Cross-binary message flow validation
+   - Stream processing latency tests (<10ms p95)
+   - Message ordering and delivery guarantees
+   - Consumer group coordination tests
 
-### Phase 3: Integration (Week 5-6)
-1. **Service Integration Tests**
-   - gRPC communication tests
-   - WebSocket streaming tests
-   - Database consistency tests
+### Phase 3: Binary Integration (Week 5-6)
+1. **Cross-Binary Integration Tests**
+   - Redis Streams communication validation
+   - gRPC service integration (config-store)
+   - Binary isolation and independence verification
+   - Message serialization/deserialization tests
 
-2. **Performance & Load Tests**
-   - Latency benchmarks
-   - Throughput validation
-   - Memory usage monitoring
+2. **Binary-Specific Performance Tests**
+   - **Per-binary latency**: <50ms processing time
+   - **Redis Streams**: <10ms p95 message delivery
+   - **Memory isolation**: No shared memory between binaries
+   - **Resource utilization**: Per-binary CPU/memory monitoring
 
-### Phase 4: System Validation (Week 7-8)
-1. **End-to-End Scenarios**
-   - Complete trading workflows
-   - Error recovery testing
-   - Security penetration tests
+### Phase 4: Binary System Validation (Week 7-8)
+1. **Cross-Binary End-to-End Scenarios**
+   - Complete data flow: data-ingestion → ruv-FANN → DAA Coordinator
+   - Binary failure and recovery testing
+   - Redis Streams partition tolerance
+   - Configuration propagation validation
 
-2. **Chaos Engineering**
-   - Service failure scenarios
-   - Network partition tests
-   - Data corruption recovery
+2. **Binary Chaos Engineering**
+   - Individual binary crash/restart scenarios
+   - Redis Streams consumer group failover
+   - Network partition between binaries
+   - Cascade failure prevention testing
 
 ## Quality Gates
 
@@ -145,15 +226,19 @@ describe('PriceCalculator', () => {
 
 ## Performance Testing Strategy
 
-### Latency Requirements
-- API responses: <100ms p95
-- Stream processing: <10ms p95
-- Database queries: <50ms p95
+### Binary-Specific Latency Requirements
+- **config-store** gRPC responses: <50ms p95
+- **Redis Streams** message delivery: <10ms p95  
+- **data-ingestion** stream processing: <5ms p95
+- **ruv-FANN** neural processing: <100ms p95
+- **DAA Coordinator** consensus: <200ms p95
 
-### Throughput Requirements
-- Market data ingestion: 10,000 events/sec
-- Trading signals: 1,000 calculations/sec
-- WebSocket connections: 1,000 concurrent
+### Binary-Specific Throughput Requirements
+- **data-ingestion**: 10,000 market events/sec via Redis Streams
+- **ruv-FANN**: 1,000 neural calculations/sec
+- **DAA Coordinator**: 500 agent coordination messages/sec
+- **config-store**: 100 configuration requests/sec
+- **Redis Streams**: 50,000 messages/sec aggregate throughput
 
 ### Load Testing Scenarios
 1. **Normal Load**: Expected production traffic
@@ -191,18 +276,20 @@ describe('PriceCalculator', () => {
 
 ## Technology Stack
 
-### Testing Frameworks
-- **Unit Testing**: Jest/Vitest
-- **Integration Testing**: Supertest + Test Containers
-- **E2E Testing**: Playwright
-- **Load Testing**: Artillery/K6
-- **Security Testing**: OWASP ZAP
+### Binary-Specific Testing Frameworks
+- **Rust binaries**: Cargo test, tokio-test, proptest
+- **Python binary**: pytest, pytest-asyncio, hypothesis
+- **Redis Streams**: redis-py, redis-rs test utilities
+- **Integration Testing**: Docker Compose with Redis container
+- **Load Testing**: K6 with Redis Streams scenarios
+- **Security Testing**: cargo-audit, bandit, OWASP ZAP
 
-### Mock & Stub Libraries
-- **HTTP Mocking**: MSW (Mock Service Worker)
-- **Database Mocking**: Jest-mock-extended
-- **Time Mocking**: Sinon fake timers
-- **External APIs**: WireMock
+### Binary-Specific Mock Libraries
+- **Redis Streams**: redis-mock, fakeredis
+- **gRPC Mocking**: tonic-mock (Rust), grpcio-testing (Python)
+- **Neural Networks**: Mock FANN models, synthetic training data
+- **Time Mocking**: mockall (Rust), freezegun (Python)
+- **Binary Process Mocking**: Process isolation test harnesses
 
 ### Test Infrastructure
 - **CI/CD**: GitHub Actions
@@ -247,18 +334,21 @@ describe('PriceCalculator', () => {
 ## Next Steps
 
 1. **Immediate (This Week)**
-   - Set up test infrastructure
-   - Create first unit tests for config store
-   - Establish CI/CD pipeline with quality gates
+   - Set up per-binary test infrastructure (Rust + Python)
+   - Create Redis Streams test harness
+   - Establish binary-specific CI/CD pipelines
+   - First unit tests for config-store gRPC service
 
 2. **Short Term (Next 2 Weeks)**
-   - Complete core service test suites
-   - Implement integration test framework
-   - Set up performance testing harness
+   - Complete all four binary test suites
+   - Implement Redis Streams integration tests
+   - Set up cross-binary performance testing
+   - Binary isolation validation tests
 
 3. **Medium Term (Next Month)**
-   - Full E2E test coverage
-   - Chaos engineering implementation
-   - Security testing automation
+   - Full cross-binary E2E test coverage
+   - Binary chaos engineering implementation
+   - Redis Streams failover and recovery testing
+   - Security testing for each binary
 
 This plan ensures we build Neural Trader V2 with uncompromising quality from day one.

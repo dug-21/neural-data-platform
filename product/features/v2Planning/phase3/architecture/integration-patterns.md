@@ -1,33 +1,45 @@
-# V2 Integration Patterns - Neural Trader Platform
+# V2 Integration Patterns - Neural Trader Platform (CORRECTED)
 
 ## Overview
 
-This document defines the integration patterns, service mesh configurations, data flow architectures, and cross-service communication standards for the Neural Trader V2 platform.
+This document defines the integration patterns for THREE RUST BINARIES using Redis Streams as the event backbone. NO service mesh needed - direct binary-to-binary communication via Redis Streams with embedded ruv-FANN inference.
 
-## Service Mesh Architecture
+## Redis Streams Event Architecture (No Service Mesh)
 
-### Istio Service Mesh Configuration
+### Redis Streams Configuration
 
 ```yaml
-service_mesh:
-  name: "Neural Trader Service Mesh"
-  technology: "Istio 1.20"
+redis_streams:
+  name: "Neural Trader Event Backbone"
+  technology: "Redis Streams with Consumer Groups"
   
   configuration:
-    global:
-      mtls:
-        mode: "STRICT"
+    streams:
+      features_computed:
+        name: "features:computed"
+        purpose: "Feature vectors from neural-ml-ops to neural-trading"
+        consumer_groups:
+          - name: "trading-group"
+            consumers: ["neural-trading-1", "neural-trading-2"]
+        retention_policy: "1000 entries"
       
-      tracing:
-        sampling: 0.1
-        provider: "jaeger"
+      models_updates:
+        name: "models:updates"
+        purpose: "Model updates from neural-ml-ops to neural-trading"
+        consumer_groups:
+          - name: "trading-group"
+            consumers: ["neural-trading-1", "neural-trading-2"]
+        retention_policy: "100 entries"
       
-      defaultConfig:
-        proxyStatsMatcher:
-          inclusionRegexps:
-            - ".*circuit_breakers.*"
-            - ".*upstream_rq_retry.*"
-            - ".*upstream_rq_pending.*"
+      trading_signals:
+        name: "trading:signals"
+        purpose: "Trading signals from neural-trading for monitoring"
+        retention_policy: "10000 entries"
+      
+      orders_executed:
+        name: "orders:executed"
+        purpose: "Order execution events for audit and analysis"
+        retention_policy: "50000 entries"
     
     traffic_management:
       load_balancing:
@@ -52,30 +64,44 @@ service_mesh:
           ml_inference: "20s"
 ```
 
-### Service Communication Patterns
+### Binary Communication Patterns
 
 ```yaml
 communication_patterns:
-  synchronous:
-    grpc:
-      use_cases:
-        - Service-to-service API calls
-        - Model inference requests
-        - Configuration retrieval
+  event_driven:
+    redis_streams:
+      pattern: "Publish-Subscribe with Consumer Groups"
+      latency: "< 1ms for local Redis"
+      throughput: "> 100k messages/sec"
       
-      configuration:
-        max_message_size: "4MB"
-        keepalive_time: "30s"
-        keepalive_timeout: "10s"
+      neural_ml_ops_publishing:
+        - stream: "features:computed"
+          frequency: "Real-time (as market data arrives)"
+          payload_size: "~1KB feature vectors"
+        
+        - stream: "models:updates"
+          frequency: "On model training completion"
+          payload_size: "~100KB model metadata"
       
-      example:
-        ```proto
-        service TradingService {
-          rpc SubmitOrder(OrderRequest) returns (OrderResponse);
-          rpc GetPosition(PositionRequest) returns (Position);
-          rpc StreamMarketData(MarketDataRequest) returns (stream MarketData);
-        }
-        ```
+      neural_trading_consuming:
+        - stream: "features:computed"
+          consumer_group: "trading-group"
+          processing_time: "< 5ms per feature vector"
+        
+        - stream: "models:updates"
+          consumer_group: "trading-group"
+          processing_time: "< 100ms per model update"
+  
+  embedded_inference:
+    ruv_fann:
+      pattern: "Direct in-memory function calls"
+      latency: "< 1ms (no network overhead)"
+      location: "Embedded in neural-trading binary"
+      
+      model_loading:
+        source: "config-store gRPC service"
+        trigger: "Redis Streams model update event"
+        caching: "In-memory model cache with hot-reload"
     
     rest:
       use_cases:
@@ -115,63 +141,70 @@ communication_patterns:
             - State reconstruction
 ```
 
-## Data Flow Architecture
+## Binary Data Flow Architecture
 
-### Market Data Flow
+### Complete Data Flow (3 Binaries)
 
 ```mermaid
 graph TB
-    subgraph "Data Sources"
-        EX1[Exchange 1]
-        EX2[Exchange 2]
-        EX3[Exchange 3]
-        BB[Bloomberg]
+    subgraph "External Data"
+        ALPACA[Alpaca Market Data]
+        POLYGON[Polygon.io]
+        YAHOO[Yahoo Finance]
     end
     
-    subgraph "Ingestion Layer"
-        GW[Gateway]
-        VAL[Validator]
-        NORM[Normalizer]
+    subgraph "neural-ml-ops Binary"
+        INGEST[Market Data Ingestion]
+        FEATURES[Feature Engineering]
+        TRAINING[ruv-FANN Training]
+        REGISTRY[Model Registry]
     end
     
-    subgraph "Processing Layer"
-        AGG[Aggregator]
-        ENR[Enricher]
-        FEAT[Feature Extractor]
+    subgraph "Redis Streams (Event Backbone)"
+        FEAT_STREAM[features:computed]
+        MODEL_STREAM[models:updates]
+        SIGNAL_STREAM[trading:signals]
+        ORDER_STREAM[orders:executed]
     end
     
-    subgraph "Distribution Layer"
-        REDIS[Redis Streams]
-        WS[WebSocket Server]
-        GRPC[gRPC Server]
+    subgraph "neural-trading Binary"
+        DAA[DAA Coordinator]
+        INFERENCE[Embedded ruv-FANN Inference]
+        EXECUTION[Order Execution]
     end
     
-    subgraph "Consumers"
-        STRAT[Strategy Engine]
-        ML[ML Platform]
-        UI[Trading UI]
-        HIST[Historical Store]
+    subgraph "config-store Service"
+        MODELS[Trained Models]
+        CONFIG[Configuration]
     end
     
-    EX1 --> GW
-    EX2 --> GW
-    EX3 --> GW
-    BB --> GW
+    subgraph "Storage"
+        TIMESCALE[TimescaleDB]
+        REDIS_CACHE[Redis Cache]
+    end
     
-    GW --> VAL
-    VAL --> NORM
-    NORM --> AGG
-    AGG --> ENR
-    ENR --> FEAT
+    ALPACA --> INGEST
+    POLYGON --> INGEST
+    YAHOO --> INGEST
     
-    FEAT --> REDIS
-    REDIS --> WS
-    REDIS --> GRPC
+    INGEST --> FEATURES
+    FEATURES --> FEAT_STREAM
+    FEATURES --> TRAINING
+    TRAINING --> REGISTRY
+    REGISTRY --> MODELS
+    REGISTRY --> MODEL_STREAM
     
-    WS --> UI
-    GRPC --> STRAT
-    GRPC --> ML
-    REDIS --> HIST
+    FEAT_STREAM --> INFERENCE
+    MODEL_STREAM --> INFERENCE
+    INFERENCE --> DAA
+    DAA --> EXECUTION
+    EXECUTION --> ALPACA
+    
+    DAA --> SIGNAL_STREAM
+    EXECUTION --> ORDER_STREAM
+    
+    SIGNAL_STREAM --> TIMESCALE
+    ORDER_STREAM --> TIMESCALE
 ```
 
 ### Order Execution Flow
@@ -225,21 +258,68 @@ order_flow:
         - Performance metrics
 ```
 
-### ML Pipeline Data Flow
+### Binary-Specific Data Flow
 
 ```yaml
-ml_data_flow:
-  training_pipeline:
-    1_feature_extraction:
-      source: "Market Data Service"
-      processor: "Feature Engineering Service"
-      output: "Feature Store"
+binary_data_flow:
+  neural_ml_ops_pipeline:
+    1_market_data_ingestion:
+      sources: ["Alpaca API", "Polygon.io", "Yahoo Finance"]
+      frequency: "Real-time (WebSocket + REST)"
+      processing: "Normalization, validation, enrichment"
       
-      transformations:
-        - Technical indicators
-        - Price patterns
-        - Volume profiles
-        - Market microstructure
+    2_feature_engineering:
+      input: "Normalized market data"
+      processor: "Rust feature engine (embedded)"
+      output: "Redis Streams: features:computed"
+      
+      features:
+        - Technical indicators (SMA, EMA, RSI, MACD)
+        - Price patterns (support/resistance, breakouts)
+        - Volume analysis (VWAP, volume profile)
+        - Market microstructure (bid-ask spread, order flow)
+      
+    3_model_training:
+      input: "Historical features + labels"
+      processor: "ruv-FANN training pipeline"
+      output: "Trained BaseModel<f64> stored in config-store"
+      
+      models:
+        - Price prediction (1-min, 5-min, 15-min horizons)
+        - Volatility forecasting
+        - Trend classification
+        - Anomaly detection
+      
+    4_model_deployment:
+      trigger: "Training completion + validation"
+      action: "Publish ModelUpdateEvent to Redis Streams"
+      target: "neural-trading binary for hot-reload"
+  
+  neural_trading_pipeline:
+    1_event_consumption:
+      sources: 
+        - "Redis Streams: features:computed"
+        - "Redis Streams: models:updates"
+      consumer_group: "trading-group"
+      processing: "Deserialize and validate events"
+      
+    2_model_inference:
+      input: "Feature vectors from neural-ml-ops"
+      processor: "Embedded ruv-FANN inference (< 1ms)"
+      models: "Cached BaseModel<f64> instances"
+      output: "Price predictions with confidence scores"
+      
+    3_daa_coordination:
+      input: "Model predictions + market context"
+      processor: "DAA Coordinator (decision making)"
+      logic: "Risk assessment, position sizing, timing"
+      output: "Trading decisions with reasoning"
+      
+    4_order_execution:
+      input: "Trading decisions from DAA"
+      processor: "Alpaca API order execution"
+      validation: "Pre-trade risk checks, compliance"
+      output: "Order fills + execution reports"
     
     2_dataset_preparation:
       source: "Feature Store"

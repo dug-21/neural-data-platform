@@ -1,155 +1,271 @@
-# Extraction Algorithms - Neural Trader V2 Refactoring
+# Feature Engineering Algorithms - Neural Trader V2 Binary Architecture
 
 ## Overview
 
-This document provides detailed pseudocode algorithms for extracting components from the neural-trader monolith into distinct service layers. Each algorithm focuses on identifying, isolating, and extracting specific functional domains while maintaining system integrity.
+This document provides detailed pseudocode algorithms for feature engineering components in the ML Ops binary. The algorithms focus on real-time feature computation, ruv-FANN training data preparation, and Redis Streams integration for the separated binary architecture.
 
 ---
 
-## 1. ML Ops Functionality Extraction
+## 1. ML Ops Feature Engineering Pipeline
 
-### 1.1 Neural Module Dependency Analysis
-
-```
-ALGORITHM: AnalyzeNeuralDependencies
-INPUT: source_directory (string), dependency_map (Map)
-OUTPUT: extraction_plan (ExtractionPlan)
-
-BEGIN
-    neural_files ← ScanDirectory("src/neural/")
-    dependencies ← Map()
-    external_deps ← Set()
-    
-    FOR EACH file IN neural_files DO
-        ast ← ParseRustFile(file)
-        imports ← ExtractImports(ast)
-        
-        FOR EACH import IN imports DO
-            IF import.starts_with("crate::") THEN
-                internal_dep ← import.replace("crate::", "")
-                dependencies[file].add(internal_dep)
-            ELSE
-                external_deps.add(import)
-            END IF
-        END FOR
-    END FOR
-    
-    // Identify circular dependencies
-    cycles ← DetectCycles(dependencies)
-    
-    // Create extraction plan
-    extraction_plan ← ExtractionPlan{
-        source_files: neural_files,
-        dependencies: dependencies,
-        circular_deps: cycles,
-        external_deps: external_deps,
-        extraction_order: TopologicalSort(dependencies)
-    }
-    
-    RETURN extraction_plan
-END
-
-SUBROUTINE: DetectCycles
-INPUT: deps (Map<string, Set<string>>)
-OUTPUT: cycles (List<List<string>>)
-
-BEGIN
-    visited ← Set()
-    rec_stack ← Set()
-    cycles ← []
-    
-    FOR EACH node IN deps.keys() DO
-        IF node NOT IN visited THEN
-            path ← []
-            DetectCyclesRecursive(node, deps, visited, rec_stack, path, cycles)
-        END IF
-    END FOR
-    
-    RETURN cycles
-END
-```
-
-### 1.2 Model Storage Extraction Algorithm
+### 1.1 Real-Time Feature Engineering Pipeline
 
 ```
-ALGORITHM: ExtractModelStorage
-INPUT: neural_predictor_path (string)
-OUTPUT: storage_service_spec (ServiceSpec)
+ALGORITHM: RealTimeFeatureEngineering
+INPUT: market_data_stream (RedisStream), feature_config (FeatureConfig)
+OUTPUT: feature_stream (RedisStream)
 
 BEGIN
-    // Analyze current model storage patterns
-    storage_methods ← []
-    file_operations ← []
-    memory_operations ← []
+    // Initialize feature processors
+    technical_indicators ← InitializeTechnicalIndicators(feature_config.indicators)
+    statistical_features ← InitializeStatisticalFeatures(feature_config.statistics)
+    pattern_recognizers ← InitializePatternRecognizers(feature_config.patterns)
     
-    source_files ← ["src/neural/mvp_predictor.rs", 
-                   "src/neural/model_factory.rs",
-                   "src/adapters/model_storage.rs"]
+    // Initialize Redis streams
+    input_stream ← RedisStream.connect("market-data")
+    output_stream ← RedisStream.connect("feature-vectors")
     
-    FOR EACH file IN source_files DO
-        ast ← ParseRustFile(file)
-        functions ← ExtractFunctions(ast)
-        
-        FOR EACH function IN functions DO
-            IF function.name.contains("save") OR function.name.contains("load") THEN
-                storage_methods.append(function)
-            END IF
+    // Process streaming data
+    WHILE input_stream.is_active() DO
+        TRY
+            // Read batch from input stream
+            batch ← input_stream.read_batch(batch_size: 100, timeout: 1000)
             
-            // Check for file I/O operations
-            IF function.body.contains("File::") OR function.body.contains("std::fs") THEN
-                file_operations.append(function)
-            END IF
+            FOR EACH data_point IN batch DO
+                // Extract raw features
+                raw_features ← ExtractRawFeatures(data_point)
+                
+                // Compute technical indicators
+                technical_features ← ComputeTechnicalIndicators(
+                    technical_indicators, 
+                    raw_features
+                )
+                
+                // Compute statistical features
+                statistical_features_computed ← ComputeStatisticalFeatures(
+                    statistical_features, 
+                    raw_features
+                )
+                
+                // Recognize patterns
+                pattern_features ← RecognizePatterns(
+                    pattern_recognizers, 
+                    raw_features
+                )
+                
+                // Combine all features
+                feature_vector ← FeatureVector{
+                    timestamp: data_point.timestamp,
+                    symbol: data_point.symbol,
+                    raw_features: raw_features,
+                    technical_features: technical_features,
+                    statistical_features: statistical_features_computed,
+                    pattern_features: pattern_features,
+                    metadata: CreateFeatureMetadata(data_point)
+                }
+                
+                // Validate feature vector
+                IF ValidateFeatureVector(feature_vector) THEN
+                    // Publish to output stream
+                    output_stream.publish("feature-computed", feature_vector)
+                    RecordMetrics("features_computed", data_point.symbol)
+                ELSE
+                    LogWarning("Invalid feature vector", feature_vector)
+                    RecordMetrics("features_invalid", data_point.symbol)
+                END IF
+            END FOR
             
-            // Check for memory operations
-            IF function.body.contains("Arc::") OR function.body.contains("Mutex::") THEN
-                memory_operations.append(function)
-            END IF
-        END FOR
-    END FOR
-    
-    // Generate service specification
-    service_spec ← ServiceSpec{
-        name: "model-storage-service",
-        api_methods: ExtractApiMethods(storage_methods),
-        data_structures: ExtractDataStructures(storage_methods),
-        persistence_layer: AnalyzePersistenceNeeds(file_operations),
-        caching_layer: AnalyzeCachingNeeds(memory_operations),
-        migrations: GenerateMigrationPlan(storage_methods)
-    }
-    
-    RETURN service_spec
+        CATCH stream_error
+            LogError("Stream processing error", stream_error)
+            RecordMetrics("stream_error", stream_error.type)
+            Sleep(1000) // Back off before retry
+        END TRY
+    END WHILE
 END
 
-SUBROUTINE: ExtractApiMethods
-INPUT: methods (List<Function>)
-OUTPUT: api_methods (List<ApiMethod>)
+SUBROUTINE: ComputeTechnicalIndicators
+INPUT: indicators (List<TechnicalIndicator>), raw_features (RawFeatures)
+OUTPUT: technical_features (TechnicalFeatures)
 
 BEGIN
-    api_methods ← []
+    technical_features ← TechnicalFeatures{}
     
-    FOR EACH method IN methods DO
-        api_method ← ApiMethod{
-            name: ConvertToSnakeCase(method.name),
-            http_method: DetermineHttpMethod(method.name),
-            path: GenerateRestPath(method.name),
-            parameters: ExtractParameters(method.signature),
-            return_type: ExtractReturnType(method.signature),
-            grpc_definition: GenerateGrpcMethod(method)
+    FOR EACH indicator IN indicators DO
+        SWITCH indicator.type DO
+            CASE "SMA":
+                sma_value ← CalculateSMA(raw_features.price_history, indicator.period)
+                technical_features.sma[indicator.period] ← sma_value
+                
+            CASE "EMA":
+                ema_value ← CalculateEMA(raw_features.price_history, indicator.period)
+                technical_features.ema[indicator.period] ← ema_value
+                
+            CASE "RSI":
+                rsi_value ← CalculateRSI(raw_features.price_history, indicator.period)
+                technical_features.rsi ← rsi_value
+                
+            CASE "MACD":
+                macd_result ← CalculateMACD(
+                    raw_features.price_history, 
+                    indicator.fast_period, 
+                    indicator.slow_period, 
+                    indicator.signal_period
+                )
+                technical_features.macd ← macd_result
+                
+            CASE "BOLLINGER_BANDS":
+                bb_result ← CalculateBollingerBands(
+                    raw_features.price_history, 
+                    indicator.period, 
+                    indicator.std_dev_factor
+                )
+                technical_features.bollinger_bands ← bb_result
+        END SWITCH
+    END FOR
+    
+    RETURN technical_features
+END
+```
+
+### 1.2 ruv-FANN Training Data Preparation
+
+```
+ALGORITHM: PrepareRuvFANNTrainingData
+INPUT: feature_stream (RedisStream), training_config (TrainingConfig)
+OUTPUT: training_dataset (RuvFANNDataset)
+
+BEGIN
+    // Initialize data collectors
+    feature_buffer ← RingBuffer(size: training_config.buffer_size)
+    label_generator ← InitializeLabelGenerator(training_config.labeling_strategy)
+    data_normalizer ← InitializeDataNormalizer(training_config.normalization_config)
+    
+    // Initialize Redis streams
+    feature_stream ← RedisStream.connect("feature-vectors")
+    training_stream ← RedisStream.connect("training-data")
+    
+    training_samples ← []
+    
+    WHILE feature_stream.is_active() DO
+        TRY
+            // Read feature vectors
+            feature_batch ← feature_stream.read_batch(
+                batch_size: training_config.batch_size,
+                timeout: 5000
+            )
+            
+            FOR EACH feature_vector IN feature_batch DO
+                // Add to buffer for sequence learning
+                feature_buffer.push(feature_vector)
+                
+                // Check if we have enough history for training sample
+                IF feature_buffer.is_full() THEN
+                    // Create training sample
+                    training_sample ← CreateTrainingample(
+                        feature_buffer.get_sequence(),
+                        label_generator,
+                        training_config
+                    )
+                    
+                    // Normalize features for ruv-FANN
+                    normalized_sample ← NormalizeForRuvFANN(
+                        training_sample,
+                        data_normalizer
+                    )
+                    
+                    // Validate training sample
+                    IF ValidateTrainingSample(normalized_sample) THEN
+                        training_samples.append(normalized_sample)
+                        
+                        // Publish to training stream
+                        training_stream.publish("training-sample", normalized_sample)
+                        RecordMetrics("training_sample_created", feature_vector.symbol)
+                        
+                        // Check if batch is ready for ruv-FANN
+                        IF training_samples.length >= training_config.ruv_fann_batch_size THEN
+                            ProcessRuvFANNTrainingBatch(training_samples, training_config)
+                            training_samples.clear()
+                        END IF
+                    ELSE
+                        LogWarning("Invalid training sample", normalized_sample)
+                        RecordMetrics("training_sample_invalid", feature_vector.symbol)
+                    END IF
+                END IF
+            END FOR
+            
+        CATCH processing_error
+            LogError("Training data preparation error", processing_error)
+            RecordMetrics("training_data_error", processing_error.type)
+        END TRY
+    END WHILE
+END
+
+SUBROUTINE: CreateTrainingSample
+INPUT: feature_sequence (List<FeatureVector>), label_generator (LabelGenerator), config (TrainingConfig)
+OUTPUT: training_sample (TrainingSample)
+
+BEGIN
+    // Extract input features (current and historical)
+    input_features ← ExtractInputFeatures(feature_sequence, config.input_window_size)
+    
+    // Generate label based on future price movement
+    label ← label_generator.generate_label(
+        feature_sequence,
+        config.prediction_horizon,
+        config.labeling_threshold
+    )
+    
+    // Create training sample
+    training_sample ← TrainingSample{
+        timestamp: feature_sequence.last().timestamp,
+        symbol: feature_sequence.last().symbol,
+        input_features: input_features,
+        label: label,
+        metadata: TrainingMetadata{
+            sequence_length: feature_sequence.length,
+            prediction_horizon: config.prediction_horizon,
+            labeling_strategy: label_generator.strategy
         }
-        
-        api_methods.append(api_method)
-    END FOR
+    }
     
-    RETURN api_methods
+    RETURN training_sample
+END
+
+SUBROUTINE: ProcessRuvFANNTrainingBatch
+INPUT: training_samples (List<TrainingSample>), config (TrainingConfig)
+
+BEGIN
+    // Convert to ruv-FANN format
+    ruv_fann_batch ← ConvertToRuvFANNFormat(training_samples)
+    
+    // Publish training batch to Redis stream for ruv-FANN processing
+    training_batch_stream ← RedisStream.connect("ruv-fann-training")
+    
+    batch_message ← RuvFANNTrainingBatch{
+        batch_id: GenerateBatchId(),
+        timestamp: CurrentTimestamp(),
+        samples: ruv_fann_batch,
+        config: config.ruv_fann_config,
+        metadata: BatchMetadata{
+            sample_count: training_samples.length,
+            symbols: ExtractUniqueSymbols(training_samples),
+            time_range: GetTimeRange(training_samples)
+        }
+    }
+    
+    training_batch_stream.publish("batch-ready", batch_message)
+    
+    LogInfo("ruv-FANN training batch prepared", batch_message.batch_id)
+    RecordMetrics("ruv_fann_batch_prepared", training_samples.length)
 END
 ```
 
-### 1.3 Feature Engineering Extraction
+### 1.3 Pattern Recognition and Feature Extraction
 
 ```
-ALGORITHM: ExtractFeatureEngineering
-INPUT: features_directory (string)
-OUTPUT: feature_service_plan (FeatureServicePlan)
+ALGORITHM: AdvancedPatternRecognition
+INPUT: feature_vectors (List<FeatureVector>), pattern_config (PatternConfig)
+OUTPUT: pattern_features (PatternFeatures)
 
 BEGIN
     feature_files ← ScanDirectory("src/features/")
@@ -206,14 +322,14 @@ END
 
 ---
 
-## 2. Domain Logic Separation Algorithms
+## 2. Trading Binary Algorithms
 
-### 2.1 Trading Logic Extraction
+### 2.1 DAA Coordination Implementation
 
 ```
-ALGORITHM: ExtractTradingLogic
-INPUT: action_layer_path (string)
-OUTPUT: trading_service_spec (TradingServiceSpec)
+ALGORITHM: ImplementDAACoordination
+INPUT: agent_configs (List<AgentConfig>), coordination_strategy (CoordinationStrategy)
+OUTPUT: daa_coordinator (DAACoordinator)
 
 BEGIN
     trading_files ← ScanDirectory("src/action_layer/")
@@ -366,9 +482,9 @@ END
 
 ---
 
-## 3. Shared Utilities Identification
+## 3. Feedback Loop Implementation
 
-### 3.1 Utility Function Classification
+### 3.1 Trading Performance Feedback
 
 ```
 ALGORITHM: ClassifyUtilities
@@ -531,9 +647,9 @@ END
 
 ---
 
-## 4. Cross-Cutting Concerns Extraction
+## 4. Binary Communication Protocols
 
-### 4.1 Logging Infrastructure Separation
+### 4.1 Redis Streams Pub/Sub Implementation
 
 ```
 ALGORITHM: ExtractLoggingInfrastructure
@@ -652,9 +768,9 @@ END
 
 ---
 
-## 5. Dependency Resolution Algorithms
+## 5. ruv-FANN Integration Algorithms
 
-### 5.1 Circular Dependency Breaking
+### 5.1 Neural Network Training Pipeline
 
 ```
 ALGORITHM: BreakCircularDependencies
@@ -770,9 +886,9 @@ END
 
 ---
 
-## 6. Migration Validation Algorithms
+## 6. Model Deployment and Inference
 
-### 6.1 Behavioral Equivalence Verification
+### 6.1 Trained Model Deployment
 
 ```
 ALGORITHM: VerifyBehavioralEquivalence

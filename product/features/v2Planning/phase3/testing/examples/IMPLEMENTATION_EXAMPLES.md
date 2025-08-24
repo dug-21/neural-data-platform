@@ -1,24 +1,183 @@
-# Neural Trader V2 - Testing Implementation Examples
+# Neural Trader V2 - Binary Separation Testing Implementation Examples
 
 ## Overview
 
-Real-world implementation examples demonstrating how to apply the comprehensive testing strategy for Neural Trader V2 components.
+Real-world implementation examples demonstrating how to apply the comprehensive testing strategy for the **binary separation architecture** with Redis Streams integration.
 
-## Examples Catalog
+## Binary Testing Examples Catalog
 
-### 1. Config Store Service Testing
-### 2. Market Data Stream Testing  
-### 3. Trading Engine Testing
-### 4. API Gateway Testing
-### 5. Database Layer Testing
-### 6. Integration Testing Scenarios
+### 1. Config Store Binary Testing (Rust + gRPC)
+### 2. Data Ingestion Binary Testing (Python + Redis Streams)
+### 3. ruv-FANN Binary Testing (Rust + Neural Networks)
+### 4. DAA Coordinator Binary Testing (Rust + Distributed Agents)
+### 5. Redis Streams Cross-Binary Communication Testing
+### 6. Binary Integration Testing Scenarios
 
-## 1. Config Store Service Testing Example
+## 1. Config Store Binary Testing Example (Rust)
 
-### Service Implementation
-```typescript
-// src/config-store/config-store.service.ts
-export class ConfigStoreService {
+### gRPC Service Implementation
+```rust
+// config-store/src/service.rs
+use tonic::{Request, Response, Status};
+use sqlx::PgPool;
+use std::sync::Arc;
+
+use crate::proto::config_store::{
+    config_store_server::ConfigStore,
+    GetConfigRequest, GetConfigResponse, SetConfigRequest, SetConfigResponse,
+    ConfigEntry,
+};
+
+#[derive(Clone)]
+pub struct ConfigStoreService {
+    db_pool: Arc<PgPool>,
+    redis_client: Arc<redis::Client>,
+}
+
+impl ConfigStoreService {
+    pub fn new(db_pool: PgPool, redis_client: redis::Client) -> Self {
+        ConfigStoreService {
+            db_pool: Arc::new(db_pool),
+            redis_client: Arc::new(redis_client),
+        }
+    }
+}
+
+#[tonic::async_trait]
+impl ConfigStore for ConfigStoreService {
+    async fn get_config(
+        &self,
+        request: Request<GetConfigRequest>,
+    ) -> Result<Response<GetConfigResponse>, Status> {
+        let req = request.into_inner();
+        
+        // First check Redis cache
+        let cache_key = format!("config:{}:{}", req.namespace, req.key);
+        let mut redis_conn = self.redis_client.get_async_connection().await
+            .map_err(|e| Status::internal(format!("Redis error: {}", e)))?;
+            
+        if let Ok(cached_value) = redis::cmd("GET")
+            .arg(&cache_key)
+            .query_async::<_, Option<String>>(&mut redis_conn)
+            .await
+        {
+            if let Some(cached) = cached_value {
+                if let Ok(config) = serde_json::from_str::<ConfigEntry>(&cached) {
+                    return Ok(Response::new(GetConfigResponse {
+                        config: Some(config),
+                    }));
+                }
+            }
+        }
+        
+        // Fallback to database
+        let config = sqlx::query_as!(
+            ConfigEntry,
+            "SELECT key, value, namespace, version, created_at, updated_at 
+             FROM configurations 
+             WHERE key = $1 AND namespace = $2",
+            req.key,
+            req.namespace
+        )
+        .fetch_optional(&*self.db_pool)
+        .await
+        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        
+        match config {
+            Some(config) => {
+                // Cache for future requests
+                let config_json = serde_json::to_string(&config)
+                    .map_err(|e| Status::internal(format!("Serialization error: {}", e)))?;
+                    
+                let _: () = redis::cmd("SETEX")
+                    .arg(&cache_key)
+                    .arg(300) // 5 minutes TTL
+                    .arg(&config_json)
+                    .query_async(&mut redis_conn)
+                    .await
+                    .unwrap_or_default(); // Don't fail if cache fails
+                    
+                Ok(Response::new(GetConfigResponse {
+                    config: Some(config),
+                }))
+            }
+            None => Err(Status::not_found("Configuration not found")),
+        }
+    }
+    
+    async fn set_config(
+        &self,
+        request: Request<SetConfigRequest>,
+    ) -> Result<Response<SetConfigResponse>, Status> {
+        let req = request.into_inner();
+        
+        // Insert/update in database
+        let config = sqlx::query_as!(
+            ConfigEntry,
+            "INSERT INTO configurations (key, value, namespace, version, created_at, updated_at)
+             VALUES ($1, $2, $3, 1, NOW(), NOW())
+             ON CONFLICT (key, namespace) DO UPDATE SET
+                 value = EXCLUDED.value,
+                 version = configurations.version + 1,
+                 updated_at = NOW()
+             RETURNING key, value, namespace, version, created_at, updated_at",
+            req.key,
+            req.value,
+            req.namespace
+        )
+        .fetch_one(&*self.db_pool)
+        .await
+        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        
+        // Update cache
+        let cache_key = format!("config:{}:{}", req.namespace, req.key);
+        let config_json = serde_json::to_string(&config)
+            .map_err(|e| Status::internal(format!("Serialization error: {}", e)))?;
+            
+        if let Ok(mut redis_conn) = self.redis_client.get_async_connection().await {
+            let _: () = redis::cmd("SETEX")
+                .arg(&cache_key)
+                .arg(300)
+                .arg(&config_json)
+                .query_async(&mut redis_conn)
+                .await
+                .unwrap_or_default();
+        }
+        
+        // Publish configuration change to Redis Streams
+        self.publish_config_change(&config).await?;
+        
+        Ok(Response::new(SetConfigResponse {
+            config: Some(config),
+        }))
+    }
+}
+
+impl ConfigStoreService {
+    async fn publish_config_change(&self, config: &ConfigEntry) -> Result<(), Status> {
+        if let Ok(mut redis_conn) = self.redis_client.get_async_connection().await {
+            let change_event = serde_json::json!({
+                "type": "config_updated",
+                "key": config.key,
+                "namespace": config.namespace,
+                "version": config.version,
+                "timestamp": chrono::Utc::now().timestamp()
+            });
+            
+            let _: () = redis::cmd("XADD")
+                .arg("config_updates_stream")
+                .arg("*")
+                .arg("event")
+                .arg(change_event.to_string())
+                .query_async(&mut redis_conn)
+                .await
+                .map_err(|e| Status::internal(format!("Stream publish error: {}", e)))?;
+        }
+        
+        Ok(())
+    }
+}
+```
   constructor(
     private repository: ConfigRepository,
     private cache: CacheService,
@@ -91,9 +250,320 @@ export class ConfigStoreService {
 }
 ```
 
-### Complete Unit Test Suite
-```typescript
-// tests/unit/config-store/config-store.service.test.ts
+### Complete Rust Unit Test Suite
+```rust
+// config-store/src/service.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockall::predicate::*;
+    use tokio_test;
+    use sqlx::PgPool;
+    use testcontainers::{
+        clients::Cli,
+        images::{postgres::Postgres, redis::Redis},
+        Container,
+    };
+    
+    struct TestContext {
+        db_pool: PgPool,
+        redis_client: redis::Client,
+        _postgres_container: Container<'static, Postgres>,
+        _redis_container: Container<'static, Redis>,
+    }
+    
+    impl TestContext {
+        async fn new() -> Self {
+            let docker = Cli::default();
+            
+            // Start test containers
+            let postgres_container = docker.run(Postgres::default());
+            let redis_container = docker.run(Redis::default());
+            
+            let postgres_port = postgres_container.get_host_port_ipv4(5432);
+            let redis_port = redis_container.get_host_port_ipv4(6379);
+            
+            // Setup database connection
+            let database_url = format!(
+                "postgres://postgres:postgres@localhost:{}/postgres",
+                postgres_port
+            );
+            let db_pool = PgPool::connect(&database_url).await.unwrap();
+            
+            // Run migrations
+            sqlx::migrate!("../migrations").run(&db_pool).await.unwrap();
+            
+            // Setup Redis connection
+            let redis_url = format!("redis://localhost:{}", redis_port);
+            let redis_client = redis::Client::open(redis_url).unwrap();
+            
+            TestContext {
+                db_pool,
+                redis_client,
+                _postgres_container: postgres_container,
+                _redis_container: redis_container,
+            }
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_get_config_from_cache() {
+        let ctx = TestContext::new().await;
+        let service = ConfigStoreService::new(ctx.db_pool.clone(), ctx.redis_client.clone());
+        
+        // Arrange - Seed Redis cache
+        let mut redis_conn = ctx.redis_client.get_async_connection().await.unwrap();
+        let test_config = ConfigEntry {
+            key: "test_key".to_string(),
+            value: "test_value".to_string(),
+            namespace: "test".to_string(),
+            version: 1,
+            created_at: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
+            updated_at: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
+        };
+        
+        let cache_key = "config:test:test_key";
+        let config_json = serde_json::to_string(&test_config).unwrap();
+        let _: () = redis::cmd("SET")
+            .arg(cache_key)
+            .arg(&config_json)
+            .query_async(&mut redis_conn)
+            .await
+            .unwrap();
+        
+        // Act
+        let request = tonic::Request::new(GetConfigRequest {
+            key: "test_key".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response = service.get_config(request).await;
+        
+        // Assert
+        assert!(response.is_ok());
+        let response = response.unwrap().into_inner();
+        assert!(response.config.is_some());
+        
+        let config = response.config.unwrap();
+        assert_eq!(config.key, "test_key");
+        assert_eq!(config.value, "test_value");
+        assert_eq!(config.namespace, "test");
+        assert_eq!(config.version, 1);
+    }
+    
+    #[tokio::test]
+    async fn test_get_config_from_database_when_cache_miss() {
+        let ctx = TestContext::new().await;
+        let service = ConfigStoreService::new(ctx.db_pool.clone(), ctx.redis_client.clone());
+        
+        // Arrange - Seed database directly
+        sqlx::query!(
+            "INSERT INTO configurations (key, value, namespace, version, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, NOW(), NOW())",
+            "db_key",
+            "db_value",
+            "test",
+            1
+        )
+        .execute(&ctx.db_pool)
+        .await
+        .unwrap();
+        
+        // Act
+        let request = tonic::Request::new(GetConfigRequest {
+            key: "db_key".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response = service.get_config(request).await;
+        
+        // Assert
+        assert!(response.is_ok());
+        let response = response.unwrap().into_inner();
+        assert!(response.config.is_some());
+        
+        let config = response.config.unwrap();
+        assert_eq!(config.key, "db_key");
+        assert_eq!(config.value, "db_value");
+        
+        // Verify cache was populated
+        let mut redis_conn = ctx.redis_client.get_async_connection().await.unwrap();
+        let cached_value: Option<String> = redis::cmd("GET")
+            .arg("config:test:db_key")
+            .query_async(&mut redis_conn)
+            .await
+            .unwrap();
+            
+        assert!(cached_value.is_some());
+        let cached_config: ConfigEntry = serde_json::from_str(&cached_value.unwrap()).unwrap();
+        assert_eq!(cached_config.key, "db_key");
+    }
+    
+    #[tokio::test]
+    async fn test_set_config_publishes_to_stream() {
+        let ctx = TestContext::new().await;
+        let service = ConfigStoreService::new(ctx.db_pool.clone(), ctx.redis_client.clone());
+        
+        // Arrange - Create consumer group for monitoring
+        let mut redis_conn = ctx.redis_client.get_async_connection().await.unwrap();
+        let _: () = redis::cmd("XGROUP")
+            .arg("CREATE")
+            .arg("config_updates_stream")
+            .arg("test_group")
+            .arg("0")
+            .arg("MKSTREAM")
+            .query_async(&mut redis_conn)
+            .await
+            .unwrap_or_default();
+        
+        // Act
+        let request = tonic::Request::new(SetConfigRequest {
+            key: "stream_test_key".to_string(),
+            value: "stream_test_value".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response = service.set_config(request).await;
+        
+        // Assert - Config was saved
+        assert!(response.is_ok());
+        let response = response.unwrap().into_inner();
+        assert!(response.config.is_some());
+        
+        let config = response.config.unwrap();
+        assert_eq!(config.key, "stream_test_key");
+        assert_eq!(config.value, "stream_test_value");
+        
+        // Assert - Stream message was published
+        let stream_messages: redis::Value = redis::cmd("XREADGROUP")
+            .arg("GROUP")
+            .arg("test_group")
+            .arg("test_consumer")
+            .arg("COUNT")
+            .arg(1)
+            .arg("STREAMS")
+            .arg("config_updates_stream")
+            .arg(">")
+            .query_async(&mut redis_conn)
+            .await
+            .unwrap();
+            
+        // Verify stream message format (simplified assertion)
+        match stream_messages {
+            redis::Value::Bulk(ref streams) if !streams.is_empty() => {
+                // Message was published successfully
+                assert!(true);
+            }
+            _ => panic!("No stream message found"),
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_config_not_found() {
+        let ctx = TestContext::new().await;
+        let service = ConfigStoreService::new(ctx.db_pool.clone(), ctx.redis_client.clone());
+        
+        // Act
+        let request = tonic::Request::new(GetConfigRequest {
+            key: "nonexistent_key".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response = service.get_config(request).await;
+        
+        // Assert
+        assert!(response.is_err());
+        let error = response.unwrap_err();
+        assert_eq!(error.code(), tonic::Code::NotFound);
+        assert!(error.message().contains("Configuration not found"));
+    }
+    
+    #[tokio::test]
+    async fn test_config_versioning() {
+        let ctx = TestContext::new().await;
+        let service = ConfigStoreService::new(ctx.db_pool.clone(), ctx.redis_client.clone());
+        
+        // Create initial config
+        let request1 = tonic::Request::new(SetConfigRequest {
+            key: "version_test".to_string(),
+            value: "initial_value".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response1 = service.set_config(request1).await.unwrap().into_inner();
+        assert_eq!(response1.config.unwrap().version, 1);
+        
+        // Update the same config
+        let request2 = tonic::Request::new(SetConfigRequest {
+            key: "version_test".to_string(),
+            value: "updated_value".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response2 = service.set_config(request2).await.unwrap().into_inner();
+        let updated_config = response2.config.unwrap();
+        assert_eq!(updated_config.version, 2);
+        assert_eq!(updated_config.value, "updated_value");
+    }
+    
+    #[tokio::test]
+    async fn test_database_error_handling() {
+        let ctx = TestContext::new().await;
+        
+        // Close the database pool to simulate connection failure
+        ctx.db_pool.close().await;
+        
+        let service = ConfigStoreService::new(ctx.db_pool.clone(), ctx.redis_client.clone());
+        
+        let request = tonic::Request::new(GetConfigRequest {
+            key: "test_key".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response = service.get_config(request).await;
+        
+        assert!(response.is_err());
+        let error = response.unwrap_err();
+        assert_eq!(error.code(), tonic::Code::Internal);
+        assert!(error.message().contains("Database error"));
+    }
+    
+    #[tokio::test]
+    async fn test_redis_fallback_behavior() {
+        let ctx = TestContext::new().await;
+        
+        // Use invalid Redis client to simulate Redis failure
+        let invalid_redis_client = redis::Client::open("redis://localhost:9999").unwrap();
+        let service = ConfigStoreService::new(ctx.db_pool.clone(), invalid_redis_client);
+        
+        // Seed database
+        sqlx::query!(
+            "INSERT INTO configurations (key, value, namespace, version, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, NOW(), NOW())",
+            "fallback_key",
+            "fallback_value",
+            "test",
+            1
+        )
+        .execute(&ctx.db_pool)
+        .await
+        .unwrap();
+        
+        // Should still work with database fallback
+        let request = tonic::Request::new(GetConfigRequest {
+            key: "fallback_key".to_string(),
+            namespace: "test".to_string(),
+        });
+        
+        let response = service.get_config(request).await;
+        
+        assert!(response.is_ok());
+        let config = response.unwrap().into_inner().config.unwrap();
+        assert_eq!(config.key, "fallback_key");
+        assert_eq!(config.value, "fallback_value");
+    }
+}
+```
 import { describe, beforeEach, afterEach, it, expect, jest } from '@jest/globals';
 import { ConfigStoreService } from '../../../src/config-store/config-store.service';
 import { MockConfigRepository } from '../../mocks/config-repository.mock';

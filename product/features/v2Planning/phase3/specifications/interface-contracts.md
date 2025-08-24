@@ -1,13 +1,13 @@
-# Neural Trader V2 Interface Specifications
+# Neural Trader V2 Interface Specifications (CORRECTED)
 
 ## SPARC Phase: Architecture - Interface Design
 
 ### Document Information
 - **Version**: 2.0
 - **Date**: 2025-08-23
-- **Status**: Greenfield Interface Design
-- **Scope**: Complete service interface definitions with comprehensive testing support
-- **Architecture**: Clean, testable, mock-friendly interfaces
+- **Status**: Single Rust Binary Interface Design
+- **Scope**: Embedded component interfaces with ruv-FANN and DAA Coordinator
+- **Architecture**: Clean, testable, embedded interfaces (no microservices)
 
 ---
 
@@ -27,27 +27,26 @@ This document defines all interface contracts for Neural Trader V2 services, des
 
 ## Interface Architecture Overview
 
-### Service Communication Patterns
+### Component Communication Patterns (Single Binary)
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                 Interface Layer Architecture                   │
+│              Neural Trader Rust Binary Interfaces             │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
-│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐          │
-│  │   Market    │   │   Feature   │   │   Model     │          │
-│  │    Data     │   │ Engineering │   │ Management  │          │
-│  │   Service   │   │   Service   │   │   Service   │          │
-│  └─────────────┘   └─────────────┘   └─────────────┘          │
-│         │                  │                  │               │
-│         │     gRPC APIs    │     gRPC APIs    │               │
-│         ↓                  ↓                  ↓               │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Event Bus Interface                         │  │
-│  │         (NATS Streaming with Schemas)                    │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                │                               │
-│  ┌─────────────┐               │               ┌─────────────┐  │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────────────┐    │
+│  │   Market    │   │   Feature   │   │   Trading Module    │    │
+│  │    Data     │   │ Engineering │   │ + ruv-FANN Models  │    │
+│  │   Module    │   │   Module    │   │ + DAA Coordinator  │    │
+│  └─────────────┘   └─────────────┘   └─────────────────────┘    │
+│         │                  │                  │                 │
+│         │   Rust Channels   │   Rust Channels  │                 │
+│         ↓                  ↓                  ↓                 │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │           Internal Event Bus (Rust Channels)            │    │
+│  │           + External EventBus (Redis Streams)           │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                │
 │  │   Trading   │               │               │   Shared    │  │
 │  │   Service   │               │               │  Services   │  │
 │  └─────────────┘               │               └─────────────┘  │

@@ -1,72 +1,124 @@
-# Rust Layer Separation Architecture
+# Rust Binary Separation Architecture (CORRECTED)
 
 ## Overview
 
-This document details the architectural refactoring of the Neural Trader Rust application (`/src`) into clean, testable layers following Domain-Driven Design and Clean Architecture principles.
+This document details the CORRECT architecture: THREE RUST BINARIES with Rust workspace structure. NO layers within a single binary - instead, clear binary separation with embedded ruv-FANN and DAA Coordinators.
 
-## Current State Analysis
+## Target Workspace Structure (Correct Architecture)
 
-### Existing Structure Problems
+### Rust Workspace with 3 Binaries
 ```
-/src/
-├── neural/           # Mixed ML logic and infrastructure
-├── action_layer/     # Trading + external APIs mixed
-├── features/         # Feature extraction + domain logic
-├── monitoring/       # Cross-cutting concerns
-├── adapters/         # External integrations
-├── config/          # Configuration scattered
-└── main.rs          # Monolithic initialization
-```
-
-**Issues:**
-- Domain logic mixed with infrastructure
-- Direct dependencies on external services
-- Configuration via environment variables
-- Difficult to test in isolation
-- Circular dependencies
-
-## Target Architecture
-
-### Layer Structure
-```
-┌────────────────────────────────────────────┐
-│          Presentation Layer                │
-│    (gRPC Services, REST APIs, WebSocket)   │
-├────────────────────────────────────────────┤
-│          Application Layer                 │
-│    (Use Cases, Service Orchestration)      │
-├────────────────────────────────────────────┤
-│            Domain Layer                    │
-│    (Entities, Value Objects, Domain Logic) │
-├────────────────────────────────────────────┤
-│         Infrastructure Layer               │
-│    (Repositories, External Services, DB)   │
-└────────────────────────────────────────────┘
-
-Dependencies: ↓ (inward only)
+Cargo.toml (workspace root)
+├── neural-core/          # Shared library
+│   ├── src/
+│   │   ├── types.rs      # Common data types
+│   │   ├── traits.rs     # Common interfaces
+│   │   ├── events.rs     # Redis Streams client
+│   │   └── ruv_fann.rs   # ruv-FANN integration
+│   └── Cargo.toml
+│
+├── neural-ml-ops/        # ML training binary
+│   ├── src/
+│   │   ├── main.rs       # Training pipeline main
+│   │   ├── trainer.rs    # ruv-FANN training
+│   │   ├── features.rs   # Feature engineering
+│   │   └── registry.rs   # Model storage
+│   └── Cargo.toml
+│
+├── neural-trading/       # Trading execution binary
+│   ├── src/
+│   │   ├── main.rs       # Trading main with DAA
+│   │   ├── daa.rs        # DAA Coordinator
+│   │   ├── inference.rs  # Embedded ruv-FANN inference
+│   │   ├── execution.rs  # Order execution
+│   │   └── market.rs     # Market data processing
+│   └── Cargo.toml
+│
+└── config-store/         # Separate gRPC service (existing)
+    ├── src/main.rs       # Config storage service
+    └── Cargo.toml
 ```
 
-## Layer Definitions
+## Binary Interaction Architecture
 
-### 1. Domain Layer (Core Business Logic)
+### Binary Communication Pattern
+```
+┌─────────────────────────────────────────┐
+│           NEURAL-ML-OPS                 │
+│          (Training Binary)              │
+├─────────────────────────────────────────┤
+│ • Feature Engineering (Rust)            │
+│ • ruv-FANN Model Training               │
+│ • Model Registry (config-store)         │
+│ • Event Publishing (Redis Streams)      │
+│ • NO DAA Coordinator                    │
+│ • NO Inference Engine                   │
+└─────────────────────────────────────────┘
+                    ↓
+          [Redis Streams Events]
+                    ↓
+┌─────────────────────────────────────────┐
+│          NEURAL-TRADING                 │
+│         (Execution Binary)              │
+├─────────────────────────────────────────┤
+│ • DAA Coordinator (Decision Making)     │
+│ • Embedded ruv-FANN Inference          │
+│ • Market Data Processing                │
+│ • Order Execution (Alpaca)             │
+│ • Event Subscription (Redis Streams)   │
+│ • NO Training                           │
+└─────────────────────────────────────────┘
+                    ↑
+          [Shared neural-core library]
+                    ↑
+┌─────────────────────────────────────────┐
+│            NEURAL-CORE                  │
+│           (Shared Library)              │
+├─────────────────────────────────────────┤
+│ • Common Data Types                     │
+│ • Event Streaming Traits               │
+│ • ruv-FANN BaseModel<T> Integration     │
+│ • Redis Streams Client                  │
+│ • Serialization/Deserialization        │
+└─────────────────────────────────────────┘
+
+Dependencies: Both binaries depend on neural-core
+```
+
+## Binary Definitions
+
+### 1. neural-core (Shared Library)
 
 ```rust
-// src/domain/mod.rs
-pub mod trading;
-pub mod neural;
-pub mod risk;
-pub mod market;
-
-// src/domain/trading/signal.rs
+// neural-core/src/types.rs
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use ruv_fann::BaseModel;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradingSignal {
-    symbol: Symbol,
-    action: TradeAction,
-    confidence: Confidence,
-    timestamp: DateTime<Utc>,
+    pub symbol: Symbol,
+    pub action: TradeAction,
+    pub confidence: f64,
+    pub timestamp: DateTime<Utc>,
+    pub model_id: ModelId,
+    pub reasoning: String, // DAA reasoning
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeatureVector {
+    pub symbol: Symbol,
+    pub timestamp: DateTime<Utc>,
+    pub features: Vec<f64>,
+    pub metadata: FeatureMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelUpdateEvent {
+    pub model_id: ModelId,
+    pub version: String,
+    pub config_store_path: String,
+    pub performance_metrics: ModelMetrics,
 }
 
 impl TradingSignal {
@@ -113,25 +165,58 @@ pub trait RiskValidator {
 }
 ```
 
-### 2. Application Layer (Use Cases)
+### 2. neural-ml-ops (Training Binary)
 
 ```rust
-// src/application/use_cases/generate_trading_signal.rs
-use crate::domain::trading::{TradingSignal, SignalGenerator};
-use crate::domain::market::MarketDataRepository;
-use crate::application::ports::{EventPublisher, SignalRepository};
+// neural-ml-ops/src/main.rs
+use neural_core::{FeatureVector, ModelUpdateEvent, RedisStreamPublisher};
+use ruv_fann::BaseModel;
+use tokio;
 
-pub struct GenerateTradingSignalUseCase<R, G, E, S>
-where
-    R: MarketDataRepository,
-    G: SignalGenerator,
-    E: EventPublisher,
-    S: SignalRepository,
-{
-    market_repo: R,
-    signal_generator: G,
-    event_publisher: E,
-    signal_repo: S,
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut trainer = MLOpsTrainer::new().await?;
+    
+    // Training pipeline
+    trainer.run_training_pipeline().await?;
+    
+    // Feature computation pipeline
+    trainer.run_feature_pipeline().await?;
+    
+    Ok(())
+}
+
+pub struct MLOpsTrainer {
+    feature_engine: FeatureEngine,
+    model_trainer: FANNModelTrainer,
+    model_registry: ConfigStoreRegistry,
+    event_publisher: RedisStreamPublisher,
+    
+    // NO DAA Coordinator (only in neural-trading)
+    // NO inference engine (only in neural-trading)
+}
+
+impl MLOpsTrainer {
+    pub async fn train_and_deploy_model(&mut self, config: TrainingConfig) -> Result<()> {
+        // 1. Prepare training data
+        let training_data = self.feature_engine.prepare_training_data(&config).await?;
+        
+        // 2. Train ruv-FANN model
+        let model = self.model_trainer.train_fann_model(&training_data).await?;
+        
+        // 3. Store in config-store
+        let model_id = self.model_registry.store_model(model, &config).await?;
+        
+        // 4. Publish update event to neural-trading
+        self.event_publisher.publish_model_update(ModelUpdateEvent {
+            model_id,
+            version: config.version,
+            config_store_path: format!("/models/{}", model_id),
+            performance_metrics: training_result.metrics,
+        }).await?;
+        
+        Ok(())
+    }
 }
 
 impl<R, G, E, S> GenerateTradingSignalUseCase<R, G, E, S>
@@ -183,17 +268,83 @@ impl TradingApplicationService {
 }
 ```
 
-### 3. Infrastructure Layer (External Integrations)
+### 3. neural-trading (Execution Binary)
 
 ```rust
-// src/infrastructure/persistence/postgres_signal_repository.rs
-use async_trait::async_trait;
-use sqlx::PgPool;
-use crate::domain::trading::TradingSignal;
-use crate::application::ports::SignalRepository;
+// neural-trading/src/main.rs
+use neural_core::{TradingSignal, FeatureVector, ModelUpdateEvent};
+use neural_core::{RedisStreamConsumer, RedisStreamPublisher};
+use ruv_fann::BaseModel;
+use tokio;
 
-pub struct PostgresSignalRepository {
-    pool: PgPool,
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut trading_engine = TradingEngine::new().await?;
+    
+    // Main trading loop with DAA coordination
+    trading_engine.run().await?;
+    
+    Ok(())
+}
+
+pub struct TradingEngine {
+    // DAA Coordinator (ONLY in domain binaries)
+    daa_coordinator: DAACoordinator,
+    
+    // Embedded ruv-FANN inference
+    model_cache: HashMap<ModelId, BaseModel<f64>>,
+    inference_engine: EmbeddedFANNInference,
+    
+    // Event handling
+    feature_subscriber: RedisStreamConsumer,
+    model_subscriber: RedisStreamConsumer,
+    signal_publisher: RedisStreamPublisher,
+    
+    // Trading execution
+    order_executor: AlpacaOrderExecutor,
+    market_data_processor: MarketDataProcessor,
+}
+
+impl TradingEngine {
+    pub async fn run(&mut self) -> Result<()> {
+        loop {
+            tokio::select! {
+                // Features from neural-ml-ops
+                features = self.feature_subscriber.next() => {
+                    if let Some(feature_event) = features {
+                        self.process_features(feature_event).await?;
+                    }
+                }
+                
+                // Model updates from neural-ml-ops
+                model_update = self.model_subscriber.next() => {
+                    if let Some(update) = model_update {
+                        self.hot_reload_model(update).await?;
+                    }
+                }
+            }
+        }
+    }
+    
+    async fn process_features(&mut self, features: FeatureVector) -> Result<()> {
+        // 1. Embedded ruv-FANN inference (< 1ms, no network calls)
+        let model = self.model_cache.get(&features.model_id).unwrap();
+        let prediction = self.inference_engine.predict(model, &features.features)?;
+        
+        // 2. DAA Coordinator makes trading decision
+        let decision = self.daa_coordinator.coordinate_trading_decision(
+            prediction,
+            features.symbol,
+            self.get_market_context()
+        )?;
+        
+        // 3. Execute trading action if warranted
+        if let Some(action) = decision {
+            self.order_executor.execute(action).await?;
+        }
+        
+        Ok(())
+    }
 }
 
 #[async_trait]

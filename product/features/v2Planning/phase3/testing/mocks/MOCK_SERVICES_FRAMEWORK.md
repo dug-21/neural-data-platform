@@ -1,58 +1,90 @@
 # Neural Trader V2 - Mock Services Framework
+## Binary Separation Architecture Edition
 
 ## Overview
 
-Comprehensive mocking framework for all external dependencies, enabling isolated testing and reliable test execution without external service dependencies.
+Comprehensive mocking framework for the **binary separation architecture**, enabling isolated testing of each binary and reliable Redis Streams communication testing without external dependencies.
 
-## Mock Service Architecture
+### Binary Architecture Mocking Strategy
+- **Binary Isolation**: Each binary can be tested independently
+- **Redis Streams Mocking**: Mock Redis for cross-binary communication testing  
+- **gRPC Service Mocking**: Mock config-store gRPC endpoints
+- **Neural Network Mocking**: Mock FANN models and training data
+- **Process-Level Mocking**: Mock binary startup/shutdown and inter-process communication
+
+## Binary Mock Service Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Mock Service Registry                    │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌────────┐ │
-│  │   Market    │ │  Database   │ │    Cache    │ │  Auth  │ │
-│  │    Data     │ │   Service   │ │   Service   │ │Service │ │
-│  │   Service   │ │             │ │             │ │        │ │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └────────┘ │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌────────┐ │
-│  │ Notification│ │   Config    │ │   Metrics   │ │  Time  │ │
-│  │   Service   │ │   Store     │ │   Service   │ │Service │ │
-│  │             │ │             │ │             │ │        │ │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └────────┘ │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Binary Mock Registry                           │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │
+│  │ Redis       │ │ Config      │ │ Neural      │ │ DAA Agent   │  │
+│  │ Streams     │ │ Store       │ │ Network     │ │ Coordination│  │
+│  │ Mock        │ │ gRPC Mock   │ │ FANN Mock   │ │ Mock        │  │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘  │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │
+│  │ Market Data │ │ Binary      │ │ Time        │ │ System      │  │
+│  │ Stream Mock │ │ Process     │ │ Mock        │ │ Metrics     │  │
+│  │             │ │ Mock        │ │             │ │ Mock        │  │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## 1. Mock Service Registry
+## 1. Binary Mock Service Registry
 
-### Core Registry Implementation
-```typescript
-// tests/mocks/service-registry.ts
-interface MockService {
-  name: string;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  reset(): void;
-  isRunning(): boolean;
+### Core Registry Implementation (Rust)
+```rust
+// tests/common/mock_registry.rs
+use async_trait::async_trait;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use std::sync::Arc;
+
+#[async_trait]
+pub trait MockService: Send + Sync {
+    fn name(&self) -> &str;
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn reset(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    fn is_running(&self) -> bool;
 }
 
-export class MockServiceRegistry {
-  private services: Map<string, MockService> = new Map();
-  private isInitialized = false;
+pub struct BinaryMockRegistry {
+    services: Arc<RwLock<HashMap<String, Box<dyn MockService>>>>,
+    is_initialized: Arc<RwLock<bool>>,
+}
 
-  register(service: MockService): void {
-    this.services.set(service.name, service);
-  }
-
-  async startAll(): Promise<void> {
-    if (this.isInitialized) return;
-
-    const startPromises = Array.from(this.services.values())
-      .map(service => service.start());
+impl BinaryMockRegistry {
+    pub fn new() -> Self {
+        Self {
+            services: Arc::new(RwLock::new(HashMap::new())),
+            is_initialized: Arc::new(RwLock::new(false)),
+        }
+    }
     
-    await Promise.all(startPromises);
-    this.isInitialized = true;
-  }
+    pub async fn register(&self, service: Box<dyn MockService>) {
+        let mut services = self.services.write().await;
+        services.insert(service.name().to_string(), service);
+    }
+
+    pub async fn start_all(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut is_initialized = self.is_initialized.write().await;
+        if *is_initialized {
+            return Ok(());
+        }
+        
+        let services = self.services.read().await;
+        let mut start_futures = Vec::new();
+        
+        for service in services.values() {
+            start_futures.push(service.start());
+        }
+        
+        futures::future::try_join_all(start_futures).await?;
+        *is_initialized = true;
+        Ok(())
+    }
 
   async stopAll(): Promise<void> {
     const stopPromises = Array.from(this.services.values())
@@ -76,48 +108,90 @@ export class MockServiceRegistry {
 }
 ```
 
-## 2. Market Data Service Mock
+## 2. Redis Streams Mock Service
 
-### WebSocket Market Data Mock
-```typescript
-// tests/mocks/market-data-service.ts
-import { EventEmitter } from 'events';
-import WebSocket from 'ws';
+### Redis Streams Communication Mock
+```rust
+// tests/mocks/redis_streams_mock.rs
+use async_trait::async_trait;
+use redis::{Client, Connection, RedisResult};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use tokio::sync::{RwLock, mpsc};
+use std::sync::Arc;
 
-export interface MarketDataPoint {
-  symbol: string;
-  price: number;
-  volume: number;
-  timestamp: Date;
-  bid: number;
-  ask: number;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamMessage {
+    pub id: String,
+    pub stream: String,
+    pub data: HashMap<String, String>,
+    pub timestamp: u64,
 }
 
-export class MockMarketDataService extends EventEmitter implements MockService {
-  name = 'market-data-service';
-  private server?: WebSocket.Server;
-  private connections: Set<WebSocket> = new Set();
-  private dataGenerators: Map<string, NodeJS.Timeout> = new Map();
-  private isRunning = false;
+pub struct RedisStreamsMock {
+    streams: Arc<RwLock<HashMap<String, VecDeque<StreamMessage>>>>,
+    consumer_groups: Arc<RwLock<HashMap<String, HashMap<String, String>>>>, // group -> consumer -> last_id
+    message_tx: Arc<RwLock<Option<mpsc::UnboundedSender<StreamMessage>>>>,
+    is_running: Arc<RwLock<bool>>,
+}
 
-  async start(): Promise<void> {
-    this.server = new WebSocket.Server({ port: 8082 });
+#[async_trait]
+impl MockService for RedisStreamsMock {
+    fn name(&self) -> &str {
+        "redis-streams-mock"
+    }
     
-    this.server.on('connection', (ws) => {
-      this.connections.add(ws);
-      
-      ws.on('message', (message) => {
-        const request = JSON.parse(message.toString());
-        this.handleSubscription(request, ws);
-      });
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut is_running = self.is_running.write().await;
+        if *is_running {
+            return Ok(());
+        }
+        
+        // Initialize default streams
+        let mut streams = self.streams.write().await;
+        let default_streams = [
+            "config-updates",
+            "market-data",
+            "neural-signals", 
+            "agent-coordination",
+            "system-events"
+        ];
+        
+        for stream_name in default_streams {
+            streams.insert(stream_name.to_string(), VecDeque::new());
+        }
+        
+        *is_running = true;
+        Ok(())
+    }
 
-      ws.on('close', () => {
-        this.connections.delete(ws);
-      });
-    });
-
-    this.isRunning = true;
-  }
+    async fn stop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut is_running = self.is_running.write().await;
+        *is_running = false;
+        
+        // Clear all streams
+        let mut streams = self.streams.write().await;
+        streams.clear();
+        
+        // Clear consumer groups
+        let mut consumer_groups = self.consumer_groups.write().await;
+        consumer_groups.clear();
+        
+        Ok(())
+    }
+    
+    async fn reset(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.stop().await?;
+        self.start().await?;
+        Ok(())
+    }
+    
+    fn is_running(&self) -> bool {
+        // This is a bit of a hack since we can't await in a sync method
+        // In practice, you'd use Arc<AtomicBool> for this
+        true
+    }
+}
 
   async stop(): Promise<void> {
     this.dataGenerators.forEach(timer => clearInterval(timer));
@@ -174,23 +248,54 @@ export class MockMarketDataService extends EventEmitter implements MockService {
     }
   }
 
-  private generateMarketData(symbol: string): MarketDataPoint {
-    const basePrice = symbol === 'BTCUSD' ? 50000 : 3000;
-    const volatility = 0.001; // 0.1% volatility
+impl RedisStreamsMock {
+    pub fn new() -> Self {
+        Self {
+            streams: Arc::new(RwLock::new(HashMap::new())),
+            consumer_groups: Arc::new(RwLock::new(HashMap::new())),
+            message_tx: Arc::new(RwLock::new(None)),
+            is_running: Arc::new(RwLock::new(false)),
+        }
+    }
     
-    const priceChange = (Math.random() - 0.5) * basePrice * volatility;
-    const price = basePrice + priceChange;
-    const spread = price * 0.0001; // 0.01% spread
-    
-    return {
-      symbol,
-      price,
-      volume: Math.random() * 100,
-      timestamp: new Date(),
-      bid: price - spread / 2,
-      ask: price + spread / 2,
-    };
-  }
+    pub async fn xadd(
+        &self,
+        stream: &str,
+        id: &str, 
+        fields: HashMap<String, String>
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let mut streams = self.streams.write().await;
+        
+        let message_id = if id == "*" {
+            format!("{}-{}", 
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis(),
+                rand::random::<u32>()
+            )
+        } else {
+            id.to_string()
+        };
+        
+        let message = StreamMessage {
+            id: message_id.clone(),
+            stream: stream.to_string(),
+            data: fields,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_millis() as u64,
+        };
+        
+        let stream_queue = streams.entry(stream.to_string()).or_insert_with(VecDeque::new);
+        stream_queue.push_back(message);
+        
+        // Keep only last 1000 messages per stream to prevent memory bloat
+        while stream_queue.len() > 1000 {
+            stream_queue.pop_front();
+        }
+        
+        Ok(message_id)
+    }
 
   // Test helper methods
   injectMarketData(symbol: string, data: Partial<MarketDataPoint>): void {
@@ -224,29 +329,81 @@ export class MockMarketDataService extends EventEmitter implements MockService {
 }
 ```
 
-## 3. Database Service Mock
+## 3. Config-Store gRPC Mock Service
 
-### In-Memory Database Mock
-```typescript
-// tests/mocks/database-service.ts
-export class MockDatabaseService implements MockService {
-  name = 'database-service';
-  private data: Map<string, Map<string, any>> = new Map();
-  private transactions: Set<string> = new Set();
+### gRPC Service Mock (Rust)
+```rust
+// tests/mocks/config_store_grpc_mock.rs
+use tonic::{transport::Server, Request, Response, Status};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use std::sync::Arc;
 
-  async start(): Promise<void> {
-    this.initializeTables();
-  }
+// Generated protobuf code
+use crate::proto::config_store_server::{ConfigStore, ConfigStoreServer};
+use crate::proto::{GetConfigRequest, GetConfigResponse, SetConfigRequest, SetConfigResponse};
 
-  async stop(): Promise<void> {
-    this.data.clear();
-  }
+pub struct MockConfigStoreService {
+    configs: Arc<RwLock<HashMap<String, String>>>,
+    request_log: Arc<RwLock<Vec<String>>>,
+}
 
-  reset(): void {
-    this.data.clear();
-    this.initializeTables();
-    this.transactions.clear();
-  }
+impl MockConfigStoreService {
+    pub fn new() -> Self {
+        Self {
+            configs: Arc::new(RwLock::new(HashMap::new())),
+            request_log: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    pub async fn set_config(&self, key: &str, value: &str) {
+        let mut configs = self.configs.write().await;
+        configs.insert(key.to_string(), value.to_string());
+    }
+    
+    pub async fn get_request_log(&self) -> Vec<String> {
+        let log = self.request_log.read().await;
+        log.clone()
+    }
+    
+    pub async fn clear_request_log(&self) {
+        let mut log = self.request_log.write().await;
+        log.clear();
+    }
+}
+
+#[tonic::async_trait]
+impl ConfigStore for MockConfigStoreService {
+    async fn get_config(
+        &self,
+        request: Request<GetConfigRequest>,
+    ) -> Result<Response<GetConfigResponse>, Status> {
+        let req = request.into_inner();
+        
+        // Log the request
+        let mut log = self.request_log.write().await;
+        log.push(format!("get_config: {}", req.key));
+        drop(log);
+        
+        let configs = self.configs.read().await;
+        
+        match configs.get(&req.key) {
+            Some(value) => {
+                let response = GetConfigResponse {
+                    value: value.clone(),
+                    found: true,
+                };
+                Ok(Response::new(response))
+            }
+            None => {
+                let response = GetConfigResponse {
+                    value: String::new(),
+                    found: false,
+                };
+                Ok(Response::new(response))
+            }
+        }
+    }
 
   isRunning(): boolean {
     return this.data.size > 0;
@@ -362,25 +519,62 @@ export class MockDatabaseService implements MockService {
 }
 ```
 
-## 4. Cache Service Mock
+## 4. Neural Network FANN Mock
 
-### Redis Cache Mock
-```typescript
-// tests/mocks/cache-service.ts
-export class MockCacheService implements MockService {
-  name = 'cache-service';
-  private cache: Map<string, { value: any; ttl?: number; setAt: number }> = new Map();
-  private pubsub: Map<string, Set<Function>> = new Map();
+### FANN Neural Network Mock (Rust)
+```rust
+// tests/mocks/fann_mock.rs
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
+use std::sync::Arc;
 
-  async start(): Promise<void> {
-    // Start TTL cleanup interval
-    setInterval(() => this.cleanupExpired(), 1000);
-  }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NeuralInput {
+    pub features: Vec<f32>,
+    pub timestamp: u64,
+}
 
-  async stop(): Promise<void> {
-    this.cache.clear();
-    this.pubsub.clear();
-  }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NeuralOutput {
+    pub predictions: Vec<f32>,
+    pub confidence: f32,
+    pub timestamp: u64,
+}
+
+pub struct MockFannService {
+    models: Arc<RwLock<HashMap<String, MockNeuralModel>>>,
+    training_data: Arc<RwLock<Vec<(NeuralInput, Vec<f32>)>>>,
+    is_running: Arc<RwLock<bool>>,
+}
+
+struct MockNeuralModel {
+    weights: Vec<Vec<f32>>,
+    biases: Vec<f32>,
+    accuracy: f32,
+}
+
+impl MockFannService {
+    pub fn new() -> Self {
+        Self {
+            models: Arc::new(RwLock::new(HashMap::new())),
+            training_data: Arc::new(RwLock::new(Vec::new())),
+            is_running: Arc::new(RwLock::new(false)),
+        }
+    }
+    
+    pub async fn create_mock_model(&self, name: &str, input_size: usize, output_size: usize) {
+        let mut models = self.models.write().await;
+        
+        // Create a simple mock model with random weights
+        let model = MockNeuralModel {
+            weights: vec![vec![0.5; input_size]; output_size],
+            biases: vec![0.1; output_size],
+            accuracy: 0.85, // Mock accuracy
+        };
+        
+        models.insert(name.to_string(), model);
+    }
 
   reset(): void {
     this.cache.clear();
@@ -391,18 +585,45 @@ export class MockCacheService implements MockService {
     return true;
   }
 
-  // Redis-like operations
-  async get(key: string): Promise<string | null> {
-    const entry = this.cache.get(key);
-    if (!entry) return null;
-    
-    if (entry.ttl && Date.now() - entry.setAt > entry.ttl * 1000) {
-      this.cache.delete(key);
-      return null;
+    pub async fn predict(&self, model_name: &str, input: &NeuralInput) -> Option<NeuralOutput> {
+        let models = self.models.read().await;
+        
+        if let Some(model) = models.get(model_name) {
+            // Simple mock prediction - just apply weights
+            let mut predictions = Vec::new();
+            
+            for (i, weights) in model.weights.iter().enumerate() {
+                let mut sum = model.biases[i];
+                for (j, &feature) in input.features.iter().enumerate() {
+                    if j < weights.len() {
+                        sum += feature * weights[j];
+                    }
+                }
+                predictions.push(sum.tanh()); // Apply activation
+            }
+            
+            Some(NeuralOutput {
+                predictions,
+                confidence: model.accuracy,
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+            })
+        } else {
+            None
+        }
     }
     
-    return JSON.stringify(entry.value);
-  }
+    pub async fn add_training_data(&self, input: NeuralInput, expected: Vec<f32>) {
+        let mut training_data = self.training_data.write().await;
+        training_data.push((input, expected));
+        
+        // Keep only last 10,000 training samples to prevent memory bloat
+        while training_data.len() > 10000 {
+            training_data.remove(0);
+        }
+    }
 
   async set(key: string, value: any, ttl?: number): Promise<void> {
     this.cache.set(key, {
@@ -490,29 +711,88 @@ export class MockCacheService implements MockService {
 }
 ```
 
-## 5. HTTP Service Mocks (MSW)
+## 5. DAA Coordinator Mock Service
 
-### Market Data API Mock
-```typescript
-// tests/mocks/http/market-data-api.ts
-import { rest } from 'msw';
+### Distributed Agent Mock (Rust)
+```rust
+// tests/mocks/daa_coordinator_mock.rs
+use std::collections::HashMap;
+use tokio::sync::{RwLock, mpsc};
+use std::sync::Arc;
+use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 
-export const marketDataHandlers = [
-  // Get current price
-  rest.get('/api/market/:symbol/price', (req, res, ctx) => {
-    const { symbol } = req.params;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    pub id: String,
+    pub agent_type: String,
+    pub status: AgentStatus,
+    pub capabilities: Vec<String>,
+    pub last_heartbeat: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AgentStatus {
+    Active,
+    Idle,
+    Busy,
+    Offline,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoordinationMessage {
+    pub from_agent: String,
+    pub to_agent: Option<String>, // None for broadcast
+    pub message_type: String,
+    pub payload: HashMap<String, String>,
+    pub timestamp: u64,
+}
+
+pub struct MockDaaCoordinator {
+    agents: Arc<RwLock<HashMap<String, Agent>>>,
+    message_queue: Arc<RwLock<Vec<CoordinationMessage>>>,
+    coordination_tx: Arc<RwLock<Option<mpsc::UnboundedSender<CoordinationMessage>>>>,
+    is_running: Arc<RwLock<bool>>,
+}
     
-    const basePrice = symbol === 'BTCUSD' ? 50000 : 3000;
-    const price = basePrice + (Math.random() - 0.5) * basePrice * 0.001;
+impl MockDaaCoordinator {
+    pub fn new() -> Self {
+        Self {
+            agents: Arc::new(RwLock::new(HashMap::new())),
+            message_queue: Arc::new(RwLock::new(Vec::new())),
+            coordination_tx: Arc::new(RwLock::new(None)),
+            is_running: Arc::new(RwLock::new(false)),
+        }
+    }
     
-    return res(
-      ctx.json({
-        symbol,
-        price,
-        timestamp: new Date().toISOString(),
-      })
-    );
-  }),
+    pub async fn register_agent(&self, agent_type: &str, capabilities: Vec<String>) -> String {
+        let agent_id = Uuid::new_v4().to_string();
+        let mut agents = self.agents.write().await;
+        
+        let agent = Agent {
+            id: agent_id.clone(),
+            agent_type: agent_type.to_string(),
+            status: AgentStatus::Active,
+            capabilities,
+            last_heartbeat: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
+        };
+        
+        agents.insert(agent_id.clone(), agent);
+        agent_id
+    }
+    
+    pub async fn send_coordination_message(&self, message: CoordinationMessage) {
+        let mut queue = self.message_queue.write().await;
+        queue.push(message);
+        
+        // Keep only last 1000 messages
+        while queue.len() > 1000 {
+            queue.remove(0);
+        }
+    }
 
   // Get historical data
   rest.get('/api/market/:symbol/history', (req, res, ctx) => {
@@ -718,33 +998,54 @@ export class MockTimeService implements MockService {
 }
 ```
 
-## 8. Mock Service Integration Example
+## 8. Binary Mock Integration Example
 
-### Test Integration
-```typescript
-// tests/integration/trading-service.test.ts
-describe('Trading Service Integration', () => {
-  let mockRegistry: MockServiceRegistry;
-  let marketDataService: MockMarketDataService;
-  let databaseService: MockDatabaseService;
-  let cacheService: MockCacheService;
-  let timeService: MockTimeService;
+### Cross-Binary Integration Test
+```rust
+// tests/integration/cross_binary_integration_test.rs
+use crate::mocks::{
+    RedisStreamsMock, MockConfigStoreService, MockFannService, MockDaaCoordinator,
+    BinaryMockRegistry
+};
+use tokio_test;
 
-  beforeAll(async () => {
-    mockRegistry = new MockServiceRegistry();
+#[tokio::test]
+async fn test_cross_binary_integration() {
+    let mut mock_registry = BinaryMockRegistry::new();
     
-    marketDataService = new MockMarketDataService();
-    databaseService = new MockDatabaseService();
-    cacheService = new MockCacheService();
-    timeService = MockTimeService.getInstance();
+    // Initialize all mock services
+    let redis_mock = Box::new(RedisStreamsMock::new());
+    let config_mock = Box::new(MockConfigStoreService::new());
+    let fann_mock = Box::new(MockFannService::new());
+    let daa_mock = Box::new(MockDaaCoordinator::new());
+    
+    mock_registry.register(redis_mock).await;
+    mock_registry.register(config_mock).await;
+    mock_registry.register(fann_mock).await;
+    mock_registry.register(daa_mock).await;
 
-    mockRegistry.register(marketDataService);
-    mockRegistry.register(databaseService);
-    mockRegistry.register(cacheService);
-    mockRegistry.register(timeService);
-
-    await mockRegistry.startAll();
-  });
+    // Start all mock services
+    mock_registry.start_all().await.unwrap();
+    
+    // Test scenario: Config update triggers neural processing
+    
+    // 1. Config-store publishes configuration update
+    let config_update = std::collections::HashMap::from([
+        ("key".to_string(), "neural_model_params".to_string()),
+        ("value".to_string(), "{\"learning_rate\": 0.01}".to_string()),
+    ]);
+    
+    let redis_service = mock_registry.get_service::<RedisStreamsMock>("redis-streams-mock").await.unwrap();
+    redis_service.xadd("config-updates", "*", config_update).await.unwrap();
+    
+    // 2. Simulate data-ingestion receiving market data and forwarding to neural processing
+    let market_data = std::collections::HashMap::from([
+        ("symbol".to_string(), "BTCUSD".to_string()),
+        ("price".to_string(), "50000.0".to_string()),
+        ("timestamp".to_string(), "1640995200000".to_string()),
+    ]);
+    
+    redis_service.xadd("market-data", "*", market_data).await.unwrap();
 
   beforeEach(() => {
     mockRegistry.resetAll();
@@ -754,32 +1055,49 @@ describe('Trading Service Integration', () => {
     await mockRegistry.stopAll();
   });
 
-  it('should execute trade with mocked market data', async () => {
-    // Inject specific market data
-    marketDataService.injectMarketData('BTCUSD', {
-      price: 50000,
-      bid: 49990,
-      ask: 50010,
-    });
-
-    // Set specific time
-    timeService.setTime(new Date('2024-01-01T12:00:00Z'));
-
-    // Execute trade
-    const tradeRequest = {
-      symbol: 'BTCUSD',
-      side: 'buy',
-      quantity: 0.1,
+    // 3. Verify neural processing received the data
+    let fann_service = mock_registry.get_service::<MockFannService>("fann-mock").await.unwrap();
+    fann_service.create_mock_model("trading_model", 5, 3).await;
+    
+    let neural_input = crate::mocks::NeuralInput {
+        features: vec![50000.0, 1000.0, 0.1, 0.05, 1.2], // price, volume, volatility, etc.
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
     };
-
-    const result = await tradingService.executeTrade(tradeRequest);
-
-    // Verify trade was stored in database
-    const trades = databaseService.getTableData('trades');
-    expect(trades).toHaveLength(1);
-    expect(trades[0].symbol).toBe('BTCUSD');
-  });
-});
+    
+    let prediction = fann_service.predict("trading_model", &neural_input).await.unwrap();
+    assert!(prediction.confidence > 0.8);
+    assert_eq!(prediction.predictions.len(), 3);
+    
+    // 4. Verify DAA coordinator received coordination signal
+    let daa_service = mock_registry.get_service::<MockDaaCoordinator>("daa-mock").await.unwrap();
+    let agent_id = daa_service.register_agent("trader", vec!["trading".to_string(), "risk_management".to_string()]).await;
+    
+    let coordination_msg = crate::mocks::CoordinationMessage {
+        from_agent: "neural_processor".to_string(),
+        to_agent: Some(agent_id),
+        message_type: "trade_signal".to_string(),
+        payload: std::collections::HashMap::from([
+            ("action".to_string(), "buy".to_string()),
+            ("confidence".to_string(), prediction.confidence.to_string()),
+        ]),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
+    };
+    
+    daa_service.send_coordination_message(coordination_msg).await;
+    
+    // 5. Verify end-to-end message flow
+    let messages = redis_service.xread("market-data", "$", 1).await.unwrap();
+    assert!(!messages.is_empty());
+    
+    // Cleanup
+    mock_registry.stop_all().await.unwrap();
+}
 ```
 
 This comprehensive mock framework enables reliable, fast, and isolated testing of all system components without external dependencies.

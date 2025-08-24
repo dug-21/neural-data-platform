@@ -1,8 +1,8 @@
-# Clean Architecture for Neural Trader V2
+# Clean Architecture for Neural Trader V2 (CORRECTED)
 
 ## Overview
 
-Neural Trader V2 follows Clean Architecture principles with hexagonal/onion architecture patterns, ensuring high testability, maintainability, and clear separation of concerns. This greenfield implementation prioritizes dependency inversion and domain-centric design.
+Neural Trader V2 follows Clean Architecture principles within a single Rust binary, using ruv-FANN for neural models and DAA Coordinator for decision orchestration. This ensures high testability, maintainability, and clear separation of concerns without microservice complexity.
 
 ## Architecture Layers
 
@@ -24,10 +24,14 @@ src/domain/
 - 100% unit testable
 
 ```rust
-// Example: Domain Entity
+use ruv_fann::BaseModel;
+
+// Example: Domain Entity with ruv-FANN integration
 #[derive(Debug, Clone, PartialEq)]
 pub struct TradingSignal {
     id: SignalId,
+    fann_prediction: Option<FANNPrediction>,  // From ruv-FANN model
+    daa_assessment: Option<DAAAssessment>,    // From DAA Coordinator
     symbol: Symbol,
     signal_type: SignalType,
     confidence: Confidence,

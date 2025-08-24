@@ -1,170 +1,248 @@
-# Neural-Trader V2 Architecture - Detailed Refactoring Plan
+# Neural-Trader V2 Architecture - Binary Build Implementation Plan
 
 ## Executive Summary
 
-This document provides a comprehensive module-by-module refactoring plan to migrate from the current neural-trader architecture to the V2 modular, event-driven architecture. The refactoring follows the SPARC methodology's refinement phase, emphasizing iterative improvements through testing, optimization, and clean component boundaries.
+This document provides a comprehensive implementation plan for building three independent binaries from scratch for the neural-trader V2 architecture. The implementation follows the SPARC methodology's refinement phase, emphasizing quality-first development through testing, optimization, and clean binary separation. This is a **NEW BUILD** approach, not a refactoring of existing code.
 
 ## Table of Contents
 
-1. [Architecture Analysis](#architecture-analysis)
-2. [Module-by-Module Refactoring](#module-by-module-refactoring)
-3. [File Movement & Reorganization](#file-movement--reorganization)
-4. [Interface Contracts & Protocols](#interface-contracts--protocols)
-5. [Dependency Injection Patterns](#dependency-injection-patterns)
+1. [Binary Architecture Overview](#binary-architecture-overview)
+2. [Binary-by-Binary Implementation](#binary-by-binary-implementation)
+3. [Shared Libraries & Components](#shared-libraries--components)
+4. [Inter-Binary Communication](#inter-binary-communication)
+5. [Build System & Dependency Management](#build-system--dependency-management)
 6. [Implementation Timeline](#implementation-timeline)
-7. [Validation Checkpoints](#validation-checkpoints)
+7. [Quality Gates & Validation](#quality-gates--validation)
 
 ---
 
-## Architecture Analysis
+## Binary Architecture Overview
 
-### Current Architecture Issues
+### Three Independent Binaries
 
 ```rust
-// Current problematic patterns identified:
-
-// 1. Tightly coupled components
-struct NeuralPredictor {
-    redis_client: redis::Client,      // Direct dependency
-    db_pool: PostgresPool,            // Direct dependency
-    config: Arc<Config>,              // Shared mutable state
+// Binary 1: Data Ingestion Service
+// Location: src/bin/data-ingestion.rs
+struct DataIngestionBinary {
+    market_connectors: Vec<Box<dyn MarketConnector>>,
+    stream_publisher: Arc<RedisStreamPublisher>,
+    health_server: HealthServer,
+    metrics_server: MetricsServer,
 }
 
-// 2. Mixed responsibilities
-impl NeuralPredictor {
-    async fn predict_and_store(&self, data: MarketData) {
-        // Prediction logic mixed with storage logic
-        let prediction = self.neural_predict(data);
-        self.store_to_redis(prediction).await;
-        self.store_to_database(prediction).await;
-    }
+// Binary 2: Neural Prediction Engine
+// Location: src/bin/neural-engine.rs  
+struct NeuralEngineBinary {
+    model_registry: Arc<ModelRegistry>,
+    prediction_service: Arc<PredictionService>,
+    stream_consumer: Arc<RedisStreamConsumer>,
+    ruv_fann_executor: Arc<RuvFannExecutor>,
 }
 
-// 3. No clear interfaces
-struct DataIngester {
-    // Direct access to multiple storage backends
-    redis: Redis,
-    timescale: TimescaleDB,
-    file_storage: FileSystem,
+// Binary 3: DAA Coordinator
+// Location: src/bin/daa-coordinator.rs
+struct DaaCoordinatorBinary {
+    agent_manager: Arc<AgentManager>,
+    decision_engine: Arc<DecisionEngine>,
+    coordination_service: Arc<CoordinationService>,
+    swarm_orchestrator: Arc<SwarmOrchestrator>,
 }
 ```
 
-### Target V2 Architecture
+### Binary Separation Benefits
 
 ```rust
-// Desired patterns with clean separation:
+// Clean binary separation with Redis Streams communication:
 
-// 1. Interface-based design
-#[async_trait]
-pub trait EventBus: Send + Sync {
-    async fn publish(&self, event: Event) -> Result<()>;
-    async fn subscribe(&self, topic: &str) -> Result<EventStream>;
-}
-
-#[async_trait]
-pub trait StorageAdapter: Send + Sync {
-    async fn store(&self, data: &dyn Storable) -> Result<()>;
-    async fn retrieve(&self, query: &Query) -> Result<Vec<Box<dyn Storable>>>;
-}
-
-// 2. Single responsibility components
-struct NeuralPredictionService<E: EventBus> {
-    event_bus: Arc<E>,
-    model_registry: Arc<dyn ModelRegistry>,
-}
-
-impl<E: EventBus> NeuralPredictionService<E> {
-    async fn handle_market_data(&self, data: MarketData) {
-        let prediction = self.generate_prediction(data).await?;
+// 1. Independent deployment and scaling
+// Data Ingestion Binary - Handles market data collection
+impl DataIngestionBinary {
+    async fn run(&self) -> Result<()> {
+        // Connect to market data sources
+        let mut streams = Vec::new();
+        for connector in &self.market_connectors {
+            streams.push(connector.connect().await?);
+        }
         
-        // Publish event instead of direct storage
-        self.event_bus.publish(Event::PredictionGenerated(prediction)).await?;
+        // Process and publish to Redis Streams
+        for stream in streams {
+            tokio::spawn({
+                let publisher = self.stream_publisher.clone();
+                async move {
+                    while let Some(data) = stream.next().await {
+                        publisher.publish("market-data", data).await?;
+                    }
+                }
+            });
+        }
+        
+        Ok(())
+    }
+}
+
+// 2. Specialized optimization per binary
+// Neural Engine Binary - Optimized for ML workloads
+impl NeuralEngineBinary {
+    async fn run(&self) -> Result<()> {
+        let consumer = self.stream_consumer.clone();
+        let executor = self.ruv_fann_executor.clone();
+        
+        // Consume market data and generate predictions
+        consumer.subscribe("market-data", |data| async {
+            let prediction = executor.predict(data).await?;
+            publisher.publish("predictions", prediction).await
+        }).await
+    }
+}
+
+// 3. Autonomous coordination
+// DAA Coordinator Binary - Manages agent swarms
+impl DaaCoordinatorBinary {
+    async fn run(&self) -> Result<()> {
+        // Coordinate between data ingestion and neural engine
+        self.orchestrator.coordinate_binaries().await?
     }
 }
 ```
 
 ---
 
-## Module-by-Module Refactoring
+## Binary-by-Binary Implementation
 
-### Phase 1: Core Infrastructure Services
+### Binary 1: Data Ingestion Service
 
-#### 1.1 Event Bus Module (NEW)
+#### 1.1 Core Structure
 
-**Location**: `src/streaming/`
+**Location**: `src/bin/data-ingestion.rs` + `src/ingestion/`
 
 ```rust
-// src/streaming/mod.rs
-pub mod event_bus;
-pub mod redis_streams;
-pub mod message_format;
-pub mod consumer;
-pub mod producer;
+// src/bin/data-ingestion.rs
+use neural_trader_shared::{
+    redis_streams::StreamPublisher,
+    market_data::{MarketData, MarketConnector},
+    health::HealthServer,
+    metrics::MetricsCollector,
+};
 
-// Core event bus interface
-#[async_trait]
-pub trait EventBus: Send + Sync + Clone {
-    type Error: std::error::Error + Send + Sync + 'static;
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::init();
     
-    async fn publish<T: Event>(&self, event: T) -> Result<EventId, Self::Error>;
-    async fn subscribe(&self, topics: Vec<String>) -> Result<EventStream<dyn Event>, Self::Error>;
-    async fn create_consumer_group(&self, group: &str, topics: Vec<String>) -> Result<(), Self::Error>;
+    let config = load_config().await?;
+    let ingestion_service = DataIngestionService::new(config).await?;
+    
+    // Start health and metrics servers
+    tokio::spawn(ingestion_service.start_health_server());
+    tokio::spawn(ingestion_service.start_metrics_server());
+    
+    // Run main ingestion loop
+    ingestion_service.run().await
 }
 
-// Message format standardization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventMessage {
-    pub id: EventId,
-    pub timestamp: DateTime<Utc>,
-    pub topic: String,
-    pub payload: serde_json::Value,
-    pub metadata: EventMetadata,
+// src/ingestion/service.rs
+pub struct DataIngestionService {
+    connectors: HashMap<String, Box<dyn MarketConnector>>,
+    publisher: Arc<RedisStreamPublisher>,
+    config: IngestionConfig,
+    metrics: Arc<IngestionMetrics>,
+}
+
+impl DataIngestionService {
+    pub async fn new(config: IngestionConfig) -> Result<Self> {
+        let publisher = Arc::new(
+            RedisStreamPublisher::new(&config.redis_url).await?
+        );
+        
+        let mut connectors = HashMap::new();
+        
+        // Initialize market data connectors
+        if config.alpaca.enabled {
+            connectors.insert(
+                "alpaca".to_string(),
+                Box::new(AlpacaConnector::new(config.alpaca.clone()).await?)
+            );
+        }
+        
+        if config.polygon.enabled {
+            connectors.insert(
+                "polygon".to_string(),
+                Box::new(PolygonConnector::new(config.polygon.clone()).await?)
+            );
+        }
+        
+        Ok(Self {
+            connectors,
+            publisher,
+            config,
+            metrics: Arc::new(IngestionMetrics::new()),
+        })
+    }
 }
 ```
 
-**Refactoring Steps**:
-1. Extract existing Redis pub/sub logic from `src/adapters/redis.rs`
-2. Create interface-based event bus abstraction
-3. Implement Redis Streams backend
-4. Add Kafka backend for future scaling
-5. Create message serialization/deserialization layer
+**Implementation Steps**:
+1. Create standalone binary entry point
+2. Implement market data connector interfaces
+3. Build Redis Streams publisher integration
+4. Add health and metrics endpoints
+5. Optimize for high-throughput data ingestion
+6. Add comprehensive error handling and recovery
 
-#### 1.2 Storage Abstraction Layer (REFACTOR)
-
-**Current**: `src/adapters/{redis.rs, timescale.rs}`
-**Target**: `src/storage/`
+#### 1.2 Market Data Processing Pipeline
 
 ```rust
-// src/storage/mod.rs
-pub mod traits;
-pub mod timescale_adapter;
-pub mod redis_adapter;
-pub mod file_adapter;
-pub mod composite_storage;
-
-#[async_trait]
-pub trait StorageBackend: Send + Sync {
-    type Error: std::error::Error + Send + Sync + 'static;
-    
-    async fn store<T: Storable>(&self, data: T) -> Result<StorageId, Self::Error>;
-    async fn retrieve<T: Storable>(&self, query: Query) -> Result<Vec<T>, Self::Error>;
-    async fn delete(&self, id: StorageId) -> Result<(), Self::Error>;
+// src/ingestion/pipeline.rs
+pub struct DataProcessingPipeline {
+    validators: Vec<Box<dyn DataValidator>>,
+    transformers: Vec<Box<dyn DataTransformer>>,
+    enrichers: Vec<Box<dyn DataEnricher>>,
+    publisher: Arc<RedisStreamPublisher>,
 }
 
-// Composite storage for multi-backend scenarios
-struct CompositeStorage {
-    hot_storage: Box<dyn StorageBackend>,      // Redis for recent data
-    cold_storage: Box<dyn StorageBackend>,     // TimescaleDB for historical
-    archive_storage: Box<dyn StorageBackend>,  // File system for archives
+impl DataProcessingPipeline {
+    pub async fn process(&self, raw_data: RawMarketData) -> Result<()> {
+        // Validate incoming data
+        for validator in &self.validators {
+            validator.validate(&raw_data)?;
+        }
+        
+        // Transform to standard format
+        let mut market_data = MarketData::from_raw(raw_data)?;
+        for transformer in &self.transformers {
+            market_data = transformer.transform(market_data)?;
+        }
+        
+        // Enrich with additional data
+        for enricher in &self.enrichers {
+            market_data = enricher.enrich(market_data).await?;
+        }
+        
+        // Publish to Redis Streams
+        self.publisher.publish("market-data", &market_data).await?;
+        
+        Ok(())
+    }
+}
+
+// High-performance batch processing
+impl DataProcessingPipeline {
+    pub async fn process_batch(&self, batch: Vec<RawMarketData>) -> Result<()> {
+        let processed_futures = batch.into_iter().map(|data| {
+            self.process(data)
+        });
+        
+        futures::future::try_join_all(processed_futures).await?;
+        Ok(())
+    }
 }
 ```
 
-**Refactoring Steps**:
-1. Extract storage logic from adapters
-2. Create unified storage traits
-3. Implement adapter pattern for each backend
-4. Add routing logic for hot/cold storage
-5. Create storage health monitoring
+**Implementation Steps**:
+1. Build data validation framework
+2. Implement transformation pipelines
+3. Add real-time data enrichment
+4. Optimize for batch processing
+5. Add monitoring and alerting
 
 #### 1.3 Configuration Service (ENHANCE)
 
@@ -197,197 +275,304 @@ impl ConfigurationService {
 }
 ```
 
-### Phase 2: Domain Services Refactoring
+### Binary 2: Neural Prediction Engine
 
-#### 2.1 Data Ingestion Service (MAJOR REFACTOR)
-
-**Current**: `data_ingestion/` (Python) → **Target**: `src/services/data_ingestion/`
+#### 2.1 Neural Engine Architecture
 
 ```rust
-// src/services/data_ingestion/mod.rs
-pub mod service;
-pub mod providers;
-pub mod processors;
-pub mod validators;
+// src/bin/neural-engine.rs
+use neural_trader_shared::{
+    redis_streams::StreamConsumer,
+    ruv_fann::RuvFannExecutor,
+    models::ModelRegistry,
+    predictions::PredictionService,
+};
 
-use crate::streaming::EventBus;
-use crate::storage::StorageBackend;
-
-pub struct DataIngestionService<E: EventBus, S: StorageBackend> {
-    event_bus: Arc<E>,
-    storage: Arc<S>,
-    providers: HashMap<String, Box<dyn DataProvider>>,
-    processors: Vec<Box<dyn DataProcessor>>,
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::init();
+    
+    let config = load_config().await?;
+    let neural_engine = NeuralEngine::new(config).await?;
+    
+    // Start health and metrics servers
+    tokio::spawn(neural_engine.start_health_server());
+    tokio::spawn(neural_engine.start_metrics_server());
+    
+    // Run neural prediction loop
+    neural_engine.run().await
 }
 
-#[async_trait]
-pub trait DataProvider: Send + Sync {
-    async fn connect(&mut self) -> Result<()>;
-    async fn stream_data(&self) -> Result<DataStream>;
-    fn provider_id(&self) -> &str;
+// src/neural/engine.rs
+pub struct NeuralEngine {
+    consumer: Arc<RedisStreamConsumer>,
+    publisher: Arc<RedisStreamPublisher>,
+    model_registry: Arc<ModelRegistry>,
+    ruv_fann_executor: Arc<RuvFannExecutor>,
+    prediction_service: Arc<PredictionService>,
+    config: NeuralConfig,
 }
 
-// Event-driven processing
-impl<E: EventBus, S: StorageBackend> DataIngestionService<E, S> {
-    pub async fn start(&self) -> Result<()> {
-        for provider in self.providers.values() {
-            let stream = provider.stream_data().await?;
-            
-            tokio::spawn({
-                let event_bus = self.event_bus.clone();
-                async move {
-                    while let Some(data) = stream.next().await {
-                        event_bus.publish(MarketDataReceived(data)).await?;
-                    }
-                }
-            });
-        }
-        Ok(())
-    }
-}
-```
-
-**Migration Strategy**:
-1. **Phase 2.1.1**: Create Rust service skeleton
-2. **Phase 2.1.2**: Port Alpaca provider to Rust
-3. **Phase 2.1.3**: Port data validation logic
-4. **Phase 2.1.4**: Integrate with event bus
-5. **Phase 2.1.5**: Deprecate Python service
-
-#### 2.2 Neural Prediction Service (REFACTOR)
-
-**Current**: `src/neural/` → **Target**: `src/services/neural_prediction/`
-
-```rust
-// src/services/neural_prediction/mod.rs
-pub mod service;
-pub mod model_registry;
-pub mod feature_extractor;
-pub mod prediction_cache;
-
-pub struct NeuralPredictionService<E: EventBus> {
-    event_bus: Arc<E>,
-    model_registry: Arc<dyn ModelRegistry>,
-    feature_extractor: Arc<dyn FeatureExtractor>,
-    prediction_cache: Arc<dyn PredictionCache>,
-}
-
-#[async_trait]
-pub trait ModelRegistry: Send + Sync {
-    async fn get_model(&self, id: &str) -> Result<Arc<dyn PredictiveModel>>;
-    async fn list_models(&self) -> Result<Vec<ModelInfo>>;
-    async fn register_model(&self, model: Box<dyn PredictiveModel>) -> Result<String>;
-}
-
-// Event-driven predictions
-impl<E: EventBus> NeuralPredictionService<E> {
-    pub async fn handle_market_data(&self, event: MarketDataReceived) -> Result<()> {
-        let features = self.feature_extractor.extract(&event.data).await?;
-        
-        for model_id in self.get_applicable_models(&event.data.symbol).await? {
-            let model = self.model_registry.get_model(&model_id).await?;
-            let prediction = model.predict(features.clone()).await?;
-            
-            self.event_bus.publish(PredictionGenerated {
-                model_id,
-                symbol: event.data.symbol.clone(),
-                prediction,
-                confidence: prediction.confidence,
-                timestamp: Utc::now(),
-            }).await?;
-        }
-        
-        Ok(())
-    }
-}
-```
-
-#### 2.3 Trading Action Service (NEW)
-
-**Current**: `src/action_layer/` → **Target**: `src/services/trading_action/`
-
-```rust
-// src/services/trading_action/mod.rs
-pub mod service;
-pub mod risk_manager;
-pub mod position_manager;
-pub mod execution_engine;
-
-pub struct TradingActionService<E: EventBus> {
-    event_bus: Arc<E>,
-    risk_manager: Arc<dyn RiskManager>,
-    position_manager: Arc<dyn PositionManager>,
-    execution_engine: Arc<dyn ExecutionEngine>,
-}
-
-// Risk-aware trading decisions
-impl<E: EventBus> TradingActionService<E> {
-    pub async fn handle_prediction(&self, event: PredictionGenerated) -> Result<()> {
-        // Risk assessment
-        let risk_assessment = self.risk_manager
-            .assess_prediction(&event)
+impl NeuralEngine {
+    pub async fn run(&self) -> Result<()> {
+        // Subscribe to market data stream
+        let mut market_data_stream = self.consumer
+            .subscribe("market-data")
             .await?;
-        
-        if !risk_assessment.approved {
-            self.event_bus.publish(TradingDecisionRejected {
-                reason: risk_assessment.reason,
-                prediction_id: event.id,
-            }).await?;
-            return Ok(());
-        }
-        
-        // Generate trading decision
-        let decision = self.generate_trading_decision(&event, &risk_assessment).await?;
-        
-        self.event_bus.publish(TradingDecisionGenerated(decision)).await?;
-        Ok(())
-    }
-}
-```
-
-### Phase 3: Platform Services
-
-#### 3.1 Service Registry & Discovery
-
-```rust
-// src/platform/service_registry.rs
-pub struct ServiceRegistry {
-    services: RwLock<HashMap<ServiceId, ServiceInfo>>,
-    health_monitor: Arc<HealthMonitor>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ServiceInfo {
-    pub id: ServiceId,
-    pub name: String,
-    pub version: String,
-    pub endpoints: Vec<ServiceEndpoint>,
-    pub health_check_url: Option<String>,
-    pub dependencies: Vec<ServiceId>,
-}
-
-impl ServiceRegistry {
-    pub async fn register_service(&self, info: ServiceInfo) -> Result<()> {
-        // Register service and start health monitoring
-        let mut services = self.services.write().await;
-        services.insert(info.id.clone(), info.clone());
-        
-        if let Some(health_url) = &info.health_check_url {
-            self.health_monitor.add_service(info.id.clone(), health_url.clone()).await?;
+            
+        while let Some(market_data) = market_data_stream.next().await {
+            self.process_market_data(market_data).await?;
         }
         
         Ok(())
     }
     
-    pub async fn discover_service(&self, name: &str) -> Result<Vec<ServiceInfo>> {
-        let services = self.services.read().await;
-        let matching_services: Vec<ServiceInfo> = services
-            .values()
-            .filter(|s| s.name == name)
-            .cloned()
-            .collect();
+    async fn process_market_data(&self, data: MarketData) -> Result<()> {
+        // Load appropriate model
+        let model = self.model_registry
+            .get_model_for_symbol(&data.symbol)
+            .await?;
+            
+        // Generate prediction using ruv-FANN
+        let prediction = self.ruv_fann_executor
+            .predict(&model, &data)
+            .await?;
+            
+        // Publish prediction to streams
+        self.publisher
+            .publish("predictions", &prediction)
+            .await?;
+            
+        Ok(())
+    }
+}
+```
+
+**Implementation Strategy**:
+1. **Build ruv-FANN integration layer**
+2. **Implement model registry system**
+3. **Create prediction service framework**  
+4. **Optimize for ML workload performance**
+5. **Add model versioning and hot-swapping**
+
+#### 2.2 ruv-FANN Optimization Layer
+
+```rust
+// src/neural/ruv_fann.rs
+use ruv_fann::{Network, ActivationFunction, TrainingAlgorithm};
+
+pub struct RuvFannExecutor {
+    networks: Arc<RwLock<HashMap<String, Network>>>,
+    thread_pool: Arc<ThreadPool>,
+    config: RuvFannConfig,
+}
+
+impl RuvFannExecutor {
+    pub async fn predict(&self, model_id: &str, data: &MarketData) -> Result<Prediction> {
+        let features = self.extract_features(data)?;
         
-        Ok(matching_services)
+        let networks = self.networks.read().await;
+        let network = networks.get(model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+            
+        // Execute prediction on thread pool to avoid blocking
+        let network = network.clone();
+        let features = features.clone();
+        
+        let result = self.thread_pool.spawn_with_handle(move || {
+            network.run(&features)
+        })?.await?;
+        
+        Ok(Prediction {
+            symbol: data.symbol.clone(),
+            value: result[0],
+            confidence: self.calculate_confidence(&result),
+            model_id: model_id.to_string(),
+            timestamp: Utc::now(),
+        })
+    }
+    
+    // Batch prediction for efficiency
+    pub async fn predict_batch(&self, model_id: &str, batch: &[MarketData]) -> Result<Vec<Prediction>> {
+        let features_batch: Vec<_> = batch.iter()
+            .map(|data| self.extract_features(data))
+            .collect::<Result<Vec<_>>>()?;
+            
+        let networks = self.networks.read().await;
+        let network = networks.get(model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+            
+        let network = network.clone();
+        let batch = batch.to_vec();
+        
+        let results = self.thread_pool.spawn_with_handle(move || {
+            features_batch.iter().map(|features| {
+                network.run(features)
+            }).collect::<Vec<_>>()
+        })?.await?;
+        
+        let predictions: Vec<Prediction> = results.into_iter()
+            .zip(batch.iter())
+            .map(|(result, data)| Prediction {
+                symbol: data.symbol.clone(),
+                value: result[0],
+                confidence: self.calculate_confidence(&result),
+                model_id: model_id.to_string(),
+                timestamp: Utc::now(),
+            })
+            .collect();
+            
+        Ok(predictions)
+    }
+    
+    // Hot-swap models without downtime
+    pub async fn update_model(&self, model_id: &str, new_network: Network) -> Result<()> {
+        let mut networks = self.networks.write().await;
+        networks.insert(model_id.to_string(), new_network);
+        
+        tracing::info!("Updated model: {}", model_id);
+        Ok(())
+    }
+}
+```
+
+### Binary 3: DAA Coordinator
+
+#### 3.1 DAA Coordination Architecture
+
+```rust
+// src/bin/daa-coordinator.rs
+use neural_trader_shared::{
+    daa::{AgentManager, SwarmOrchestrator},
+    coordination::CoordinationService,
+    decision::DecisionEngine,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::init();
+    
+    let config = load_config().await?;
+    let coordinator = DaaCoordinator::new(config).await?;
+    
+    // Start coordination services
+    tokio::spawn(coordinator.start_health_server());
+    tokio::spawn(coordinator.start_metrics_server());
+    tokio::spawn(coordinator.start_agent_manager());
+    
+    // Run coordination loop
+    coordinator.run().await
+}
+
+// src/daa/coordinator.rs
+pub struct DaaCoordinator {
+    agent_manager: Arc<AgentManager>,
+    swarm_orchestrator: Arc<SwarmOrchestrator>,
+    decision_engine: Arc<DecisionEngine>,
+    coordination_service: Arc<CoordinationService>,
+    consumer: Arc<RedisStreamConsumer>,
+    publisher: Arc<RedisStreamPublisher>,
+}
+
+impl DaaCoordinator {
+    pub async fn run(&self) -> Result<()> {
+        // Subscribe to predictions stream
+        let mut predictions_stream = self.consumer
+            .subscribe("predictions")
+            .await?;
+            
+        while let Some(prediction) = predictions_stream.next().await {
+            self.coordinate_decision(prediction).await?;
+        }
+        
+        Ok(())
+    }
+    
+    async fn coordinate_decision(&self, prediction: Prediction) -> Result<()> {
+        // Create agent swarm for decision making
+        let swarm = self.swarm_orchestrator
+            .create_decision_swarm(&prediction)
+            .await?;
+            
+        // Coordinate decision making process
+        let decision = self.decision_engine
+            .make_collective_decision(swarm, &prediction)
+            .await?;
+            
+        // Publish final decision
+        self.publisher
+            .publish("trading-decisions", &decision)
+            .await?;
+            
+        Ok(())
+    }
+}
+```
+
+#### 3.2 Agent Swarm Management
+
+```rust
+// src/daa/swarm_orchestrator.rs
+pub struct SwarmOrchestrator {
+    agent_factory: Arc<AgentFactory>,
+    swarm_registry: Arc<RwLock<HashMap<SwarmId, Swarm>>>,
+    coordination_algorithms: HashMap<String, Box<dyn CoordinationAlgorithm>>,
+}
+
+impl SwarmOrchestrator {
+    pub async fn create_decision_swarm(&self, prediction: &Prediction) -> Result<Swarm> {
+        let swarm_config = self.determine_swarm_config(prediction).await?;
+        
+        let mut agents = Vec::new();
+        
+        // Create specialized agents based on prediction characteristics
+        if prediction.requires_risk_analysis() {
+            agents.push(
+                self.agent_factory
+                    .create_risk_agent(prediction.symbol.clone())
+                    .await?
+            );
+        }
+        
+        if prediction.requires_market_analysis() {
+            agents.push(
+                self.agent_factory
+                    .create_market_agent(prediction.symbol.clone())
+                    .await?
+            );
+        }
+        
+        agents.push(
+            self.agent_factory
+                .create_decision_agent(prediction.clone())
+                .await?
+        );
+        
+        let swarm = Swarm::new(
+            SwarmId::new(),
+            agents,
+            swarm_config.coordination_algorithm.clone(),
+            swarm_config.consensus_threshold,
+        );
+        
+        // Register swarm for monitoring
+        {
+            let mut registry = self.swarm_registry.write().await;
+            registry.insert(swarm.id.clone(), swarm.clone());
+        }
+        
+        Ok(swarm)
+    }
+    
+    pub async fn coordinate_swarm_decision(&self, swarm: &Swarm, prediction: &Prediction) -> Result<TradingDecision> {
+        let algorithm = self.coordination_algorithms
+            .get(&swarm.coordination_algorithm)
+            .ok_or_else(|| anyhow::anyhow!("Unknown coordination algorithm"))?;
+            
+        // Run coordination algorithm
+        let decision = algorithm.coordinate_decision(swarm, prediction).await?;
+        
+        Ok(decision)
     }
 }
 ```
@@ -440,89 +625,108 @@ impl<E: EventBus> EventOrchestrator<E> {
 
 ---
 
-## File Movement & Reorganization
+## Shared Libraries & Components
 
-### Directory Structure Migration
+### Shared Crate Structure
 
 ```
-Current Structure:
-src/
-├── adapters/           # Mixed responsibilities
-├── config/             # Basic config only
-├── data/               # Data structures
-├── neural/             # Monolithic neural code
-├── action_layer/       # Trading logic
-├── integration/        # DAA integration
-├── monitoring/         # Basic monitoring
-└── utils/              # Utilities
+Binary Separation Structure:
 
-Target V2 Structure:
 src/
-├── platform/           # NEW: Platform services
-│   ├── service_registry.rs
-│   ├── orchestration.rs
-│   ├── health_monitor.rs
-│   └── lifecycle_manager.rs
-├── streaming/          # NEW: Event bus abstraction
-│   ├── event_bus.rs
-│   ├── redis_streams.rs
-│   ├── kafka_adapter.rs
-│   └── message_format.rs
-├── storage/            # NEW: Storage abstraction
-│   ├── traits.rs
-│   ├── timescale_adapter.rs
-│   ├── redis_adapter.rs
-│   └── composite_storage.rs
-├── services/           # NEW: Domain services
-│   ├── data_ingestion/
-│   ├── neural_prediction/
-│   ├── trading_action/
-│   ├── risk_management/
-│   └── portfolio_management/
-├── config/             # ENHANCED: Configuration service
-│   ├── service.rs
-│   ├── store.rs
-│   ├── watchers.rs
-│   └── validation.rs
-├── types/              # ENHANCED: Shared types
-│   ├── events.rs
-│   ├── market_data.rs
-│   ├── predictions.rs
-│   └── trading.rs
-├── monitoring/         # ENHANCED: Comprehensive monitoring
-│   ├── metrics.rs
-│   ├── traces.rs
-│   ├── alerts.rs
-│   └── dashboards.rs
-└── utils/              # CLEANED: Pure utilities
-    ├── time.rs
-    ├── math.rs
-    └── validation.rs
+├── bin/                        # Binary entry points
+│   ├── data-ingestion.rs       # Data ingestion binary
+│   ├── neural-engine.rs        # Neural prediction binary
+│   └── daa-coordinator.rs      # DAA coordination binary
+│
+├── ingestion/                  # Data ingestion components
+│   ├── connectors/            # Market data connectors
+│   ├── pipeline.rs            # Data processing pipeline
+│   ├── validators.rs          # Data validation
+│   └── service.rs             # Ingestion service
+│
+├── neural/                     # Neural prediction components
+│   ├── ruv_fann.rs            # ruv-FANN integration
+│   ├── models.rs              # Model registry
+│   ├── features.rs            # Feature extraction
+│   └── engine.rs              # Neural engine
+│
+├── daa/                       # DAA coordination components
+│   ├── agents.rs              # Agent management
+│   ├── swarms.rs              # Swarm orchestration
+│   ├── coordination.rs        # Coordination algorithms
+│   └── coordinator.rs         # Main coordinator
+│
+neural-trader-shared/           # Shared library crate
+├── src/
+│   ├── redis_streams/         # Redis Streams abstraction
+│   ├── types/                 # Shared data types
+│   ├── config/                # Configuration management
+│   ├── health/                # Health monitoring
+│   ├── metrics/               # Metrics collection
+│   └── utils/                 # Utility functions
 ```
 
-### File Movement Plan
+### Shared Library Components
 
-#### Phase 1 Movements
+```rust
+// neural-trader-shared/src/redis_streams/mod.rs
+pub mod publisher;
+pub mod consumer;
+pub mod types;
 
-```bash
-# Create new structure
-mkdir -p src/{platform,streaming,storage,services}
+use redis::{Client, Connection};
+use serde::{Serialize, Deserialize};
 
-# Move and refactor adapters
-mv src/adapters/redis.rs src/storage/redis_adapter.rs
-mv src/adapters/timescale.rs src/storage/timescale_adapter.rs
+pub struct RedisStreamPublisher {
+    client: Client,
+    connection_pool: r2d2::Pool<redis::Client>,
+}
 
-# Extract event bus logic
-# (Manual extraction from redis.rs pub/sub code)
-touch src/streaming/{event_bus.rs,redis_streams.rs,message_format.rs}
+impl RedisStreamPublisher {
+    pub async fn publish<T: Serialize>(&self, stream: &str, data: &T) -> Result<String> {
+        let mut conn = self.connection_pool.get()?;
+        let serialized = serde_json::to_string(data)?;
+        
+        let id: String = redis::cmd("XADD")
+            .arg(stream)
+            .arg("*")
+            .arg("data")
+            .arg(serialized)
+            .query(&mut conn)?;
+            
+        Ok(id)
+    }
+}
 
-# Move neural logic to service
-mkdir -p src/services/neural_prediction
-mv src/neural/* src/services/neural_prediction/
+pub struct RedisStreamConsumer {
+    client: Client,
+    consumer_group: String,
+    consumer_name: String,
+}
 
-# Move action layer to service
-mkdir -p src/services/trading_action
-mv src/action_layer/* src/services/trading_action/
+impl RedisStreamConsumer {
+    pub async fn subscribe<T: for<'de> Deserialize<'de>>(
+        &self,
+        stream: &str,
+    ) -> Result<StreamIterator<T>> {
+        // Create consumer group if not exists
+        let mut conn = self.client.get_connection()?;
+        let _: Result<String, _> = redis::cmd("XGROUP")
+            .arg("CREATE")
+            .arg(stream)
+            .arg(&self.consumer_group)
+            .arg("$")
+            .arg("MKSTREAM")
+            .query(&mut conn);
+        
+        Ok(StreamIterator::new(
+            self.client.clone(),
+            stream.to_string(),
+            self.consumer_group.clone(),
+            self.consumer_name.clone(),
+        ))
+    }
+}
 ```
 
 #### Phase 2 Movements
@@ -545,58 +749,76 @@ mv src/monitoring/* src/monitoring/legacy/
 
 ---
 
-## Interface Contracts & Protocols
+## Inter-Binary Communication
 
-### gRPC Protocol Definitions
+### Redis Streams Protocol
 
-```protobuf
-// proto/neural_trader_platform.proto
-syntax = "proto3";
+```rust
+// neural-trader-shared/src/types/streams.rs
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
 
-package neural_trader.v2;
-
-// Event Bus Service
-service EventBusService {
-    rpc PublishEvent(PublishEventRequest) returns (PublishEventResponse);
-    rpc SubscribeToEvents(SubscribeRequest) returns (stream EventMessage);
-    rpc CreateConsumerGroup(CreateConsumerGroupRequest) returns (CreateConsumerGroupResponse);
+// Stream: market-data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketDataMessage {
+    pub symbol: String,
+    pub price: f64,
+    pub volume: u64,
+    pub timestamp: DateTime<Utc>,
+    pub source: String,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
-message EventMessage {
-    string id = 1;
-    string topic = 2;
-    google.protobuf.Timestamp timestamp = 3;
-    bytes payload = 4;
-    map<string, string> metadata = 5;
+// Stream: predictions  
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PredictionMessage {
+    pub symbol: String,
+    pub prediction_value: f64,
+    pub confidence: f64,
+    pub model_id: String,
+    pub features: Vec<f64>,
+    pub timestamp: DateTime<Utc>,
+    pub correlation_id: Option<String>,
 }
 
-// Neural Prediction Service
-service NeuralPredictionService {
-    rpc GeneratePrediction(PredictionRequest) returns (PredictionResponse);
-    rpc GetModelInfo(ModelInfoRequest) returns (ModelInfoResponse);
-    rpc RegisterModel(RegisterModelRequest) returns (RegisterModelResponse);
+// Stream: trading-decisions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradingDecisionMessage {
+    pub symbol: String,
+    pub action: TradingAction,
+    pub quantity: f64,
+    pub confidence: f64,
+    pub reasoning: String,
+    pub risk_score: f64,
+    pub timestamp: DateTime<Utc>,
+    pub prediction_id: String,
 }
 
-message PredictionRequest {
-    string symbol = 1;
-    repeated double features = 2;
-    string model_id = 3;
-    google.protobuf.Timestamp timestamp = 4;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TradingAction {
+    Buy,
+    Sell,
+    Hold,
 }
 
-message PredictionResponse {
-    string prediction_id = 1;
-    double prediction_value = 2;
-    double confidence = 3;
-    string model_id = 4;
-    google.protobuf.Timestamp generated_at = 5;
+// Stream: system-events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemEventMessage {
+    pub event_type: SystemEventType,
+    pub binary: String,
+    pub message: String,
+    pub severity: Severity,
+    pub timestamp: DateTime<Utc>,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
-// Trading Action Service
-service TradingActionService {
-    rpc ProcessPrediction(ProcessPredictionRequest) returns (ProcessPredictionResponse);
-    rpc GetTradingDecision(TradingDecisionRequest) returns (TradingDecisionResponse);
-    rpc ExecuteTrade(ExecuteTradeRequest) returns (ExecuteTradeResponse);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SystemEventType {
+    BinaryStarted,
+    BinaryShutdown,
+    ModelUpdated,
+    ErrorOccurred,
+    HealthCheckFailed,
 }
 ```
 
@@ -682,113 +904,123 @@ components:
 
 ---
 
-## Dependency Injection Patterns
+## Build System & Dependency Management
 
-### Service Container Implementation
+### Cargo Workspace Configuration
 
-```rust
-// src/platform/container.rs
-use async_trait::async_trait;
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+```toml
+# Cargo.toml - Workspace root
+[workspace]
+members = [
+    "neural-trader-shared",
+    "neural-trader-ingestion",
+    "neural-trader-neural",
+    "neural-trader-daa",
+]
+resolver = "2"
 
-pub struct ServiceContainer {
-    services: RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
-    factories: RwLock<HashMap<TypeId, Box<dyn ServiceFactory>>>,
-}
+[workspace.dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+redis = { version = "0.24", features = ["streams", "connection-manager"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ruv_fann = { version = "0.1", path = "../ruv_fann" }
 
-#[async_trait]
-pub trait ServiceFactory: Send + Sync {
-    async fn create(&self, container: &ServiceContainer) -> Result<Arc<dyn Any + Send + Sync>>;
-}
+# neural-trader-ingestion/Cargo.toml
+[package]
+name = "neural-trader-ingestion"
+version = "0.1.0"
+edition = "2021"
 
-#[async_trait]
-pub trait Injectable: Send + Sync {
-    type Dependencies;
-    
-    async fn inject(deps: Self::Dependencies) -> Result<Self>
-    where
-        Self: Sized;
-}
+[[bin]]
+name = "data-ingestion"
+path = "src/bin/data-ingestion.rs"
 
-impl ServiceContainer {
-    pub fn new() -> Self {
-        Self {
-            services: RwLock::new(HashMap::new()),
-            factories: RwLock::new(HashMap::new()),
-        }
-    }
-    
-    // Register a service instance
-    pub async fn register<T: Send + Sync + 'static>(&self, service: T) {
-        let service_arc = Arc::new(service);
-        let mut services = self.services.write().await;
-        services.insert(TypeId::of::<T>(), service_arc);
-    }
-    
-    // Register a service factory
-    pub async fn register_factory<T: 'static>(&self, factory: Box<dyn ServiceFactory>) {
-        let mut factories = self.factories.write().await;
-        factories.insert(TypeId::of::<T>(), factory);
-    }
-    
-    // Resolve a service
-    pub async fn resolve<T: Send + Sync + 'static>(&self) -> Result<Arc<T>> {
-        let type_id = TypeId::of::<T>();
-        
-        // Check if already instantiated
-        {
-            let services = self.services.read().await;
-            if let Some(service) = services.get(&type_id) {
-                return Ok(service.clone().downcast::<T>().map_err(|_| {
-                    anyhow::anyhow!("Service type mismatch")
-                })?);
-            }
-        }
-        
-        // Try to create via factory
-        {
-            let factories = self.factories.read().await;
-            if let Some(factory) = factories.get(&type_id) {
-                let service = factory.create(self).await?;
-                
-                // Cache the created service
-                {
-                    let mut services = self.services.write().await;
-                    services.insert(type_id, service.clone());
-                }
-                
-                return Ok(service.downcast::<T>().map_err(|_| {
-                    anyhow::anyhow!("Service type mismatch")
-                })?);
-            }
-        }
-        
-        Err(anyhow::anyhow!("Service not registered: {}", std::any::type_name::<T>()))
-    }
-}
+[dependencies]
+neural-trader-shared = { path = "../neural-trader-shared" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+redis.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
-// Example service with dependency injection
-struct NeuralPredictionServiceFactory;
+# Market data connectors
+alpaca = "0.1"
+polygon = "0.1"
+tungstenite = "0.20"  # WebSocket client
+reqwest = { version = "0.11", features = ["json"] }
 
-#[async_trait]
-impl ServiceFactory for NeuralPredictionServiceFactory {
-    async fn create(&self, container: &ServiceContainer) -> Result<Arc<dyn Any + Send + Sync>> {
-        let event_bus = container.resolve::<dyn EventBus>().await?;
-        let model_registry = container.resolve::<dyn ModelRegistry>().await?;
-        let feature_extractor = container.resolve::<dyn FeatureExtractor>().await?;
-        
-        let service = NeuralPredictionService::new(
-            event_bus,
-            model_registry,
-            feature_extractor,
-        ).await?;
-        
-        Ok(Arc::new(service))
-    }
-}
+# Performance optimizations
+rayon = "1.7"  # Parallel processing
+dashmap = "5.0"  # Concurrent HashMap
+bytes = "1.0"
+
+# neural-trader-neural/Cargo.toml
+[package]
+name = "neural-trader-neural"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "neural-engine"
+path = "src/bin/neural-engine.rs"
+
+[dependencies]
+neural-trader-shared = { path = "../neural-trader-shared" }
+ruv_fann.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+redis.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# ML/AI dependencies
+candle-core = "0.3"
+candle-nn = "0.3"
+candle-transformers = "0.3"
+linfa = "0.7"
+linfa-trees = "0.7"
+smartcore = "0.3"
+
+# Performance optimizations
+rayon = "1.7"
+num_cpus = "1.0"
+
+# neural-trader-daa/Cargo.toml
+[package]
+name = "neural-trader-daa"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "daa-coordinator"
+path = "src/bin/daa-coordinator.rs"
+
+[dependencies]
+neural-trader-shared = { path = "../neural-trader-shared" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+redis.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# DAA/Swarm intelligence
+quicksight = "0.1"
+consensus-algorithms = "0.1"
+distributed-systems = "0.1"
 ```
 
 ### Configuration-Driven Injection
@@ -862,197 +1094,254 @@ impl PlatformBootstrap {
 
 ## Implementation Timeline
 
-### Phase 1: Foundation (Weeks 1-4)
+### Phase 1: Shared Foundation (Weeks 1-3)
 
 ```mermaid
 gantt
-    title V2 Refactoring Timeline - Phase 1
+    title V2 Binary Build Timeline - Phase 1
     dateFormat  YYYY-MM-DD
-    section Infrastructure
-    Event Bus Interface        :done, eventbus, 2024-01-01, 2024-01-07
-    Redis Streams Backend      :done, redis, 2024-01-08, 2024-01-14
-    Storage Abstraction        :active, storage, 2024-01-08, 2024-01-21
-    Configuration Service      :config, 2024-01-15, 2024-01-28
-    Service Container          :container, 2024-01-22, 2024-02-04
+    section Shared Foundation
+    Workspace Setup           :done, workspace, 2024-01-01, 2024-01-03
+    Redis Streams Library     :done, streams, 2024-01-04, 2024-01-10
+    Shared Types              :active, types, 2024-01-08, 2024-01-14
+    Config Management         :config, 2024-01-11, 2024-01-17
+    Health & Metrics          :monitoring, 2024-01-15, 2024-01-21
 ```
 
-**Week 1-2: Event Bus Foundation**
-- [ ] Create `src/streaming/` module structure
-- [ ] Implement `EventBus` trait and message format
-- [ ] Build Redis Streams backend
+**Week 1: Workspace & Shared Library Setup**
+- [ ] Create Cargo workspace structure
+- [ ] Build neural-trader-shared crate
+- [ ] Implement Redis Streams abstraction
+- [ ] Create shared data types
+- [ ] Set up CI/CD pipeline
+
+**Week 2-3: Foundation Components**
+- [ ] Build configuration management system
+- [ ] Implement health monitoring framework
+- [ ] Create metrics collection infrastructure
 - [ ] Add comprehensive error handling
-- [ ] Write integration tests
+- [ ] Write shared library tests
 
-**Week 3-4: Storage & Config**
-- [ ] Create `src/storage/` abstraction layer
-- [ ] Refactor TimescaleDB and Redis adapters
-- [ ] Enhance configuration service with hot-reloading
-- [ ] Implement service container and DI patterns
-- [ ] Add monitoring and health checks
+### Phase 2: Binary Implementation (Weeks 4-10)
 
-### Phase 2: Service Migration (Weeks 5-8)
+**Week 4-5: Data Ingestion Binary**
+- [ ] Build data-ingestion binary entry point
+- [ ] Implement market data connectors (Alpaca, Polygon)
+- [ ] Create data processing pipeline
+- [ ] Add data validation and enrichment
+- [ ] Optimize for high-throughput ingestion
 
-**Week 5-6: Core Services**
-- [ ] Migrate Neural Prediction Service
-- [ ] Create Trading Action Service
-- [ ] Implement Risk Management Service
-- [ ] Add event-driven communication
+**Week 6-8: Neural Engine Binary**
+- [ ] Build neural-engine binary entry point
+- [ ] Integrate ruv-FANN library
+- [ ] Implement model registry system
+- [ ] Create prediction service framework
+- [ ] Optimize ML workload performance
+- [ ] Add model versioning and hot-swapping
 
-**Week 7-8: Data Services**
-- [ ] Port Data Ingestion from Python to Rust
-- [ ] Create Portfolio Management Service
-- [ ] Implement Feature Extraction Service
-- [ ] Add comprehensive testing
+### Phase 3: DAA Coordination (Weeks 9-12)
 
-### Phase 3: Platform Services (Weeks 9-12)
+**Week 9-10: DAA Coordinator Binary**
+- [ ] Build daa-coordinator binary entry point
+- [ ] Implement agent management system
+- [ ] Create swarm orchestration framework
+- [ ] Build decision coordination algorithms
+- [ ] Add autonomous agent behaviors
 
-**Week 9-10: Platform Infrastructure**
-- [ ] Implement Service Registry
-- [ ] Create Event Orchestration Engine
-- [ ] Add Health Monitoring System
-- [ ] Implement Service Discovery
-
-**Week 11-12: Integration & Testing**
-- [ ] End-to-end integration testing
-- [ ] Performance benchmarking
-- [ ] Security audit
-- [ ] Documentation and deployment guides
+**Week 11-12: Integration & Optimization**
+- [ ] End-to-end binary integration testing
+- [ ] Performance optimization and tuning
+- [ ] Binary-specific monitoring and alerting
+- [ ] Deployment automation and documentation
 
 ---
 
-## Validation Checkpoints
+## Quality Gates & Validation
 
-### Checkpoint 1: Event Bus Validation (Week 2)
+### Quality Gate 1: Shared Library Validation (Week 3)
 
 ```rust
-// tests/integration/event_bus_validation.rs
+// neural-trader-shared/tests/integration/streams_validation.rs
 #[tokio::test]
-async fn test_event_bus_throughput() {
-    let event_bus = RedisEventBus::new(&test_config()).await.unwrap();
+async fn test_redis_streams_throughput() {
+    let publisher = RedisStreamPublisher::new(&test_redis_url()).await.unwrap();
+    let consumer = RedisStreamConsumer::new(&test_redis_url(), "test-group", "test-consumer").await.unwrap();
     
-    // Test throughput: should handle 10,000+ messages/second
+    // Test throughput: should handle 100,000+ messages/second
     let start = Instant::now();
-    let total_messages = 10_000;
+    let total_messages = 100_000;
     
-    for i in 0..total_messages {
-        let event = TestEvent { id: i, data: format!("test-{}", i) };
-        event_bus.publish(event).await.unwrap();
-    }
+    // Publish messages in parallel
+    let publish_tasks = (0..total_messages).map(|i| {
+        let publisher = publisher.clone();
+        async move {
+            let data = MarketDataMessage {
+                symbol: "TEST".to_string(),
+                price: 100.0 + i as f64,
+                volume: 1000,
+                timestamp: Utc::now(),
+                source: "test".to_string(),
+                metadata: HashMap::new(),
+            };
+            publisher.publish("test-stream", &data).await
+        }
+    });
+    
+    futures::future::try_join_all(publish_tasks).await.unwrap();
     
     let duration = start.elapsed();
     let throughput = total_messages as f64 / duration.as_secs_f64();
     
-    assert!(throughput > 10_000.0, "Throughput {} msg/s below target", throughput);
+    assert!(throughput > 100_000.0, "Throughput {} msg/s below target", throughput);
 }
 
 #[tokio::test]
-async fn test_event_reliability() {
-    let event_bus = RedisEventBus::new(&test_config()).await.unwrap();
+async fn test_binary_communication_reliability() {
+    // Test reliable communication between binaries
+    let publisher = RedisStreamPublisher::new(&test_redis_url()).await.unwrap();
+    let mut consumer = consumer.subscribe::<MarketDataMessage>("market-data").await.unwrap();
     
-    // Test message delivery guarantee
-    let consumer = event_bus.subscribe(vec!["test-topic".to_string()]).await.unwrap();
-    
-    // Publish messages
-    for i in 0..1000 {
-        event_bus.publish(TestEvent { id: i }).await.unwrap();
-    }
-    
-    // Verify all messages received
-    let mut received_count = 0;
-    let timeout = Duration::from_secs(30);
-    
-    while let Ok(Some(_)) = timeout(timeout, consumer.next()).await {
-        received_count += 1;
-        if received_count >= 1000 {
-            break;
-        }
-    }
-    
-    assert_eq!(received_count, 1000, "Message loss detected");
-}
-```
-
-### Checkpoint 2: Service Migration Validation (Week 6)
-
-```rust
-// tests/integration/service_migration_validation.rs
-#[tokio::test]
-async fn test_neural_prediction_service_migration() {
-    let container = create_test_container().await;
-    let service = container.resolve::<NeuralPredictionService>().await.unwrap();
-    
-    // Test prediction generation
-    let market_data = create_test_market_data();
-    let result = service.handle_market_data(market_data).await;
-    
-    assert!(result.is_ok(), "Prediction service failed: {:?}", result.err());
-    
-    // Verify event was published
-    let event_bus = container.resolve::<dyn EventBus>().await.unwrap();
-    // Check for PredictionGenerated event
-}
-
-#[tokio::test]
-async fn test_service_communication() {
-    let container = create_test_container().await;
-    
-    // Test event flow: Market Data → Neural Prediction → Trading Action
-    let market_data_event = MarketDataReceived {
+    // Publish test data
+    let test_data = MarketDataMessage {
         symbol: "AAPL".to_string(),
         price: 150.0,
+        volume: 1000,
         timestamp: Utc::now(),
+        source: "test".to_string(),
+        metadata: HashMap::new(),
     };
     
-    let event_bus = container.resolve::<dyn EventBus>().await.unwrap();
-    event_bus.publish(market_data_event).await.unwrap();
+    publisher.publish("market-data", &test_data).await.unwrap();
     
-    // Wait for cascade of events and verify end-to-end processing
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Verify message received
+    let received = tokio::time::timeout(
+        Duration::from_secs(5),
+        consumer.next()
+    ).await.unwrap().unwrap();
     
-    // Verify TradingDecisionGenerated event was created
+    assert_eq!(received.symbol, "AAPL");
+    assert_eq!(received.price, 150.0);
 }
 ```
 
-### Checkpoint 3: Performance Validation (Week 10)
+### Quality Gate 2: Binary Independence Validation (Week 8)
+
+```rust
+// tests/integration/binary_independence_validation.rs
+#[tokio::test]
+async fn test_binaries_run_independently() {
+    // Start each binary in separate processes
+    let ingestion_handle = start_binary("data-ingestion").await.unwrap();
+    let neural_handle = start_binary("neural-engine").await.unwrap();
+    let daa_handle = start_binary("daa-coordinator").await.unwrap();
+    
+    // Verify each binary is healthy
+    assert!(check_health("data-ingestion", 8080).await);
+    assert!(check_health("neural-engine", 8081).await);
+    assert!(check_health("daa-coordinator", 8082).await);
+    
+    // Test binary failure isolation
+    stop_binary(neural_handle).await;
+    
+    // Other binaries should continue running
+    assert!(check_health("data-ingestion", 8080).await);
+    assert!(check_health("daa-coordinator", 8082).await);
+    
+    // Cleanup
+    stop_binary(ingestion_handle).await;
+    stop_binary(daa_handle).await;
+}
+
+#[tokio::test]
+async fn test_binary_communication_flow() {
+    // Test complete data flow through all binaries
+    let test_orchestrator = BinaryTestOrchestrator::new().await;
+    
+    // Start all binaries
+    test_orchestrator.start_all_binaries().await.unwrap();
+    
+    // Inject test market data
+    test_orchestrator.inject_market_data(create_test_market_data("AAPL", 150.0)).await.unwrap();
+    
+    // Verify data flows through all stages
+    let flow_result = test_orchestrator.wait_for_complete_flow(Duration::from_secs(10)).await;
+    
+    assert!(flow_result.ingestion_completed);
+    assert!(flow_result.prediction_generated);
+    assert!(flow_result.decision_coordinated);
+    assert!(flow_result.end_to_end_latency < Duration::from_secs(2));
+}
+```
+
+### Quality Gate 3: Performance & Scale Validation (Week 12)
 
 ```rust
 // tests/integration/performance_validation.rs
 #[tokio::test]
-async fn test_end_to_end_latency() {
-    let platform = create_test_platform().await;
+async fn test_binary_system_performance() {
+    let test_env = BinaryPerformanceTestEnvironment::new().await;
+    test_env.start_all_binaries().await.unwrap();
     
     let start = Instant::now();
     
-    // Simulate full pipeline: Market Data → Prediction → Trading Decision
-    let market_data = create_realistic_market_data();
-    platform.process_market_data(market_data).await.unwrap();
+    // Simulate high-frequency market data
+    let market_data_stream = generate_realistic_market_data_stream(
+        Duration::from_secs(60),
+        10_000, // 10K messages per second
+    );
     
-    let latency = start.elapsed();
+    let mut latencies = Vec::new();
     
-    // Target: <2 seconds end-to-end latency
-    assert!(latency < Duration::from_secs(2), 
-           "End-to-end latency {} ms exceeds target", latency.as_millis());
+    for market_data in market_data_stream {
+        let message_start = Instant::now();
+        
+        // Inject market data
+        test_env.inject_market_data(market_data).await.unwrap();
+        
+        // Wait for complete processing
+        let result = test_env.wait_for_decision(Duration::from_secs(5)).await;
+        let latency = message_start.elapsed();
+        
+        latencies.push(latency);
+        
+        assert!(result.is_some(), "Processing failed");
+    }
+    
+    // Calculate performance metrics
+    let total_duration = start.elapsed();
+    let avg_latency = latencies.iter().sum::<Duration>() / latencies.len() as u32;
+    let p99_latency = calculate_percentile(&latencies, 0.99);
+    let throughput = latencies.len() as f64 / total_duration.as_secs_f64();
+    
+    // Performance assertions
+    assert!(avg_latency < Duration::from_millis(500), 
+           "Average latency {} ms exceeds target", avg_latency.as_millis());
+    assert!(p99_latency < Duration::from_secs(2), 
+           "P99 latency {} ms exceeds target", p99_latency.as_millis());
+    assert!(throughput > 5_000.0, 
+           "Throughput {} msg/s below target", throughput);
 }
 
 #[tokio::test]
-async fn test_concurrent_processing() {
-    let platform = create_test_platform().await;
+async fn test_binary_scaling_characteristics() {
+    // Test how system scales with multiple instances
+    let test_env = BinaryScalingTestEnvironment::new().await;
     
-    // Simulate concurrent market data from multiple symbols
-    let symbols = vec!["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN"];
-    let futures: Vec<_> = symbols.into_iter().map(|symbol| {
-        let platform = platform.clone();
-        async move {
-            let market_data = create_market_data_for_symbol(symbol);
-            platform.process_market_data(market_data).await
-        }
-    }).collect();
+    // Test with different scaling configurations
+    let configurations = vec![
+        ScalingConfig { ingestion: 1, neural: 1, daa: 1 },
+        ScalingConfig { ingestion: 2, neural: 2, daa: 1 },
+        ScalingConfig { ingestion: 4, neural: 4, daa: 2 },
+    ];
     
-    let results = futures::future::join_all(futures).await;
-    
-    // Verify all processing succeeded
-    for result in results {
-        assert!(result.is_ok(), "Concurrent processing failed");
+    for config in configurations {
+        test_env.scale_binaries(config).await.unwrap();
+        
+        let performance = test_env.measure_performance(Duration::from_secs(30)).await;
+        
+        // Verify scaling improves performance
+        assert!(performance.throughput >= config.expected_throughput());
+        assert!(performance.avg_latency <= config.expected_max_latency());
     }
 }
 ```

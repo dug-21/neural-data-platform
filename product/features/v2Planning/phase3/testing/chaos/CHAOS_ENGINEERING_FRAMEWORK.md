@@ -1,8 +1,17 @@
-# Neural Trader V2 - Chaos Engineering Framework
+# Neural Trader V2 - Binary Separation Chaos Engineering Framework
 
 ## Overview
 
-Chaos Engineering framework for Neural Trader V2 to validate system resilience, fault tolerance, and graceful degradation under adverse conditions through controlled failure injection.
+Chaos Engineering framework for the **binary separation architecture** to validate system resilience, fault tolerance, and graceful degradation under adverse conditions through controlled binary failure injection and Redis Streams disruption.
+
+## Binary Chaos Testing Strategy
+
+### Independent Binary Failure Testing
+- **config-store-binary**: gRPC service failure scenarios
+- **data-ingestion-binary**: Streaming service disruption
+- **ruv-FANN-binary**: Neural network model failures
+- **DAA-coordinator-binary**: Distributed coordination failures
+- **Redis Streams**: Cross-binary communication disruption
 
 ## Chaos Engineering Principles
 
@@ -23,30 +32,450 @@ Chaos Engineering framework for Neural Trader V2 to validate system resilience, 
 
 ## Chaos Testing Categories
 
-### Infrastructure Failures
-- Network partitions
-- Service unavailability
-- Resource exhaustion
-- Hardware failures
+### Binary Infrastructure Failures
+- **Binary process crashes**: Individual binary termination
+- **Redis Streams partitions**: Cross-binary communication failure
+- **gRPC connection failures**: Config store unavailability
+- **Resource exhaustion**: Per-binary memory/CPU limits
+- **Container failures**: Binary container restart scenarios
 
-### Application Failures
-- Memory leaks
-- CPU spikes
-- Database failures
-- Cache invalidation
+### Binary Application Failures
+- **config-store**: gRPC service degradation
+- **data-ingestion**: Stream processing failures
+- **ruv-FANN**: Neural network inference errors
+- **DAA-coordinator**: Agent coordination failures
+- **Redis Streams**: Message ordering disruption
 
-### Data Failures
-- Corrupt data
-- Missing records
-- Schema changes
-- Replication lag
+### Cross-Binary Data Failures
+- **Stream message corruption**: Invalid Redis Streams data
+- **Binary state inconsistency**: Cross-binary data drift
+- **Configuration propagation failure**: Config updates not received
+- **Neural model desync**: Model predictions inconsistency
+- **Agent coordination breakdown**: DAA state conflicts
 
-## 1. Network Chaos Testing
+## 1. Binary Process Chaos Testing
 
-### Network Partition Simulation
-```typescript
-// tests/chaos/network-chaos.ts
-export class NetworkChaosEngine {
+### Binary Termination and Recovery Simulation
+```rust
+// tests/chaos/binary_chaos.rs
+use std::collections::HashMap;
+use std::process::{Child, Command};
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
+use uuid::Uuid;
+
+pub struct BinaryChaosEngine {
+    binary_processes: HashMap<String, Child>,
+    chaos_experiments: Vec<ChaosExperiment>,
+    redis_client: redis::Client,
+}
+
+impl BinaryChaosEngine {
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let redis_client = redis::Client::open("redis://localhost:6379")?;
+        
+        Ok(BinaryChaosEngine {
+            binary_processes: HashMap::new(),
+            chaos_experiments: Vec::new(),
+            redis_client,
+        })
+    }
+    
+    pub async fn simulate_binary_crash(
+        &mut self,
+        binary_name: &str,
+        crash_duration: Duration,
+        recovery_strategy: RecoveryStrategy,
+    ) -> Result<ChaosExperiment, Box<dyn std::error::Error>> {
+        let experiment_id = Uuid::new_v4().to_string();
+        println!("🔥 Starting binary crash chaos: {} - {}", binary_name, experiment_id);
+        
+        let experiment = ChaosExperiment {
+            id: experiment_id.clone(),
+            experiment_type: ChaosType::BinaryCrash,
+            target_binary: binary_name.to_string(),
+            start_time: Instant::now(),
+            duration: crash_duration,
+            status: ChaosStatus::Running,
+            metrics: ChaosMetrics::new(),
+        };
+        
+        // Capture baseline metrics
+        let baseline_metrics = self.capture_system_baseline().await?;
+        
+        // Terminate the binary process
+        self.terminate_binary(binary_name).await?;
+        
+        // Monitor system behavior during outage
+        let monitoring_task = self.start_chaos_monitoring(&experiment).await;
+        
+        // Wait for crash duration
+        sleep(crash_duration).await;
+        
+        // Recover the binary based on strategy
+        self.recover_binary(binary_name, recovery_strategy).await?;
+        
+        // Wait for system stabilization
+        sleep(Duration::from_secs(10)).await;
+        
+        // Capture recovery metrics
+        let recovery_metrics = self.capture_recovery_metrics().await?;
+        
+        // Stop monitoring
+        monitoring_task.abort();
+        
+        let mut completed_experiment = experiment;
+        completed_experiment.status = ChaosStatus::Completed;
+        completed_experiment.metrics.baseline = Some(baseline_metrics);
+        completed_experiment.metrics.recovery = Some(recovery_metrics);
+        
+        self.chaos_experiments.push(completed_experiment.clone());
+        
+        println!("✅ Binary crash chaos completed: {}", experiment_id);
+        Ok(completed_experiment)
+    }
+    
+    pub async fn simulate_redis_streams_partition(
+        &mut self,
+        affected_streams: Vec<&str>,
+        partition_duration: Duration,
+    ) -> Result<ChaosExperiment, Box<dyn std::error::Error>> {
+        let experiment_id = Uuid::new_v4().to_string();
+        println!("🔥 Starting Redis Streams partition: {}", experiment_id);
+        
+        let experiment = ChaosExperiment {
+            id: experiment_id.clone(),
+            experiment_type: ChaosType::RedisPartition,
+            target_binary: "redis-streams".to_string(),
+            start_time: Instant::now(),
+            duration: partition_duration,
+            status: ChaosStatus::Running,
+            metrics: ChaosMetrics::new(),
+        };
+        
+        // Block Redis Streams access using iptables or similar
+        self.block_redis_access().await?;
+        
+        // Monitor binary behavior during partition
+        let monitoring_task = self.start_partition_monitoring(&affected_streams).await;
+        
+        sleep(partition_duration).await;
+        
+        // Restore Redis Streams access
+        self.restore_redis_access().await?;
+        
+        // Monitor recovery and message replay
+        let recovery_start = Instant::now();
+        self.monitor_message_replay(&affected_streams).await?;
+        let recovery_time = recovery_start.elapsed();
+        
+        monitoring_task.abort();
+        
+        let mut completed_experiment = experiment;
+        completed_experiment.status = ChaosStatus::Completed;
+        completed_experiment.metrics.recovery_time = Some(recovery_time);
+        
+        self.chaos_experiments.push(completed_experiment.clone());
+        
+        println!("✅ Redis Streams partition completed: {}", experiment_id);
+        Ok(completed_experiment)
+    }
+    
+    pub async fn simulate_binary_cascade_failure(
+        &mut self,
+        failure_sequence: Vec<(&str, Duration)>, // (binary_name, delay)
+        total_duration: Duration,
+    ) -> Result<ChaosExperiment, Box<dyn std::error::Error>> {
+        let experiment_id = Uuid::new_v4().to_string();
+        println!("🔥 Starting binary cascade failure: {}", experiment_id);
+        
+        let experiment = ChaosExperiment {
+            id: experiment_id.clone(),
+            experiment_type: ChaosType::CascadeFailure,
+            target_binary: "all-binaries".to_string(),
+            start_time: Instant::now(),
+            duration: total_duration,
+            status: ChaosStatus::Running,
+            metrics: ChaosMetrics::new(),
+        };
+        
+        let baseline = self.capture_system_baseline().await?;
+        
+        // Execute cascade failure sequence
+        for (binary_name, delay) in failure_sequence {
+            sleep(delay).await;
+            
+            println!("Failing binary in cascade: {}", binary_name);
+            self.terminate_binary(binary_name).await?;
+            
+            // Capture system state after each failure
+            let state = self.capture_system_state().await?;
+            println!("System state after {} failure: {:?}", binary_name, state.binary_health);
+        }
+        
+        // Monitor system during complete outage
+        let outage_duration = total_duration / 2;
+        sleep(outage_duration).await;
+        
+        // Gradual recovery
+        for (binary_name, _) in failure_sequence.iter().rev() {
+            println!("Recovering binary: {}", binary_name);
+            self.recover_binary(binary_name, RecoveryStrategy::CleanRestart).await?;
+            sleep(Duration::from_secs(5)).await; // Staggered recovery
+        }
+        
+        // Wait for system stabilization
+        sleep(Duration::from_secs(30)).await;
+        
+        let recovery_metrics = self.capture_recovery_metrics().await?;
+        
+        let mut completed_experiment = experiment;
+        completed_experiment.status = ChaosStatus::Completed;
+        completed_experiment.metrics.baseline = Some(baseline);
+        completed_experiment.metrics.recovery = Some(recovery_metrics);
+        
+        self.chaos_experiments.push(completed_experiment.clone());
+        
+        println!("✅ Binary cascade failure completed: {}", experiment_id);
+        Ok(completed_experiment)
+    }
+    
+    async fn terminate_binary(&mut self, binary_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        match binary_name {
+            "config-store" => {
+                Command::new("pkill")
+                    .args(["-f", "config-store"])
+                    .output()?;
+            }
+            "data-ingestion" => {
+                Command::new("pkill")
+                    .args(["-f", "data_ingestion"])
+                    .output()?;
+            }
+            "ruv-fann" => {
+                Command::new("pkill")
+                    .args(["-f", "ruv-fann"])
+                    .output()?;
+            }
+            "daa-coordinator" => {
+                Command::new("pkill")
+                    .args(["-f", "daa-coordinator"])
+                    .output()?;
+            }
+            _ => return Err(format!("Unknown binary: {}", binary_name).into()),
+        }
+        
+        println!("Binary {} terminated for chaos experiment", binary_name);
+        Ok(())
+    }
+    
+    async fn recover_binary(
+        &mut self,
+        binary_name: &str,
+        strategy: RecoveryStrategy,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match strategy {
+            RecoveryStrategy::CleanRestart => self.clean_restart_binary(binary_name).await,
+            RecoveryStrategy::StateRecovery => self.recover_with_state(binary_name).await,
+            RecoveryStrategy::ManualIntervention => {
+                println!("Manual intervention required for {}", binary_name);
+                // In real scenario, this would wait for manual recovery
+                sleep(Duration::from_secs(5)).await;
+                self.clean_restart_binary(binary_name).await
+            }
+        }
+    }
+    
+    async fn clean_restart_binary(&mut self, binary_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let child = match binary_name {
+            "config-store" => {
+                Command::new("cargo")
+                    .args(["run", "--bin", "config-store"])
+                    .current_dir("./config-store")
+                    .env("RUST_LOG", "info")
+                    .env("DATABASE_URL", "postgres://user:pass@localhost:5432/config_store")
+                    .env("REDIS_URL", "redis://localhost:6379")
+                    .spawn()?
+            }
+            "data-ingestion" => {
+                Command::new("python")
+                    .args(["-m", "data_ingestion.main"])
+                    .current_dir("./data_ingestion")
+                    .env("PYTHONPATH", "./data_ingestion")
+                    .env("REDIS_URL", "redis://localhost:6379")
+                    .spawn()?
+            }
+            "ruv-fann" => {
+                Command::new("cargo")
+                    .args(["run", "--bin", "ruv-fann"])
+                    .current_dir("./ruv-fann")
+                    .env("RUST_LOG", "info")
+                    .env("REDIS_URL", "redis://localhost:6379")
+                    .spawn()?
+            }
+            "daa-coordinator" => {
+                Command::new("cargo")
+                    .args(["run", "--bin", "daa-coordinator"])
+                    .current_dir("./daa-coordinator")
+                    .env("RUST_LOG", "info")
+                    .env("REDIS_URL", "redis://localhost:6379")
+                    .spawn()?
+            }
+            _ => return Err(format!("Unknown binary: {}", binary_name).into()),
+        };
+        
+        self.binary_processes.insert(binary_name.to_string(), child);
+        println!("Binary {} restarted after chaos experiment", binary_name);
+        
+        // Wait for binary to be ready
+        sleep(Duration::from_secs(10)).await;
+        
+        Ok(())
+    }
+    
+    async fn capture_system_baseline(&self) -> Result<SystemMetrics, Box<dyn std::error::Error>> {
+        let mut con = self.redis_client.get_async_connection().await?;
+        
+        // Test all critical streams
+        let streams = vec![
+            "market_data_stream",
+            "config_updates_stream",
+            "neural_signals_stream",
+            "daa_coordination_stream",
+        ];
+        
+        let mut stream_health = HashMap::new();
+        
+        for stream in streams {
+            let info: redis::Value = redis::cmd("XINFO")
+                .arg("STREAM")
+                .arg(stream)
+                .query_async(&mut con)
+                .await
+                .unwrap_or(redis::Value::Nil);
+                
+            stream_health.insert(stream.to_string(), info != redis::Value::Nil);
+        }
+        
+        Ok(SystemMetrics {
+            timestamp: Instant::now(),
+            binary_health: self.check_all_binaries_health().await?,
+            stream_health,
+            response_times: self.measure_response_times().await?,
+            message_throughput: self.measure_message_throughput().await?,
+        })
+    }
+    
+    async fn check_all_binaries_health(&self) -> Result<HashMap<String, bool>, Box<dyn std::error::Error>> {
+        let mut health = HashMap::new();
+        
+        let binaries = vec!["config-store", "data-ingestion", "ruv-fann", "daa-coordinator"];
+        
+        for binary in binaries {
+            let is_healthy = self.check_binary_health(binary).await;
+            health.insert(binary.to_string(), is_healthy);
+        }
+        
+        Ok(health)
+    }
+    
+    async fn check_binary_health(&self, binary_name: &str) -> bool {
+        match binary_name {
+            "config-store" => {
+                // Check gRPC health endpoint
+                // Simplified - in reality would make actual gRPC health check
+                true
+            }
+            "data-ingestion" => {
+                // Check if process is running and producing to streams
+                Command::new("pgrep")
+                    .args(["-f", "data_ingestion"])
+                    .output()
+                    .map(|output| output.status.success())
+                    .unwrap_or(false)
+            }
+            "ruv-fann" => {
+                Command::new("pgrep")
+                    .args(["-f", "ruv-fann"])
+                    .output()
+                    .map(|output| output.status.success())
+                    .unwrap_or(false)
+            }
+            "daa-coordinator" => {
+                Command::new("pgrep")
+                    .args(["-f", "daa-coordinator"])
+                    .output()
+                    .map(|output| output.status.success())
+                    .unwrap_or(false)
+            }
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ChaosExperiment {
+    pub id: String,
+    pub experiment_type: ChaosType,
+    pub target_binary: String,
+    pub start_time: Instant,
+    pub duration: Duration,
+    pub status: ChaosStatus,
+    pub metrics: ChaosMetrics,
+}
+
+#[derive(Debug, Clone)]
+pub enum ChaosType {
+    BinaryCrash,
+    RedisPartition,
+    CascadeFailure,
+    ResourceExhaustion,
+}
+
+#[derive(Debug, Clone)]
+pub enum ChaosStatus {
+    Running,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone)]
+pub enum RecoveryStrategy {
+    CleanRestart,
+    StateRecovery,
+    ManualIntervention,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChaosMetrics {
+    pub baseline: Option<SystemMetrics>,
+    pub during_chaos: Vec<SystemMetrics>,
+    pub recovery: Option<SystemMetrics>,
+    pub recovery_time: Option<Duration>,
+}
+
+impl ChaosMetrics {
+    pub fn new() -> Self {
+        ChaosMetrics {
+            baseline: None,
+            during_chaos: Vec::new(),
+            recovery: None,
+            recovery_time: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SystemMetrics {
+    pub timestamp: Instant,
+    pub binary_health: HashMap<String, bool>,
+    pub stream_health: HashMap<String, bool>,
+    pub response_times: HashMap<String, Duration>,
+    pub message_throughput: HashMap<String, u64>,
+}
+```
+
+## 2. Redis Streams Chaos Testing
   private activeExperiments: Set<string> = new Set();
   private toxiproxy: ToxiproxyClient;
 

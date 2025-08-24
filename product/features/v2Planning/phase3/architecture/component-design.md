@@ -1,8 +1,8 @@
-# V2 Component Design - Neural Trader Platform
+# V2 Component Design - Neural Trader Platform (CORRECTED)
 
 ## Component Architecture Overview
 
-This document details the component-level design for the Neural Trader V2 platform, defining interfaces, responsibilities, and interactions between system components.
+This document details the component-level design for the Neural Trader V2 platform with THREE RUST BINARIES: neural-ml-ops for training, neural-trading for execution, and neural-core as shared library. NO Python, NO microservices - embedded ruv-FANN with DAA Coordinators.
 
 ## Core Components
 
@@ -75,40 +75,98 @@ component:
     max_stream_length: 1000000
 ```
 
-### 2. ML Ops Platform Component
+### 2. Binary Separation: ML Ops Component (neural-ml-ops)
 
-```yaml
-component:
-  name: "MLOpsPlatform"
-  type: "Platform Service"
-  technology: "ruv-FANN with MLflow integration"
-  
-  subcomponents:
-    model_registry:
-      purpose: "Centralized model versioning and deployment"
-      interfaces:
-        - register_model(model: Model, metadata: Metadata) -> ModelId
-        - get_model(id: ModelId) -> Model
-        - promote_model(id: ModelId, stage: Stage) -> Result
-        - rollback_model(id: ModelId) -> Result
-      
-      storage:
-        backend: "S3/MinIO"
-        metadata_db: "PostgreSQL"
-        index: "Elasticsearch"
+```rust
+// neural-ml-ops binary - TRAINING ONLY
+pub struct MLOpsEngine {
+    // ruv-FANN training (NOT inference)
+    training_pipeline: FANNTrainingPipeline,
+    
+    // Model registry (config-store backed)
+    model_registry: ConfigStoreRegistry,
+    
+    // Feature computation (domain-agnostic)
+    feature_engine: RustFeatureEngine,
+    
+    // Event publishing (to trading binary)
+    publisher: RedisStreamPublisher,
+    
+    // NO DAA Coordinator (only in neural-trading)
+    // NO inference engine (only in neural-trading)
+}
+
+impl MLOpsEngine {
+    pub async fn train_model(&mut self, config: TrainingConfig) -> Result<ModelId> {
+        // 1. Extract features using Rust feature engine
+        let features = self.feature_engine.compute_training_features(
+            config.symbol_list,
+            config.time_range
+        ).await?;
+        
+        // 2. Train ruv-FANN model
+        let mut model = BaseModel::<TradingData>::new(
+            config.network_topology,
+            config.activation_function
+        )?;
+        
+        let training_result = model.train(
+            &features.training_data,
+            &features.targets,
+            config.epochs,
+            config.learning_rate
+        )?;
+        
+        // 3. Store trained model in config-store
+        let model_id = self.model_registry.store_model(
+            model,
+            training_result.metrics,
+            config.clone()
+        ).await?;
+        
+        // 4. Publish model update event
+        self.publisher.publish_model_update(ModelUpdateEvent {
+            model_id: model_id.clone(),
+            version: training_result.version,
+            performance: training_result.metrics,
+            config_store_path: format!("/models/{}", model_id),
+        }).await?;
+        
+        Ok(model_id)
+    }
+    
+    pub async fn compute_features(&mut self, market_data: MarketData) -> Result<()> {
+        // Compute features (domain-agnostic indicators)
+        let features = self.feature_engine.compute_features(&market_data)?;
+        
+        // Publish to Redis Streams for neural-trading to consume
+        self.publisher.publish_features(FeatureUpdateEvent {
+            symbol: market_data.symbol,
+            timestamp: market_data.timestamp,
+            features: features,
+            metadata: FeatureMetadata {
+                computation_time: Utc::now(),
+                version: self.feature_engine.version(),
+            },
+        }).await?;
+        
+        Ok(())
+    }
+}
+```
     
     feature_store:
-      purpose: "Centralized feature computation and serving"
+      purpose: "Embedded Rust feature computation and serving"
       interfaces:
-        - register_feature(definition: FeatureDefinition) -> FeatureId
-        - compute_features(entity: Entity, features: Vec<FeatureId>) -> Features
-        - get_online_features(keys: Vec<Key>) -> Features
+        - register_feature(definition: RustFeatureDefinition) -> FeatureId
+        - compute_features(entity: TradingEntity, features: Vec<FeatureId>) -> TradingFeatures
+        - get_online_features(keys: Vec<SymbolKey>) -> TradingFeatures
         - materialize_features(feature_set: FeatureSet) -> Result
       
       architecture:
-        online_store: "Redis"
+        online_store: "EventBus (Redis Streams)"
         offline_store: "TimescaleDB"
-        compute_engine: "Apache Spark"
+        compute_engine: "Native Rust feature engine (embedded)"
     
     training_pipeline:
       purpose: "Automated model training and evaluation"
@@ -118,60 +176,69 @@ component:
         - cancel_job(id: JobId) -> Result
       
       implementation:
-        ```python
-        class TrainingPipeline:
-            def __init__(self):
-                self.orchestrator = KubeflowClient()
-                self.feature_store = FeatureStore()
-                self.model_registry = ModelRegistry()
-            
-            async def train_model(self, config: TrainingConfig):
-                # Load features
-                features = await self.feature_store.get_training_data(
-                    config.feature_set,
+        ```rust
+        use ruv_fann::BaseModel;
+        
+        pub struct RustTrainingPipeline {
+            feature_engine: FeatureEngine,
+            model_registry: ConfigStoreModelRegistry,
+            daa_coordinator: DAACoordinator,
+        }
+        
+        impl RustTrainingPipeline {
+            pub async fn train_model(&self, config: TrainingConfig) -> Result<ModelId> {
+                // Load features using Rust feature engine
+                let features = self.feature_engine.get_training_data(
+                    &config.feature_set,
                     config.time_range
-                )
+                ).await?;
                 
-                # Initialize FANN model
-                model = FANNModel(
-                    layers=config.layers,
-                    activation=config.activation,
-                    learning_rate=config.learning_rate
-                )
+                // Initialize ruv-FANN model
+                let mut model = BaseModel::<TradingData>::new(
+                    config.layers.clone(),
+                    config.activation,
+                    config.learning_rate
+                )?;
                 
-                # Train model
-                history = model.fit(
-                    features.X,
-                    features.y,
-                    epochs=config.epochs,
-                    batch_size=config.batch_size,
-                    validation_split=0.2
-                )
+                // Train model using ruv-FANN
+                let history = model.fit(
+                    &features.X,
+                    &features.y,
+                    config.epochs,
+                    config.batch_size,
+                    0.2  // validation_split
+                )?;
                 
-                # Evaluate model
-                metrics = self.evaluate_model(model, features.X_test, features.y_test)
+                // Evaluate model
+                let metrics = self.evaluate_model(&model, &features.X_test, &features.y_test)?;
                 
-                # Register model
-                model_id = await self.model_registry.register(
-                    model=model,
-                    metrics=metrics,
-                    config=config
-                )
+                // Let DAA Coordinator assess model quality
+                let assessment = self.daa_coordinator.assess_model(&model, &metrics)?;
                 
-                return model_id
+                // Register model in config-store
+                let model_id = self.model_registry.register(
+                    model,
+                    metrics,
+                    config,
+                    assessment
+                ).await?;
+                
+                Ok(model_id)
+            }
+        }
         ```
     
-    inference_server:
-      purpose: "Low-latency model serving"
+    inference_engine:
+      purpose: "Embedded low-latency ruv-FANN inference (no separate server)"
       interfaces:
-        - predict(model_id: ModelId, input: Tensor) -> Prediction
-        - batch_predict(model_id: ModelId, inputs: Vec<Tensor>) -> Vec<Prediction>
-        - explain(model_id: ModelId, input: Tensor) -> Explanation
+        - predict(model: &BaseModel<TradingData>, input: TradingFeatures) -> TradingPrediction
+        - batch_predict(model: &BaseModel<TradingData>, inputs: Vec<TradingFeatures>) -> Vec<TradingPrediction>
+        - explain(model: &BaseModel<TradingData>, input: TradingFeatures) -> PredictionExplanation
       
       performance:
-        latency_p99: "< 10ms"
-        throughput: "> 10k req/sec"
-        availability: "99.99%"
+        latency_p99: "< 1ms (embedded, no network calls)"
+        throughput: "> 100k req/sec (embedded)"
+        availability: "Same as main trading service"
 ```
 
 ### 3. Domain Registry Service
@@ -373,20 +440,101 @@ component:
       - stream_bars(symbols: Vec<String>, interval: Interval) -> BarStream
 ```
 
-### 5. Strategy Engine Component
+### 3. Binary Separation: Trading Component (neural-trading)
 
-```yaml
-component:
-  name: "StrategyEngine"
-  type: "Domain Service"
-  domain: "Trading"
-  
-  architecture:
-    ```rust
-    pub struct StrategyEngine {
-        // Strategy management
-        strategies: HashMap<StrategyId, Box<dyn Strategy>>,
-        strategy_registry: StrategyRegistry,
+```rust
+// neural-trading binary - INFERENCE AND EXECUTION
+pub struct TradingEngine {
+    // DAA Coordinator (CRITICAL - only in domain binaries)
+    daa_coordinator: DAACoordinator,
+    
+    // Embedded ruv-FANN inference (NO separate service)
+    model_cache: HashMap<ModelId, BaseModel<TradingData>>,
+    inference_engine: EmbeddedFANNInference,
+    
+    // Market data processing
+    market_data_processor: MarketDataProcessor,
+    
+    // Order execution
+    order_executor: AlpacaOrderExecutor,
+    
+    // Event subscription from neural-ml-ops
+    feature_subscriber: RedisStreamConsumer,
+    model_subscriber: RedisStreamConsumer,
+    
+    // Event publishing
+    signal_publisher: RedisStreamPublisher,
+}
+
+impl TradingEngine {
+    pub async fn run(&mut self) -> Result<()> {
+        // Subscribe to features from neural-ml-ops
+        self.feature_subscriber.subscribe("features:computed", "trading-group").await?;
+        
+        // Subscribe to model updates from neural-ml-ops
+        self.model_subscriber.subscribe("models:updates", "trading-group").await?;
+        
+        loop {
+            tokio::select! {
+                // Handle new features
+                feature_event = self.feature_subscriber.next() => {
+                    if let Some(features) = feature_event {
+                        self.process_features(features).await?;
+                    }
+                }
+                
+                // Handle model updates
+                model_event = self.model_subscriber.next() => {
+                    if let Some(update) = model_event {
+                        self.update_model(update).await?;
+                    }
+                }
+                
+                // Handle market data
+                market_data = self.market_data_processor.next() => {
+                    if let Some(data) = market_data {
+                        self.process_market_data(data).await?;
+                    }
+                }
+            }
+        }
+    }
+    
+    async fn process_features(&mut self, features: FeatureUpdateEvent) -> Result<()> {
+        // Get relevant model from cache
+        let model = self.model_cache.get(&features.model_id)
+            .ok_or(TradingError::ModelNotFound)?;
+        
+        // Embedded ruv-FANN inference (< 1ms)
+        let prediction = self.inference_engine.predict(model, &features.features)?;
+        
+        // DAA Coordinator makes trading decision
+        let decision = self.daa_coordinator.coordinate_decision(
+            prediction,
+            features.symbol,
+            self.get_market_context(&features.symbol)
+        )?;
+        
+        // Execute if decision warrants action
+        if let Some(action) = decision {
+            self.execute_trading_action(action).await?;
+        }
+        
+        Ok(())
+    }
+    
+    async fn update_model(&mut self, update: ModelUpdateEvent) -> Result<()> {
+        // Load new model from config-store
+        let new_model = self.load_model_from_config_store(&update.config_store_path).await?;
+        
+        // Hot-reload model in cache
+        self.model_cache.insert(update.model_id, new_model);
+        
+        info!("Model updated: {} -> version {}", update.model_id, update.version);
+        Ok(())
+    }
+}
+```
         
         // Execution
         executor: StrategyExecutor,
@@ -396,23 +544,24 @@ component:
         position_tracker: PositionTracker,
         risk_manager: RiskManager,
         
-        // Signal processing
-        signal_processor: SignalProcessor,
+        // Signal processing with ruv-FANN
+        fann_signal_processor: FANNSignalProcessor,
         signal_aggregator: SignalAggregator,
         
-        // Integration
+        // Integration (embedded models, no separate ML platform)
         market_data: Arc<MarketDataService>,
         order_manager: Arc<OrderManagementService>,
-        ml_platform: Arc<MLOpsPlatform>,
+        fann_models: HashMap<ModelId, BaseModel<TradingData>>,
     }
     
     #[async_trait]
     impl Strategy for CustomStrategy {
         async fn initialize(&mut self, context: &Context) -> Result<()> {
-            // Load model from ML platform
-            self.model = context.ml_platform
-                .load_model(&self.config.model_id)
-                .await?;
+            // Load ruv-FANN model from embedded registry
+            self.fann_model = context.fann_models
+                .get(&self.config.model_id)
+                .cloned()
+                .ok_or(StrategyError::ModelNotFound)?;
             
             // Subscribe to market data
             self.market_stream = context.market_data
@@ -434,11 +583,15 @@ component:
             // Compute features
             let features = self.compute_features(&self.feature_buffer);
             
-            // Get prediction from model
-            let prediction = self.model.predict(&features).await?;
+            // Get prediction from ruv-FANN model (embedded, no async needed)
+            let prediction = self.fann_model.predict(&features)?;
             
-            // Generate signals
-            let signals = self.generate_signals(prediction, &tick, context);
+            // Generate signals using DAA Coordinator
+            let signals = context.daa_coordinator.coordinate_signals(
+                prediction, 
+                &tick, 
+                &self.context
+            )?;
             
             Ok(signals)
         }

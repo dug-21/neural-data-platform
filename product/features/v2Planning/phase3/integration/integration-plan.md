@@ -52,22 +52,22 @@ Validation:
   - Trace propagation verification
 ```
 
-### Phase 2: ML Ops Platform Integration (Weeks 3-4)
+### Phase 2: ruv-FANN Integration (Weeks 3-4)
 
 #### 2.1 ML Service Integration
 ```python
-# ML Ops Service Integration
-class MLOpsIntegration:
+# ruv-FANN Neural Network Integration
+class RuvFANNIntegration:
     def __init__(self):
         self.components = {
             'feature_store': FeatureStoreService(),
-            'model_registry': MLflowRegistry(),
+            'model_storage': ConfigStoreClient(),
             'inference_engine': RuvFANNEngine(),
             'training_pipeline': TrainingOrchestrator()
         }
     
     def integrate_with_eventbus(self):
-        """Connect ML Ops to EventBus for data ingestion"""
+        """Connect ruv-FANN to EventBus for data ingestion"""
         self.eventbus_consumer = RedisStreamConsumer(
             stream_key='trading:market-data',
             consumer_group='ml-ops-group'
@@ -575,7 +575,7 @@ jobs:
 ## Timeline
 
 - **Week 1-2**: Core infrastructure integration
-- **Week 3-4**: ML Ops platform integration
+- **Week 3-4**: ruv-FANN neural network integration
 - **Week 5-6**: Trading services integration
 - **Week 7-8**: End-to-end validation and optimization
 

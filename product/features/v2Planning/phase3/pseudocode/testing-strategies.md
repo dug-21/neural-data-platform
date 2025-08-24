@@ -1,46 +1,49 @@
-# Testing Strategies - Neural Trader V2 Refactoring
+# Testing Strategies - Neural Trader V2 Binary Architecture
 
 ## Overview
 
-This document provides comprehensive pseudocode algorithms for testing strategies during the monolith to microservices refactoring process, including contract testing, integration testing, chaos engineering, and performance validation.
+This document provides comprehensive pseudocode algorithms for testing the separated ML Ops and Trading binaries, including Redis Streams testing, binary integration testing, ruv-FANN testing, DAA coordination testing, and performance validation.
 
 ---
 
-## 1. Contract Testing Framework
+## 1. Binary Integration Testing Framework
 
-### 1.1 Consumer-Driven Contract Testing
+### 1.1 Redis Streams Integration Testing
 
 ```
-ALGORITHM: ImplementConsumerDrivenContractTesting
-INPUT: consumer_services (List<Service>), provider_services (List<Service>)
-OUTPUT: contract_testing_framework (ContractTestingFramework)
+ALGORITHM: ImplementRedisStreamsIntegrationTesting
+INPUT: ml_ops_binary (Binary), trading_binary (Binary), redis_config (RedisConfig)
+OUTPUT: streams_testing_framework (StreamsTestingFramework)
 
 BEGIN
-    contract_testing_framework ← ContractTestingFramework{
-        contracts: Map<string, Contract>(),
-        consumer_tests: Map<string, List<ConsumerTest>>(),
-        provider_verifications: Map<string, List<ProviderVerification>>(),
-        contract_broker: InitializeContractBroker(),
-        test_runner: InitializeTestRunner()
+    // Initialize test Redis instance
+    test_redis ← StartTestRedisInstance(redis_config)
+    
+    streams_testing_framework ← StreamsTestingFramework{
+        test_redis: test_redis,
+        stream_contracts: Map<string, StreamContract>(),
+        message_validators: Map<string, MessageValidator>(),
+        binary_simulators: InitializeBinarySimulators(),
+        integration_scenarios: [],
+        chaos_injector: InitializeChaosInjector()
     }
     
-    // Generate contracts from consumer tests
-    FOR EACH consumer IN consumer_services DO
-        consumer_contracts ← GenerateConsumerContracts(consumer)
-        FOR EACH contract IN consumer_contracts DO
-            contract_testing_framework.contracts[contract.id] ← contract
-            StoreContract(contract_testing_framework.contract_broker, contract)
-        END FOR
+    // Define stream contracts between binaries
+    stream_contracts ← [
+        CreateStreamContract("market-data", "ML Ops", "feature processing"),
+        CreateStreamContract("feature-vectors", "ML Ops", "Trading", "decision making"),
+        CreateStreamContract("model-predictions", "ML Ops", "Trading", "signal generation"),
+        CreateStreamContract("training-requests", "Trading", "ML Ops", "model training"),
+        CreateStreamContract("trading-signals", "Trading", "External", "order execution")
+    ]
+    
+    FOR EACH contract IN stream_contracts DO
+        streams_testing_framework.stream_contracts[contract.stream_name] ← contract
+        streams_testing_framework.message_validators[contract.stream_name] ← 
+            CreateMessageValidator(contract.message_schema)
     END FOR
     
-    // Generate provider verification tests
-    FOR EACH provider IN provider_services DO
-        provider_contracts ← GetProviderContracts(provider, contract_testing_framework.contracts)
-        verifications ← GenerateProviderVerifications(provider, provider_contracts)
-        contract_testing_framework.provider_verifications[provider.name] ← verifications
-    END FOR
-    
-    RETURN contract_testing_framework
+    RETURN streams_testing_framework
 END
 
 SUBROUTINE: GenerateConsumerContracts
@@ -243,26 +246,35 @@ END
 
 ---
 
-## 2. Integration Testing Framework
+## 2. ruv-FANN Testing Framework
 
-### 2.1 End-to-End Integration Testing
+### 2.1 ruv-FANN Training and Inference Testing
 
 ```
-ALGORITHM: ImplementEndToEndIntegrationTesting
-INPUT: system_architecture (SystemArchitecture), test_scenarios (List<TestScenario>)
-OUTPUT: integration_test_framework (IntegrationTestFramework)
+ALGORITHM: ImplementRuvFANNTestingFramework
+INPUT: ruv_fann_config (RuvFANNConfig), test_datasets (List<TestDataset>)
+OUTPUT: ruv_fann_testing_framework (RuvFANNTestingFramework)
 
 BEGIN
-    integration_test_framework ← IntegrationTestFramework{
-        test_environment: InitializeTestEnvironment(),
-        service_registry: InitializeServiceRegistry(),
-        test_data_manager: InitializeTestDataManager(),
-        assertion_framework: InitializeAssertionFramework(),
-        reporting_system: InitializeReportingSystem()
+    ruv_fann_testing_framework ← RuvFANNTestingFramework{
+        test_network_configs: [],
+        training_test_cases: [],
+        inference_test_cases: [],
+        performance_benchmarks: [],
+        accuracy_validators: [],
+        model_comparators: InitializeModelComparators()
     }
     
-    // Setup test environment with all services
-    SetupIntegrationEnvironment(system_architecture, integration_test_framework.test_environment)
+    // Create test network configurations
+    test_configs ← [
+        CreateNetworkConfig("small", [50, 30, 10], "sigmoid"),
+        CreateNetworkConfig("medium", [100, 80, 50, 20], "relu"),
+        CreateNetworkConfig("large", [200, 150, 100, 50, 10], "leaky_relu")
+    ]
+    
+    FOR EACH config IN test_configs DO
+        ruv_fann_testing_framework.test_network_configs.append(config)
+    END FOR
     
     integration_test_framework.execute_scenario ← "
         ALGORITHM: ExecuteIntegrationScenario
@@ -525,23 +537,35 @@ END
 
 ---
 
-## 3. Chaos Engineering Framework
+## 3. DAA Coordination Testing Framework
 
-### 3.1 Fault Injection Testing
+### 3.1 DAA Agent Coordination Testing
 
 ```
-ALGORITHM: ImplementChaosEngineering
-INPUT: system_topology (SystemTopology), chaos_experiments (List<ChaosExperiment>)
-OUTPUT: chaos_engineering_framework (ChaosEngineeringFramework)
+ALGORITHM: ImplementDAACoordinationTesting
+INPUT: daa_config (DAAConfig), coordination_scenarios (List<CoordinationScenario>)
+OUTPUT: daa_testing_framework (DAATestingFramework)
 
 BEGIN
-    chaos_engineering_framework ← ChaosEngineeringFramework{
-        fault_injectors: InitializeFaultInjectors(),
-        monitoring_system: InitializeMonitoringSystem(),
-        safety_controls: InitializeSafetyControls(),
-        experiment_scheduler: InitializeExperimentScheduler(),
-        result_analyzer: InitializeResultAnalyzer()
+    daa_testing_framework ← DAATestingFramework{
+        agent_simulators: InitializeAgentSimulators(),
+        consensus_validators: InitializeConsensusValidators(),
+        learning_trackers: InitializeLearningTrackers(),
+        coordination_monitors: InitializeCoordinationMonitors(),
+        adaptation_testers: InitializeAdaptationTesters()
     }
+    
+    // Initialize test agents with different strategies
+    test_agents ← [
+        CreateTestAgent("conservative", ConservativeStrategy()),
+        CreateTestAgent("aggressive", AggressiveStrategy()),
+        CreateTestAgent("adaptive", AdaptiveStrategy()),
+        CreateTestAgent("consensus", ConsensusStrategy())
+    ]
+    
+    FOR EACH agent IN test_agents DO
+        daa_testing_framework.agent_simulators.append(agent)
+    END FOR
     
     chaos_engineering_framework.execute_experiment ← "
         ALGORITHM: ExecuteChaosExperiment
@@ -785,14 +809,14 @@ END
 
 ---
 
-## 4. Performance Testing Framework
+## 4. Binary Performance Testing Framework
 
-### 4.1 Load Testing Implementation
+### 4.1 Binary Load Testing Implementation
 
 ```
-ALGORITHM: ImplementLoadTesting
-INPUT: performance_requirements (PerformanceRequirements), test_profiles (List<LoadTestProfile>)
-OUTPUT: load_testing_framework (LoadTestingFramework)
+ALGORITHM: ImplementBinaryLoadTesting
+INPUT: performance_requirements (PerformanceRequirements), binary_configs (List<BinaryConfig>)
+OUTPUT: binary_load_testing_framework (BinaryLoadTestingFramework)
 
 BEGIN
     load_testing_framework ← LoadTestingFramework{
@@ -1076,9 +1100,9 @@ END
 
 ---
 
-## 5. Data Consistency Testing
+## 5. Redis Streams Consistency Testing
 
-### 5.1 Eventual Consistency Testing
+### 5.1 Stream Message Ordering Testing
 
 ```
 ALGORITHM: TestEventualConsistency
@@ -1195,9 +1219,9 @@ END
 
 ---
 
-## 6. Automated Test Generation
+## 6. Binary Integration End-to-End Testing
 
-### 6.1 Property-Based Testing
+### 6.1 Complete Trading Flow Testing
 
 ```
 ALGORITHM: GeneratePropertyBasedTests
@@ -1276,17 +1300,17 @@ END
 ## Complexity Analysis
 
 ### Time Complexity Analysis
-- **Contract Testing**: O(c * p) where c = consumers, p = providers
-- **Integration Testing**: O(s * t) where s = test scenarios, t = test steps
-- **Chaos Experiments**: O(e * m) where e = experiments, m = monitoring duration
-- **Load Testing**: O(l * d) where l = load levels, d = test duration
-- **Property Testing**: O(p * g) where p = properties, g = generated test cases
+- **Stream Integration Testing**: O(s * m) where s = streams, m = messages per stream
+- **ruv-FANN Testing**: O(n * e) where n = network configurations, e = epochs
+- **DAA Coordination Testing**: O(a * c) where a = agents, c = coordination scenarios
+- **Binary Load Testing**: O(b * l) where b = binaries, l = load levels
+- **End-to-End Testing**: O(f * s) where f = trading flows, s = test steps
 
 ### Space Complexity Analysis
-- **Test Results Storage**: O(r) where r = total test results
-- **Metrics Collection**: O(m * t) where m = metrics count, t = time points
-- **Test Data Generation**: O(g) where g = generated test data size
-- **System State Snapshots**: O(s) where s = system state size
+- **Stream Message Storage**: O(m) where m = message buffer size
+- **ruv-FANN Model Storage**: O(n) where n = network size
+- **DAA Agent State**: O(a * s) where a = agents, s = state size per agent
+- **Binary Performance Metrics**: O(b * m * t) where b = binaries, m = metrics, t = time points
 
 ### Testing Optimization Strategies
 1. **Parallel Execution**: Run independent tests concurrently
