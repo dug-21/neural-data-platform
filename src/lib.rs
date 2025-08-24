@@ -85,6 +85,7 @@ pub mod neural;
 pub mod observability;
 pub mod performance;
 pub mod orchestration;
+pub mod orchestrator;
 pub mod security;
 pub mod strategies;
 pub mod streaming;
