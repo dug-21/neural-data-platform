@@ -1,0 +1,192 @@
+syntax = "proto3";
+package neural_trader.market_data.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "common.proto";
+
+// Market Data Service - Real-time data ingestion and quality monitoring
+service MarketDataService {
+  // Real-time data streaming
+  rpc StreamMarketData(StreamRequest) returns (stream MarketDataEvent);
+  
+  // Historical data retrieval
+  rpc GetHistoricalData(HistoricalDataRequest) returns (HistoricalDataResponse);
+  
+  // Data quality metrics
+  rpc GetDataQualityMetrics(QualityMetricsRequest) returns (DataQualityMetrics);
+  
+  // Provider management
+  rpc ListDataProviders(google.protobuf.Empty) returns (DataProviderList);
+  rpc GetProviderStatus(ProviderStatusRequest) returns (ProviderStatus);
+  
+  // Data validation
+  rpc ValidateDataFeed(ValidationRequest) returns (neural_trader.common.v1.ValidationResponse);
+  
+  // Health and metrics
+  rpc GetServiceHealth(google.protobuf.Empty) returns (neural_trader.common.v1.ServiceHealth);
+  rpc GetServiceMetrics(google.protobuf.Empty) returns (neural_trader.common.v1.ServiceMetrics);
+}
+
+// Request/Response Messages
+message StreamRequest {
+  repeated string symbols = 1;
+  repeated DataType data_types = 2;
+  neural_trader.common.v1.DataFilter filter = 3;
+  int32 buffer_size = 4;
+}
+
+message MarketDataEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string symbol = 3;
+  DataType data_type = 4;
+  MarketDataPayload payload = 5;
+  DataQuality quality = 6;
+  string provider = 7;
+  map<string, string> metadata = 8;
+}
+
+message MarketDataPayload {
+  oneof data {
+    TradeData trade = 1;
+    QuoteData quote = 2;
+    BarData bar = 3;
+    NewsData news = 4;
+  }
+}
+
+message TradeData {
+  double price = 1;
+  double size = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string exchange = 4;
+  int64 sequence = 5;
+}
+
+message QuoteData {
+  double bid_price = 1;
+  double bid_size = 2;
+  double ask_price = 3;
+  double ask_size = 4;
+  google.protobuf.Timestamp timestamp = 5;
+  string exchange = 6;
+}
+
+message BarData {
+  double open = 1;
+  double high = 2;
+  double low = 3;
+  double close = 4;
+  double volume = 5;
+  double vwap = 6;
+  google.protobuf.Timestamp start_time = 7;
+  google.protobuf.Timestamp end_time = 8;
+  int32 trade_count = 9;
+}
+
+message NewsData {
+  string headline = 1;
+  string body = 2;
+  string source = 3;
+  google.protobuf.Timestamp published_at = 4;
+  repeated string symbols = 5;
+  double sentiment_score = 6;
+}
+
+message DataQuality {
+  double completeness_score = 1;  // 0.0 - 1.0
+  double timeliness_score = 2;    // 0.0 - 1.0  
+  double accuracy_score = 3;      // 0.0 - 1.0
+  double overall_score = 4;       // 0.0 - 1.0
+  repeated string issues = 5;
+}
+
+message HistoricalDataRequest {
+  repeated string symbols = 1;
+  DataType data_type = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  int32 limit = 5;
+}
+
+message HistoricalDataResponse {
+  repeated MarketDataEvent events = 1;
+  bool has_more = 2;
+  string next_cursor = 3;
+}
+
+message QualityMetricsRequest {
+  repeated string symbols = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+}
+
+message DataQualityMetrics {
+  map<string, DataQuality> symbol_quality = 1;
+  DataQuality overall_quality = 2;
+  google.protobuf.Timestamp calculated_at = 3;
+}
+
+message DataProviderList {
+  repeated DataProvider providers = 1;
+}
+
+message DataProvider {
+  string name = 1;
+  bool enabled = 2;
+  repeated DataType supported_types = 3;
+  ProviderStatus status = 4;
+  map<string, string> configuration = 5;
+}
+
+message ProviderStatusRequest {
+  string provider_name = 1;
+}
+
+message ProviderStatus {
+  string name = 1;
+  bool connected = 2;
+  double latency_ms = 3;
+  uint64 messages_received = 4;
+  uint64 messages_failed = 5;
+  google.protobuf.Timestamp last_message = 6;
+  repeated string errors = 7;
+}
+
+message ValidationRequest {
+  string provider_name = 1;
+  repeated string symbols = 2;
+  DataType data_type = 3;
+}
+
+// Enums
+enum DataType {
+  DATA_TYPE_UNSPECIFIED = 0;
+  DATA_TYPE_TRADE = 1;
+  DATA_TYPE_QUOTE = 2;
+  DATA_TYPE_BAR_1M = 3;
+  DATA_TYPE_BAR_5M = 4;
+  DATA_TYPE_BAR_1H = 5;
+  DATA_TYPE_BAR_1D = 6;
+  DATA_TYPE_NEWS = 7;
+}
+
+// Error Codes
+enum MarketDataErrorCode {
+  MARKET_DATA_ERROR_UNSPECIFIED = 0;
+  INVALID_SYMBOL = 1;
+  PROVIDER_UNAVAILABLE = 2;  
+  DATA_QUALITY_INSUFFICIENT = 3;
+  RATE_LIMIT_EXCEEDED = 4;
+  SUBSCRIPTION_FAILED = 5;
+  HISTORICAL_DATA_NOT_AVAILABLE = 6;
+}
+
+message MarketDataError {
+  MarketDataErrorCode code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+  bool retryable = 4;
+  int32 retry_after_seconds = 5;
+}
