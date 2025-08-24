@@ -1,0 +1,1 @@
+# Default adapter implementations for Phase 3 orchestrator interfaces
