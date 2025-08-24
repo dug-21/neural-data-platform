@@ -1,0 +1,199 @@
+syntax = "proto3";
+package neural_trader.features.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "common.proto";
+
+service FeatureEngineeringService {
+  // Feature calculation
+  rpc CalculateFeatures(FeatureRequest) returns (FeatureResponse);
+  rpc CalculateFeaturesStream(stream FeatureRequest) returns (stream FeatureResponse);
+  
+  // Feature management
+  rpc GetAvailableIndicators(google.protobuf.Empty) returns (IndicatorList);
+  rpc ValidateFeaturePipeline(PipelineConfig) returns (neural_trader.common.v1.ValidationResponse);
+  rpc GetFeatureMetadata(FeatureMetadataRequest) returns (FeatureMetadata);
+  
+  // Caching
+  rpc GetCachedFeatures(CacheRequest) returns (CacheResponse);
+  rpc InvalidateCache(CacheInvalidationRequest) returns (CacheInvalidationResponse);
+  
+  // Health and metrics
+  rpc GetServiceHealth(google.protobuf.Empty) returns (neural_trader.common.v1.ServiceHealth);
+  rpc GetServiceMetrics(google.protobuf.Empty) returns (neural_trader.common.v1.ServiceMetrics);
+}
+
+message FeatureRequest {
+  string request_id = 1;
+  string symbol = 2;
+  repeated IndicatorRequest indicators = 3;
+  neural_trader.common.v1.TimeWindow window = 4;
+  map<string, string> parameters = 5;
+}
+
+message IndicatorRequest {
+  string name = 1;  // "rsi", "macd", "bollinger_bands", etc.
+  int32 period = 2;
+  map<string, double> parameters = 3;
+}
+
+message FeatureResponse {
+  string request_id = 1;
+  string symbol = 2;
+  repeated FeatureValue features = 3;
+  google.protobuf.Timestamp calculated_at = 4;
+  CalculationMetadata metadata = 5;
+}
+
+message FeatureValue {
+  string name = 1;
+  oneof value {
+    double numeric_value = 2;
+    string text_value = 3;
+    bool boolean_value = 4;
+    FeatureVector vector_value = 5;
+  }
+  double confidence = 6;
+  map<string, string> attributes = 7;
+}
+
+message FeatureVector {
+  repeated double values = 1;
+  repeated string labels = 2;
+}
+
+message CalculationMetadata {
+  int32 data_points_used = 1;
+  double calculation_time_ms = 2;
+  bool cache_hit = 3;
+  repeated string warnings = 4;
+}
+
+message IndicatorList {
+  repeated IndicatorInfo indicators = 1;
+}
+
+message IndicatorInfo {
+  string name = 1;
+  string description = 2;
+  IndicatorType type = 3;
+  repeated ParameterInfo parameters = 4;
+  repeated string output_fields = 5;
+}
+
+message ParameterInfo {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  string default_value = 4;
+  string description = 5;
+}
+
+message PipelineConfig {
+  string name = 1;
+  repeated IndicatorRequest indicators = 2;
+  map<string, string> global_parameters = 3;
+  repeated DependencySpec dependencies = 4;
+}
+
+message DependencySpec {
+  string indicator_name = 1;
+  repeated string depends_on = 2;
+}
+
+message FeatureMetadataRequest {
+  string feature_name = 1;
+  string symbol = 2;
+}
+
+message FeatureMetadata {
+  string name = 1;
+  string description = 2;
+  FeatureType type = 3;
+  google.protobuf.Timestamp last_calculated = 4;
+  StatisticalInfo statistics = 5;
+  repeated string tags = 6;
+}
+
+message StatisticalInfo {
+  double mean = 1;
+  double std_dev = 2;
+  double min = 3;
+  double max = 4;
+  double median = 5;
+  repeated double percentiles = 6;
+}
+
+message CacheRequest {
+  string symbol = 1;
+  repeated string feature_names = 2;
+  google.protobuf.Timestamp max_age = 3;
+}
+
+message CacheResponse {
+  repeated CachedFeature features = 1;
+  int32 cache_hits = 2;
+  int32 cache_misses = 3;
+}
+
+message CachedFeature {
+  string name = 1;
+  FeatureValue value = 2;
+  google.protobuf.Timestamp cached_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message CacheInvalidationRequest {
+  oneof scope {
+    string symbol = 1;
+    string feature_name = 2;
+    bool all = 3;
+  }
+}
+
+message CacheInvalidationResponse {
+  int32 invalidated_count = 1;
+  repeated string invalidated_keys = 2;
+}
+
+// Technical Indicators
+enum IndicatorType {
+  INDICATOR_UNSPECIFIED = 0;
+  RSI = 1;
+  MACD = 2;
+  BOLLINGER_BANDS = 3;
+  MOVING_AVERAGE = 4;
+  STOCHASTIC = 5;
+  ATR = 6;
+  VOLUME_PROFILE = 7;
+  MOMENTUM = 8;
+  WILLIAMS_R = 9;
+  CCI = 10;
+  ADX = 11;
+}
+
+enum FeatureType {
+  FEATURE_TYPE_UNSPECIFIED = 0;
+  NUMERIC = 1;
+  CATEGORICAL = 2;
+  BOOLEAN = 3;
+  VECTOR = 4;
+}
+
+// Error Codes
+enum FeatureErrorCode {
+  FEATURE_ERROR_UNSPECIFIED = 0;
+  INDICATOR_NOT_FOUND = 1;
+  INSUFFICIENT_DATA = 2;
+  CALCULATION_FAILED = 3;
+  INVALID_PARAMETERS = 4;
+  CACHE_ERROR = 5;
+}
+
+message FeatureError {
+  FeatureErrorCode code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+  bool retryable = 4;
+}

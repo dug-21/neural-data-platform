@@ -2,6 +2,9 @@
 members = [
     "config-store",
     "mcp-trading-server",
+    "neural-core",
+    "neural-trading",
+    "neural-ml-ops",
     # other future v2 components
 ]
 exclude = [
@@ -208,6 +211,10 @@ path = "src/bin/mcp_server.rs"
 [[bin]]
 name = "mcp_server_simple"
 path = "src/bin/mcp_server_simple.rs"
+
+[[bin]]
+name = "production-validator"
+path = "src/bin/production_validator.rs"
 
 [profile.release]
 opt-level = 3
