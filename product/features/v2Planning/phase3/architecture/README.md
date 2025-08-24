@@ -1,257 +1,140 @@
-# Neural Trader V2 Architecture Documentation
+# Neural Trader V2 Architecture - Phase 3 (CORRECTED)
 
-## Overview
+## Architecture Overview
 
-This directory contains the complete architectural design for Neural Trader V2, a comprehensive refactoring that transforms the platform into a modular, scalable, cloud-native trading system.
+This directory contains the CORRECTED architecture documents for Neural Trader V2, implementing the ACTUAL MVP architecture with binary separation, embedded ruv-FANN, and DAA Coordinators.
+
+## Critical Architecture Decisions
+
+### 1. Binary Separation (NOT layers within one binary)
+
+```
+neural-ml-ops      (Training Binary)
+├── Feature engineering (Rust)
+├── ruv-FANN model training
+├── Model registry (config-store)
+└── Event publishing (Redis Streams)
+
+neural-trading     (Execution Binary)
+├── DAA Coordinator (decision making)
+├── Embedded ruv-FANN inference
+├── Market data processing
+└── Order execution (Alpaca)
+
+neural-core        (Shared Library)
+├── Common data types
+├── Event streaming traits
+├── ruv-FANN integration
+└── Redis Streams client
+```
+
+### 2. Event Backbone: Redis Streams (NOT microservices)
+
+```
+Redis Streams:
+├── features:computed     (ML Ops → Trading)
+├── models:updates        (ML Ops → Trading)
+├── trading:signals       (Trading → Monitoring)
+└── orders:executed       (Trading → Audit)
+```
+
+### 3. Embedded Neural Networks (NO Python ML platform)
+
+- ruv-FANN models trained in `neural-ml-ops`
+- ruv-FANN inference embedded in `neural-trading` 
+- < 1ms inference latency (no network calls)
+- Models stored in config-store, cached in-memory
+
+### 4. DAA Coordinators (ONLY in domain binaries)
+
+- DAA Coordinator embedded in `neural-trading` binary
+- Drives ALL trading decisions
+- NO DAA in `neural-ml-ops` (training only)
 
 ## Architecture Documents
 
-### 1. [System Architecture](./system-architecture.md)
-Defines the overall system design with three distinct layers:
-- **Layer 1: Shared Infrastructure** - Foundation services (Redis Streams, Service Mesh, Observability)
-- **Layer 2: Standardized Interfaces** - Platform services (API Gateway, Domain Registry, ML Ops)
-- **Layer 3: Domain Implementations** - Business services (Trading, Analytics, ML domains)
+### [system-architecture.md](system-architecture.md)
+- Complete system overview with binary interactions
+- Event-driven communication patterns
+- Infrastructure services (Redis, TimescaleDB, etc.)
 
-Key Features:
-- Event-driven architecture using Redis Streams
-- Microservices with clear domain boundaries
-- Kubernetes-native deployment
-- Multi-region disaster recovery
+### [component-design.md](component-design.md)  
+- Detailed component design for each binary
+- ruv-FANN integration patterns
+- DAA Coordinator implementation
 
-### 2. [Component Design](./component-design.md)
-Detailed component-level specifications including:
-- **EventBus Abstraction** - Unified messaging layer
-- **ML Ops Platform** - ruv-FANN integration with MLflow
-- **Domain Registry** - Service discovery and configuration
-- **Core Services** - Market Data, Strategy Engine, Order Management
-- **Analytics Components** - Performance tracking and backtesting
+### [rust-layer-separation.md](rust-layer-separation.md)
+- Rust workspace structure
+- Binary separation implementation
+- Shared library (`neural-core`) design
 
-Technical Highlights:
-- Rust for high-performance trading services
-- Python for ML and analytics
-- gRPC for service communication
-- Redis Streams for event distribution
+### [integration-patterns.md](integration-patterns.md)
+- Redis Streams event patterns
+- Binary communication protocols
+- Data flow between binaries
 
-### 3. [Integration Patterns](./integration-patterns.md)
-Service integration and communication patterns:
-- **Service Mesh Configuration** - Istio-based traffic management
-- **API Gateway Architecture** - Kong for edge routing
-- **Data Flow Patterns** - Market data, order execution, ML pipelines
-- **Event Schema Registry** - Protobuf-based message contracts
+### [deployment-architecture.md](deployment-architecture.md)
+- Kubernetes deployment for 3 binaries
+- Container orchestration patterns
+- Infrastructure as code
 
-Communication Protocols:
-- Synchronous: gRPC for service calls, REST for external APIs
-- Asynchronous: Redis Streams for events, WebSocket for real-time updates
-- Streaming: Server-sent events for continuous data
+## Key Principles
 
-### 4. [Deployment Architecture](./deployment-architecture.md)
-Infrastructure and deployment specifications:
-- **Container Strategy** - Docker multi-stage builds
-- **Kubernetes Orchestration** - GKE with specialized node pools
-- **Helm Charts** - Package management for deployments
-- **CI/CD Pipeline** - GitHub Actions with blue-green deployment
+### ✅ CORRECT Architecture
+1. **Binary Separation**: 3 Rust binaries with clear boundaries
+2. **Embedded ML**: ruv-FANN models embedded in binaries
+3. **Event Backbone**: Redis Streams for inter-binary communication
+4. **Quality First**: New build from scratch, not migration
+5. **DAA in Domains**: Decision coordinators only in execution binaries
 
-Infrastructure as Code:
-- Terraform for cloud resources
-- Ansible for configuration management
-- GitOps for deployment automation
+### ❌ WRONG Architecture (Avoided)
+1. ~~Microservices~~ → Binary separation
+2. ~~Python ML platform~~ → Embedded ruv-FANN
+3. ~~Service mesh~~ → Redis Streams
+4. ~~Layered monolith~~ → Binary separation
+5. ~~Migration complexity~~ → Quality-first new build
 
-### 5. [C4 Architecture Diagrams](./diagrams/c4-context-diagram.md)
-Visual architecture representations:
-- **Context Diagram** - System boundaries and external interactions
-- **Container Diagram** - High-level technology choices
-- **Component Diagram** - Internal service structure
-- **Code Diagram** - Class and interface relationships
-- **Deployment Diagram** - Physical deployment topology
+## Implementation Flow
 
-## Architecture Principles
+### Phase 1: Core Infrastructure
+1. Setup Redis Streams event backbone
+2. Implement config-store service (already exists)
+3. Create neural-core shared library
 
-### 1. Separation of Concerns
-- Clear boundaries between infrastructure, platform, and domain layers
-- Each service has a single, well-defined responsibility
-- Shared concerns handled by platform services
+### Phase 2: ML Operations Binary
+1. Build neural-ml-ops binary
+2. Implement ruv-FANN training pipeline
+3. Create feature engineering pipeline
+4. Setup model registry integration
 
-### 2. Scalability First
-- Horizontal scaling for all stateless services
-- Event-driven architecture for loose coupling
-- Caching at multiple layers
-- Database sharding and read replicas
+### Phase 3: Trading Binary
+1. Build neural-trading binary  
+2. Implement DAA Coordinator
+3. Embed ruv-FANN inference engine
+4. Create Alpaca execution integration
 
-### 3. Resilience & Reliability
-- Circuit breakers for fault isolation
-- Retry mechanisms with exponential backoff
-- Health checks and automatic recovery
-- Multi-region deployment for disaster recovery
-
-### 4. Observability
-- Distributed tracing across all services
-- Metrics collection and aggregation
-- Centralized logging with correlation IDs
-- Real-time alerting and monitoring
-
-### 5. Security by Design
-- Zero-trust networking with mTLS
-- API authentication and authorization
-- Secrets management with Vault
-- Regular security scanning and updates
-
-## Technology Stack
-
-### Core Technologies
-- **Languages**: Rust (performance-critical), Python (ML/Analytics), TypeScript (UI)
-- **Message Broker**: Redis Streams
-- **Service Mesh**: Istio
-- **Container Orchestration**: Kubernetes (GKE)
-- **Databases**: TimescaleDB, PostgreSQL, Redis
-- **ML Framework**: ruv-FANN, TensorFlow, PyTorch
-
-### Infrastructure
-- **Cloud Provider**: Google Cloud Platform
-- **Container Registry**: Google Container Registry
-- **Object Storage**: Google Cloud Storage / MinIO
-- **CDN**: CloudFlare
-- **DNS**: Cloud DNS
-
-### Development Tools
-- **CI/CD**: GitHub Actions
-- **IaC**: Terraform, Ansible
-- **Package Management**: Helm
-- **Monitoring**: Prometheus, Grafana, Jaeger
-
-## Migration Strategy
-
-### Phase 1: Foundation (Weeks 1-4)
-✅ Deploy shared infrastructure layer
-✅ Setup monitoring and observability
-✅ Configure service mesh
-✅ Establish CI/CD pipelines
-
-### Phase 2: Platform Services (Weeks 5-8)
-🔄 Deploy API gateway and load balancers
-🔄 Implement domain registry service
-🔄 Setup ML Ops platform
-🔄 Configure event bus abstraction
-
-### Phase 3: Domain Migration (Weeks 9-16)
-📅 Migrate market data service
-📅 Port strategy engine with new architecture
-📅 Implement enhanced order management
-📅 Deploy ML prediction services
-
-### Phase 4: Optimization (Weeks 17-20)
-📅 Performance tuning and optimization
-📅 Cost optimization review
-📅 Documentation completion
-📅 Training and handover
-
-## Performance Targets
-
-| Service | Latency (p99) | Throughput | Availability |
-|---------|---------------|------------|--------------|
-| Market Data | < 1ms | 1M msg/sec | 99.99% |
-| Strategy Engine | < 10ms | 10K signals/sec | 99.95% |
-| Order Management | < 5ms | 1K orders/sec | 99.99% |
-| ML Inference | < 20ms | 5K req/sec | 99.9% |
-| API Gateway | < 50ms | 10K req/sec | 99.99% |
-
-## Cost Projections
-
-### Monthly Costs (Production)
-- **Compute**: $8,000 - $12,000
-  - GKE nodes: $6,000
-  - GPU instances: $2,000
-  - Load balancers: $500
-  
-- **Storage**: $2,000 - $3,000
-  - Databases: $1,500
-  - Object storage: $500
-  - Backups: $300
-  
-- **Network**: $1,000 - $2,000
-  - Egress traffic: $800
-  - CDN: $200
-  - VPN: $100
-
-- **Total**: $11,000 - $17,000/month
-
-### Cost Optimization Strategies
-1. Use preemptible instances for non-critical workloads (30% savings)
-2. Implement aggressive autoscaling (25% savings)
-3. Reserved capacity commitments (20% savings)
-4. Data lifecycle management (15% savings)
-
-## Risk Mitigation
-
-### Technical Risks
-- **Risk**: Service mesh complexity
-  - **Mitigation**: Gradual rollout, extensive testing, training
-  
-- **Risk**: Data migration challenges
-  - **Mitigation**: Parallel run, data validation, rollback procedures
-
-- **Risk**: Performance degradation
-  - **Mitigation**: Load testing, canary deployments, monitoring
-
-### Operational Risks
-- **Risk**: Team skill gaps
-  - **Mitigation**: Training programs, documentation, external expertise
-
-- **Risk**: Vendor lock-in
-  - **Mitigation**: Abstract vendor-specific features, use open standards
+### Phase 4: Integration & Testing
+1. Wire up Redis Streams communication
+2. Implement end-to-end testing
+3. Setup monitoring and observability
+4. Performance optimization
 
 ## Success Metrics
 
-### Technical KPIs
-- System availability > 99.95%
-- Order execution latency < 5ms p99
-- Zero data loss incidents
-- Deployment frequency > 10/week
-- MTTR < 30 minutes
+- **Latency**: < 1ms inference, < 5ms trading decisions
+- **Throughput**: > 1000 trades/sec, > 100k features/sec  
+- **Availability**: 99.9% uptime with binary-level resilience
+- **Maintainability**: Clear separation enables independent development
+- **Performance**: Full Rust stack with embedded inference
 
-### Business KPIs
-- Trading volume increase > 50%
-- Strategy performance improvement > 20%
-- Operational cost reduction > 30%
-- Time to market for new features < 2 weeks
+## Migration from Current State
 
-## Next Steps
+This is a **QUALITY-FIRST NEW BUILD**, not a migration:
 
-1. **Review and Approval**
-   - Architecture review with stakeholders
-   - Security assessment
-   - Cost-benefit analysis approval
+1. Build new architecture in parallel
+2. Migrate data and configurations
+3. Run both systems during validation
+4. Switch traffic to new system
+5. Decommission old architecture
 
-2. **Proof of Concept**
-   - Deploy minimal viable architecture
-   - Validate key architectural decisions
-   - Performance benchmarking
-
-3. **Implementation Planning**
-   - Detailed project planning
-   - Resource allocation
-   - Risk assessment and mitigation planning
-
-4. **Execution**
-   - Begin Phase 1 implementation
-   - Weekly progress reviews
-   - Continuous architecture refinement
-
-## Documentation Updates
-
-This architecture documentation should be treated as a living document and updated:
-- After each deployment phase
-- When significant design decisions change
-- Following incident post-mortems
-- During quarterly architecture reviews
-
-## Contact & Support
-
-- **Architecture Team**: architecture@neural-trader.io
-- **DevOps Team**: devops@neural-trader.io
-- **Documentation**: https://docs.neural-trader.io/v2/architecture
-
----
-
-*Last Updated: August 2024*
-*Version: 2.0.0*
-*Status: Under Review*
+No gradual migration - clean cutover to ensure architectural integrity.

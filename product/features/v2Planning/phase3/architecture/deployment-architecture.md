@@ -1,8 +1,8 @@
-# V2 Deployment Architecture - Neural Trader Platform
+# V2 Deployment Architecture - Neural Trader Platform (CORRECTED)
 
 ## Overview
 
-This document provides comprehensive deployment architecture for the Neural Trader V2 platform, including container orchestration, infrastructure as code, CI/CD pipelines, and operational procedures.
+This document provides comprehensive deployment architecture for the Neural Trader V2 platform, using a single Rust binary with embedded ruv-FANN models and DAA Coordinator, including container orchestration and operational procedures.
 
 ## Container Architecture
 
@@ -38,59 +38,27 @@ EXPOSE 8080 9090
 ENTRYPOINT ["/usr/local/bin/neural-trader"]
 ```
 
-```dockerfile
-# Python ML Services Base
-FROM python:3.11-slim as python-base
-WORKDIR /app
+# REMOVED - No separate Python ML services. All ML is embedded ruv-FANN in Rust binary.
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-# ML Dependencies Stage
-FROM python-base as ml-deps
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Runtime Stage
-FROM python-base as runtime
-COPY --from=ml-deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY . .
-
-USER 1001
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Container Registry Structure
+### Container Registry Structure (3 Binaries)
 
 ```yaml
 registry_structure:
-  repository: "gcr.io/neural-trader"
+  repository: "gcr.io/neural-trader-v2"
   
-  images:
-    base_images:
-      - neural-trader/rust-base:latest
-      - neural-trader/python-base:latest
-      - neural-trader/node-base:latest
+  binary_images:
+    core_binaries:
+      - neural-trader-v2/neural-ml-ops:v2.0.0
+      - neural-trader-v2/neural-trading:v2.0.0
+      - neural-trader-v2/config-store:v2.0.0
     
-    service_images:
-      trading_services:
-        - neural-trader/market-data:v2.0.0
-        - neural-trader/strategy-engine:v2.0.0
-        - neural-trader/order-management:v2.0.0
-      
-      ml_services:
-        - neural-trader/ml-training:v2.0.0
-        - neural-trader/ml-inference:v2.0.0
-        - neural-trader/feature-engineering:v2.0.0
-      
-      infrastructure:
-        - neural-trader/api-gateway:v2.0.0
-        - neural-trader/event-bus:v2.0.0
-        - neural-trader/monitoring:v2.0.0
+    infrastructure:
+      - redis/redis-stack:7.0  # Redis Streams + RedisInsight
+      - timescale/timescaledb:latest
+      - prom/prometheus:latest
+      - grafana/grafana:latest
+  
+  # NO microservices - just 3 binaries + infrastructure
   
   tagging_strategy:
     - latest: "Most recent build from main"
@@ -101,7 +69,7 @@ registry_structure:
 
 ## Kubernetes Deployment
 
-### Namespace Organization
+### Namespace Organization (Simplified)
 
 ```yaml
 apiVersion: v1
@@ -111,34 +79,17 @@ metadata:
   labels:
     name: neural-trader-infrastructure
     environment: production
-    team: platform
+    purpose: "Redis, TimescaleDB, monitoring"
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: neural-trader-platform
+  name: neural-trader-binaries
   labels:
-    name: neural-trader-platform
+    name: neural-trader-binaries
     environment: production
-    team: platform
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: neural-trader-trading
-  labels:
-    name: neural-trader-trading
-    environment: production
-    team: trading
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: neural-trader-ml
-  labels:
-    name: neural-trader-ml
-    environment: production
-    team: ml
+    purpose: "neural-ml-ops, neural-trading, config-store"
+# Just 2 namespaces total - infrastructure + binaries
 ```
 
 ### Core Service Deployments
@@ -631,39 +582,7 @@ resource "google_container_node_pool" "compute" {
   }
 }
 
-resource "google_container_node_pool" "ml" {
-  name     = "ml-pool"
-  location = var.region
-  cluster  = google_container_cluster.primary.name
-  
-  node_config {
-    preemptible  = false
-    machine_type = "n1-highmem-8"
-    
-    guest_accelerator {
-      type  = "nvidia-tesla-t4"
-      count = 1
-    }
-    
-    disk_size_gb = 500
-    disk_type    = "pd-ssd"
-    
-    labels = {
-      workload = "ml"
-    }
-    
-    taint {
-      key    = "workload"
-      value  = "ml"
-      effect = "NO_SCHEDULE"
-    }
-  }
-  
-  autoscaling {
-    min_node_count = 1
-    max_node_count = 10
-  }
-}
+# REMOVED - No separate ML nodes needed, ruv-FANN runs in main compute pool
 ```
 
 ### Ansible Playbooks
@@ -774,7 +693,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [market-data, strategy-engine, order-management]
+        service: [neural-trader]  # Single Rust binary only
     
     steps:
       - uses: actions/checkout@v3

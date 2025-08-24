@@ -1,204 +1,194 @@
-# V2 System Architecture - Neural Trader Platform
+# V2 System Architecture - Neural Trader Platform (CORRECTED)
 
 ## Executive Summary
 
-The V2 architecture transforms Neural Trader into a modular, scalable trading platform using a 3-layer deployment model with clear separation of concerns, standardized interfaces, and domain-specific implementations.
+The V2 architecture transforms Neural Trader into a high-performance trading platform using THREE RUST BINARIES with embedded ruv-FANN neural networks, DAA Coordinators, and Redis Streams as the event backbone. This is a QUALITY-FIRST new build, not a migration.
 
 ## Architecture Overview
 
 ### Core Principles
 
-1. **Layered Architecture**: Three distinct deployment layers with clear boundaries
-2. **Event-Driven Communication**: Asynchronous, loosely-coupled services
-3. **Domain-Driven Design**: Business logic encapsulated in domain services
-4. **Infrastructure as Code**: Declarative, version-controlled infrastructure
-5. **Observability First**: Built-in monitoring, tracing, and analytics
+1. **Binary Separation**: Three distinct Rust binaries with clear responsibilities
+2. **Embedded Neural Networks**: ruv-FANN models embedded directly in binaries
+3. **DAA Coordination**: Decentralized Autonomous Agent coordinators in domain binaries
+4. **Event-Driven Communication**: Redis Streams as the central event backbone
+5. **Quality First**: New build from scratch, no legacy migration
 
-## 3-Layer Deployment Architecture
+## 3-Binary Architecture
 
-### Layer 1: Shared Infrastructure (Foundation)
+### Binary 1: neural-core (Shared Library)
+
+```rust
+// Shared types and traits across all binaries
+pub struct neural_core {
+    // Common data types
+    pub types: {
+        MarketData,
+        TradingSignal,
+        FeatureVector,
+        ModelMetadata,
+    },
+    
+    // Common traits
+    pub traits: {
+        EventPublisher,
+        EventSubscriber,
+        ModelRegistry,
+        FeatureExtractor,
+    },
+    
+    // ruv-FANN integration
+    pub ruv_fann: {
+        BaseModel<T>,
+        TrainingConfig,
+        InferenceEngine,
+    },
+    
+    // Event streaming (Redis)
+    pub events: {
+        RedisStreamPublisher,
+        RedisStreamConsumer,
+        EventBus,
+    }
+}
+```
+
+### Binary 2: neural-ml-ops (ML Operations)
+
+```rust
+// ML training and model management binary
+pub struct neural_ml_ops {
+    // ruv-FANN training pipeline
+    training_engine: FANNTrainingEngine,
+    
+    // Model registry (config-store backed)
+    model_registry: ConfigStoreModelRegistry,
+    
+    // Feature engineering pipeline
+    feature_pipeline: RustFeatureEngine,
+    
+    // Event publishing to domains
+    event_publisher: RedisStreamPublisher,
+    
+    // NO DAA Coordinator (only in domains)
+    // NO inference (only in domains)
+}
+```
+
+### Binary 3: neural-trading (Trading Domain)
+
+```rust
+// Trading execution binary with embedded inference
+pub struct neural_trading {
+    // DAA Coordinator (CRITICAL - drives all decisions)
+    daa_coordinator: DAACoordinator,
+    
+    // Embedded ruv-FANN inference (NO separate service)
+    fann_models: HashMap<ModelId, BaseModel<TradingData>>,
+    inference_engine: EmbeddedInferenceEngine,
+    
+    // Market data processing
+    market_data_service: MarketDataService,
+    
+    // Order execution
+    order_management: OrderManagementService,
+    
+    // Event subscription from ML Ops
+    event_subscriber: RedisStreamConsumer,
+}
+```
+
+### Infrastructure Layer (Shared Services)
 
 ```yaml
-infrastructure_layer:
-  name: "Shared Infrastructure Foundation"
+infrastructure_services:
+  name: "Infrastructure Foundation"
   
-  components:
-    event_bus:
+  core_services:
+    redis_streams:
+      type: "Event Backbone"
       technology: "Redis Streams"
-      purpose: "Central message broker and event streaming"
-      capabilities:
-        - Consumer groups for parallel processing
-        - Message persistence and replay
-        - Pub/sub patterns
-        - Stream processing
+      purpose: "Central event streaming between binaries"
+      streams:
+        - "market:data" # Market data distribution
+        - "models:updates" # Model updates from ML Ops
+        - "features:computed" # Feature updates from ML Ops
+        - "trading:signals" # Trading signals from neural-trading
+        - "orders:executed" # Order execution events
     
-    service_mesh:
-      technology: "Envoy/Istio"
-      purpose: "Service communication and traffic management"
-      features:
-        - mTLS encryption
-        - Circuit breaking
-        - Load balancing
-        - Service discovery
+    config_store:
+      type: "Configuration Service"
+      technology: "gRPC Service"
+      purpose: "Model and configuration storage"
+      stored_data:
+        - ruv-FANN model binaries
+        - Feature definitions
+        - Trading strategies
+        - System configurations
     
-    observability_stack:
-      components:
-        metrics: "Prometheus + Grafana"
-        tracing: "Jaeger/OpenTelemetry"
-        logging: "ELK Stack (Elasticsearch, Logstash, Kibana)"
-        apm: "Application Performance Monitoring"
+    timescale_db:
+      type: "Time Series Database"
+      purpose: "Historical data storage"
+      data_types:
+        - Market data history
+        - Feature history
+        - Model performance metrics
+        - Trading performance
     
-    data_persistence:
-      timeseries_db: "TimescaleDB"
-      cache: "Redis Cluster"
-      object_storage: "MinIO/S3"
-      configuration: "etcd/Consul"
-    
-    security_layer:
-      authentication: "OAuth2/OIDC Provider"
-      authorization: "OPA (Open Policy Agent)"
-      secrets: "Vault/Kubernetes Secrets"
-      tls: "cert-manager"
+    observability:
+      metrics: "Prometheus + Grafana"
+      tracing: "Jaeger/OpenTelemetry"
+      logging: "Structured logs to stdout"
+      alerting: "AlertManager"
 ```
 
-### Layer 2: Standardized Interfaces (Platform Services)
+### Binary Interactions (Event-Driven)
 
 ```yaml
-platform_services:
-  name: "Standardized Interface Layer"
+binary_interactions:
+  name: "Event-Driven Binary Communication"
   
-  services:
-    api_gateway:
-      type: "Edge Service"
-      technology: "Kong/Traefik"
-      protocols:
-        - REST/HTTP2
-        - WebSocket
-        - gRPC
-      features:
-        - Rate limiting
-        - API key management
-        - Request/response transformation
-        - Protocol translation
-    
-    domain_registry:
-      type: "Service Registry"
-      purpose: "Dynamic service discovery and configuration"
-      capabilities:
-        - Service registration/deregistration
-        - Health checking
-        - Configuration management
-        - Version management
-    
-    event_router:
-      type: "Message Router"
-      purpose: "Intelligent event routing and transformation"
-      features:
-        - Content-based routing
-        - Event transformation
-        - Schema validation
-        - Dead letter queues
-    
-    ml_ops_platform:
-      type: "ML Infrastructure"
-      components:
-        model_registry: "MLflow Model Registry"
-        feature_store: "Feast"
-        training_pipeline: "Kubeflow/Airflow"
-        inference_server: "TorchServe/TensorFlow Serving"
-    
-    workflow_orchestrator:
-      type: "Workflow Management"
-      technology: "Temporal/Cadence"
-      use_cases:
-        - Complex trading strategies
-        - Batch processing
-        - Long-running workflows
-        - Saga pattern implementation
-```
-
-### Layer 3: Domain Implementations (Business Services)
-
-```yaml
-domain_services:
-  name: "Domain Implementation Layer"
+  neural_ml_ops_outputs:
+    trained_models:
+      destination: "config-store"
+      format: "Serialized BaseModel<T>"
+      trigger: "Training completion"
+      
+    computed_features:
+      destination: "Redis Streams: features:computed"
+      format: "FeatureVector with metadata"
+      frequency: "Real-time as market data arrives"
+      
+    model_updates:
+      destination: "Redis Streams: models:updates"
+      format: "Model metadata + config-store reference"
+      trigger: "Model promotion/deployment"
   
-  trading_domain:
-    market_data_service:
-      responsibilities:
-        - Real-time market data ingestion
-        - Data normalization and enrichment
-        - Historical data management
-      interfaces:
-        inbound: ["WebSocket", "REST", "FIX"]
-        outbound: ["EventBus", "gRPC"]
-    
-    strategy_engine:
-      responsibilities:
-        - Strategy execution and management
-        - Signal generation
-        - Risk calculation
-      components:
-        - Strategy executor
-        - Signal processor
-        - Risk manager
-        - Position tracker
-    
-    order_management:
-      responsibilities:
-        - Order lifecycle management
-        - Execution algorithms
-        - Smart order routing
-      features:
-        - Order validation
-        - Execution tracking
-        - Fill management
-        - Commission calculation
-    
-  analytics_domain:
-    performance_analytics:
-      responsibilities:
-        - P&L calculation
-        - Performance attribution
-        - Risk metrics computation
-      outputs:
-        - Real-time dashboards
-        - Historical reports
-        - Risk alerts
-    
-    backtesting_engine:
-      responsibilities:
-        - Historical simulation
-        - Strategy optimization
-        - Monte Carlo analysis
-      components:
-        - Data replay engine
-        - Strategy evaluator
-        - Optimization framework
-    
-  ml_domain:
-    neural_predictor:
-      technology: "ruv-FANN Integration"
-      responsibilities:
-        - Price prediction
-        - Pattern recognition
-        - Anomaly detection
-      architecture:
-        - FANN neural networks
-        - Real-time inference
-        - Model versioning
-        - A/B testing framework
-    
-    feature_engineering:
-      responsibilities:
-        - Technical indicator calculation
-        - Feature extraction
-        - Data preprocessing
-      pipeline:
-        - Raw data ingestion
-        - Feature computation
-        - Feature storage
-        - Feature serving
+  neural_trading_inputs:
+    market_data:
+      source: "External market data feeds"
+      processing: "Internal normalization and validation"
+      
+    features:
+      source: "Redis Streams: features:computed"
+      consumer_group: "trading-domain"
+      
+    models:
+      source: "config-store (triggered by Redis events)"
+      caching: "In-memory model cache with hot-reload"
+  
+  neural_trading_outputs:
+    trading_signals:
+      destination: "Redis Streams: trading:signals"
+      format: "TradingSignal with confidence and reasoning"
+      
+    order_executions:
+      destination: "Redis Streams: orders:executed"
+      format: "OrderFill with execution details"
+      
+    performance_metrics:
+      destination: "TimescaleDB + Redis Streams"
+      format: "Performance data for monitoring"
 ```
 
 ## System Boundaries and Interfaces
@@ -221,7 +211,7 @@ graph TB
     subgraph "Platform Services"
         EB[Event Bus]
         DR[Domain Registry]
-        ML[ML Ops Platform]
+        FANN[ruv-FANN Integration]
     end
     
     subgraph "Trading Domain"
@@ -258,8 +248,8 @@ graph TB
     DR -.-> SE
     DR -.-> OM
     
-    ML --> NP
-    ML --> FE
+    FANN --> NP
+    FANN --> FE
 ```
 
 ### Communication Patterns
@@ -490,7 +480,7 @@ security_layers:
 ### Phase 2: Platform Services (Weeks 5-8)
 - Deploy API gateway
 - Implement domain registry
-- Setup ML Ops platform
+- Integrate ruv-FANN with DAA Coordinator
 
 ### Phase 3: Domain Migration (Weeks 9-16)
 - Migrate market data service

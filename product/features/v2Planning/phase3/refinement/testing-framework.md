@@ -1,8 +1,8 @@
-# Neural-Trader V2 Architecture - Testing Framework Strategy
+# Neural-Trader V2 Architecture - Binary Testing Framework Strategy
 
 ## Executive Summary
 
-This document establishes a comprehensive testing framework for the neural-trader V2 architecture migration, emphasizing **Test-Driven Development (TDD)**, **automated testing pipelines**, **performance validation**, and **continuous integration**. The strategy ensures system reliability through rigorous testing at all architectural levels.
+This document establishes a comprehensive testing framework for the neural-trader V2 binary separation architecture, emphasizing **Test-Driven Development (TDD)**, **binary-specific testing**, **inter-binary communication validation**, and **performance testing**. The strategy ensures system reliability through rigorous testing of independent binaries and their communication protocols.
 
 ## Table of Contents
 
@@ -10,10 +10,10 @@ This document establishes a comprehensive testing framework for the neural-trade
 2. [Test Pyramid Architecture](#test-pyramid-architecture)
 3. [TDD Implementation](#tdd-implementation)
 4. [Integration Testing Framework](#integration-testing-framework)
-5. [Performance Testing Suite](#performance-testing-suite)
-6. [Contract Testing](#contract-testing)
-7. [Chaos Engineering](#chaos-engineering)
-8. [CI/CD Integration](#cicd-integration)
+5. [Binary Performance Testing](#binary-performance-testing)
+6. [Redis Streams Contract Testing](#redis-streams-contract-testing)
+7. [Binary Chaos Engineering](#binary-chaos-engineering)
+8. [Binary CI/CD Pipeline](#binary-cicd-pipeline)
 
 ---
 
