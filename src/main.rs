@@ -1,3 +1,9 @@
+// ⚠️ DEPRECATED: This monolithic main.rs is replaced by 3 separate binaries:
+// - neural-ml-ops/src/main.rs (training)
+// - neural-trading/src/main.rs (execution)
+// - Use neural-core for shared types
+// See /docs/architecture/LEGACY_CODE_MIGRATION_REPORT.md
+
 use anyhow::{Context, Result};
 use autonomous_platform::load_default_config;
 use futures::StreamExt;
