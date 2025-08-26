@@ -1,0 +1,100 @@
+<mxfile host="app.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.1.16">
+  <diagram name="Neural-Trader V2 Unified Architecture" id="neural-trader-unified">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <mxCell id="external-systems" value="External Market Data Providers" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="200" height="60" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="data-ingestion" value="Python Data-Ingestion Service&#xa;&#xa;• RealtimeCoordinator&#xa;• RedisStore&#xa;• BatchScheduler&#xa;• StreamManager" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="50" y="160" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="redis" value="Redis&#xa;Real-time Stream&#xa;&#xa;• price_updates:*&#xa;• tick_updates:*&#xa;• orderbook_updates:*&#xa;&#xa;Retention: &lt; 1 hour&#xa;Latency: &lt; 50ms" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="350" y="120" width="180" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="timescaledb" value="TimescaleDB&#xa;Historical Storage&#xa;&#xa;• OHLCV data (> 1h old)&#xa;• Economic indicators&#xa;• Reference data&#xa;• Training datasets&#xa;&#xa;Retention: Years&#xa;Query time: &lt; 500ms" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="350" y="270" width="180" height="130" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ml-ops-hub" value="Neural-ML-Ops Unified Data Hub&#xa;&#xa;CORE COMPONENTS:&#xa;• DataIngestionLayer (Redis)&#xa;• HistoricalDataClient (TimescaleDB)&#xa;• FeatureEngineeringEngine&#xa;• EventPublisher (EventBus)&#xa;• TrainingCoordinator&#xa;• ModelRegistry&#xa;&#xa;DATA FLOW:&#xa;Real-time + Historical → Features → EventBus" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="650" y="160" width="280" height="200" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="eventbus" value="EventBus&#xa;ML Features Channel ONLY&#xa;&#xa;• stream:ml:features:{symbol}&#xa;• stream:ml:internal:*&#xa;&#xa;Content:&#xa;• Technical indicators&#xa;• Market microstructure&#xa;• Risk metrics&#xa;• ML predictions&#xa;• Economic context&#xa;&#xa;Retention: 24h&#xa;Throughput: 5k events/sec" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="650" y="420" width="280" height="160" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="neural-trading" value="Neural-Trading Service&#xa;Single Channel Consumer&#xa;&#xa;• UnifiedMLConsumer (EventBus only)&#xa;• DAACoordinator&#xa;• ExecutionEngine&#xa;• RiskManager&#xa;&#xa;DATA INPUT:&#xa;ONLY ML features from EventBus&#xa;NO raw data subscriptions&#xa;NO fallback channels" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="650" y="630" width="280" height="140" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="trading-execution" value="Trade Execution&#xa;&#xa;• Order placement&#xa;• Position management&#xa;• Risk monitoring" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="680" width="150" height="90" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-external-ingestion" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d79b00;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="external-systems" target="data-ingestion">
+          <mxGeometry relative="1" as="geometry" />
+          <mxCell as="sourcePoint" />
+          <mxCell as="targetPoint" />
+        </mxCell>
+        
+        <mxCell id="flow-ingestion-redis" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d79b00;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="data-ingestion" target="redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-ingestion-timescale" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d79b00;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="data-ingestion" target="timescaledb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-redis-mlops" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=4;strokeColor=#006600;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="redis" target="ml-ops-hub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-timescale-mlops" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=4;strokeColor=#006600;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="timescaledb" target="ml-ops-hub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-mlops-eventbus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=5;strokeColor=#cc0000;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="ml-ops-hub" target="eventbus">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-eventbus-trading" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=5;strokeColor=#cc0000;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="eventbus" target="neural-trading">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-trading-execution" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d79b00;labelBackgroundColor=none;fontSize=10;" edge="1" parent="1" source="neural-trading" target="trading-execution">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-title" value="Data Flow Legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="450" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-ingestion" value="Market Data Ingestion" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=#d5e8d4;strokeColor=#d79b00;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="50" y="480" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-processing" value="ML Processing (Critical Path)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=#dae8fc;strokeColor=#006600;strokeWidth=4;" vertex="1" parent="1">
+          <mxGeometry x="50" y="520" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="legend-single-channel" value="Single EventBus Channel" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=#e1d5e7;strokeColor=#cc0000;strokeWidth=5;" vertex="1" parent="1">
+          <mxGeometry x="50" y="560" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="architecture-principles" value="UNIFIED ARCHITECTURE PRINCIPLES&#xa;&#xa;✓ SINGLE DATA ROUTE: No dual paths&#xa;✓ ML-OPS OWNS FEATURES: Only source of EventBus data&#xa;✓ TIMESCALE INTEGRATION: Historical context required&#xa;✓ NO RAW DATA BRIDGE: Trading gets only processed features&#xa;✓ NO FALLBACK CHANNELS: Simplified single-flow design&#xa;&#xa;ELIMINATED COMPLEXITY:&#xa;❌ Dual subscription management&#xa;❌ Raw data emergency channels&#xa;❌ Channel coordination logic&#xa;❌ Data consistency between multiple sources" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="50" y="620" width="300" height="180" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="performance-metrics" value="PERFORMANCE TARGETS&#xa;&#xa;Real-time processing: &lt; 50ms&#xa;ML feature generation: &lt; 100ms&#xa;EventBus delivery: &lt; 25ms&#xa;End-to-end latency: &lt; 200ms&#xa;TimescaleDB queries: &lt; 500ms&#xa;EventBus throughput: 5k events/sec&#xa;&#xa;FAST DATA: Redis (&lt; 1s)&#xa;SLOW DATA: TimescaleDB (&gt; 1s)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="420" width="150" height="180" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
