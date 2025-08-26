@@ -37,6 +37,9 @@ nalgebra = "0.32"
 # Streams
 tokio-stream = { version = "0.1", features = ["sync"] }
 
+# Redis
+redis = { version = "0.25", features = ["tokio-comp", "aio", "streams"] }
+
 # gRPC and Protocol Buffers (optional)
 tonic = { version = "0.10", optional = true }
 prost = { version = "0.12", optional = true }
