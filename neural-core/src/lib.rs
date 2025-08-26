@@ -5,6 +5,7 @@
 
 // Module declarations - each module is <500 lines as per requirements
 pub mod errors;
+pub mod eventbus;
 pub mod events;
 pub mod interfaces;
 pub mod traits;
@@ -12,6 +13,7 @@ pub mod types;
 
 // Re-exports for convenience
 pub use errors::{CoreError, Result};
+pub use eventbus::{EventBus as EventBusTrait, EventSubscriber, EventBusError};
 pub use events::{Event, EventBus};
 pub use interfaces::{
     MarketDataServiceTrait, FeatureEngineeringServiceTrait,
