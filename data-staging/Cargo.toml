@@ -1,0 +1,55 @@
+[package]
+name = "data-staging"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neural Trader Team"]
+description = "Data-Staging Service - JSON to Proto transformation layer for Neural Trader V2 Phase 4"
+
+[dependencies]
+# Core dependencies
+neural-core = { path = "../neural-core" }
+tokio = { version = "1.35", features = ["full"] }
+redis = { version = "0.25", features = ["tokio-comp", "aio", "streams"] }
+
+# Proto dependencies (optional for development)
+tonic = { version = "0.10", optional = true }
+prost = { version = "0.12", optional = true }
+prost-types = { version = "0.12", optional = true }
+
+# JSON parsing for raw data
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Async
+async-trait = "0.1"
+futures = "0.3"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Logging
+tracing = "0.1"
+
+# Monitoring
+prometheus = "0.13"
+
+# Validation
+regex = "1.0"
+
+[build-dependencies]
+tonic-build = "0.10"
+
+[features]
+default = ["proto"]
+proto = ["tonic", "prost", "prost-types"]
+
+[dev-dependencies]
+tokio-test = "0.4"
+redis-test = "0.4"
