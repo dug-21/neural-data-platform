@@ -58,6 +58,164 @@ message EventEnvelope {
 
 ## Architecture Design
 
+### Data-Staging Event Creation (NEW)
+
+The Data-Staging service is the ONLY component that creates EventEnvelope protos from raw data:
+
+```rust
+// In data-staging service
+pub struct DataStaging {
+    redis_consumer: RedisConsumer,
+    eventbus_publisher: EventBusPublisher,
+}
+
+impl DataStaging {
+    // Transform raw JSON to proto
+    pub fn transform_market_data(&self, json_str: &str) -> Result<EventEnvelope> {
+        // 1. Parse JSON
+        let raw: serde_json::Value = serde_json::from_str(json_str)?;
+        
+        // 2. Validate required fields
+        self.validate_market_data(&raw)?;
+        
+        // 3. Create proto EventEnvelope
+        let mut envelope = EventEnvelope::default();
+        envelope.message_id = Uuid::new_v4().to_string();
+        envelope.source = "data-staging".to_string();
+        envelope.event_type = "market_data".to_string();
+        
+        // 4. Convert payload to proto Any
+        let market_data = self.json_to_market_data_proto(&raw)?;
+        envelope.payload = Some(prost_types::Any::from_msg(&market_data)?);
+        
+        // 5. Add metadata
+        envelope.quality = Some(self.calculate_quality_score(&raw));
+        envelope.ingested_at = Some(Timestamp::now());
+        
+        Ok(envelope)
+    }
+    
+    // Validate incoming JSON structure
+    fn validate_market_data(&self, raw: &serde_json::Value) -> Result<()> {
+        // Ensure required fields exist
+        raw["symbol"].as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing symbol field"))?;
+        raw["price"].as_f64()
+            .ok_or_else(|| anyhow::anyhow!("Missing or invalid price field"))?;
+        raw["timestamp"].as_i64()
+            .ok_or_else(|| anyhow::anyhow!("Missing or invalid timestamp field"))?;
+            
+        Ok(())
+    }
+    
+    // Convert JSON to strongly-typed proto message
+    fn json_to_market_data_proto(&self, raw: &serde_json::Value) -> Result<proto::market_data::PriceUpdate> {
+        Ok(proto::market_data::PriceUpdate {
+            symbol: raw["symbol"].as_str().unwrap().to_string(),
+            price: raw["price"].as_f64().unwrap(),
+            volume: raw["volume"].as_f64().unwrap_or(0.0),
+            timestamp: raw["timestamp"].as_i64().unwrap(),
+            bid: raw["bid"].as_f64(),
+            ask: raw["ask"].as_f64(),
+            exchange: raw["exchange"].as_str().map(|s| s.to_string()),
+        })
+    }
+    
+    // Calculate data quality metrics
+    fn calculate_quality_score(&self, raw: &serde_json::Value) -> proto::QualityMetadata {
+        let mut quality = proto::QualityMetadata::default();
+        
+        // Check data freshness
+        if let Some(timestamp) = raw["timestamp"].as_i64() {
+            let age_seconds = chrono::Utc::now().timestamp() - timestamp;
+            quality.freshness_score = match age_seconds {
+                0..=5 => 1.0,      // Excellent: 0-5s old
+                6..=30 => 0.8,     // Good: 6-30s old
+                31..=300 => 0.5,   // Fair: 31s-5min old
+                _ => 0.2,          // Poor: >5min old
+            };
+        }
+        
+        // Check data completeness
+        let required_fields = ["symbol", "price", "timestamp"];
+        let optional_fields = ["volume", "bid", "ask", "exchange"];
+        
+        let required_present = required_fields.iter()
+            .filter(|&field| !raw[field].is_null())
+            .count();
+        let optional_present = optional_fields.iter()
+            .filter(|&field| !raw[field].is_null())
+            .count();
+        
+        quality.completeness_score = (required_present as f32 / required_fields.len() as f32) * 0.7 +
+                                   (optional_present as f32 / optional_fields.len() as f32) * 0.3;
+        
+        // Check data validity
+        quality.validity_score = if raw["price"].as_f64().unwrap_or(0.0) > 0.0 { 1.0 } else { 0.0 };
+        
+        // Overall quality score
+        quality.overall_score = (quality.freshness_score + quality.completeness_score + quality.validity_score) / 3.0;
+        
+        quality
+    }
+    
+    // Process incoming raw data stream
+    pub async fn process_raw_stream(&self) -> Result<()> {
+        loop {
+            // 1. Consume raw data from Redis streams
+            let raw_data = self.redis_consumer.consume().await?;
+            
+            // 2. Transform to proto EventEnvelope
+            let proto_envelope = self.transform_market_data(&raw_data)?;
+            
+            // 3. Publish to EventBus (proto-only)
+            self.eventbus_publisher.publish(proto_envelope).await?;
+            
+            // 4. Update metrics
+            self.update_processing_metrics().await?;
+        }
+    }
+}
+
+// EventBus integration - ONLY accepts proto EventEnvelopes
+impl EventBusPublisher {
+    pub async fn publish(&self, envelope: proto::EventEnvelope) -> Result<()> {
+        // Validate proto structure before publishing
+        if envelope.message_id.is_empty() {
+            return Err(anyhow::anyhow!("EventEnvelope missing message_id"));
+        }
+        
+        if envelope.payload.is_none() {
+            return Err(anyhow::anyhow!("EventEnvelope missing payload"));
+        }
+        
+        // Serialize proto to bytes for transport
+        let bytes = envelope.encode_to_vec();
+        
+        // Publish to appropriate channel based on event_type
+        let channel = self.route_to_channel(&envelope.event_type);
+        self.transport.publish(channel, bytes).await
+    }
+    
+    fn route_to_channel(&self, event_type: &str) -> &str {
+        match event_type {
+            "market_data" => "market-data-stream",
+            "trading_signal" => "trading-signals",
+            "order_event" => "order-management",
+            _ => "default-events",
+        }
+    }
+}
+```
+
+**Key Design Points:**
+- **Data-Staging as Proto Factory**: Only Data-Staging creates EventEnvelope protos from raw data
+- **JSON to Proto Transformation**: Validates and converts raw JSON to strongly-typed proto messages
+- **Quality Metadata**: Calculates data quality scores during transformation
+- **EventBus Integration**: EventBus ONLY accepts validated EventEnvelope protos
+- **Type Safety**: No Vec<u8> payloads - only strongly-typed proto messages
+- **Validation First**: Rejects invalid data at the transformation boundary
+
 ### Proto-Only Type Hierarchy
 
 ```rust

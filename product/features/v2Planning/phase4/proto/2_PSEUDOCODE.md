@@ -6,10 +6,12 @@
 2. [Protobuf Serialization/Deserialization](#protobuf-serialization-deserialization)
 3. [Schema Validation Logic](#schema-validation-logic)
 4. [gRPC Service Method Implementations](#grpc-service-method-implementations)
-5. [Error Handling for Proto Operations](#error-handling-for-proto-operations)
-6. [Channel-to-Proto Mapping Logic](#channel-to-proto-mapping-logic)
-7. [Data Structure Definitions](#data-structure-definitions)
-8. [Complexity Analysis](#complexity-analysis)
+5. [Data-Staging Service Algorithms](#data-staging-service-algorithms)
+6. [Error Handling for Proto Operations](#error-handling-for-proto-operations)
+7. [Data-Staging Transformation Algorithms](#data-staging-transformation-algorithms)
+8. [Channel-to-Proto Mapping Logic](#channel-to-proto-mapping-logic)
+9. [Data Structure Definitions](#data-structure-definitions)
+10. [Complexity Analysis](#complexity-analysis)
 
 ---
 
@@ -1331,9 +1333,695 @@ END
 
 ---
 
-## 6. Strict Proto-Only Channel Mapping
+## 7. Data-Staging Transformation Algorithms
 
-### 6.1 Proto-Only Channel Validation
+The Data-Staging service acts as the bridge between external data sources (Redis) and the EventBus system, transforming raw JSON messages into strict protobuf EventEnvelopes.
+
+### 7.1 Redis Consumer Algorithm
+
+```
+ALGORITHM: ConsumeFromRedis
+INPUT: redis_channels (list of channel names), connection_config (RedisConfig)
+OUTPUT: stream of raw JSON messages
+
+DATA STRUCTURES:
+    ConnectionPool: Pool<RedisConnection> with reconnection logic
+    MessageBuffer: CircularBuffer<RawMessage> for buffering
+    ChannelSubscriptions: Map<channel_name, SubscriptionState>
+
+BEGIN
+    // Step 1: Initialize Redis connection with retry logic
+    TRY
+        redis_connection ← ConnectionPool.get_connection()
+        IF redis_connection == null THEN
+            RETURN error("REDIS_CONNECTION_FAILED: Unable to connect to Redis")
+        END IF
+    CATCH RedisConnectionException e
+        RETURN error("REDIS_CONNECTION_ERROR: " + e.message)
+    END TRY
+    
+    // Step 2: Subscribe to specified channels
+    subscription_results ← []
+    FOR EACH channel IN redis_channels DO
+        TRY
+            subscription_state ← redis_connection.subscribe(channel)
+            ChannelSubscriptions.put(channel, subscription_state)
+            subscription_results.append({channel: channel, success: true})
+        CATCH RedisSubscriptionException e
+            LOG error("Failed to subscribe to channel: " + channel + " - " + e.message)
+            subscription_results.append({channel: channel, success: false, error: e.message})
+        END TRY
+    END FOR
+    
+    // Step 3: Main message consumption loop
+    WHILE service_running DO
+        TRY
+            // Wait for messages with timeout
+            message ← redis_connection.get_message(timeout: 5_seconds)
+            
+            IF message == null THEN
+                // Timeout occurred, check connection health
+                IF NOT redis_connection.is_healthy() THEN
+                    LOG warning("Redis connection unhealthy, attempting reconnection")
+                    redis_connection ← ConnectionPool.reconnect()
+                END IF
+                CONTINUE
+            END IF
+            
+            // Step 4: Validate message type and structure
+            IF message.type == "message" THEN
+                // Extract channel and data
+                channel_name ← message.channel
+                raw_data ← message.data
+                
+                // Step 5: Basic JSON validation
+                IF NOT IsValidJSON(raw_data) THEN
+                    LOG warning("Invalid JSON received from channel: " + channel_name)
+                    UpdateChannelMetrics(channel_name, "invalid_json")
+                    CONTINUE
+                END IF
+                
+                // Step 6: Create structured message
+                structured_message ← RawMessage()
+                structured_message.channel ← channel_name
+                structured_message.data ← raw_data
+                structured_message.timestamp ← GetCurrentTimestamp()
+                structured_message.message_id ← GenerateMessageId()
+                
+                // Step 7: Buffer message for processing
+                MessageBuffer.add(structured_message)
+                UpdateChannelMetrics(channel_name, "received")
+                
+                YIELD structured_message
+                
+            ELSE IF message.type == "subscribe" THEN
+                LOG info("Successfully subscribed to channel: " + message.channel)
+            ELSE IF message.type == "unsubscribe" THEN
+                LOG info("Unsubscribed from channel: " + message.channel)
+            END IF
+            
+        CATCH RedisException e
+            LOG error("Redis message processing error: " + e.message)
+            UpdateSystemMetrics("redis_errors")
+            
+            // Attempt reconnection on critical errors
+            IF IsCriticalRedisError(e) THEN
+                redis_connection ← ConnectionPool.reconnect()
+            END IF
+        END TRY
+    END WHILE
+    
+    // Step 8: Cleanup on shutdown
+    FOR EACH channel IN redis_channels DO
+        TRY
+            redis_connection.unsubscribe(channel)
+        CATCH RedisException e
+            LOG warning("Error unsubscribing from channel " + channel + ": " + e.message)
+        END TRY
+    END FOR
+    
+    ConnectionPool.return_connection(redis_connection)
+END
+```
+
+### 7.2 JSON to Proto Transformation
+
+```
+ALGORITHM: TransformJsonToProto
+INPUT: raw_message (RawMessage containing JSON string)
+OUTPUT: EventEnvelope proto OR error
+
+DATA STRUCTURES:
+    JsonParser: High-performance JSON parsing engine
+    ProtoFactory: Factory for creating specific proto message types
+    ValidationCache: Cache<json_structure_hash, ValidationResult>
+    TransformationRules: Map<channel_pattern, TransformationRule>
+
+BEGIN
+    start_time ← GetCurrentTime()
+    
+    // Step 1: Parse and validate JSON structure
+    TRY
+        json_data ← JsonParser.parse(raw_message.data)
+        IF json_data == null THEN
+            RETURN TransformError("JSON_PARSE_FAILED: Invalid JSON structure")
+        END IF
+    CATCH JsonParseException e
+        RETURN TransformError("JSON_PARSE_ERROR: " + e.message)
+    END TRY
+    
+    // Step 2: Determine transformation rules based on channel
+    transformation_rule ← TransformationRules.get(raw_message.channel)
+    IF transformation_rule == null THEN
+        // Try pattern matching
+        transformation_rule ← FindMatchingTransformationRule(raw_message.channel)
+        IF transformation_rule == null THEN
+            RETURN TransformError("NO_TRANSFORMATION_RULE: No rule found for channel " + raw_message.channel)
+        END IF
+    END IF
+    
+    // Step 3: Validate required fields according to rule
+    validation_result ← ValidateRequiredFields(json_data, transformation_rule.required_fields)
+    IF NOT validation_result.valid THEN
+        RETURN TransformError("FIELD_VALIDATION_FAILED: " + validation_result.errors)
+    END IF
+    
+    // Step 4: Create EventEnvelope proto message
+    TRY
+        envelope ← EventEnvelope()
+        
+        // Core envelope fields
+        envelope.message_id ← raw_message.message_id
+        envelope.correlation_id ← ExtractCorrelationId(json_data, transformation_rule)
+        envelope.source ← "data-staging"
+        envelope.domain ← DetermineDomain(raw_message.channel, transformation_rule)
+        envelope.event_type ← DetermineEventType(json_data, transformation_rule)
+        envelope.schema_version ← transformation_rule.target_schema_version
+        
+        // Timestamps
+        envelope.created_at ← ExtractTimestamp(json_data, transformation_rule)
+        envelope.ingested_at ← raw_message.timestamp
+        
+        // Step 5: Create domain-specific proto payload
+        domain_proto ← CreateDomainProtoFromJson(json_data, transformation_rule)
+        IF domain_proto == null THEN
+            RETURN TransformError("DOMAIN_PROTO_CREATION_FAILED")
+        END IF
+        
+        // Validate proto message before packaging
+        proto_validation ← ValidateProtobufMessage(domain_proto)
+        IF NOT proto_validation.is_valid THEN
+            RETURN TransformError("DOMAIN_PROTO_INVALID: " + proto_validation.errors)
+        END IF
+        
+        // Package as Any
+        envelope.payload ← PackageProtoAsAny(domain_proto)
+        
+    CATCH ProtoCreationException e
+        RETURN TransformError("PROTO_CREATION_ERROR: " + e.message)
+    END TRY
+    
+    // Step 6: Build routing metadata
+    envelope.routing ← BuildRoutingMetadata(json_data, raw_message.channel, transformation_rule)
+    
+    // Step 7: Calculate and add quality metadata
+    envelope.quality ← CalculateQualityMetadata(json_data, raw_message, transformation_rule)
+    
+    // Step 8: Add transformation metadata
+    envelope.metadata ← CreateTransformationMetadata(json_data, raw_message, transformation_rule, start_time)
+    
+    // Step 9: Create tracing context
+    envelope.tracing ← CreateTracingContext(raw_message, transformation_rule)
+    
+    // Step 10: Final envelope validation
+    final_validation ← ValidateEventEnvelope(envelope)
+    IF NOT final_validation.is_valid THEN
+        RETURN TransformError("ENVELOPE_VALIDATION_FAILED: " + final_validation.errors)
+    END IF
+    
+    // Step 11: Update transformation metrics
+    transformation_time ← GetCurrentTime() - start_time
+    UpdateTransformationMetrics(raw_message.channel, transformation_time, "success")
+    
+    RETURN envelope
+    
+EXCEPTION_HANDLING:
+    CATCH Exception as e
+        error_details ← CreateErrorDetails(e, raw_message, json_data)
+        LOG error("Transformation failed: " + error_details.summary)
+        
+        // Send to dead letter queue for investigation
+        SendToDeadLetterQueue(raw_message, error_details)
+        UpdateTransformationMetrics(raw_message.channel, GetCurrentTime() - start_time, "error")
+        
+        RETURN TransformError("TRANSFORMATION_FAILED: " + e.message)
+    END TRY
+END
+
+SUBROUTINE: CreateDomainProtoFromJson
+INPUT: json_data, transformation_rule
+OUTPUT: domain_proto_message
+
+BEGIN
+    CASE transformation_rule.target_proto_type OF
+        "neural_trader.MarketDataProto":
+            RETURN CreateMarketDataProto(json_data, transformation_rule)
+        "neural_trader.TradingEventProto":
+            RETURN CreateTradingEventProto(json_data, transformation_rule)
+        "neural_trader.RiskAlertProto":
+            RETURN CreateRiskAlertProto(json_data, transformation_rule)
+        "neural_trader.SystemLogProto":
+            RETURN CreateSystemLogProto(json_data, transformation_rule)
+        DEFAULT:
+            RETURN CreateGenericProto(json_data, transformation_rule)
+    END CASE
+END
+
+SUBROUTINE: CreateMarketDataProto
+INPUT: json_data, transformation_rule
+OUTPUT: MarketDataProto
+
+BEGIN
+    market_data ← MarketDataProto()
+    
+    // Required fields with validation
+    market_data.symbol ← ValidateAndExtract(json_data, "symbol", STRING, required: true)
+    market_data.price ← ValidateAndExtract(json_data, "price", DOUBLE, required: true, min: 0.0)
+    market_data.volume ← ValidateAndExtract(json_data, "volume", DOUBLE, required: true, min: 0.0)
+    market_data.timestamp ← ValidateAndExtractTimestamp(json_data, "timestamp", required: true)
+    
+    // Optional fields
+    IF json_data.has_field("bid") THEN
+        market_data.bid ← ValidateAndExtract(json_data, "bid", DOUBLE, min: 0.0)
+    END IF
+    
+    IF json_data.has_field("ask") THEN
+        market_data.ask ← ValidateAndExtract(json_data, "ask", DOUBLE, min: 0.0)
+    END IF
+    
+    IF json_data.has_field("exchange") THEN
+        market_data.exchange ← ValidateAndExtract(json_data, "exchange", STRING)
+    END IF
+    
+    // Market-specific metadata
+    IF json_data.has_field("market_session") THEN
+        market_data.market_session ← ParseMarketSession(json_data.get("market_session"))
+    END IF
+    
+    RETURN market_data
+END
+```
+
+### 7.3 Data Quality Scoring Algorithm
+
+```
+ALGORITHM: CalculateQualityScore
+INPUT: json_data (parsed JSON), raw_message (RawMessage), transformation_rule
+OUTPUT: quality_metadata (QualityMetadata with score 0.0 to 1.0)
+
+DATA STRUCTURES:
+    QualityRules: Set of quality assessment rules
+    HistoricalData: Time-series data for comparison
+    ThresholdConfig: Configurable quality thresholds
+
+BEGIN
+    quality_metadata ← QualityMetadata()
+    base_score ← 1.0
+    quality_issues ← []
+    
+    // Step 1: Timestamp freshness evaluation
+    message_timestamp ← ExtractTimestamp(json_data, transformation_rule)
+    IF message_timestamp != null THEN
+        timestamp_age ← GetCurrentTimestamp() - message_timestamp
+        
+        IF timestamp_age > 60_seconds THEN
+            freshness_penalty ← min(0.3, timestamp_age.as_seconds() / 300.0)
+            base_score -= freshness_penalty
+            quality_issues.append("STALE_DATA: Message is " + timestamp_age + " old")
+        END IF
+        
+        // Future timestamp check
+        IF message_timestamp > GetCurrentTimestamp() + 5_seconds THEN
+            base_score -= 0.4
+            quality_issues.append("FUTURE_TIMESTAMP: Message timestamp is in future")
+        END IF
+    ELSE
+        base_score -= 0.5
+        quality_issues.append("MISSING_TIMESTAMP: No valid timestamp found")
+    END IF
+    
+    // Step 2: Required field completeness
+    required_fields ← transformation_rule.required_fields
+    missing_fields ← []
+    
+    FOR EACH field IN required_fields DO
+        IF NOT json_data.has_field(field.name) OR IsNullOrEmpty(json_data.get(field.name)) THEN
+            missing_fields.append(field.name)
+            base_score -= field.weight
+        END IF
+    END FOR
+    
+    IF NOT missing_fields.is_empty() THEN
+        quality_issues.append("MISSING_FIELDS: " + missing_fields.join(", "))
+    END IF
+    
+    // Step 3: Data range and type validation
+    FOR EACH field IN transformation_rule.validated_fields DO
+        IF json_data.has_field(field.name) THEN
+            field_value ← json_data.get(field.name)
+            
+            CASE field.type OF
+                NUMERIC:
+                    IF NOT IsNumeric(field_value) THEN
+                        base_score -= 0.2
+                        quality_issues.append("INVALID_TYPE: " + field.name + " should be numeric")
+                    ELSE
+                        numeric_value ← ToNumeric(field_value)
+                        IF field.has_min_value AND numeric_value < field.min_value THEN
+                            base_score -= 0.3
+                            quality_issues.append("OUT_OF_RANGE: " + field.name + " below minimum")
+                        END IF
+                        IF field.has_max_value AND numeric_value > field.max_value THEN
+                            base_score -= 0.3
+                            quality_issues.append("OUT_OF_RANGE: " + field.name + " above maximum")
+                        END IF
+                    END IF
+                    
+                STRING:
+                    IF NOT IsString(field_value) THEN
+                        base_score -= 0.15
+                        quality_issues.append("INVALID_TYPE: " + field.name + " should be string")
+                    ELSE
+                        string_value ← ToString(field_value)
+                        IF field.has_pattern AND NOT MatchesPattern(string_value, field.pattern) THEN
+                            base_score -= 0.25
+                            quality_issues.append("PATTERN_MISMATCH: " + field.name + " doesn't match expected pattern")
+                        END IF
+                    END IF
+            END CASE
+        END IF
+    END FOR
+    
+    // Step 4: Temporal consistency checks
+    IF transformation_rule.enable_temporal_validation THEN
+        previous_message ← GetPreviousMessage(raw_message.channel, json_data.get("symbol"))
+        IF previous_message != null THEN
+            time_gap ← message_timestamp - previous_message.timestamp
+            
+            // Check for significant time gaps
+            expected_interval ← transformation_rule.expected_message_interval
+            IF time_gap > expected_interval * 2 THEN
+                gap_penalty ← min(0.2, time_gap.as_seconds() / expected_interval.as_seconds() * 0.05)
+                base_score -= gap_penalty
+                quality_issues.append("TIME_GAP: Large gap since previous message")
+            END IF
+            
+            // Check for duplicate timestamps
+            IF time_gap == 0 AND AreSimilarMessages(json_data, previous_message.data) THEN
+                base_score -= 0.1
+                quality_issues.append("DUPLICATE_MESSAGE: Potential duplicate detected")
+            END IF
+        END IF
+    END IF
+    
+    // Step 5: Market-specific quality checks (if applicable)
+    IF transformation_rule.domain == "market_data" THEN
+        market_quality_score ← EvaluateMarketDataQuality(json_data, transformation_rule)
+        base_score *= market_quality_score.multiplier
+        quality_issues.extend(market_quality_score.issues)
+    END IF
+    
+    // Step 6: Statistical outlier detection
+    IF transformation_rule.enable_outlier_detection THEN
+        outlier_result ← DetectStatisticalOutliers(json_data, raw_message.channel)
+        IF outlier_result.is_outlier THEN
+            outlier_penalty ← min(0.15, outlier_result.deviation_score * 0.05)
+            base_score -= outlier_penalty
+            quality_issues.append("STATISTICAL_OUTLIER: " + outlier_result.description)
+        END IF
+    END IF
+    
+    // Step 7: Create quality metadata
+    quality_metadata.overall_score ← max(0.0, base_score)
+    quality_metadata.completeness ← CalculateCompleteness(json_data, transformation_rule)
+    quality_metadata.freshness_score ← CalculateFreshnessScore(message_timestamp)
+    quality_metadata.consistency_score ← CalculateConsistencyScore(json_data, raw_message.channel)
+    quality_metadata.issues ← quality_issues
+    quality_metadata.evaluation_timestamp ← GetCurrentTimestamp()
+    
+    // Step 8: Apply quality threshold rules
+    IF quality_metadata.overall_score < transformation_rule.minimum_quality_threshold THEN
+        quality_metadata.quality_grade ← "REJECTED"
+        quality_metadata.issues.append("QUALITY_BELOW_THRESHOLD: Score " + quality_metadata.overall_score + " below required " + transformation_rule.minimum_quality_threshold)
+    ELSE IF quality_metadata.overall_score < 0.7 THEN
+        quality_metadata.quality_grade ← "POOR"
+    ELSE IF quality_metadata.overall_score < 0.9 THEN
+        quality_metadata.quality_grade ← "GOOD"
+    ELSE
+        quality_metadata.quality_grade ← "EXCELLENT"
+    END IF
+    
+    RETURN quality_metadata
+END
+
+SUBROUTINE: EvaluateMarketDataQuality
+INPUT: json_data, transformation_rule
+OUTPUT: market_quality_result
+
+BEGIN
+    quality_result ← MarketQualityResult()
+    quality_result.multiplier ← 1.0
+    quality_result.issues ← []
+    
+    // Price validation
+    IF json_data.has_field("price") THEN
+        price ← ToNumeric(json_data.get("price"))
+        
+        // Check for reasonable price values
+        IF price <= 0 THEN
+            quality_result.multiplier *= 0.0  // Fatal for market data
+            quality_result.issues.append("INVALID_PRICE: Price must be positive")
+        ELSE IF price < 0.01 THEN
+            quality_result.multiplier *= 0.8
+            quality_result.issues.append("SUSPICIOUS_PRICE: Price unusually low")
+        END IF
+    END IF
+    
+    // Volume validation
+    IF json_data.has_field("volume") THEN
+        volume ← ToNumeric(json_data.get("volume"))
+        
+        IF volume < 0 THEN
+            quality_result.multiplier *= 0.5
+            quality_result.issues.append("INVALID_VOLUME: Volume cannot be negative")
+        ELSE IF volume == 0 THEN
+            quality_result.multiplier *= 0.9
+            quality_result.issues.append("ZERO_VOLUME: No trading volume")
+        END IF
+    END IF
+    
+    // Bid-Ask spread validation
+    IF json_data.has_field("bid") AND json_data.has_field("ask") THEN
+        bid ← ToNumeric(json_data.get("bid"))
+        ask ← ToNumeric(json_data.get("ask"))
+        
+        IF bid >= ask THEN
+            quality_result.multiplier *= 0.3
+            quality_result.issues.append("INVALID_SPREAD: Bid >= Ask")
+        ELSE
+            spread_percent ← (ask - bid) / bid * 100.0
+            IF spread_percent > 10.0 THEN  // >10% spread is suspicious
+                quality_result.multiplier *= 0.7
+                quality_result.issues.append("WIDE_SPREAD: Bid-ask spread > 10%")
+            END IF
+        END IF
+    END IF
+    
+    RETURN quality_result
+END
+```
+
+### 7.4 Integration with EventBus System
+
+```
+ALGORITHM: IntegrateWithEventBus
+INPUT: validated_envelope (EventEnvelope)
+OUTPUT: integration_result
+
+DATA STRUCTURES:
+    EventBusClient: gRPC client for EventBus ingestion
+    RetryQueue: Queue for failed message retries
+    MetricsCollector: Performance and integration metrics
+
+BEGIN
+    integration_start ← GetCurrentTime()
+    
+    // Step 1: Final envelope validation before sending
+    final_validation ← ValidateEventEnvelopeForEventBus(validated_envelope)
+    IF NOT final_validation.is_valid THEN
+        LOG error("Envelope validation failed before EventBus integration: " + final_validation.errors)
+        RETURN IntegrationError("ENVELOPE_INVALID", final_validation.errors)
+    END IF
+    
+    // Step 2: Create EventBus ingestion request
+    ingestion_request ← CreateIngestionRequest(validated_envelope)
+    
+    // Step 3: Send to EventBus with retry logic
+    attempt_count ← 0
+    max_attempts ← 3
+    
+    WHILE attempt_count < max_attempts DO
+        TRY
+            // Send via gRPC to EventBus
+            response ← EventBusClient.ingest_single_event(ingestion_request)
+            
+            IF response.success THEN
+                // Step 4: Update success metrics
+                integration_time ← GetCurrentTime() - integration_start
+                UpdateIntegrationMetrics(validated_envelope.domain, integration_time, "success")
+                
+                RETURN IntegrationSuccess(response.results[0])
+            ELSE
+                LOG warning("EventBus rejected message: " + response.error_message)
+                RETURN IntegrationError("EVENTBUS_REJECTED", response.error_message)
+            END IF
+            
+        CATCH gRPCException e
+            attempt_count += 1
+            LOG warning("EventBus integration attempt " + attempt_count + " failed: " + e.message)
+            
+            IF attempt_count < max_attempts THEN
+                // Exponential backoff
+                delay ← CalculateBackoffDelay(attempt_count)
+                Sleep(delay)
+            END IF
+        END TRY
+    END WHILE
+    
+    // Step 5: All attempts failed - queue for retry
+    LOG error("EventBus integration failed after " + max_attempts + " attempts")
+    RetryQueue.add(validated_envelope, integration_start)
+    UpdateIntegrationMetrics(validated_envelope.domain, GetCurrentTime() - integration_start, "failed")
+    
+    RETURN IntegrationError("EVENTBUS_UNAVAILABLE", "Max retry attempts exceeded")
+END
+
+SUBROUTINE: CreateIngestionRequest
+INPUT: envelope
+OUTPUT: ingestion_request
+
+BEGIN
+    request ← IngestionRequest()
+    request.event ← envelope
+    request.options ← IngestionOptions()
+    request.options.validate_schema ← true
+    request.options.enforce_quality_threshold ← true
+    request.options.enable_routing ← true
+    
+    RETURN request
+END
+```
+
+### 7.5 Data-Staging Service Orchestration
+
+```
+ALGORITHM: RunDataStagingService
+INPUT: configuration (DataStagingConfig)
+OUTPUT: service_status
+
+DATA STRUCTURES:
+    ConsumerManager: Manages Redis consumer threads
+    TransformationPipeline: Parallel transformation pipeline
+    EventBusIntegrator: Handles EventBus communication
+    HealthMonitor: Service health monitoring
+
+BEGIN
+    service_status ← ServiceStatus()
+    
+    // Step 1: Initialize all components
+    TRY
+        consumer_manager ← ConsumerManager.initialize(configuration.redis_config)
+        transformation_pipeline ← TransformationPipeline.initialize(configuration.transformation_config)
+        eventbus_integrator ← EventBusIntegrator.initialize(configuration.eventbus_config)
+        health_monitor ← HealthMonitor.initialize()
+        
+        LOG info("Data-Staging service components initialized successfully")
+    CATCH InitializationException e
+        LOG error("Service initialization failed: " + e.message)
+        RETURN ServiceStatus.FAILED
+    END TRY
+    
+    // Step 2: Start consumer threads for each Redis channel
+    active_consumers ← []
+    FOR EACH channel_config IN configuration.channels DO
+        TRY
+            consumer_thread ← consumer_manager.start_consumer(channel_config)
+            active_consumers.append(consumer_thread)
+            LOG info("Started consumer for channel: " + channel_config.name)
+        CATCH ConsumerException e
+            LOG error("Failed to start consumer for channel " + channel_config.name + ": " + e.message)
+        END TRY
+    END FOR
+    
+    // Step 3: Main processing loop
+    WHILE service_running DO
+        TRY
+            // Get raw messages from all consumers
+            raw_messages ← consumer_manager.get_pending_messages(timeout: 1_second)
+            
+            IF NOT raw_messages.is_empty() THEN
+                // Step 4: Batch transform messages
+                transformation_results ← transformation_pipeline.process_batch(raw_messages)
+                
+                // Step 5: Separate successful from failed transformations
+                successful_envelopes ← []
+                failed_transformations ← []
+                
+                FOR EACH result IN transformation_results DO
+                    IF result.success THEN
+                        successful_envelopes.append(result.envelope)
+                    ELSE
+                        failed_transformations.append(result)
+                    END IF
+                END FOR
+                
+                // Step 6: Send successful transformations to EventBus
+                IF NOT successful_envelopes.is_empty() THEN
+                    integration_results ← eventbus_integrator.send_batch(successful_envelopes)
+                    UpdateBatchMetrics(integration_results)
+                END IF
+                
+                // Step 7: Handle failed transformations
+                IF NOT failed_transformations.is_empty() THEN
+                    HandleFailedTransformations(failed_transformations)
+                END IF
+            END IF
+            
+            // Step 8: Health monitoring
+            health_status ← health_monitor.check_health()
+            IF NOT health_status.healthy THEN
+                LOG warning("Health check failed: " + health_status.issues)
+                HandleUnhealthyState(health_status)
+            END IF
+            
+        CATCH ServiceException e
+            LOG error("Service processing error: " + e.message)
+            HandleServiceError(e)
+        END TRY
+    END WHILE
+    
+    // Step 9: Graceful shutdown
+    LOG info("Data-Staging service shutting down...")
+    
+    // Stop consumers
+    FOR EACH consumer IN active_consumers DO
+        consumer_manager.stop_consumer(consumer)
+    END FOR
+    
+    // Flush remaining messages
+    transformation_pipeline.flush_remaining()
+    eventbus_integrator.flush_remaining()
+    
+    LOG info("Data-Staging service shutdown complete")
+    RETURN ServiceStatus.SHUTDOWN
+END
+```
+
+This comprehensive set of Data-Staging transformation algorithms provides:
+
+1. **Redis Consumer Algorithm**: Robust Redis message consumption with error handling and reconnection logic
+2. **JSON to Proto Transformation**: Strict transformation from JSON to EventEnvelope protobuf with comprehensive validation
+3. **Data Quality Scoring**: Multi-dimensional quality assessment including freshness, completeness, consistency, and market-specific validation
+4. **EventBus Integration**: Seamless integration with the EventBus system using gRPC with retry logic
+5. **Service Orchestration**: Complete service lifecycle management with health monitoring and graceful shutdown
+
+These algorithms integrate seamlessly with the existing proto-only EventBus system, ensuring that all data from external sources is properly validated and transformed into strict protobuf format before entering the event processing pipeline.
+
+---
+
+## 8. Strict Proto-Only Channel Mapping
+
+### 8.1 Proto-Only Channel Validation
 
 ```
 ALGORITHM: ValidateChannelProtoMapping
@@ -1453,7 +2141,7 @@ BEGIN
 END
 ```
 
-### 6.2 Strict Proto Channel Processing
+### 8.2 Strict Proto Channel Processing
 
 ```
 ALGORITHM: ProcessChannelProtoMessage
@@ -1585,9 +2273,9 @@ END
 
 ---
 
-## 7. Data Structure Definitions
+## 9. Data Structure Definitions
 
-### 7.1 Core Data Structures
+### 9.1 Core Data Structures
 
 ```
 DATA STRUCTURE: ProtoMessageProcessor
@@ -1631,7 +2319,7 @@ OPERATIONS:
     register_custom_validator(field_type: string, validator: FieldValidator): void
 ```
 
-### 7.2 Error Handling Data Structures
+### 9.2 Error Handling Data Structures
 
 ```
 DATA STRUCTURE: ErrorRecoverySystem
@@ -1666,7 +2354,7 @@ OPERATIONS:
     force_close(): void
 ```
 
-### 7.3 Performance Optimization Structures
+### 9.3 Performance Optimization Structures
 
 ```
 DATA STRUCTURE: SerializationPool
@@ -1698,9 +2386,9 @@ OPERATIONS:
 
 ---
 
-## 8. Strict Proto Complexity Analysis
+## 10. Strict Proto Complexity Analysis
 
-### 8.1 Proto-Only Time Complexity Analysis
+### 10.1 Proto-Only Time Complexity Analysis
 
 ```
 ANALYSIS: Strict Proto Message Validation
@@ -1782,7 +2470,7 @@ Space Complexity: O(r + p)
 - Validation context: O(1) - minimal temporary data
 ```
 
-### 8.2 Proto-Only Space Complexity Analysis
+### 10.2 Proto-Only Space Complexity Analysis
 
 ```
 ANALYSIS: Strict Proto Memory Usage Patterns
@@ -1840,20 +2528,40 @@ Proto Performance Benefits:
 
 ## Summary - STRICT PROTO-ONLY PROCESSING
 
-This comprehensive pseudocode document provides detailed algorithmic specifications for STRICT PROTO-ONLY processing:
+This comprehensive pseudocode document provides detailed algorithmic specifications for STRICT PROTO-ONLY processing with Data-Staging integration:
 
 1. **Proto-Only Message Validation**: Strict validation that REJECTS all non-protobuf inputs with fail-fast error handling
 2. **Proto-Only Operations**: High-performance protobuf serialization/deserialization with mandatory validation and NO fallback paths
 3. **Strict Schema Validation**: Proto-only schema validation with immediate rejection of non-compliant messages
 4. **gRPC Services**: Proto-only service implementations with strict validation and NO graceful degradation
 5. **Fail-Fast Error Handling**: Immediate rejection of invalid proto inputs with comprehensive error classification
-6. **Proto-Only Channel Mapping**: Strict channel-to-proto mapping with mandatory type validation and NO inference
+6. **Data-Staging Transformation**: Robust transformation of external JSON data into strict protobuf EventEnvelopes with comprehensive quality assessment
+7. **Proto-Only Channel Mapping**: Strict channel-to-proto mapping with mandatory type validation and NO inference
 
-The algorithms are designed for STRICT PROTO-ONLY processing:
-- **Proto-Only Input**: REJECTS all non-protobuf data immediately
-- **Fail-Fast Validation**: O(1) rejection of invalid inputs
+## Integration Architecture
+
+The algorithms are designed for a complete **DATA-TO-PROTO PIPELINE**:
+
+### Data Flow:
+1. **External Data Sources** (Redis) → **Data-Staging Service**
+2. **JSON Messages** → **Quality Assessment** → **Proto Transformation**
+3. **EventEnvelope Protobufs** → **EventBus gRPC Services**
+4. **Strict Proto Validation** → **Domain Processing** OR **Immediate Rejection**
+
+### Key Benefits:
+- **Proto-Only Input**: EventBus REJECTS all non-protobuf data immediately
+- **Quality-First Transformation**: Data-Staging ensures only high-quality data reaches EventBus
+- **Fail-Fast Validation**: O(1) rejection of invalid inputs at every stage
 - **No Fallback Paths**: Every message MUST be a valid protobuf or it gets rejected
-- **Strict Compliance**: NO exceptions, NO graceful degradation, NO data transformation
+- **Strict Compliance**: NO exceptions, NO graceful degradation, NO lossy transformation
 - **Maximum Performance**: 4x throughput improvement by eliminating conversion overhead
+- **Comprehensive Quality**: Multi-dimensional quality scoring with domain-specific validation
 
-This pseudocode serves as the foundation for implementing a STRICT PROTO-ONLY message processing system that accepts ONLY valid protobuf messages and rejects everything else without exception.
+### Data-Staging Integration Points:
+- **Redis Consumer**: Robust message consumption with reconnection logic
+- **JSON-to-Proto**: Strict transformation with field validation and type conversion
+- **Quality Assessment**: Real-time quality scoring with configurable thresholds
+- **EventBus Integration**: Seamless gRPC communication with retry logic
+- **Dead Letter Queues**: Failed transformation handling for investigation
+
+This pseudocode serves as the foundation for implementing a COMPLETE END-TO-END message processing system that transforms external data into strict protobuf format and processes it with zero tolerance for invalid messages.

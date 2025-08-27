@@ -1,17 +1,21 @@
-# EventBus Proto Contract Enforcement - SPARC Planning Artifacts
+# EventBus Proto Contract Enforcement with Data-Staging - SPARC Planning Artifacts
 
 ## Overview
-This directory contains comprehensive SPARC planning artifacts for enforcing Protocol Buffer contracts as the ONLY message format in the Neural-Trader EventBus. These documents establish a zero-tolerance policy for non-proto messages - if you have a contract, you MUST follow it.
+This directory contains comprehensive SPARC planning artifacts for enforcing Protocol Buffer contracts through a new Data-Staging service that bridges raw data to the proto-only EventBus. These documents establish a clear architectural separation: raw data in Redis, structured proto in EventBus.
 
 ## Problem Statement
-The EventBus currently allows unstructured `Vec<u8>` payloads, defeating the entire purpose of having proto contracts. Comprehensive proto definitions exist in `/proto` and `/schemas` directories but aren't enforced. This creates:
-- No guarantee of message structure consistency
-- Runtime errors from malformed data
-- Inability to trust message contracts
-- No type safety across service boundaries
+The current architecture has multiple issues:
+- Data-Ingestion publishes raw JSON to Redis (this is correct - it's raw data)
+- EventBus would need to handle both raw and structured data (violates single responsibility)
+- No clear quality gate between raw external data and internal structured messaging
+- Proto contracts exist but aren't enforced at the right boundary
 
-## Solution: Proto-Only Contract Enforcement
-The SPARC methodology enforces strict proto compliance with zero exceptions:
+## Solution: Data-Staging Service + Proto-Only EventBus
+The architecture now clearly separates concerns:
+1. **Data-Ingestion** → Redis (Raw JSON) - unchanged
+2. **Data-Staging** (NEW) → Validates, transforms, and enriches raw data to proto
+3. **EventBus** → Proto-only message bus for structured data
+4. **Consumers** → Receive only validated, structured proto messages
 
 ### 📋 Core Planning Documents
 
@@ -75,11 +79,11 @@ The SPARC methodology enforces strict proto compliance with zero exceptions:
 - Proto compliance is mandatory
 
 ### 📅 [INTEGRATION_TIMELINE](./INTEGRATION_TIMELINE.md)
-- **4-5 week implementation** (reduced from 6-8)
-- **184 developer hours** (reduced from 390)
-- Simplified rollout without compatibility phases
-- Faster implementation without conversion layers
-- Direct proto-only approach
+- **5-6 week implementation** (includes Data-Staging development)
+- **227 developer hours** (includes 80 hours for Data-Staging)
+- Clean separation between raw data and structured messaging
+- Data-Staging as quality gate and transformation layer
+- Proto-only EventBus with strict enforcement
 
 ## Key Technical Decisions
 
@@ -115,25 +119,35 @@ The SPARC methodology enforces strict proto compliance with zero exceptions:
 
 ## Implementation Phases
 
-### Phase 1: Proto-Only Foundation (Week 1)
-- Rewrite EventBus with proto-only support
-- Remove all Vec<u8> code paths
-- Implement strict validation
+### Phase 1: Data-Staging Foundation (Week 1)
+- Create Data-Staging service
+- Implement Redis consumer for raw JSON
+- Build JSON to proto transformation
 
-### Phase 2: Service Integration (Weeks 2-3)
-- Rewrite all services for proto compliance
-- No compatibility bridges needed
-- Direct proto integration
+### Phase 2: Data-Staging Integration (Week 2)
+- Connect Data-Staging to EventBus
+- Implement quality scoring
+- Add DLQ for invalid data
 
-### Phase 3: Performance & Hardening (Week 4)
-- Zero-copy optimizations
-- Performance validation
-- Security hardening
+### Phase 3: EventBus Proto-Only (Week 3)
+- Update EventBus to reject all non-proto
+- Remove any JSON compatibility code
+- Enforce strict proto validation
 
-### Phase 4: Production Deployment (Week 5)
-- Complete system validation
-- Production deployment
-- Phase 5 preparation
+### Phase 4: Consumer Migration (Week 4)
+- Update all consumers to proto
+- Remove JSON parsing from ML-Ops
+- Update Execution for proto messages
+
+### Phase 5: Production Hardening (Week 5)
+- End-to-end testing
+- Performance optimization
+- Monitoring and alerting
+
+### Phase 6: Deployment (Week 6)
+- Deploy Data-Staging service
+- Monitor quality metrics
+- Complete migration
 
 ## Success Metrics
 - ✅ **100% proto compliance** - ZERO non-proto messages allowed
@@ -148,7 +162,7 @@ The SPARC methodology enforces strict proto compliance with zero exceptions:
 2. Allocate development resources
 3. Begin Phase 1 implementation
 4. Set up CI/CD pipeline for proto compilation
-5. Create feature flags for gradual rollout
+
 
 ## References
 - [Phase 4 EventBus Specification](../README.md)

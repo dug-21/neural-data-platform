@@ -28,6 +28,42 @@ This guide provides instructions for migrating EventBus consumers from JSON-base
 
 **No dual-format period. No JSON fallback. Use proto or your messages will be rejected.**
 
+## Migration Steps (UPDATED)
+
+### Phase 1: Deploy Data-Staging Service
+1. **Deploy Data-Staging** alongside existing infrastructure
+2. **Configure Redis subscription** to raw data channels
+3. **Verify proto conversion** works correctly
+4. **Monitor quality metrics** 
+
+### Phase 2: Update EventBus Consumers
+1. **All consumers MUST** expect proto-only messages
+2. **Remove any JSON parsing** code from consumers
+3. **Update to use generated proto classes**
+
+### Phase 3: Cut Over
+1. **Data-Staging goes live** consuming from Redis
+2. **EventBus accepts ONLY** proto from Data-Staging
+3. **Stop any direct Redis→EventBus paths**
+4. **Monitor for rejected messages**
+
+## Architecture After Migration
+```
+Data-Ingestion (unchanged) → Redis (raw JSON)
+                                ↓
+                        Data-Staging (NEW)
+                                ↓ (proto only)
+                            EventBus
+                                ↓
+                        All Consumers (proto)
+```
+
+## Key Points
+- Data-Ingestion remains unchanged (still publishes JSON)
+- Data-Staging is the ONLY path to EventBus
+- EventBus is proto-only, no exceptions
+- Clear separation: raw data (Redis) vs structured (EventBus)
+
 ## Step-by-Step Migration
 
 ### Prerequisites

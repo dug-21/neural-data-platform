@@ -1267,4 +1267,225 @@ time_compilation("Proto compilation", || {
 - **Reliability**: Build fails fast on proto issues
 - **Maintenance**: Single code path to maintain
 
+## Data-Staging Service Build Configuration (NEW)
+
+### Overview
+
+The Data-Staging Service is a new component in Phase 4 that requires Protocol Buffer compilation for EventEnvelope integration and market data processing. This service MUST compile proto files - there are no feature flags for optional proto support.
+
+### Cargo.toml for data-staging
+
+```toml
+[package]
+name = "data-staging"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Core dependencies
+neural-core = { path = "../neural-core" }
+tokio = { version = "1.35", features = ["full"] }
+redis = { version = "0.25", features = ["tokio-comp", "aio", "streams"] }
+
+# Proto dependencies (REQUIRED - no feature flags)
+tonic = "0.10"
+prost = "0.12"
+prost-types = "0.12"
+
+# JSON parsing for raw data
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Monitoring
+prometheus = "0.13"
+tracing = "0.1"
+
+[build-dependencies]
+tonic-build = "0.10"
+```
+
+### build.rs for data-staging
+
+```rust
+//! Build script for data-staging service proto compilation
+//! 
+//! This script compiles Protocol Buffer files for EventEnvelope and market data.
+//! Proto compilation is MANDATORY - the service cannot be built without proto support.
+
+use std::env;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Proto compilation is MANDATORY - build fails without it
+    println!("cargo:warning=Compiling Protocol Buffers for data-staging - REQUIRED for build");
+    
+    // Ensure protoc is available - fail build if not
+    if !check_protoc_available() {
+        return Err("Protocol Buffer compiler (protoc) is required but not found. Install with: apt-get install protobuf-compiler".into());
+    }
+    
+    // Set up rerun triggers
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=../schemas/ingestion-eventbus.proto");
+    println!("cargo:rerun-if-changed=../proto/market_data.proto");
+    
+    // Compile proto files for EventEnvelope and market data
+    tonic_build::configure()
+        .build_server(true)
+        .build_client(true)
+        .type_attribute(".", "#[derive(Clone, PartialEq)]")
+        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(".", "#[serde(rename_all = \"camelCase\")]")
+        .field_attribute(".", "#[serde(skip_serializing_if = \"Option::is_none\")]")
+        .extern_path(".google.protobuf.Any", "::prost_types::Any")
+        .extern_path(".google.protobuf.Timestamp", "::prost_types::Timestamp")
+        .extern_path(".google.protobuf.Duration", "::prost_types::Duration")
+        .extern_path(".google.protobuf.Empty", "::prost_types::Empty")
+        .compile(
+            &["../schemas/ingestion-eventbus.proto",
+              "../proto/market_data.proto"],
+            &["../schemas", "../proto"]
+        ).map_err(|e| format!("FATAL: Proto compilation failed: {}. Build cannot continue.", e))?;
+    
+    println!("cargo:warning=Data-staging proto compilation completed successfully");
+    
+    Ok(())
+}
+
+// Helper function to check if protoc is available
+fn check_protoc_available() -> bool {
+    std::process::Command::new("protoc")
+        .arg("--version")
+        .output()
+        .is_ok()
+}
+```
+
+### Integration with Neural-Core
+
+The data-staging service integrates with neural-core's EventBus system through shared proto definitions:
+
+```rust
+// src/lib.rs - data-staging service
+pub mod generated {
+    // Generated proto code (always available)
+    include!(concat!(env!("OUT_DIR"), "/neural_trader.interfaces.ingestion.rs"));
+    include!(concat!(env!("OUT_DIR"), "/neural_trader.market_data.rs"));
+}
+
+use generated::*;
+use neural_core::eventbus::{Event, EventBus};
+
+// EventBus integration for data staging
+impl Event for event_envelope::EventEnvelope {
+    fn event_id(&self) -> &str {
+        &self.message_id
+    }
+    
+    fn event_type(&self) -> &str {
+        &self.event_type
+    }
+    
+    fn timestamp(&self) -> chrono::DateTime<chrono::Utc> {
+        self.created_at
+            .as_ref()
+            .map(|ts| chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32))
+            .flatten()
+            .unwrap_or_else(chrono::Utc::now)
+    }
+}
+```
+
+### Directory Structure
+
+```
+data-staging/
+├── Cargo.toml                     # Package config with proto deps
+├── build.rs                       # Proto compilation script
+├── src/
+│   ├── lib.rs                     # Main service with proto integration
+│   ├── staging.rs                 # Data staging logic
+│   ├── redis_client.rs           # Redis integration
+│   └── metrics.rs                # Prometheus metrics
+└── target/
+    └── debug/build/data-staging-*/
+        └── out/
+            ├── neural_trader.interfaces.ingestion.rs  # EventEnvelope types
+            └── neural_trader.market_data.rs           # Market data types
+```
+
+### Required Proto Files
+
+The data-staging service requires these proto files to exist:
+
+1. **`../schemas/ingestion-eventbus.proto`** - EventEnvelope definition
+2. **`../proto/market_data.proto`** - Market data types
+
+If either file is missing, the build will fail intentionally.
+
+### CI/CD Integration
+
+Add data-staging to proto validation workflow:
+
+```yaml
+# .github/workflows/proto-validation.yml (addition)
+- name: Build Data-Staging Service
+  run: |
+    cd data-staging
+    cargo build
+    # Proto is always compiled for data-staging
+    
+- name: Test Data-Staging Proto Integration
+  run: |
+    cd data-staging
+    cargo test
+    # Tests proto message parsing and EventBus integration
+```
+
+### Error Handling
+
+The data-staging service follows the same error handling pattern as neural-core:
+
+```rust
+// Build script error handling
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // ... setup code ...
+    
+    tonic_build::configure()
+        // ... configuration ...
+        .compile(&proto_files, &include_paths)
+        .map_err(|e| {
+            eprintln!("Data-staging proto compilation failed:");
+            eprintln!("Error: {}", e);
+            eprintln!("Required files:");
+            eprintln!("  - ../schemas/ingestion-eventbus.proto");
+            eprintln!("  - ../proto/market_data.proto");
+            eprintln!("Ensure protoc is installed and files exist.");
+            format!("FATAL: Proto compilation failed: {}", e)
+        })?;
+    
+    Ok(())
+}
+```
+
+### Development Commands
+
+```bash
+# Build data-staging with proto compilation (MANDATORY)
+cd data-staging
+cargo build
+
+# Test proto integration
+cargo test
+
+# Clean and rebuild
+cargo clean && cargo build
+
+# Validate proto files exist
+ls -la ../schemas/ingestion-eventbus.proto ../proto/market_data.proto
+```
+
+The data-staging service is now fully integrated into the EventBus ecosystem with mandatory Protocol Buffer compilation, ensuring type safety and consistent event handling across all services.
+
+---
+
 This comprehensive build.rs configuration provides a robust foundation for Protocol Buffer compilation in the neural-core EventBus system, with mandatory proto compilation, proper error handling, incremental compilation, and CI/CD integration.
