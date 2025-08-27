@@ -6,6 +6,7 @@
 // Module declarations - each module is <500 lines as per requirements
 pub mod errors;
 pub mod eventbus;
+pub mod proto;
 pub mod events;
 pub mod interfaces;
 pub mod traits;
