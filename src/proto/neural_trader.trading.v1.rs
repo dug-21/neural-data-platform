@@ -556,6 +556,7 @@ pub struct TradingError {
     #[prost(int32, tag = "5")]
     pub retry_after_seconds: i32,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum OrderSide {
@@ -585,6 +586,7 @@ impl OrderSide {
         }
     }
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum OrderType {
@@ -620,6 +622,7 @@ impl OrderType {
         }
     }
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum OrderState {
@@ -1341,7 +1344,7 @@ pub mod trading_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         > {
             self.inner
@@ -1371,7 +1374,7 @@ pub mod trading_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         > {
             self.inner
@@ -1500,14 +1503,14 @@ pub mod trading_service_server {
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         >;
         async fn get_service_metrics(
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         >;
     }
@@ -2292,7 +2295,7 @@ pub mod trading_service_server {
                     struct GetServiceHealthSvc<T: TradingService>(pub Arc<T>);
                     impl<T: TradingService> tonic::server::UnaryService<()>
                     for GetServiceHealthSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceHealth;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceHealth;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -2334,7 +2337,7 @@ pub mod trading_service_server {
                     struct GetServiceMetricsSvc<T: TradingService>(pub Arc<T>);
                     impl<T: TradingService> tonic::server::UnaryService<()>
                     for GetServiceMetricsSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceMetrics;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceMetrics;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,

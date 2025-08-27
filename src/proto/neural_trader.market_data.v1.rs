@@ -8,7 +8,9 @@ pub struct StreamRequest {
     #[prost(enumeration = "DataType", repeated, tag = "2")]
     pub data_types: ::prost::alloc::vec::Vec<i32>,
     #[prost(message, optional, tag = "3")]
-    pub filter: ::core::option::Option<super::super::common::v1::DataFilter>,
+    pub filter: ::core::option::Option<
+        crate::proto::neural_trader_common_v1::DataFilter,
+    >,
     #[prost(int32, tag = "4")]
     pub buffer_size: i32,
 }
@@ -264,6 +266,7 @@ pub struct MarketDataError {
     pub retry_after_seconds: i32,
 }
 /// Enums
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum DataType {
@@ -596,7 +599,7 @@ pub mod market_data_service_client {
             &mut self,
             request: impl tonic::IntoRequest<super::ValidationRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ValidationResponse>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ValidationResponse>,
             tonic::Status,
         > {
             self.inner
@@ -627,7 +630,7 @@ pub mod market_data_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         > {
             self.inner
@@ -657,7 +660,7 @@ pub mod market_data_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         > {
             self.inner
@@ -739,7 +742,7 @@ pub mod market_data_service_server {
             &self,
             request: tonic::Request<super::ValidationRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ValidationResponse>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ValidationResponse>,
             tonic::Status,
         >;
         /// Health and metrics
@@ -747,14 +750,14 @@ pub mod market_data_service_server {
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         >;
         async fn get_service_metrics(
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         >;
     }
@@ -1091,7 +1094,7 @@ pub mod market_data_service_server {
                         T: MarketDataService,
                     > tonic::server::UnaryService<super::ValidationRequest>
                     for ValidateDataFeedSvc<T> {
-                        type Response = super::super::super::common::v1::ValidationResponse;
+                        type Response = crate::proto::neural_trader_common_v1::ValidationResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -1139,7 +1142,7 @@ pub mod market_data_service_server {
                     struct GetServiceHealthSvc<T: MarketDataService>(pub Arc<T>);
                     impl<T: MarketDataService> tonic::server::UnaryService<()>
                     for GetServiceHealthSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceHealth;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceHealth;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -1184,7 +1187,7 @@ pub mod market_data_service_server {
                     struct GetServiceMetricsSvc<T: MarketDataService>(pub Arc<T>);
                     impl<T: MarketDataService> tonic::server::UnaryService<()>
                     for GetServiceMetricsSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceMetrics;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceMetrics;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,

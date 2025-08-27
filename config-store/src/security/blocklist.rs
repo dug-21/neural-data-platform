@@ -1,6 +1,5 @@
 use crate::{ConfigValue, ConfigError};
 use regex::Regex;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct SecretBlocker {

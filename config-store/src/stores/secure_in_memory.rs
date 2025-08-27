@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use crate::traits::{ConfigStore, path_utils};
+use crate::traits::ConfigStore;
 use crate::types::{
     ConfigValue, ConfigError, ConfigTree, ConfigNode, ConfigVersion, 
     ConfigSnapshot

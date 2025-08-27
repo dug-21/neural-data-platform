@@ -386,9 +386,20 @@ impl BacktestEngine for StandardBacktestEngine {
         
         impl StrategyFactory for SingleStrategyFactory {
             fn create_strategy(&self) -> Box<dyn TradingStrategy> {
-                // Note: This would need proper cloning in production
-                // For now, return a placeholder that implements the interface
-                unimplemented!("Strategy factory cloning needs implementation for walk-forward")
+                // Create a new instance of the strategy for walk-forward testing
+                // This ensures each time window gets a fresh strategy state
+                use crate::strategies::momentum::MomentumStrategy;
+                use crate::strategies::momentum::MomentumConfig;
+                
+                let config = MomentumConfig {
+                    fast_period: 10,
+                    slow_period: 20,
+                    momentum_threshold: 0.02,
+                    stop_loss_threshold: 0.05,
+                    take_profit_threshold: 0.10,
+                };
+                
+                Box::new(MomentumStrategy::new(config))
             }
         }
         

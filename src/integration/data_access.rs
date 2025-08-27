@@ -426,9 +426,20 @@ impl DataAccessLayer {
 
     /// Health check for the data access layer
     pub async fn health_check(&self) -> Result<bool> {
-        // TODO: Implement proper health checks for storage and cache
-        // For now, return true if we have valid references
-        Ok(true)
+        // Check storage availability
+        let storage_healthy = match &self.storage {
+            Some(_) => true, // Storage exists, assume healthy for basic check
+            None => false,
+        };
+
+        // Check cache availability  
+        let cache_healthy = match &self.cache {
+            Some(_) => true, // Cache exists, assume healthy for basic check
+            None => true,    // Cache is optional
+        };
+
+        // Return overall health status
+        Ok(storage_healthy && cache_healthy)
     }
 
     /// Get performance metrics
