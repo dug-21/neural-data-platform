@@ -16,7 +16,7 @@ use uuid::Uuid;
 use super::{
     ArtifactInfo, ArtifactType, ModelAccessControl, ModelComparison, ModelInfo, ModelLineage,
     ModelRegistryConfig, ModelRegistryTrait, ModelSearchCriteria, ModelStatus, Permission,
-    RegistryStats,
+    RegistryStats, ModelType, ModelMetrics,
 };
 use super::storage::{ModelStorage, ModelVersion, VersionIncrement};
 
@@ -673,14 +673,14 @@ impl ModelRegistry {
             id: metadata.id,
             name: metadata.name,
             version: metadata.version,
-            model_type: super::ModelType::Custom(metadata.model_type),
+            model_type: ModelType::Custom(metadata.model_type),
             status: ModelStatus::Draft, // Default for imported models
             created_at: metadata.created_at,
             updated_at: Utc::now(),
             created_by: metadata.created_by,
             description: metadata.description,
             tags: metadata.tags,
-            metrics: super::ModelMetrics::default(), // Would deserialize from JSON
+            metrics: ModelMetrics::default(), // Would deserialize from JSON
             artifacts: metadata.artifacts,
         })
     }
@@ -823,14 +823,14 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             version: "1.0.0".to_string(),
-            model_type: super::ModelType::NeuralNetwork,
+            model_type: ModelType::NeuralNetwork,
             status: ModelStatus::Draft,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             created_by: Some("test-user".to_string()),
             description: Some("Test model".to_string()),
             tags: vec!["test".to_string()],
-            metrics: super::ModelMetrics::default(),
+            metrics: ModelMetrics::default(),
             artifacts: HashMap::new(),
         };
         
@@ -852,14 +852,14 @@ mod tests {
                 id: format!("test-model-{}", i),
                 name: format!("Test Model {}", i),
                 version: "1.0.0".to_string(),
-                model_type: super::ModelType::NeuralNetwork,
+                model_type: ModelType::NeuralNetwork,
                 status: ModelStatus::Draft,
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
                 created_by: None,
                 description: None,
                 tags: vec!["test".to_string()],
-                metrics: super::ModelMetrics::default(),
+                metrics: ModelMetrics::default(),
                 artifacts: HashMap::new(),
             };
             

@@ -7,6 +7,20 @@ pub mod publisher;
 
 pub use publisher::{EventPublisher};
 
+// Type aliases for backward compatibility  
+pub type MLProtoEvent = MLEvent;
+pub type MLProtoEventType = MLEventType;
+
+/// Proto channel configuration for ML operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtoChannelConfig {
+    pub training: String,
+    pub inference: String,
+    pub model_lifecycle: String,
+    pub feature_engineering: String,
+    pub monitoring: String,
+}
+
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

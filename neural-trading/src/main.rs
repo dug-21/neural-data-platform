@@ -5,66 +5,14 @@ use std::sync::Arc;
 use tokio::signal;
 use tracing::{info, error};
 
-mod daa;
-mod execution;
-mod risk;
-mod inference;
-mod events;
+use neural_trading::{TradingConfig, ExecutionParams};
+use neural_trading::events::consumer::EventConsumer;
+use neural_trading::daa::coordinator::DAACoordinator;
+use neural_trading::execution::engine::ExecutionEngine;
+use neural_trading::risk::manager::RiskManager;
+use neural_trading::inference::predictor::NeuralPredictor;
 
-use daa::coordinator::DAACoordinator;
-use execution::engine::ExecutionEngine;
-use risk::manager::RiskManager;
-use inference::predictor::NeuralPredictor;
-use events::consumer::EventConsumer;
-
-#[derive(Debug, Clone)]
-pub struct TradingConfig {
-    pub redis_url: String,
-    pub postgres_url: String,
-    pub broker_endpoint: String,
-    pub neural_model_path: String,
-    pub risk_limits: RiskLimits,
-    pub execution_params: ExecutionParams,
-}
-
-#[derive(Debug, Clone)]
-pub struct RiskLimits {
-    pub max_position_size: f64,
-    pub max_daily_loss: f64,
-    pub max_drawdown: f64,
-    pub max_correlation_exposure: f64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ExecutionParams {
-    pub order_timeout_ms: u64,
-    pub max_slippage_bps: u32,
-    pub min_confidence_threshold: f64,
-    pub max_orders_per_minute: u32,
-}
-
-impl Default for TradingConfig {
-    fn default() -> Self {
-        Self {
-            redis_url: "redis://localhost:6379".to_string(),
-            postgres_url: "postgresql://localhost/neural_trader".to_string(),
-            broker_endpoint: "http://localhost:8080".to_string(),
-            neural_model_path: "./models/trading_model.safetensors".to_string(),
-            risk_limits: RiskLimits {
-                max_position_size: 0.05,
-                max_daily_loss: 0.02,
-                max_drawdown: 0.10,
-                max_correlation_exposure: 0.20,
-            },
-            execution_params: ExecutionParams {
-                order_timeout_ms: 30000,
-                max_slippage_bps: 20,
-                min_confidence_threshold: 0.65,
-                max_orders_per_minute: 10,
-            },
-        }
-    }
-}
+// Types moved to lib.rs
 
 #[tokio::main]
 async fn main() -> Result<()> {
