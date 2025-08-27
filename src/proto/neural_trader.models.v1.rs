@@ -379,7 +379,9 @@ pub struct ListModelsRequest {
     #[prost(message, optional, tag = "1")]
     pub filter: ::core::option::Option<ModelFilter>,
     #[prost(message, optional, tag = "2")]
-    pub pagination: ::core::option::Option<super::super::common::v1::PaginationRequest>,
+    pub pagination: ::core::option::Option<
+        crate::proto::neural_trader_common_v1::PaginationRequest,
+    >,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -406,7 +408,9 @@ pub struct ModelList {
     #[prost(message, repeated, tag = "1")]
     pub models: ::prost::alloc::vec::Vec<ModelSummary>,
     #[prost(message, optional, tag = "2")]
-    pub pagination: ::core::option::Option<super::super::common::v1::PaginationResponse>,
+    pub pagination: ::core::option::Option<
+        crate::proto::neural_trader_common_v1::PaginationResponse,
+    >,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -595,6 +599,7 @@ pub struct ModelError {
     #[prost(bool, tag = "4")]
     pub retryable: bool,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum TrainingStage {
@@ -639,6 +644,7 @@ impl TrainingStage {
         }
     }
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum ModelType {
@@ -686,6 +692,7 @@ impl ModelType {
         }
     }
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum DeploymentStatus {
@@ -1282,7 +1289,7 @@ pub mod model_management_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         > {
             self.inner
@@ -1312,7 +1319,7 @@ pub mod model_management_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         > {
             self.inner
@@ -1439,14 +1446,14 @@ pub mod model_management_service_server {
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         >;
         async fn get_service_metrics(
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         >;
     }
@@ -2173,7 +2180,7 @@ pub mod model_management_service_server {
                     struct GetServiceHealthSvc<T: ModelManagementService>(pub Arc<T>);
                     impl<T: ModelManagementService> tonic::server::UnaryService<()>
                     for GetServiceHealthSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceHealth;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceHealth;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -2218,7 +2225,7 @@ pub mod model_management_service_server {
                     struct GetServiceMetricsSvc<T: ModelManagementService>(pub Arc<T>);
                     impl<T: ModelManagementService> tonic::server::UnaryService<()>
                     for GetServiceMetricsSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceMetrics;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceMetrics;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,

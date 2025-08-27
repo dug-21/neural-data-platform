@@ -261,7 +261,7 @@ impl ModelServingServer {
         let validation_metrics = ModelMetrics {
             mse: val_mse,
             mae: val_mse.sqrt(),
-            directional_accuracy: 0.0, // TODO: Calculate
+            directional_accuracy: self.calculate_directional_accuracy(&predictions, &validation_errors),
             sharpe_ratio: 0.0,
             max_drawdown: 0.0,
             training_epochs: training_metrics.training_epochs,
@@ -339,6 +339,23 @@ impl ModelServingServer {
         } else {
             Ok(None)
         }
+    }
+
+    /// Calculate directional accuracy - percentage of correct directional predictions
+    fn calculate_directional_accuracy(&self, predictions: &[f32], actual_deltas: &[f32]) -> f32 {
+        if predictions.len() != actual_deltas.len() || predictions.is_empty() {
+            return 0.0;
+        }
+
+        let correct_directions = predictions.iter()
+            .zip(actual_deltas.iter())
+            .filter(|(pred, actual)| {
+                // Both positive or both negative (same direction)
+                (**pred > 0.0 && **actual > 0.0) || (**pred < 0.0 && **actual < 0.0)
+            })
+            .count();
+
+        correct_directions as f32 / predictions.len() as f32 * 100.0
     }
 }
 

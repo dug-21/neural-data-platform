@@ -84,7 +84,7 @@ impl RedisAdapter {
         let client = client.as_ref().clone();
 
         let pubsub_conn = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| AdapterError::Connection(e.to_string()))?
             .into_pubsub();

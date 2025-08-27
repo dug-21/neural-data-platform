@@ -345,10 +345,15 @@ pub struct HealthCheckerFactory;
 
 impl HealthCheckerFactory {
     /// Create a database health checker
-    pub fn create_database_checker(_connection_string: &str) -> Result<Box<dyn HealthChecker>> {
+    pub fn create_database_checker(connection_string: &str) -> Result<Box<dyn HealthChecker>> {
         // In real implementation, this would create a proper connection pool
-        // For now, we'll return a placeholder
-        todo!("Implement actual database connection")
+        // For now, return a health checker that reports connection status
+        use sqlx::PgPool;
+        let rt = tokio::runtime::Handle::current();
+        let pool = rt.block_on(async {
+            PgPool::connect(connection_string).await
+        })?;
+        Ok(Box::new(DatabaseHealthChecker::new(pool)))
     }
 
     /// Create a Redis health checker

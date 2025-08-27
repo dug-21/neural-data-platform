@@ -139,7 +139,7 @@ pub struct TradingAccount {
     pub realized_pnl: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RiskLimits {
     pub max_position_size: f64,        // Maximum position size as % of portfolio
     pub max_daily_loss: f64,           // Maximum daily loss limit

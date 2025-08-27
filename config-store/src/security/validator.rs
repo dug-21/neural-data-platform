@@ -1,6 +1,5 @@
 use crate::{ConfigValue, ConfigError};
 use regex::Regex;
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
 static KEY_PATTERN: Lazy<Regex> = Lazy::new(|| {

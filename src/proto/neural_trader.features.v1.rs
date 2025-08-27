@@ -9,7 +9,9 @@ pub struct FeatureRequest {
     #[prost(message, repeated, tag = "3")]
     pub indicators: ::prost::alloc::vec::Vec<IndicatorRequest>,
     #[prost(message, optional, tag = "4")]
-    pub window: ::core::option::Option<super::super::common::v1::TimeWindow>,
+    pub window: ::core::option::Option<
+        crate::proto::neural_trader_common_v1::TimeWindow,
+    >,
     #[prost(map = "string, string", tag = "5")]
     pub parameters: ::std::collections::HashMap<
         ::prost::alloc::string::String,
@@ -573,7 +575,7 @@ pub mod feature_engineering_service_client {
             &mut self,
             request: impl tonic::IntoRequest<super::PipelineConfig>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ValidationResponse>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ValidationResponse>,
             tonic::Status,
         > {
             self.inner
@@ -692,7 +694,7 @@ pub mod feature_engineering_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         > {
             self.inner
@@ -722,7 +724,7 @@ pub mod feature_engineering_service_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         > {
             self.inner
@@ -784,7 +786,7 @@ pub mod feature_engineering_service_server {
             &self,
             request: tonic::Request<super::PipelineConfig>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ValidationResponse>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ValidationResponse>,
             tonic::Status,
         >;
         async fn get_feature_metadata(
@@ -808,14 +810,14 @@ pub mod feature_engineering_service_server {
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceHealth>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceHealth>,
             tonic::Status,
         >;
         async fn get_service_metrics(
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<
-            tonic::Response<super::super::super::common::v1::ServiceMetrics>,
+            tonic::Response<crate::proto::neural_trader_common_v1::ServiceMetrics>,
             tonic::Status,
         >;
     }
@@ -1062,7 +1064,7 @@ pub mod feature_engineering_service_server {
                         T: FeatureEngineeringService,
                     > tonic::server::UnaryService<super::PipelineConfig>
                     for ValidateFeaturePipelineSvc<T> {
-                        type Response = super::super::super::common::v1::ValidationResponse;
+                        type Response = crate::proto::neural_trader_common_v1::ValidationResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -1264,7 +1266,7 @@ pub mod feature_engineering_service_server {
                     struct GetServiceHealthSvc<T: FeatureEngineeringService>(pub Arc<T>);
                     impl<T: FeatureEngineeringService> tonic::server::UnaryService<()>
                     for GetServiceHealthSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceHealth;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceHealth;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -1311,7 +1313,7 @@ pub mod feature_engineering_service_server {
                     );
                     impl<T: FeatureEngineeringService> tonic::server::UnaryService<()>
                     for GetServiceMetricsSvc<T> {
-                        type Response = super::super::super::common::v1::ServiceMetrics;
+                        type Response = crate::proto::neural_trader_common_v1::ServiceMetrics;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
