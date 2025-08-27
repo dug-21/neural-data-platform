@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Domain-agnostic ML Operations platform with neural training coordination"
 
+[lib]
+name = "neural_ml_ops"
+path = "src/lib.rs"
+
 [[bin]]
 name = "neural-ml-ops"
 path = "src/main.rs"
@@ -25,9 +29,12 @@ futures = "0.3"
 # Configuration
 config-store = { path = "../config-store" }
 
-# Neural core (optional for now since paths may not exist)
-# neural-core = { path = "../vendor/neural-core", optional = true }
-# ruv-fann = { path = "../vendor/ruv-fann", optional = true }
+# Neural core - required for EventBus integration
+# neural-core = { path = "../neural-core" }
+
+# Protobuf dependencies
+prost = "0.12"
+prost-types = "0.12"
 
 # Data structures
 dashmap = "6.0"

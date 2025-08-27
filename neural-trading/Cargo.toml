@@ -7,6 +7,10 @@ edition = "2021"
 name = "neural-trading"
 path = "src/main.rs"
 
+[lib]
+name = "neural_trading"
+path = "src/lib.rs"
+
 [dependencies]
 # Core dependencies
 tokio = { version = "1.0", features = ["full"] }
@@ -20,14 +24,8 @@ anyhow = "1.0"
 thiserror = "1.0"
 async-trait = "0.1"
 
-# Neural network dependencies (using compatible versions)
-# candle-core = "0.6"
-# candle-nn = "0.6"
-# candle-transformers = "0.6"
-
 # Data processing
 ndarray = "0.15"
-# numpy = "0.21"
 
 # Trading specific
 ta = "0.5"
@@ -51,9 +49,6 @@ opentelemetry = "0.25"
 
 # Add missing dependencies for compilation
 rand = "0.8"
-
-# Note: Removing neural-core dependency to make this standalone
-# neural-core = { path = "../neural-core" }
 
 [dev-dependencies]
 tokio-test = "0.4"
