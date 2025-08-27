@@ -5,6 +5,7 @@ members = [
     "neural-core",
     "neural-trading",
     "neural-ml-ops",
+    "data-staging",
     # other future v2 components
 ]
 exclude = [
