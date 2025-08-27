@@ -1,0 +1,37 @@
+[run]
+source = tests
+branch = True
+omit = 
+    */venv/*
+    */env/*
+    */site-packages/*
+    */lib/python*/*
+    */__pycache__/*
+    */migrations/*
+    */node_modules/*
+    */test_*
+    *_test.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if settings.DEBUG
+    raise AssertionError
+    raise NotImplementedError
+    if 0:
+    if __name__ == .__main__.:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod
+
+show_missing = True
+skip_covered = False
+precision = 2
+
+[html]
+directory = coverage/html
+title = Config-Store Integration Test Coverage Report
+
+[xml]
+output = coverage/coverage.xml

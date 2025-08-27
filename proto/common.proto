@@ -1,0 +1,81 @@
+syntax = "proto3";
+package neural_trader.common.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Common data structures used across services
+
+// Time window specification
+message TimeWindow {
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+  int32 max_points = 3;
+}
+
+// Service health status
+message ServiceHealth {
+  bool is_healthy = 1;
+  double latency_ms = 2;
+  string version = 3;
+  google.protobuf.Timestamp last_check = 4;
+  repeated string warnings = 5;
+  map<string, string> metadata = 6;
+}
+
+// Service metrics
+message ServiceMetrics {
+  uint64 requests_total = 1;
+  uint64 requests_failed = 2;
+  double average_latency_ms = 3;
+  double p95_latency_ms = 4;
+  double p99_latency_ms = 5;
+  google.protobuf.Timestamp collection_time = 6;
+  map<string, double> custom_metrics = 7;
+}
+
+// Generic validation response
+message ValidationResponse {
+  bool is_valid = 1;
+  repeated string errors = 2;
+  repeated string warnings = 3;
+  double confidence_score = 4;
+}
+
+// Common error codes
+enum CommonErrorCode {
+  COMMON_ERROR_UNSPECIFIED = 0;
+  INVALID_REQUEST = 1;
+  RESOURCE_NOT_FOUND = 2;
+  PERMISSION_DENIED = 3;
+  RATE_LIMIT_EXCEEDED = 4;
+  SERVICE_UNAVAILABLE = 5;
+  TIMEOUT = 6;
+  INTERNAL_ERROR = 7;
+}
+
+message CommonError {
+  CommonErrorCode code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+  bool retryable = 4;
+  int32 retry_after_seconds = 5;
+}
+
+// Data filter for queries
+message DataFilter {
+  repeated string symbols = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  map<string, string> attributes = 4;
+}
+
+// Generic pagination
+message PaginationRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message PaginationResponse {
+  string next_page_token = 1;
+  int32 total_count = 2;
+}

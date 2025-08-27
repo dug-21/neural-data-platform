@@ -25,6 +25,7 @@
 - `/config` - Configuration files
 - `/scripts` - Utility scripts
 - `/examples` - Example code
+- `product/features/xxx` - for feature specific development, planning, implementation status/report filess
 
 ## Project Overview
 
@@ -33,16 +34,21 @@ This project uses SPARC (Specification, Pseudocode, Architecture, Refinement, Co
 ## SPARC Commands
 
 ### Core Commands
-- `claude-flow sparc modes` - List available modes
-- `claude-flow sparc run <mode> "<task>"` - Execute specific mode
-- `claude-flow sparc tdd "<feature>"` - Run complete TDD workflow
-- `claude-flow sparc info <mode>` - Get mode details
+- `npx claude-flow sparc modes` - List available modes
+- `npx claude-flow sparc run <mode> "<task>"` - Execute specific mode
+- `npx claude-flow sparc tdd "<feature>"` - Run complete TDD workflow
+- `npx claude-flow sparc info <mode>` - Get mode details
 
 ### Batchtools Commands
-- `claude-flow sparc batch <modes> "<task>"` - Parallel execution
-- `claude-flow sparc pipeline "<task>"` - Full pipeline processing
-- `claude-flow sparc concurrent <mode> "<tasks-file>"` - Multi-task processing
+- `npx claude-flow sparc batch <modes> "<task>"` - Parallel execution
+- `npx claude-flow sparc pipeline "<task>"` - Full pipeline processing
+- `npx claude-flow sparc concurrent <mode> "<tasks-file>"` - Multi-task processing
 
+### Build Commands
+- `npm run build` - Build project
+- `npm run test` - Run tests
+- `npm run lint` - Linting
+- `npm run typecheck` - Type checking
 
 ## SPARC Workflow Phases
 
@@ -63,7 +69,7 @@ This project uses SPARC (Specification, Pseudocode, Architecture, Refinement, Co
 ## 🚀 Available Agents (54 Total)
 
 ### Core Development
-`coder`, `reviewer`, `tester`, `planner`, `researcher`, `production-validator`
+`coder`, `reviewer`, `tester`, `planner`, `researcher`, `architect`
 
 ### Swarm Coordination
 `hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`, `collective-intelligence-coordinator`, `swarm-memory-manager`
@@ -116,7 +122,7 @@ This project uses SPARC (Specification, Pseudocode, Architecture, Refinement, Co
 
 ```bash
 # Add Claude Flow MCP server
-claude mcp add claude-flow claude-flow mcp start
+claude mcp add claude-flow npx claude-flow@alpha mcp start
 ```
 
 ## MCP Tool Categories
@@ -142,20 +148,20 @@ claude mcp add claude-flow claude-flow mcp start
 
 **1️⃣ BEFORE Work:**
 ```bash
-claude-flow hooks pre-task --description "[task]"
-claude-flow hooks session-restore --session-id "swarm-[id]"
+npx claude-flow@alpha hooks pre-task --description "[task]"
+npx claude-flow@alpha hooks session-restore --session-id "swarm-[id]"
 ```
 
 **2️⃣ DURING Work:**
 ```bash
-claude-flow hooks post-edit --file "[file]" --memory-key "swarm/[agent]/[step]"
-claude-flow hooks notify --message "[what was done]"
+npx claude-flow@alpha hooks post-edit --file "[file]" --memory-key "swarm/[agent]/[step]"
+npx claude-flow@alpha hooks notify --message "[what was done]"
 ```
 
 **3️⃣ AFTER Work:**
 ```bash
-claude-flow hooks post-task --task-id "[task]"
-claude-flow hooks session-end --export-metrics true
+npx claude-flow@alpha hooks post-task --task-id "[task]"
+npx claude-flow@alpha hooks session-end --export-metrics true
 ```
 
 ## 🎯 Concurrent Execution Examples

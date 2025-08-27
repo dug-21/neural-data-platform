@@ -205,6 +205,63 @@ services:
       - "neural-trader.service.type=cache"
       - "neural-trader.service.tier=data"
 
+  config-store:
+    image: neural-trader/config-store:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: ./docker/base/Dockerfile.config-store
+      target: production
+      args:
+        - RUST_VERSION=1.75
+    container_name: neural-trader-config-store
+    hostname: config-store
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: ${LOG_LEVEL:-info}
+      CONFIG_NAMESPACE: neural-platform
+      ENABLE_HOT_RELOAD: true
+      CACHE_TTL_SECONDS: 300
+      VALIDATION_MODE: strict
+    volumes:
+      - shared_config:/opt/config-store/config:ro
+      - log_data:/var/log/config-store:rw
+    networks:
+      backend:
+        ipv4_address: 172.21.0.12
+      monitoring:
+        ipv4_address: 172.22.0.12
+    ports:
+      - "127.0.0.1:8003:8003"  # gRPC API
+      - "127.0.0.1:9094:9094"  # Metrics
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=localhost:8003"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=100m
+    labels:
+      - "neural-trader.service.type=config-store"
+      - "neural-trader.service.tier=data"
+
   # --------------------------------------------------------------------------
   # Compute Layer Services
   # --------------------------------------------------------------------------
@@ -296,21 +353,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      config-store:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
+      CONFIG_STORE_URL: http://config-store:8003
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      PRIMARY_PROVIDER: ${PRIMARY_PROVIDER:-alpaca}
-      SYMBOLS: ${TRADING_SYMBOLS_PRIMARY:-AAPL,MSFT,GOOGL,AMZN,NVDA}
-      UPDATE_INTERVAL: ${UPDATE_INTERVAL:-60s}
+      CONFIG_NAMESPACE: neural-trading/data-ingestion
       CONFIG_PATH: /opt/data-ingestion/config
       DATA_PATH: /opt/data-ingestion/data
-      # API Keys
+      # API Keys - loaded from environment, not config-store
       ALPACA_API_KEY: ${ALPACA_API_KEY}
       ALPACA_API_SECRET: ${ALPACA_API_SECRET}
+      ALPACA_API_URL: ${ALPACA_API_URL:-https://paper-api.alpaca.markets}
+      ALPACA_WS_URL: ${ALPACA_WS_URL:-wss://stream.data.alpaca.markets/v2/iex}
       POLYGON_API_KEY: ${POLYGON_API_KEY}
+      POLYGON_API_URL: ${POLYGON_API_URL:-https://api.polygon.io}
+      POLYGON_WS_URL: ${POLYGON_WS_URL:-wss://socket.polygon.io}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+      FINNHUB_API_URL: ${FINNHUB_API_URL:-https://finnhub.io/api/v1}
+      FINNHUB_WS_URL: ${FINNHUB_WS_URL:-wss://ws.finnhub.io}
       ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}
+      ENABLE_PAPER_TRADING: ${ENABLE_PAPER_TRADING:-true}
     secrets:
       - api_keys
     volumes:

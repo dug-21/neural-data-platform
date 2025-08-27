@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-08-23T00:00:00.000Z" agent="Claude" version="24.7.10" etag="data-flow-sequence-v1">
+  <diagram name="Data Flow Sequence" id="data-flow-sequence">
+    <mxGraphModel dx="1434" dy="796" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        
+        <!-- Title -->
+        <mxCell id="title" value="C4 Sequence Diagram: Complete Data Flow &amp; Feedback Loop" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="350" y="20" width="700" height="40" as="geometry"/>
+        </mxCell>
+        
+        <!-- Actors/Systems -->
+        <mxCell id="market-data" value="Market Data&#xa;Provider" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="data-ingestion" value="Data Ingestion&#xa;Service" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="ml-ops" value="ML Ops&#xa;Service" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="redis-streams" value="Redis&#xa;Streams" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="460" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="neural-trading" value="Neural Trading&#xa;Domain" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="daa-coordinator" value="DAA&#xa;Coordinator" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="740" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="ruv-fann" value="ruv-fann&#xa;Neural Engine" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="alpaca-api" value="Alpaca&#xa;API" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="config-store" value="Config Store&#xa;Service" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="80" width="100" height="60" as="geometry"/>
+        </mxCell>
+        
+        <!-- Lifelines -->
+        <mxCell id="lifeline1" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="90" y="160" as="sourcePoint"/>
+            <mxPoint x="90" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline2" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="230" y="160" as="sourcePoint"/>
+            <mxPoint x="230" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline3" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="370" y="160" as="sourcePoint"/>
+            <mxPoint x="370" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline4" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="510" y="160" as="sourcePoint"/>
+            <mxPoint x="510" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline5" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="650" y="160" as="sourcePoint"/>
+            <mxPoint x="650" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline6" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="790" y="160" as="sourcePoint"/>
+            <mxPoint x="790" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline7" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="930" y="160" as="sourcePoint"/>
+            <mxPoint x="930" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline8" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1070" y="160" as="sourcePoint"/>
+            <mxPoint x="1070" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="lifeline9" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1210" y="160" as="sourcePoint"/>
+            <mxPoint x="1210" y="920" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Sequence Steps -->
+        
+        <!-- 1. Raw Data Ingestion -->
+        <mxCell id="step1" value="1. Raw Market Data&#xa;(~10ms latency)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#d79b00;fillColor=#ffe6cc;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="90" y="180" as="sourcePoint"/>
+            <mxPoint x="230" y="180" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 2. Feature Computation -->
+        <mxCell id="step2" value="2. Compute Features&#xa;(50-100ms)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#82b366;fillColor=#d5e8d4;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="230" y="220" as="sourcePoint"/>
+            <mxPoint x="370" y="220" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 3. Feature Publication -->
+        <mxCell id="step3" value="3. Publish Features&#xa;(feature-stream)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#6c8ebf;fillColor=#dae8fc;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="370" y="260" as="sourcePoint"/>
+            <mxPoint x="510" y="260" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 4. Feature Subscription -->
+        <mxCell id="step4" value="4. Subscribe &amp; Consume&#xa;(~5ms latency)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#6c8ebf;fillColor=#dae8fc;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="510" y="300" as="sourcePoint"/>
+            <mxPoint x="650" y="300" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 5. DAA Coordination -->
+        <mxCell id="step5" value="5. Coordinate Decision&#xa;(Neural Analysis)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#b85450;fillColor=#f8cecc;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="650" y="340" as="sourcePoint"/>
+            <mxPoint x="790" y="340" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 6. Model Inference -->
+        <mxCell id="step6" value="6. Neural Inference&#xa;(ruv-fann: ~2ms)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#9673a6;fillColor=#e1d5e7;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="790" y="380" as="sourcePoint"/>
+            <mxPoint x="930" y="380" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 7. Inference Result -->
+        <mxCell id="step7" value="7. Prediction Result" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#9673a6;fillColor=#e1d5e7;fontSize=9;dashed=1;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="930" y="420" as="sourcePoint"/>
+            <mxPoint x="790" y="420" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 8. DAA Decision -->
+        <mxCell id="step8" value="8. Trading Decision&#xa;(Risk Assessment)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#b85450;fillColor=#f8cecc;fontSize=9;dashed=1;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="790" y="460" as="sourcePoint"/>
+            <mxPoint x="650" y="460" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 9. Order Execution -->
+        <mxCell id="step9" value="9. Execute Order&#xa;(~100ms latency)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#d6b656;fillColor=#fff2cc;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="650" y="500" as="sourcePoint"/>
+            <mxPoint x="1070" y="500" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 10. Execution Result -->
+        <mxCell id="step10" value="10. Execution Status" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#d6b656;fillColor=#fff2cc;fontSize=9;dashed=1;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="1070" y="540" as="sourcePoint"/>
+            <mxPoint x="650" y="540" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 11. Outcome Feedback -->
+        <mxCell id="step11" value="11. Outcome Feedback&#xa;(Performance Data)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#b85450;fillColor=#f8cecc;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="650" y="580" as="sourcePoint"/>
+            <mxPoint x="510" y="580" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 12. Feedback to ML Ops -->
+        <mxCell id="step12" value="12. Feedback Stream&#xa;(feedback-stream)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#6c8ebf;fillColor=#dae8fc;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="510" y="620" as="sourcePoint"/>
+            <mxPoint x="370" y="620" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 13. Drift Detection -->
+        <mxCell id="step13" value="13. Drift Detection&#xa;(&lt; 500ms analysis)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="320" y="660" width="100" height="40" as="geometry"/>
+        </mxCell>
+        
+        <!-- 14. Model Configuration -->
+        <mxCell id="step14" value="14. Model Config Update&#xa;(if retraining needed)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#82b366;fillColor=#d5e8d4;fontSize=9;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="370" y="720" as="sourcePoint"/>
+            <mxPoint x="1210" y="720" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 15. Model Deployment -->
+        <mxCell id="step15" value="15. Deploy New Model&#xa;(canary deployment)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=center;verticalAlign=middle;endArrow=block;endFill=1;strokeColor=#82b366;fillColor=#d5e8d4;fontSize=9;dashed=1;" edge="1" parent="1">
+          <mxGeometry width="80" relative="1" as="geometry">
+            <mxPoint x="1210" y="760" as="sourcePoint"/>
+            <mxPoint x="790" y="760" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Timing Annotations -->
+        <mxCell id="timing-ingestion" value="Data Ingestion&#xa;~100-150ms" style="text;html=1;strokeColor=#666666;fillColor=#f5f5f5;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="timing-decision" value="Decision Making&#xa;~5-10ms" style="text;html=1;strokeColor=#666666;fillColor=#f5f5f5;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="750" y="320" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="timing-execution" value="Order Execution&#xa;~100-200ms" style="text;html=1;strokeColor=#666666;fillColor=#f5f5f5;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="520" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="timing-feedback" value="Feedback Loop&#xa;~1-5 seconds" style="text;html=1;strokeColor=#666666;fillColor=#f5f5f5;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="330" y="600" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <!-- Phase Separators -->
+        <mxCell id="phase1" value="PHASE 1: DATA PROCESSING" style="text;html=1;strokeColor=#d79b00;fillColor=#ffe6cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="160" width="200" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="phase2" value="PHASE 2: DECISION MAKING" style="text;html=1;strokeColor=#b85450;fillColor=#f8cecc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="320" width="200" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="phase3" value="PHASE 3: EXECUTION" style="text;html=1;strokeColor=#d6b656;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="950" y="480" width="200" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="phase4" value="PHASE 4: FEEDBACK &amp; LEARNING" style="text;html=1;strokeColor=#6c8ebf;fillColor=#dae8fc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="560" width="220" height="20" as="geometry"/>
+        </mxCell>
+        
+        <!-- Key Performance Metrics -->
+        <mxCell id="metrics-box" value="KEY PERFORMANCE METRICS" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontStyle=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;verticalAlign=top;spacingTop=5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="800" width="300" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="metrics-text" value="• End-to-End Latency: &lt; 300ms&#xa;• Neural Inference: &lt; 5ms (ruv-fann)&#xa;• Feature Processing: &lt; 100ms&#xa;• Order Execution: &lt; 200ms&#xa;• Feedback Loop: 1-5 seconds&#xa;• Drift Detection: &lt; 500ms&#xa;• Model Deployment: &lt; 30 seconds" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="830" width="280" height="80" as="geometry"/>
+        </mxCell>
+        
+        <!-- Component Integration Notes -->
+        <mxCell id="integration-box" value="COMPONENT INTEGRATION" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontStyle=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=top;spacingTop=5;" vertex="1" parent="1">
+          <mxGeometry x="360" y="800" width="300" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="integration-text" value="• DAA Coordinator: src/integration/daa_coordinator.rs&#xa;• Neural Engine: vendor/ruv-fann&#xa;• Redis Streams: Feature &amp; feedback channels&#xa;• gRPC: Config Store communication&#xa;• WebSocket: Real-time market data&#xa;• REST API: Alpaca order execution&#xa;• PostgreSQL: Persistent configuration" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="370" y="830" width="280" height="80" as="geometry"/>
+        </mxCell>
+        
+        <!-- Error Handling & Resilience -->
+        <mxCell id="resilience-box" value="ERROR HANDLING &amp; RESILIENCE" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontStyle=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=top;spacingTop=5;" vertex="1" parent="1">
+          <mxGeometry x="680" y="800" width="300" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="resilience-text" value="• Circuit breakers on external APIs&#xa;• Retry logic with exponential backoff&#xa;• Fallback to cached models/strategies&#xa;• Health checks every 30 seconds&#xa;• Automatic rollback on drift detection&#xa;• Dead letter queues for failed messages&#xa;• Graceful degradation under load" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="690" y="830" width="280" height="80" as="geometry"/>
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

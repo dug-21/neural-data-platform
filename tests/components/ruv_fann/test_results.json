@@ -1,0 +1,48 @@
+{
+  "total_tests": 48,
+  "total_failures": 1,
+  "total_errors": 0,
+  "total_skipped": 0,
+  "overall_success_rate": 0.9791666666666666,
+  "total_time_s": 1.4645373821258545,
+  "suite_results": {
+    "Neural Initialization": {
+      "tests_run": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "success_rate": 1.0,
+      "failure_details": [],
+      "error_details": []
+    },
+    "Training Pipeline": {
+      "tests_run": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "success_rate": 1.0,
+      "failure_details": [],
+      "error_details": []
+    },
+    "Inference Engine": {
+      "tests_run": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "success_rate": 1.0,
+      "failure_details": [],
+      "error_details": []
+    },
+    "Model Management": {
+      "tests_run": 12,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "success_rate": 0.9166666666666666,
+      "failure_details": [
+        "(<test_model_management.ModelManagementTests testMethod=test_model_versioning>, 'Traceback (most recent call last):\\n  File \"/workspaces/neural-trader/tests/components/ruv_fann/test_model_management.py\", line 744, in test_model_versioning\\n    self.assertTrue(loaded_model.is_trained())\\nAssertionError: False is not true\\n')"
+      ],
+      "error_details": []
+    }
+  }
+}

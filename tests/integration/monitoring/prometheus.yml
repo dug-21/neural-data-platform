@@ -1,0 +1,53 @@
+# Prometheus configuration for Config-Store Integration Test monitoring
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Config Store Mock Service
+  - job_name: 'config-store-mock'
+    static_configs:
+      - targets: ['config-store-mock:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Data Ingestion Test Service
+  - job_name: 'data-ingestion-test'
+    static_configs:
+      - targets: ['data-ingestion-test:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # PostgreSQL Exporter (if available)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-test:5432']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Redis Exporter (if available)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-test:6379']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+# Alerting rules for test environment
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093

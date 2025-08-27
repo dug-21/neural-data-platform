@@ -1,0 +1,23 @@
+# ruv-FANN Component Tests Requirements
+# Minimal dependencies for isolated component testing
+
+# Core testing framework
+pytest>=7.0.0
+unittest-xml-reporting>=3.2.0
+
+# Performance and system monitoring
+psutil>=5.9.0
+
+# Data manipulation for test fixtures
+numpy>=1.21.0
+
+# Optional: Enhanced test reporting
+coverage>=6.0
+pytest-cov>=3.0.0
+pytest-html>=3.1.0
+pytest-benchmark>=3.4.0
+
+# Development dependencies
+flake8>=4.0.0
+black>=22.0.0
+mypy>=0.950

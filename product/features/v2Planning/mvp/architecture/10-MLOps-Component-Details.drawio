@@ -1,0 +1,429 @@
+<mxfile host="app.diagrams.net" agent="Claude" version="1.0.0">
+  <diagram name="ML Ops Platform Component Details" id="mlops-component-details">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- ML Ops Platform Boundary -->
+        <mxCell id="mlops-platform-boundary" value="ML Ops Platform (neural-ml-ops)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=16;labelBackgroundColor=none;fillColor=#E1D5E7;fontColor=#9673A6;align=left;arcSize=10;strokeColor=#9673A6;verticalAlign=top;fontStyle=1;spacingTop=15;spacingLeft=15;dashed=1;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="1700" height="1100" as="geometry" />
+        </mxCell>
+        
+        <!-- Feature Engineering Pipeline Section -->
+        <mxCell id="feature-section" value="Feature Engineering Pipeline" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;labelBackgroundColor=none;fillColor=#F8CECC;fontColor=#B85450;align=left;arcSize=10;strokeColor=#B85450;verticalAlign=top;fontStyle=1;spacingTop=10;spacingLeft=10;dashed=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="100" width="520" height="300" as="geometry" />
+        </mxCell>
+        
+        <object placeholders="1" c4Name="Data Ingestion Controller" c4Type="Component" c4Technology="Rust + Tokio" c4Description="Manages multiple data source connections with backpressure control" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="data-ingestion">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#1061B0;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0D5091;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="100" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Time-Series Feature Extractor" c4Type="Component" c4Technology="Rust" c4Description="Sliding window features, technical indicators, volatility measures" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="ts-features">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#1061B0;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0D5091;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="240" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Statistical Feature Extractor" c4Type="Component" c4Technology="Rust" c4Description="Statistical moments, distributions, correlation measures" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="stat-features">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#1061B0;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0D5091;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="380" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Pattern Recognition Engine" c4Type="Component" c4Technology="Rust" c4Description="Identifies recurring patterns and regime changes" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="pattern-engine">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#1061B0;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0D5091;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="100" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Feature Normalizer" c4Type="Component" c4Technology="Rust" c4Description="Domain-agnostic normalization and scaling" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="normalizer">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#1061B0;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0D5091;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="240" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Feature Aggregator" c4Type="Component" c4Technology="Rust" c4Description="Combines and validates feature sets before publishing" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="feature-aggregator">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#1061B0;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0D5091;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="380" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Model Training Service Section -->
+        <mxCell id="model-section" value="Model Training Service (ruv-FANN)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;labelBackgroundColor=none;fillColor=#D5E8D4;fontColor=#82B366;align=left;arcSize=10;strokeColor=#82B366;verticalAlign=top;fontStyle=1;spacingTop=10;spacingLeft=10;dashed=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="640" y="100" width="520" height="300" as="geometry" />
+        </mxCell>
+        
+        <object placeholders="1" c4Name="Training Data Preprocessor" c4Type="Component" c4Technology="Rust" c4Description="Prepares training datasets with proper windowing and validation splits" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="data-preprocessor">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="660" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="ruv-FANN Training Engine" c4Type="Component" c4Technology="ruv-FANN + Rust" c4Description="Neural network training with genetic algorithms and backpropagation" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="ruv-fann-engine">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="800" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Model Validator" c4Type="Component" c4Technology="Rust" c4Description="Cross-validation, performance metrics, overfitting detection" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="model-validator">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="940" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Hyperparameter Optimizer" c4Type="Component" c4Technology="Rust" c4Description="Automated hyperparameter tuning using evolutionary algorithms" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="hyperopt">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="660" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Model Serializer" c4Type="Component" c4Technology="Rust + Serde" c4Description="Efficient serialization of trained models for distribution" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="model-serializer">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="800" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Training Scheduler" c4Type="Component" c4Technology="Rust + Tokio Cron" c4Description="Schedules retraining based on drift detection and time triggers" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="training-scheduler">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="940" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Drift Detection Section -->
+        <mxCell id="drift-section" value="Drift Detection Aggregator" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;labelBackgroundColor=none;fillColor=#FFF2CC;fontColor=#D6B656;align=left;arcSize=10;strokeColor=#D6B656;verticalAlign=top;fontStyle=1;spacingTop=10;spacingLeft=10;dashed=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="100" width="520" height="300" as="geometry" />
+        </mxCell>
+        
+        <object placeholders="1" c4Name="Feature Drift Monitor" c4Type="Component" c4Technology="Rust" c4Description="Monitors distribution changes in feature vectors" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="feature-drift">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1220" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Model Performance Monitor" c4Type="Component" c4Technology="Rust" c4Description="Tracks model accuracy degradation across domains" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="performance-monitor">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1360" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Concept Drift Detector" c4Type="Component" c4Technology="Rust" c4Description="Detects changes in underlying data relationships" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="concept-drift">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1500" y="140" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Drift Alert Manager" c4Type="Component" c4Technology="Rust" c4Description="Manages drift alerts and triggers retraining decisions" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="drift-alert">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1220" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Cross-Domain Aggregator" c4Type="Component" c4Technology="Rust" c4Description="Aggregates drift signals from multiple domains" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="cross-domain-agg">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1360" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Retraining Orchestrator" c4Type="Component" c4Technology="Rust" c4Description="Coordinates model retraining across all components" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="retraining-orchestrator">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1500" y="240" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Data Stores Section -->
+        <mxCell id="storage-section" value="Data Stores" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;labelBackgroundColor=none;fillColor=#E1D5E7;fontColor=#9673A6;align=left;arcSize=10;strokeColor=#9673A6;verticalAlign=top;fontStyle=1;spacingTop=10;spacingLeft=10;dashed=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="440" width="520" height="300" as="geometry" />
+        </mxCell>
+        
+        <object placeholders="1" c4Name="Feature Store" c4Type="Database" c4Technology="TimescaleDB" c4Description="Time-series storage for computed features with efficient querying" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="feature-store">
+          <mxCell style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fontSize=9;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;strokeColor=#736782;align=center;" vertex="1" parent="1">
+            <mxGeometry x="120" y="480" width="100" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Model Store" c4Type="Database" c4Technology="File System + Redis" c4Description="Versioned storage of trained models with metadata and lineage" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="model-store">
+          <mxCell style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fontSize=9;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;strokeColor=#736782;align=center;" vertex="1" parent="1">
+            <mxGeometry x="260" y="480" width="100" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Training Data Cache" c4Type="Cache" c4Technology="Redis" c4Description="High-speed cache for frequently accessed training datasets" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="training-cache">
+          <mxCell style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fontSize=9;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;strokeColor=#736782;align=center;" vertex="1" parent="1">
+            <mxGeometry x="400" y="480" width="100" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Configuration Store" c4Type="Database" c4Technology="Config-Store Service" c4Description="Centralized configuration for features, models, and training parameters" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="config-store">
+          <mxCell style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fontSize=9;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;strokeColor=#736782;align=center;" vertex="1" parent="1">
+            <mxGeometry x="120" y="620" width="100" height="100" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Drift Metrics Store" c4Type="Database" c4Technology="TimescaleDB" c4Description="Historical drift metrics and performance degradation data" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="drift-store">
+          <mxCell style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fontSize=9;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;strokeColor=#736782;align=center;" vertex="1" parent="1">
+            <mxGeometry x="260" y="620" width="100" height="100" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Audit Log Store" c4Type="Database" c4Technology="TimescaleDB" c4Description="Immutable audit trail of all model training and deployment events" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="audit-store">
+          <mxCell style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fontSize=9;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;strokeColor=#736782;align=center;" vertex="1" parent="1">
+            <mxGeometry x="400" y="620" width="100" height="100" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Publishing Section -->
+        <mxCell id="publishing-section" value="Redis Streams Publishing" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;labelBackgroundColor=none;fillColor=#D5E8D4;fontColor=#82B366;align=left;arcSize=10;strokeColor=#82B366;verticalAlign=top;fontStyle=1;spacingTop=10;spacingLeft=10;dashed=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="640" y="440" width="520" height="300" as="geometry" />
+        </mxCell>
+        
+        <object placeholders="1" c4Name="Feature Stream Publisher" c4Type="Component" c4Technology="Redis Client" c4Description="Publishes computed features to domain-specific streams" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="feature-publisher">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="660" y="480" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Model Stream Publisher" c4Type="Component" c4Technology="Redis Client" c4Description="Publishes trained models and metadata to distribution streams" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="model-publisher">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="800" y="480" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Event Serializer" c4Type="Component" c4Technology="ProtocolBuffers + Rust" c4Description="Efficient serialization of events for network transmission" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="event-serializer">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="940" y="480" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Stream Router" c4Type="Component" c4Technology="Rust" c4Description="Routes events to appropriate Redis streams based on domain patterns" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="stream-router">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="660" y="580" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Backpressure Controller" c4Type="Component" c4Technology="Rust + Tokio" c4Description="Controls publishing rate to prevent overwhelming downstream consumers" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="backpressure">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="800" y="580" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Delivery Guarantees Manager" c4Type="Component" c4Technology="Redis Client" c4Description="Ensures at-least-once delivery with deduplication" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="delivery-manager">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#23A2D9;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#0E7DAD;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="940" y="580" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Monitoring Section -->
+        <mxCell id="monitoring-section" value="Performance Monitor" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;labelBackgroundColor=none;fillColor=#FFF2CC;fontColor=#D6B656;align=left;arcSize=10;strokeColor=#D6B656;verticalAlign=top;fontStyle=1;spacingTop=10;spacingLeft=10;dashed=1;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="440" width="520" height="300" as="geometry" />
+        </mxCell>
+        
+        <object placeholders="1" c4Name="Metrics Collector" c4Type="Component" c4Technology="Rust + Prometheus" c4Description="Collects performance metrics from all components" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="metrics-collector">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1220" y="480" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Health Check Manager" c4Type="Component" c4Technology="Rust" c4Description="Monitors component health and availability" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="health-check">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1360" y="480" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Resource Usage Monitor" c4Type="Component" c4Technology="Rust" c4Description="Tracks CPU, memory, and network usage" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="resource-monitor">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1500" y="480" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Latency Tracker" c4Type="Component" c4Technology="Rust" c4Description="Tracks end-to-end processing latencies" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="latency-tracker">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1220" y="580" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Throughput Analyzer" c4Type="Component" c4Technology="Rust" c4Description="Analyzes feature and model production rates" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="throughput-analyzer">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1360" y="580" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Name="Alert Generator" c4Type="Component" c4Technology="Rust" c4Description="Generates alerts for anomalies and threshold breaches" label="&lt;font style=&quot;font-size: 12px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="alert-generator">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;fillColor=#E1761B;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#B85C00;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="1500" y="580" width="120" height="80" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Redis Streams Integration -->
+        <object placeholders="1" c4Name="Redis Streams Event Bus" c4Type="Message Broker" c4Technology="Redis" c4Description="Central event distribution with multiple channels" label="&lt;font style=&quot;font-size: 14px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Technology%&lt;/font&gt;&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;" id="redis-event-bus">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#8C8496;fontColor=#ffffff;align=center;arcSize=10;strokeColor=#736782;metaEdit=1;resizable=1;" vertex="1" parent="1">
+            <mxGeometry x="400" y="800" width="800" height="120" as="geometry" />
+          </mxCell>
+        </object>
+        
+        <!-- Channel Details -->
+        <mxCell id="channel-details" value="Channels:&#xa;• features:market:* (price, volume, technical indicators)&#xa;• features:clinical:* (patient vitals, lab results)&#xa;• features:sensor:* (IoT device measurements)&#xa;• models:updates (model versions and metadata)&#xa;• feedback:performance (domain execution results)&#xa;• alerts:drift (model degradation notifications)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="420" y="830" width="760" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- Internal Data Flows -->
+        <object placeholders="1" c4Type="Relationship" c4Description="Raw data" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="data-to-ts">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="data-ingestion" target="ts-features">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="220" y="180" as="sourcePoint" />
+              <mxPoint x="240" y="180" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Raw data" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="data-to-stat">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="data-ingestion" target="stat-features">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="220" y="180" as="sourcePoint" />
+              <mxPoint x="380" y="180" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Features" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="features-to-agg">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="normalizer" target="feature-aggregator">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="360" y="280" as="sourcePoint" />
+              <mxPoint x="380" y="280" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Training data" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="prep-to-fann">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="data-preprocessor" target="ruv-fann-engine">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="780" y="180" as="sourcePoint" />
+              <mxPoint x="800" y="180" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Model" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="fann-to-validator">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="ruv-fann-engine" target="model-validator">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="920" y="180" as="sourcePoint" />
+              <mxPoint x="940" y="180" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Drift signals" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="drift-to-alert">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="cross-domain-agg" target="drift-alert">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="1380" y="280" as="sourcePoint" />
+              <mxPoint x="1320" y="280" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Triggers" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="alert-to-orchestrator">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="drift-alert" target="retraining-orchestrator">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="1340" y="280" as="sourcePoint" />
+              <mxPoint x="1500" y="280" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <!-- Storage Connections -->
+        <object placeholders="1" c4Type="Relationship" c4Description="Stores" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="agg-to-store">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="feature-aggregator" target="feature-store">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="420" y="320" as="sourcePoint" />
+              <mxPoint x="200" y="480" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Stores" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="serializer-to-store">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="model-serializer" target="model-store">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="820" y="320" as="sourcePoint" />
+              <mxPoint x="340" y="480" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <!-- Publishing Connections -->
+        <object placeholders="1" c4Type="Relationship" c4Description="Publishes" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="feature-pub-to-redis">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#FF6B35;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="feature-publisher" target="redis-event-bus">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="720" y="560" as="sourcePoint" />
+              <mxPoint x="700" y="800" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <object placeholders="1" c4Type="Relationship" c4Description="Publishes" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="model-pub-to-redis">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=2;endFill=1;strokeColor=#FF6B35;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="model-publisher" target="redis-event-bus">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="860" y="560" as="sourcePoint" />
+              <mxPoint x="800" y="800" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <!-- Monitoring Connections -->
+        <object placeholders="1" c4Type="Relationship" c4Description="Metrics" label="&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;" id="components-to-metrics">
+          <mxCell style="endArrow=blockThin;html=1;fontSize=9;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#666666;elbow=vertical;metaEdit=1;endSize=12;startSize=12;jumpStyle=arc;jumpSize=12;rounded=0;edgeStyle=orthogonalEdgeStyle;dashed=1;" edge="1" parent="1" source="ruv-fann-engine" target="metrics-collector">
+            <mxGeometry width="160" relative="1" as="geometry">
+              <mxPoint x="900" y="220" as="sourcePoint" />
+              <mxPoint x="1240" y="480" as="targetPoint" />
+            </mxGeometry>
+          </mxCell>
+        </object>
+        
+        <!-- Diagram Title -->
+        <mxCell id="component-title" value="ML Ops Platform - Detailed Component Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="550" y="10" width="600" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- Technology Stack Box -->
+        <mxCell id="tech-stack-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#F5F5F5;fontColor=#333333;align=left;arcSize=10;strokeColor=#CCCCCC;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="970" width="600" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="tech-title" value="Key Technologies Used" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="90" y="980" width="180" height="20" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="tech-content" value="• ruv-FANN: High-performance neural network training with genetic algorithms&#xa;• Redis Streams: Event-driven feature and model distribution&#xa;• TimescaleDB: Time-series data storage for features and metrics&#xa;• Protocol Buffers: Efficient serialization for network transmission&#xa;• Tokio: Async runtime for high-performance I/O operations&#xa;• Prometheus: Metrics collection and monitoring" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="90" y="1000" width="580" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Data Flow Direction Box -->
+        <mxCell id="flow-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#F5F5F5;fontColor=#333333;align=left;arcSize=10;strokeColor=#CCCCCC;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="720" y="970" width="600" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-title" value="Data Flow Summary" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="730" y="980" width="180" height="20" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="flow-content" value="1. Raw Data → Feature Extraction → Feature Store → Redis Streams&#xa;2. Training Data → ruv-FANN → Model Validation → Model Store → Redis Streams&#xa;3. Feedback Streams → Drift Detection → Retraining Triggers&#xa;4. All Components → Performance Monitoring → Health Dashboards&#xa;5. Configuration Store → Dynamic Parameter Updates → All Components&#xa;6. Redis Streams → Domain-specific subscribers (trading, healthcare, IoT)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="730" y="1000" width="580" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Performance Characteristics Box -->
+        <mxCell id="perf-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;labelBackgroundColor=none;fillColor=#F5F5F5;fontColor=#333333;align=left;arcSize=10;strokeColor=#CCCCCC;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="970" width="360" height="120" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="perf-title" value="Performance Characteristics" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1370" y="980" width="200" height="20" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="perf-content" value="• Feature Extraction: ~10ms latency&#xa;• Model Training: Minutes to hours&#xa;• Model Inference: Sub-millisecond&#xa;• Event Publishing: ~1ms latency&#xa;• Drift Detection: Real-time streaming&#xa;• Storage: Horizontally scalable" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1370" y="1000" width="340" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
