@@ -2,71 +2,27 @@
 //!
 //! This consumer ONLY accepts protobuf messages via ProtoEventBus.
 //! ALL Vec<u8> and JSON handling has been REMOVED per Phase 4 specification.
-//!
-//! NOTE: Temporarily using mock types until neural-core compilation issues are fixed.
 
 use anyhow::{Result, Context};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tracing::{info, debug, warn};
+use tracing::{info, debug, error, warn};
+
+use neural_core::eventbus::{
+    traits::{ProtoEventBus, DynamicProtoEventSubscriber},
+    types::{ProtoEvent, ProtoMessage, SubscriptionConfig, EventId},
+    implementations::ProtoInMemoryEventBus,
+    error::EventBusError,
+};
 
 use crate::daa::coordinator::DAACoordinator;
 
-// Temporary mock types until neural-core compiles
-pub type ProtoEventId = String;
-pub type ProtoEventBusError = anyhow::Error;
-
-pub trait MockProtoEventBus: Send + Sync {
-    fn create_proto_consumer_group(&self, channel: &str, group: &str) -> Result<(), ProtoEventBusError>;
-    fn subscribe_dynamic_proto(
-        &self,
-        channels: &[String],
-        proto_types: &[String],
-        config: SubscriptionConfig,
-    ) -> Result<Box<dyn MockDynamicProtoEventSubscriber>, ProtoEventBusError>;
-}
-
-pub trait MockDynamicProtoEventSubscriber: Send + Sync {}
-
-#[derive(Debug, Clone)]
-pub struct SubscriptionConfig {
-    pub consumer_group: Option<String>,
-    pub auto_ack: bool,
-    pub batch_size: usize,
-    pub timeout_ms: u64,
-}
-
-pub struct MockInMemoryEventBus;
-
-impl MockInMemoryEventBus {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl MockProtoEventBus for MockInMemoryEventBus {
-    fn create_proto_consumer_group(&self, _channel: &str, _group: &str) -> Result<(), ProtoEventBusError> {
-        Ok(())
-    }
-    
-    fn subscribe_dynamic_proto(
-        &self,
-        _channels: &[String],
-        _proto_types: &[String],
-        _config: SubscriptionConfig,
-    ) -> Result<Box<dyn MockDynamicProtoEventSubscriber>, ProtoEventBusError> {
-        struct MockSubscriber;
-        impl MockDynamicProtoEventSubscriber for MockSubscriber {}
-        Ok(Box::new(MockSubscriber))
-    }
-}
-
 /// Proto-only Event Consumer - NO Vec<u8> or JSON support
 pub struct EventConsumer {
-    eventbus: Arc<dyn MockProtoEventBus>,
+    eventbus: Arc<dyn ProtoEventBus>,
     daa_coordinator: Arc<DAACoordinator>,
-    subscriber: Arc<RwLock<Option<Box<dyn MockDynamicProtoEventSubscriber>>>>,
+    subscriber: Arc<RwLock<Option<Box<dyn DynamicProtoEventSubscriber>>>>,
     consumer_task: Arc<RwLock<Option<JoinHandle<()>>>>,
     channels: Vec<String>,
     consumer_group: String,
@@ -78,7 +34,7 @@ impl EventConsumer {
         redis_url: String,
         daa_coordinator: Arc<DAACoordinator>,
     ) -> Result<Self> {
-        info!("Initializing proto-only EventConsumer (with mock types)");
+        info!("Initializing proto-only EventConsumer");
         
         // Create ProtoEventBus connection (replace with actual Redis connection)
         let eventbus = Self::create_proto_eventbus(&redis_url).await
@@ -111,7 +67,7 @@ impl EventConsumer {
         
         // Create consumer groups for all channels
         for channel in &self.channels {
-            if let Err(e) = self.eventbus.create_proto_consumer_group(channel, &self.consumer_group) {
+            if let Err(e) = self.eventbus.create_proto_consumer_group(channel, &self.consumer_group).await {
                 warn!("Consumer group creation failed for channel {}: {}", channel, e);
                 // Continue - group might already exist
             }
@@ -119,10 +75,10 @@ impl EventConsumer {
         
         // Define proto types we can handle
         let proto_types = vec![
-            "neural_trader.MarketDataEvent".to_string(),
-            "neural_trader.NeuralPredictionEvent".to_string(), 
-            "neural_trader.TradingSignalEvent".to_string(),
-            "neural_trader.RiskAlertEvent".to_string(),
+            "neural_trader.MarketDataEvent",
+            "neural_trader.NeuralPredictionEvent", 
+            "neural_trader.TradingSignalEvent",
+            "neural_trader.RiskAlertEvent",
         ];
         
         // Create dynamic proto subscriber
@@ -137,7 +93,7 @@ impl EventConsumer {
             &self.channels,
             &proto_types,
             config
-        ).context("Failed to create dynamic proto subscriber")?;
+        ).await.context("Failed to create dynamic proto subscriber")?;
         
         // Store subscriber
         {
@@ -193,37 +149,39 @@ impl EventConsumer {
     // Private methods
     
     /// Create ProtoEventBus connection
-    async fn create_proto_eventbus(redis_url: &str) -> Result<Arc<dyn MockProtoEventBus>> {
-        debug!("Creating mock ProtoEventBus connection to {}", redis_url);
+    async fn create_proto_eventbus(redis_url: &str) -> Result<Arc<dyn ProtoEventBus>> {
+        // TODO: Replace with actual Redis ProtoEventBus when available
+        debug!("Creating ProtoEventBus connection to {}", redis_url);
         
         // For now, use in-memory implementation
-        let eventbus = MockInMemoryEventBus::new();
+        let eventbus = ProtoInMemoryEventBus::new();
         Ok(Arc::new(eventbus))
     }
     
     /// Start the consumer event loop
     async fn start_consumer_loop(&self) -> JoinHandle<()> {
         let subscriber = self.subscriber.clone();
+        let eventbus = self.eventbus.clone();
         let daa_coordinator = self.daa_coordinator.clone();
         let channels = self.channels.clone();
+        let consumer_group = self.consumer_group.clone();
         
         tokio::spawn(async move {
-            info!("Starting proto event consumer loop for channels: {:?}", channels);
+            info!("Starting proto event consumer loop");
             
             loop {
                 let subscriber_guard = subscriber.read().await;
                 let subscriber_ref = match subscriber_guard.as_ref() {
-                    Some(_sub) => _sub,
+                    Some(sub) => sub,
                     None => {
                         warn!("No subscriber available, stopping consumer loop");
                         break;
                     }
                 };
                 
-                // TODO: Implement actual proto event receiving once neural-core is fixed
-                // For now, just log that we're running
-                debug!("Proto event consumer loop running...");
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                // Receive proto events (stub implementation)
+                // TODO: Implement actual proto event receiving
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
             
             info!("Proto event consumer loop ended");

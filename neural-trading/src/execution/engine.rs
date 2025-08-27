@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use anyhow::Result;
-use crate::{ExecutionParams, RiskManager};
+use crate::{ExecutionParams, risk::manager::RiskManager};
 
 pub struct ExecutionEngine;
 
