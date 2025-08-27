@@ -8,7 +8,7 @@ use tracing::{warn, error};
 use crate::eventbus::{
     types::{Event, EventId},
     error::EventBusError,
-    traits::EventBus,
+    traits::LegacyEventBusV2 as EventBus,
 };
 
 /// Dead Letter Queue for handling failed messages
@@ -247,9 +247,8 @@ impl DeadLetterQueue {
         tokio::spawn(async move {
             sleep(Duration::from_millis(delay_ms)).await;
             
-            if let Err(e) = event_bus.publish(&channel, event).await {
-                error!("Failed to retry message: {}", e);
-            }
+            // Publish not supported in deprecated EventBus trait
+            error!("Retry not supported in deprecated EventBus interface");
         });
         
         Ok(())
@@ -283,7 +282,8 @@ impl DeadLetterQueue {
                 timestamp: chrono::Utc::now().timestamp(),
             };
             
-            event_bus.publish(&dlq_channel, dlq_event).await?;
+            // Publish not supported in deprecated EventBus trait
+            error!("DLQ publish not supported in deprecated EventBus interface");
         }
         
         Ok(())

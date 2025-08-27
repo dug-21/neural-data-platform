@@ -10,7 +10,7 @@ use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
 
 use crate::eventbus::{
-    traits::{EventBus, ProtoEventSubscriber, DynamicProtoEventSubscriber, DynamicEventBus},
+    traits::{ProtoEventBus, ProtoEventSubscriber, DynamicProtoEventSubscriber},
     types::{
         ProtoMessage, ProtoEvent, ProtoEventEnvelope,
         EventId, SubscriptionConfig
@@ -21,7 +21,7 @@ use crate::eventbus::{
 use super::super::traits::{ProtoChannelInfo, ProtoEventBusConfig};
 
 /// Proto-only in-memory EventBus implementation
-pub struct InMemoryEventBus {
+pub struct ProtoInMemoryEventBus {
     channels: Arc<RwLock<HashMap<String, ProtoChannel>>>,
     consumer_groups: Arc<RwLock<HashMap<String, ProtoConsumerGroup>>>,
     config: ProtoEventBusConfig,
@@ -43,7 +43,7 @@ struct ProtoConsumerGroup {
     last_delivered: Option<EventId>,
 }
 
-impl InMemoryEventBus {
+impl ProtoInMemoryEventBus {
     /// Create a new proto-only in-memory EventBus
     pub fn new() -> Self {
         Self::with_config(ProtoEventBusConfig::default())
@@ -158,8 +158,8 @@ impl InMemoryEventBus {
 }
 
 #[async_trait]
-impl EventBus for InMemoryEventBus {
-    async fn publish<T: ProtoMessage + Default>(
+impl ProtoEventBus for ProtoInMemoryEventBus {
+    async fn publish_proto<T: ProtoMessage + Default>(
         &self,
         channel: &str,
         event: ProtoEvent<T>,
@@ -187,7 +187,7 @@ impl EventBus for InMemoryEventBus {
         Ok(event_id)
     }
     
-    async fn publish_batch<T: ProtoMessage + Default>(
+    async fn publish_proto_batch<T: ProtoMessage + Default>(
         &self,
         channel: &str,
         events: Vec<ProtoEvent<T>>,
@@ -201,14 +201,14 @@ impl EventBus for InMemoryEventBus {
         
         // Publish all events if validation passes
         for event in events {
-            let id = self.publish(channel, event).await?;
+            let id = self.publish_proto(channel, event).await?;
             event_ids.push(id);
         }
         
         Ok(event_ids)
     }
     
-    async fn subscribe<T: ProtoMessage + Default>(
+    async fn subscribe_proto<T: ProtoMessage + Default>(
         &self,
         channels: &[String],
         config: SubscriptionConfig,
@@ -254,7 +254,7 @@ impl EventBus for InMemoryEventBus {
         }))
     }
     
-    async fn subscribe_dynamic(
+    async fn subscribe_dynamic_proto(
         &self,
         channels: &[String],
         proto_types: &[&'static str],
@@ -278,7 +278,7 @@ impl EventBus for InMemoryEventBus {
         }))
     }
     
-    async fn ack(
+    async fn ack_proto(
         &self,
         channel: &str,
         group: &str,
@@ -297,7 +297,7 @@ impl EventBus for InMemoryEventBus {
         }
     }
     
-    async fn nack(
+    async fn nack_proto(
         &self,
         channel: &str,
         group: &str,
@@ -315,7 +315,7 @@ impl EventBus for InMemoryEventBus {
         }
     }
     
-    async fn create_consumer_group(
+    async fn create_proto_consumer_group(
         &self,
         channel: &str,
         group: &str,
@@ -346,7 +346,7 @@ impl EventBus for InMemoryEventBus {
         Ok(())
     }
     
-    async fn get_channel_info(&self, channel: &str) -> Result<ProtoChannelInfo, EventBusError> {
+    async fn get_proto_channel_info(&self, channel: &str) -> Result<ProtoChannelInfo, EventBusError> {
         let channels = self.channels.read().await;
         
         if let Some(chan) = channels.get(channel) {
@@ -384,190 +384,6 @@ impl EventBus for InMemoryEventBus {
         } else {
             Err(EventBusError::channel_not_found(channel))
         }
-    }
-
-    async fn list_channels(&self) -> Result<Vec<String>, EventBusError> {
-        let channels = self.channels.read().await;
-        Ok(channels.keys().cloned().collect())
-    }
-
-    async fn channel_subscriber_count(&self, channel: &str) -> Result<usize, EventBusError> {
-        let channels = self.channels.read().await;
-        if let Some(chan) = channels.get(channel) {
-            Ok(chan.subscribers.len())
-        } else {
-            Err(EventBusError::channel_not_found(channel))
-        }
-    }
-}
-
-/// Dynamic EventBus implementation for dyn compatibility
-#[async_trait]
-impl DynamicEventBus for InMemoryEventBus {
-    async fn publish_envelope(
-        &self,
-        channel: &str,
-        envelope: ProtoEventEnvelope,
-    ) -> Result<EventId, EventBusError> {
-        if !validate_channel_name(channel) {
-            return Err(EventBusError::invalid_channel(channel));
-        }
-
-        let event_id = EventId::new();
-        let mut envelope = envelope;
-        envelope.event_id = event_id.clone();
-
-        // Ensure channel exists
-        self.ensure_channel(channel).await?;
-
-        // Add event to channel
-        let mut channels = self.channels.write().await;
-        if let Some(chan) = channels.get_mut(channel) {
-            chan.events.push(envelope.clone());
-            
-            // Update proto type counts
-            let proto_type = &envelope.proto_type;
-            *chan.proto_type_counts.entry(proto_type.clone()).or_insert(0) += 1;
-        }
-
-        Ok(event_id)
-    }
-
-    async fn publish_batch_envelopes(
-        &self,
-        channel: &str,
-        envelopes: Vec<ProtoEventEnvelope>,
-    ) -> Result<Vec<EventId>, EventBusError> {
-        let mut event_ids = Vec::new();
-        
-        for envelope in envelopes {
-            let id = self.publish_envelope(channel, envelope).await?;
-            event_ids.push(id);
-        }
-        
-        Ok(event_ids)
-    }
-
-    async fn subscribe_dynamic(
-        &self,
-        channels: &[String],
-        proto_types: &[&'static str],
-        config: SubscriptionConfig,
-    ) -> Result<Box<dyn DynamicProtoEventSubscriber>, EventBusError> {
-        for channel in channels {
-            if !validate_channel_name(channel) {
-                return Err(EventBusError::invalid_channel(channel));
-            }
-        }
-
-        // Validate all channel names
-        for channel in channels {
-            self.validate_channel_name(channel)?;
-            self.ensure_channel(channel).await?;
-        }
-
-        let subscriber_id = Uuid::new_v4().to_string();
-        let (tx, rx) = mpsc::channel(config.batch_size);
-
-        // Create consumer group if needed
-        let group_key = format!("{}:{}", channels.join(","), config.group_name);
-        let mut consumer_groups = self.consumer_groups.write().await;
-        consumer_groups.entry(group_key.clone()).or_insert_with(|| ProtoConsumerGroup {
-            name: config.group_name.clone(),
-            channel: channels.join(","),
-            members: Vec::new(),
-            pending_messages: HashMap::new(),
-            last_delivered: None,
-        });
-        
-        if let Some(group) = consumer_groups.get_mut(&group_key) {
-            group.members.push(subscriber_id.clone());
-        }
-        
-        // Register subscriber with channels
-        let mut channel_map = self.channels.write().await;
-        for channel in channels {
-            if let Some(chan) = channel_map.get_mut(channel) {
-                chan.subscribers.push(subscriber_id.clone());
-            }
-        }
-
-        Ok(Box::new(DynamicInMemorySubscriber {
-            id: subscriber_id,
-            channels: channels.to_vec(),
-            receiver: rx,
-            proto_types: proto_types.iter().map(|s| s.to_string()).collect(),
-        }))
-    }
-
-    async fn ack(&self, _channel: &str, _group: &str, _event_id: &EventId) -> Result<(), EventBusError> {
-        // In-memory implementation doesn't need explicit acks
-        Ok(())
-    }
-
-    async fn nack(&self, _channel: &str, _group: &str, _event_id: &EventId) -> Result<(), EventBusError> {
-        // In-memory implementation doesn't support nack
-        Ok(())
-    }
-
-    async fn create_consumer_group(&self, _channel: &str, _group: &str) -> Result<(), EventBusError> {
-        // In-memory implementation doesn't need explicit consumer group creation
-        Ok(())
-    }
-
-    async fn get_channel_info(&self, channel: &str) -> Result<ProtoChannelInfo, EventBusError> {
-        <Self as crate::eventbus::traits::EventBus>::get_channel_info(self, channel).await
-    }
-
-    async fn list_proto_types_on_channel(&self, channel: &str) -> Result<Vec<String>, EventBusError> {
-        <Self as crate::eventbus::traits::EventBus>::list_proto_types_on_channel(self, channel).await
-    }
-
-    async fn list_channels(&self) -> Result<Vec<String>, EventBusError> {
-        <Self as crate::eventbus::traits::EventBus>::list_channels(self).await
-    }
-
-    async fn channel_subscriber_count(&self, channel: &str) -> Result<usize, EventBusError> {
-        <Self as crate::eventbus::traits::EventBus>::channel_subscriber_count(self, channel).await
-    }
-}
-
-pub struct DynamicInMemorySubscriber {
-    id: String,
-    channels: Vec<String>,
-    receiver: mpsc::Receiver<ProtoEventEnvelope>,
-    proto_types: Vec<String>,
-}
-
-#[async_trait]
-impl DynamicProtoEventSubscriber for DynamicInMemorySubscriber {
-    async fn next_dynamic_proto(&mut self) -> Result<Option<ProtoEventEnvelope>, EventBusError> {
-        while let Some(envelope) = self.receiver.recv().await {
-            // Filter by proto types if specified
-            if !self.proto_types.is_empty() && !self.proto_types.contains(&envelope.proto_type) {
-                continue;
-            }
-            return Ok(Some(envelope));
-        }
-        Ok(None)
-    }
-
-    async fn filter_proto_types(&mut self, types: &[&str]) -> Result<(), EventBusError> {
-        self.proto_types = types.iter().map(|s| s.to_string()).collect();
-        Ok(())
-    }
-
-    fn supported_proto_types(&self) -> &[String] {
-        &self.proto_types
-    }
-
-    async fn close(&mut self) -> Result<(), EventBusError> {
-        self.receiver.close();
-        Ok(())
-    }
-
-    fn id(&self) -> &str {
-        &self.id
     }
 }
 
@@ -637,50 +453,9 @@ impl DynamicProtoEventSubscriber for DynamicProtoInMemorySubscriber {
     }
 }
 
-impl Default for InMemoryEventBus {
+impl Default for ProtoInMemoryEventBus {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Validates channel name format (stream:domain:identifier)
-pub fn validate_channel_name(name: &str) -> bool {
-    let parts: Vec<&str> = name.split(':').collect();
-    
-    if parts.len() != 3 {
-        return false;
-    }
-    
-    if parts[0] != "stream" {
-        return false;
-    }
-    
-    let valid_domains = [
-        "symbol", "sector", "portfolio", "cross_sector", "ml", "action", "dlq"
-    ];
-    
-    if !valid_domains.contains(&parts[1]) {
-        return false;
-    }
-    
-    !parts[2].is_empty()
-}
-
-/// Migrates old channel names to new format
-pub fn migrate_channel_name(old_name: &str) -> String {
-    if old_name.starts_with("market:") {
-        let symbol = old_name.strip_prefix("market:").unwrap_or("");
-        format!("stream:symbol:{}", symbol)
-    } else if old_name.starts_with("sector_") {
-        let sector = old_name.strip_prefix("sector_").unwrap_or("");
-        format!("stream:sector:{}", sector)
-    } else if old_name.starts_with("ml_") {
-        let operation = old_name.strip_prefix("ml_").unwrap_or("");
-        format!("stream:ml:{}", operation)
-    } else if old_name.starts_with("stream:") {
-        old_name.to_string()
-    } else {
-        format!("stream:unknown:{}", old_name)
     }
 }
 
@@ -717,7 +492,7 @@ mod tests {
     
     #[tokio::test]
     async fn test_proto_publish_subscribe() {
-        let eventbus = InMemoryEventBus::for_testing();
+        let eventbus = ProtoInMemoryEventBus::for_testing();
         
         // Create a test proto message
         let market_data = TestMarketData {
@@ -730,7 +505,7 @@ mod tests {
             .with_quality_score(0.95);
         
         // Publish the event
-        let event_id = eventbus.publish("stream:symbol:AAPL", event).await.unwrap();
+        let event_id = eventbus.publish_proto("stream:symbol:AAPL", event).await.unwrap();
         assert!(!event_id.as_str().is_empty());
         
         // Subscribe and receive the event
@@ -747,13 +522,13 @@ mod tests {
             priority: 0,
         };
         
-        let _subscriber = eventbus.subscribe::<TestMarketData>(
+        let _subscriber = eventbus.subscribe_proto::<TestMarketData>(
             &["stream:symbol:AAPL".to_string()], 
             config
         ).await.unwrap();
         
         // Verify channel info includes proto type counts
-        let info = eventbus.get_channel_info("stream:symbol:AAPL").await.unwrap();
+        let info = eventbus.get_proto_channel_info("stream:symbol:AAPL").await.unwrap();
         assert_eq!(info.message_count, 1);
         assert!(info.proto_type_counts.contains_key("test.MarketData"));
         assert_eq!(*info.proto_type_counts.get("test.MarketData").unwrap(), 1);
@@ -761,7 +536,7 @@ mod tests {
     
     #[tokio::test]
     async fn test_contract_violation_rejection() {
-        let eventbus = InMemoryEventBus::new();
+        let eventbus = ProtoInMemoryEventBus::new();
         
         // Test that legacy raw methods are rejected
         let result = eventbus.publish_raw("test-channel", vec![1, 2, 3]).await;
@@ -779,7 +554,7 @@ mod tests {
     
     #[tokio::test]
     async fn test_proto_validation_failure() {
-        let eventbus = InMemoryEventBus::new();
+        let eventbus = ProtoInMemoryEventBus::new();
         
         // Test invalid proto message
         let invalid_market_data = TestMarketData {
@@ -789,14 +564,14 @@ mod tests {
         };
         
         let event = ProtoEvent::new(invalid_market_data);
-        let result = eventbus.publish("stream:symbol:INVALID", event).await;
+        let result = eventbus.publish_proto("stream:symbol:INVALID", event).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), EventBusError::SchemaValidation(_)));
     }
     
     #[tokio::test]
     async fn test_channel_name_validation() {
-        let eventbus = InMemoryEventBus::new();
+        let eventbus = ProtoInMemoryEventBus::new();
         
         let market_data = TestMarketData {
             symbol: "AAPL".to_string(),
@@ -814,34 +589,40 @@ mod tests {
         ];
         
         for channel in &invalid_channels {
-            let result = eventbus.publish(channel, event.clone()).await;
+            let result = eventbus.publish_proto(channel, event.clone()).await;
             assert!(result.is_err());
             assert!(matches!(result.unwrap_err(), EventBusError::InvalidChannel(_)));
         }
         
         // Test valid channel
-        let result = eventbus.publish("stream:symbol:AAPL", event).await;
+        let result = eventbus.publish_proto("stream:symbol:AAPL", event).await;
         assert!(result.is_ok());
     }
     
-    #[test]
-    fn test_validate_channel_name() {
-        assert!(validate_channel_name("stream:symbol:AAPL"));
-        assert!(validate_channel_name("stream:sector:technology"));
-        assert!(validate_channel_name("stream:ml:training"));
+    #[tokio::test]
+    async fn test_quality_score_enforcement() {
+        let config = ProtoEventBusConfig::strict().min_quality_score(0.8);
+        let eventbus = ProtoInMemoryEventBus::with_config(config);
         
-        assert!(!validate_channel_name("market:AAPL"));
-        assert!(!validate_channel_name("stream:unknown:test"));
-        assert!(!validate_channel_name("stream:symbol:"));
-        assert!(!validate_channel_name("invalid"));
-    }
-    
-    #[test]
-    fn test_migrate_channel_name() {
-        assert_eq!(migrate_channel_name("market:AAPL"), "stream:symbol:AAPL");
-        assert_eq!(migrate_channel_name("sector_technology"), "stream:sector:technology");
-        assert_eq!(migrate_channel_name("ml_training"), "stream:ml:training");
-        assert_eq!(migrate_channel_name("stream:symbol:MSFT"), "stream:symbol:MSFT");
-        assert_eq!(migrate_channel_name("unknown"), "stream:unknown:unknown");
+        let market_data = TestMarketData {
+            symbol: "AAPL".to_string(),
+            price: 150.25,
+            timestamp: chrono::Utc::now().timestamp(),
+        };
+        
+        // Low quality event should be rejected
+        let low_quality_event = ProtoEvent::new(market_data.clone())
+            .with_quality_score(0.5); // Below 0.8 threshold
+        
+        let result = eventbus.publish_proto("stream:symbol:AAPL", low_quality_event).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), EventBusError::SchemaValidation(_)));
+        
+        // High quality event should be accepted
+        let high_quality_event = ProtoEvent::new(market_data)
+            .with_quality_score(0.95); // Above 0.8 threshold
+        
+        let result = eventbus.publish_proto("stream:symbol:AAPL", high_quality_event).await;
+        assert!(result.is_ok());
     }
 }

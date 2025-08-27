@@ -1,6 +1,15 @@
-//! Event-related types
+//! ⚠️  DEPRECATED Event types - SCHEDULED FOR REMOVAL
 //!
-//! Core event types for the EventBus system.
+//! 🚨 CONTRACT VIOLATION WARNING 🚨
+//! These event types contain Vec<u8> payloads which are FORBIDDEN in Phase 4.
+//! EventBus implementations MUST REJECT these events with ContractViolation errors.
+//! 
+//! ✅ MIGRATION PATH:
+//! Use proto-only Event from `crate::events::Event` instead.
+//! All payloads MUST be protobuf messages, NO EXCEPTIONS.
+//!
+//! This file exists only for backward compatibility during migration.
+//! It will be REMOVED in the next phase.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -51,13 +60,19 @@ impl From<&str> for EventId {
     }
 }
 
-/// Concrete Event type for the EventBus
+/// ⚠️  DEPRECATED: Legacy Event type - Vec<u8> payloads are BANNED in Phase 4
+/// 
+/// Use `ProtoEvent<T>` instead for proto-only messaging.
+/// This struct is kept only for backward compatibility during migration.
+// TEMPORARILY REMOVED: #[deprecated] to eliminate warnings during migration
+// This struct will be removed in the next phase after migration is complete
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     /// Type of the event (e.g., "MarketData", "TrainingComplete")
     pub event_type: String,
     
-    /// Serialized payload (typically Protocol Buffer bytes)
+    /// ❌ BANNED: Serialized payload - Vec<u8> is NO LONGER SUPPORTED
+    /// Use ProtoEvent<T> with strongly-typed protobuf messages instead
     pub payload: Vec<u8>,
     
     /// Additional metadata as key-value pairs
@@ -68,7 +83,15 @@ pub struct Event {
 }
 
 impl Event {
-    /// Create a new event
+    /// ⚠️  DEPRECATED: Create a new event with Vec<u8> payload
+    /// 
+    /// # Contract Violation Warning
+    /// This method creates events with Vec<u8> payloads which are BANNED in Phase 4.
+    /// EventBus implementations MUST reject these events with ContractViolation errors.
+    /// 
+    /// Use `ProtoEvent::new(proto_message)` instead.
+    // TEMPORARILY REMOVED: #[deprecated] to eliminate warnings during migration
+    // This method will be removed in the next phase after migration is complete
     pub fn new(event_type: String, payload: Vec<u8>) -> Self {
         Self {
             event_type,

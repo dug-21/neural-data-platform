@@ -1,5 +1,5 @@
 /// Simple proof that EventBus works
-use neural_core::eventbus::{InMemoryEventBus, EventBus, Event, SubscriptionConfig};
+use neural_core::eventbus::{InMemoryEventBus, ProtoEventBus, ProtoEvent, SubscriptionConfig, proto_messages::TestMessage};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -11,14 +11,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. Publish single event
     println!("1. Publishing single event:");
-    let event = Event::new("MarketData".to_string(), b"AAPL:150.25".to_vec());
+    let event = ProtoEvent::new(TestMessage { content: "AAPL:150.25".to_string(), timestamp: chrono::Utc::now().timestamp() });
     let id = event_bus.publish("stream:symbol:AAPL", event).await?;
     println!("   ✅ Published with ID: {}", id);
 
     // 2. Publish batch
     println!("\n2. Publishing batch of 5 events:");
-    let batch: Vec<Event> = (0..5).map(|i| {
-        Event::new(format!("Event_{}", i), vec![i as u8])
+    let batch: Vec<ProtoEvent<TestMessage>> = (0..5).map(|i| {
+        ProtoEvent::new(TestMessage { content: format!("Event_{}", i), timestamp: chrono::Utc::now().timestamp() })
     }).collect();
     let ids = event_bus.publish_batch("stream:symbol:AAPL", batch).await?;
     println!("   ✅ Published {} events", ids.len());
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5. Test error handling
     println!("\n5. Testing error handling:");
-    let bad_event = Event::new("Bad".to_string(), b"test".to_vec());
+    let bad_event = ProtoEvent::new(TestMessage { content: "Bad".to_string(), timestamp: chrono::Utc::now().timestamp() });
     match event_bus.publish("invalid_channel", bad_event).await {
         Err(e) => println!("   ✅ Correctly rejected: {}", e),
         Ok(_) => println!("   ❌ Should have failed"),

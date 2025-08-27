@@ -1,157 +1,214 @@
-//! Integration tests for event system
-//! Test actual event flow and processing
+//! Integration tests for event system using ProtoEvent
+//! Test actual event flow and processing with proto-only messages
 
-use neural_core::events::{
-    InMemoryEventBus, EventBus, Event, PriceUpdateEvent, VolumeEvent, 
-    TrendChangeEvent, ModelUpdateEvent
+use neural_core::eventbus::{
+    proto_messages::*,
+    types::{ProtoEvent, ProtoMessage, SubscriptionConfig, StartPosition},
+    implementations::proto_inmemory::ProtoInMemoryEventBus,
+    traits::ProtoEventBus,
 };
-use neural_core::types::{Prediction, market::MarketTrend};
-use neural_core::events::prediction_events::{ModelUpdateType, ModelPredictionEvent};
 use std::sync::Arc;
 use futures::StreamExt;
 
 #[tokio::test]
 async fn test_event_bus_integration() {
-    let bus = InMemoryEventBus::new();
+    let bus = ProtoInMemoryEventBus::for_testing();
     
-    // Subscribe to price updates to create the channel
-    let _handle = bus.subscribe("price_update").await.unwrap();
+    // Create a market data event (proto-only)
+    let trade_data = MarketDataEvent::new_trade("AAPL", 155.0, 100.0, "NASDAQ");
+    let proto_event = ProtoEvent::new(trade_data.clone())
+        .with_quality_score(0.95)
+        .with_metadata("exchange".to_string(), "NASDAQ".to_string());
     
-    // Get stream first (this will create receiver)
-    let mut stream = bus.get_stream("price_update").await.unwrap();
+    // Publish the proto event using proper channel format
+    let event_id = bus.publish_proto("stream:symbol:AAPL", proto_event).await.unwrap();
+    assert!(!event_id.as_str().is_empty());
     
-    // Test price update event
-    let price_event = Arc::new(PriceUpdateEvent::new(
-        "AAPL".to_string(),
-        155.0,
-        150.0,
-    ).with_volume(1000000));
+    // Create subscription configuration
+    let config = SubscriptionConfig {
+        group_name: "test-group".to_string(),
+        consumer_name: "test-consumer".to_string(),
+        start_position: StartPosition::Beginning,
+        batch_size: 10,
+        block_timeout_ms: 1000,
+        ack_timeout_ms: 5000,
+        buffer_size: 1024,
+        receive_timeout: None,
+        persistent: false,
+        priority: 0,
+    };
     
-    // Publish event
-    bus.publish(price_event.clone()).await.unwrap();
+    // Subscribe to market data events
+    let _subscriber = bus.subscribe_proto::<MarketDataEvent>(
+        &["stream:symbol:AAPL".to_string()], 
+        config
+    ).await.unwrap();
     
-    // Publish another event to test stream
-    let price_event2 = Arc::new(PriceUpdateEvent::new(
-        "GOOGL".to_string(),
-        2500.0,
-        2480.0,
-    ));
-    
-    bus.publish(price_event2).await.unwrap();
-    
-    // Should receive the event from stream
-    if let Some(received_event) = stream.next().await {
-        assert_eq!(received_event.event_type(), "price_update");
-    }
+    // Verify channel information
+    let channel_info = bus.get_proto_channel_info("stream:symbol:AAPL").await.unwrap();
+    assert_eq!(channel_info.message_count, 1);
+    assert!(channel_info.proto_type_counts.contains_key("neural_trader.market_data.v1.MarketDataEvent"));
 }
 
 #[tokio::test]
 async fn test_multiple_event_types() {
-    let bus = InMemoryEventBus::new();
+    let bus = ProtoInMemoryEventBus::for_testing();
     
-    // Create streams (which create receivers) for each event type
-    let _price_stream = bus.get_stream("price_update").await.unwrap();
-    let _volume_stream = bus.get_stream("volume_event").await.unwrap();
-    let _trend_stream = bus.get_stream("trend_change").await.unwrap();
+    let config = SubscriptionConfig {
+        group_name: "test-group".to_string(),
+        consumer_name: "test-consumer".to_string(),
+        start_position: StartPosition::Beginning,
+        batch_size: 10,
+        block_timeout_ms: 1000,
+        ack_timeout_ms: 5000,
+        buffer_size: 1024,
+        receive_timeout: None,
+        persistent: false,
+        priority: 0,
+    };
     
-    // Create different event types
-    let price_event = Arc::new(PriceUpdateEvent::new("AAPL".to_string(), 155.0, 150.0));
-    let volume_event = Arc::new(VolumeEvent::new("AAPL".to_string(), 2000000, 1000000));
-    let trend_event = Arc::new(TrendChangeEvent::new(
-        "AAPL".to_string(),
-        MarketTrend::Neutral,
-        MarketTrend::Bullish,
-        0.85
-    ));
+    // Create different proto event types
+    let trade_event = MarketDataEvent::new_trade("AAPL", 155.0, 100.0, "NASDAQ");
+    let proto_trade = ProtoEvent::new(trade_event);
     
-    // Publish all events
-    bus.publish(price_event).await.unwrap();
-    bus.publish(volume_event).await.unwrap();
-    bus.publish(trend_event).await.unwrap();
+    let order_event = OrderRequest::new_market_buy("AAPL", 100.0);
+    let proto_order = ProtoEvent::new(order_event);
     
-    // Verify we can subscribe to each type
-    let _price_handle = bus.subscribe("price_update").await.unwrap();
-    let _volume_handle = bus.subscribe("volume_event").await.unwrap();
-    let _trend_handle = bus.subscribe("trend_change").await.unwrap();
+    let config_event = ConfigChangeEvent {
+        event_id: "cfg-123".to_string(),
+        config_key: "model.threshold".to_string(),
+        old_value: "0.5".to_string(),
+        new_value: "0.7".to_string(),
+        changed_by: "admin".to_string(),
+        timestamp: None,
+        reason: "Test update".to_string(),
+    };
+    let proto_config = ProtoEvent::new(config_event);
+    
+    // Publish all proto events to proper channels
+    bus.publish_proto("stream:symbol:AAPL", proto_trade).await.unwrap();
+    bus.publish_proto("stream:action:BUY", proto_order).await.unwrap();
+    bus.publish_proto("stream:ml:CONFIG", proto_config).await.unwrap();
+    
+    // Verify we can subscribe to each channel
+    let _market_handle = bus.subscribe_proto::<MarketDataEvent>(
+        &["stream:symbol:AAPL".to_string()], config.clone()).await.unwrap();
+    let _order_handle = bus.subscribe_proto::<OrderRequest>(
+        &["stream:action:BUY".to_string()], config.clone()).await.unwrap();
+    let _config_handle = bus.subscribe_proto::<ConfigChangeEvent>(
+        &["stream:ml:CONFIG".to_string()], config).await.unwrap();
 }
 
 #[tokio::test]
-async fn test_prediction_events() {
-    let bus = InMemoryEventBus::new();
+async fn test_feature_extraction_requests() {
+    let bus = ProtoInMemoryEventBus::for_testing();
     
-    // Create streams for prediction events
-    let _pred_stream = bus.get_stream("model_prediction").await.unwrap();
-    let _update_stream = bus.get_stream("model_update").await.unwrap();
+    let config = SubscriptionConfig {
+        group_name: "mlops-group".to_string(),
+        consumer_name: "test-consumer".to_string(),
+        start_position: StartPosition::Beginning,
+        batch_size: 10,
+        block_timeout_ms: 1000,
+        ack_timeout_ms: 5000,
+        buffer_size: 1024,
+        receive_timeout: None,
+        persistent: false,
+        priority: 0,
+    };
     
-    let prediction = Prediction::new(155.0, 0.85);
-    let prediction_event = Arc::new(ModelPredictionEvent::new(
-        "lstm_v1".to_string(),
-        "AAPL".to_string(),
-        prediction
-    ));
+    let feature_request = FeatureExtractionRequest {
+        request_id: "req-123".to_string(),
+        pipeline_id: "lstm_v1".to_string(),
+        source: Some(DataSource {
+            source_type: SourceType::Stream as i32,
+            topic: "market_data".to_string(),
+            query: "symbol=AAPL".to_string(),
+            partitions: vec!["0".to_string()],
+            filters: std::collections::HashMap::new(),
+        }),
+        config: Some(FeatureConfig {
+            feature_set_id: "technical_indicators_v1".to_string(),
+            version: "1.0.0".to_string(),
+        }),
+        window: None,
+        quality: Some(QualityRequirements {
+            min_completeness: 0.95,
+            max_latency_ms: 100,
+            min_quality_score: 0.90,
+            allow_missing: false,
+            allow_outliers: true,
+        }),
+    };
     
-    let update_event = Arc::new(ModelUpdateEvent::new(
-        "lstm_v1".to_string(),
-        ModelUpdateType::Deploy,
-        "2.0.0".to_string()
-    ));
+    let proto_request = ProtoEvent::new(feature_request);
     
-    // Test publishing prediction events
-    bus.publish(prediction_event).await.unwrap();
-    bus.publish(update_event).await.unwrap();
+    // Test publishing ML-Ops proto events
+    bus.publish_proto("stream:ml:FEATURES", proto_request).await.unwrap();
     
-    let _pred_handle = bus.subscribe("model_prediction").await.unwrap();
-    let _update_handle = bus.subscribe("model_update").await.unwrap();
+    let _mlops_handle = bus.subscribe_proto::<FeatureExtractionRequest>(
+        &["stream:ml:FEATURES".to_string()], config).await.unwrap();
 }
 
 #[tokio::test]
-async fn test_event_priorities() {
-    let price_event = PriceUpdateEvent::new("AAPL".to_string(), 155.0, 150.0);
-    let volume_spike = VolumeEvent::new("AAPL".to_string(), 5000000, 1000000); // 5x volume spike
-    let normal_volume = VolumeEvent::new("AAPL".to_string(), 1000000, 1000000);
+async fn test_proto_event_validation() {
+    // Valid proto events should pass validation
+    let valid_trade = MarketDataEvent::new_trade("AAPL", 155.0, 100.0, "NASDAQ");
+    let valid_proto_event = ProtoEvent::new(valid_trade).with_quality_score(0.95);
+    assert!(valid_proto_event.validate().is_ok());
     
-    // Check priorities
-    assert_eq!(price_event.priority(), 8);
-    assert_eq!(volume_spike.priority(), 9); // Should be higher due to spike
-    assert_eq!(normal_volume.priority(), 6);
+    // Invalid quality scores should fail validation
+    let invalid_proto_event = ProtoEvent::new(
+        MarketDataEvent::new_trade("AAPL", 155.0, 100.0, "NASDAQ")
+    ).with_quality_score(1.5); // Invalid score > 1.0
+    assert!(invalid_proto_event.validate().is_err());
+    
+    // Valid orders should pass validation
+    let valid_order = OrderRequest::new_market_buy("AAPL", 100.0);
+    let valid_order_event = ProtoEvent::new(valid_order);
+    assert!(valid_order_event.validate().is_ok());
 }
 
 #[tokio::test]
-async fn test_event_serialization() {
-    let prediction = Prediction::new(155.0, 0.85);
-    let event = ModelPredictionEvent::new(
-        "lstm_v1".to_string(),
-        "AAPL".to_string(),
-        prediction
-    );
+async fn test_proto_event_serialization() {
+    let trade_event = MarketDataEvent::new_trade("AAPL", 155.0, 100.0, "NASDAQ");
+    let proto_event = ProtoEvent::new(trade_event.clone())
+        .with_quality_score(0.95)
+        .with_metadata("exchange".to_string(), "NASDAQ".to_string());
     
-    // Test JSON serialization
-    let json_value = event.to_json();
-    assert!(json_value.is_object());
-    assert!(json_value.get("symbol").is_some());
-    assert!(json_value.get("base").is_some());
+    // Test protobuf serialization
+    let proto_bytes = proto_event.to_proto_bytes().unwrap();
+    assert!(!proto_bytes.is_empty());
+    
+    // Verify we can deserialize the proto message back
+    let deserialized = MarketDataEvent::decode(&proto_bytes[..]).unwrap();
+    assert_eq!(deserialized.symbol, "AAPL");
+    
+    // Verify proto type name
+    assert_eq!(proto_event.proto_type_name(), "neural_trader.market_data.v1.MarketDataEvent");
 }
 
 #[tokio::test]
-async fn test_concurrent_event_publishing() {
-    let bus = Arc::new(InMemoryEventBus::new());
+async fn test_concurrent_proto_event_publishing() {
+    let bus = Arc::new(ProtoInMemoryEventBus::for_testing());
     
-    // Create stream to keep channel open
-    let _stream = bus.get_stream("price_update").await.unwrap();
-    
-    // Spawn multiple tasks publishing events concurrently
+    // Spawn multiple tasks publishing proto events concurrently
     let mut handles = Vec::new();
     
     for i in 0..10 {
         let bus_clone = bus.clone();
         let handle = tokio::spawn(async move {
-            let event = Arc::new(PriceUpdateEvent::new(
-                format!("STOCK{}", i),
+            let trade_event = MarketDataEvent::new_trade(
+                &format!("STOCK{}", i),
                 100.0 + i as f64,
-                99.0 + i as f64,
-            ));
+                50.0,
+                "NASDAQ"
+            );
+            let proto_event = ProtoEvent::new(trade_event)
+                .with_quality_score(0.90 + (i as f64 * 0.01))
+                .with_metadata("batch".to_string(), i.to_string());
             
-            bus_clone.publish(event).await.unwrap();
+            let channel = format!("stream:symbol:STOCK{}", i);
+            bus_clone.publish_proto(&channel, proto_event).await.unwrap();
         });
         handles.push(handle);
     }
@@ -161,6 +218,10 @@ async fn test_concurrent_event_publishing() {
         handle.await.unwrap();
     }
     
-    // All events should have been published successfully
-    // (no panics or errors in the tasks above)
+    // Verify that all channels were created with events
+    for i in 0..10 {
+        let channel = format!("stream:symbol:STOCK{}", i);
+        let info = bus.get_proto_channel_info(&channel).await.unwrap();
+        assert_eq!(info.message_count, 1);
+    }
 }
