@@ -7,6 +7,7 @@ package neural_trader.interfaces.ingestion;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
 
 option go_package = "github.com/neural-trader/interfaces/ingestion";
 option java_package = "io.neuraltrader.interfaces.ingestion";

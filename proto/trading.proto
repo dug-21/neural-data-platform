@@ -1,0 +1,408 @@
+syntax = "proto3";
+package neural_trader.trading.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "common.proto";
+
+service TradingService {
+  // Order management
+  rpc SubmitOrder(OrderRequest) returns (OrderResponse);
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc ModifyOrder(ModifyOrderRequest) returns (ModifyOrderResponse);
+  rpc GetOrderStatus(OrderStatusRequest) returns (OrderStatus);
+  
+  // Portfolio management
+  rpc GetPortfolio(PortfolioRequest) returns (Portfolio);
+  rpc GetPositions(PositionsRequest) returns (PositionList);
+  rpc GetPerformance(PerformanceRequest) returns (PerformanceMetrics);
+  
+  // Risk management
+  rpc ValidateRisk(RiskValidationRequest) returns (RiskValidationResponse);
+  rpc GetRiskMetrics(RiskMetricsRequest) returns (RiskMetrics);
+  rpc SetRiskLimits(RiskLimitsRequest) returns (RiskLimitsResponse);
+  
+  // Strategy management
+  rpc GetTradingSignals(SignalRequest) returns (SignalResponse);
+  rpc EnableStrategy(StrategyRequest) returns (StrategyResponse);
+  rpc DisableStrategy(StrategyRequest) returns (StrategyResponse);
+  
+  // Emergency controls
+  rpc EmergencyStop(EmergencyStopRequest) returns (EmergencyStopResponse);
+  rpc ResumeTrading(ResumeRequest) returns (ResumeResponse);
+  
+  // Health and metrics
+  rpc GetServiceHealth(google.protobuf.Empty) returns (neural_trader.common.v1.ServiceHealth);
+  rpc GetServiceMetrics(google.protobuf.Empty) returns (neural_trader.common.v1.ServiceMetrics);
+}
+
+message OrderRequest {
+  string client_order_id = 1;
+  string symbol = 2;
+  OrderSide side = 3;
+  double quantity = 4;
+  OrderType order_type = 5;
+  double price = 6;  // For limit orders
+  double stop_price = 7;  // For stop orders
+  TimeInForce time_in_force = 8;
+  OrderSource source = 9;
+  map<string, string> metadata = 10;
+}
+
+message OrderResponse {
+  string order_id = 1;
+  OrderState state = 2;
+  string broker_order_id = 3;
+  google.protobuf.Timestamp submitted_at = 4;
+  repeated string warnings = 5;
+  RiskValidationResult risk_validation = 6;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string client_order_id = 2;
+}
+
+message CancelOrderResponse {
+  bool success = 1;
+  string message = 2;
+  OrderState new_state = 3;
+}
+
+message ModifyOrderRequest {
+  string order_id = 1;
+   double new_quantity = 2;
+   double new_price = 3;
+   double new_stop_price = 4;
+}
+
+message ModifyOrderResponse {
+  bool success = 1;
+  string message = 2;
+  OrderDetails updated_order = 3;
+}
+
+message OrderStatusRequest {
+  string order_id = 1;
+  string client_order_id = 2;
+}
+
+message OrderStatus {
+  string order_id = 1;
+  OrderState state = 2;
+  double filled_quantity = 3;
+  double remaining_quantity = 4;
+  double average_fill_price = 5;
+  repeated Fill fills = 6;
+  google.protobuf.Timestamp last_updated = 7;
+}
+
+message OrderDetails {
+  string order_id = 1;
+  string client_order_id = 2;
+  string symbol = 3;
+  OrderSide side = 4;
+  double quantity = 5;
+  OrderType order_type = 6;
+  double price = 7;
+  OrderState state = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message Fill {
+  string fill_id = 1;
+  double quantity = 2;
+  double price = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  string exchange = 5;
+}
+
+message PortfolioRequest {
+  string account_id = 1;
+  bool include_positions = 2;
+}
+
+message Portfolio {
+  string account_id = 1;
+  double total_value = 2;
+  double cash_balance = 3;
+  double equity = 4;
+  double buying_power = 5;
+  repeated Position positions = 6;
+  PortfolioMetrics metrics = 7;
+  google.protobuf.Timestamp last_updated = 8;
+}
+
+message Position {
+  string symbol = 1;
+  double quantity = 2;
+  double market_value = 3;
+  double cost_basis = 4;
+  double unrealized_pnl = 5;
+  double realized_pnl = 6;
+  double average_cost = 7;
+  google.protobuf.Timestamp first_acquired = 8;
+  google.protobuf.Timestamp last_updated = 9;
+}
+
+message PositionsRequest {
+  string account_id = 1;
+  repeated string symbols = 2;
+}
+
+message PositionList {
+  repeated Position positions = 1;
+  google.protobuf.Timestamp snapshot_time = 2;
+}
+
+message PerformanceRequest {
+  string account_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+message PerformanceMetrics {
+  double total_return = 1;
+  double total_return_percentage = 2;
+  double annualized_return = 3;
+  double sharpe_ratio = 4;
+  double max_drawdown = 5;
+  double volatility = 6;
+  int32 winning_trades = 7;
+  int32 losing_trades = 8;
+  double profit_factor = 9;
+  double average_win = 10;
+  double average_loss = 11;
+  PortfolioMetrics current_metrics = 12;
+}
+
+message PortfolioMetrics {
+  double beta = 1;
+  double alpha = 2;
+  double var_95 = 3;  // Value at Risk 95%
+  double var_99 = 4;  // Value at Risk 99%
+  double expected_shortfall = 5;
+}
+
+message RiskValidationRequest {
+  OrderRequest order = 1;
+  Portfolio current_portfolio = 2;
+  map<string, double> current_positions = 3;
+}
+
+message RiskValidationResponse {
+  bool approved = 1;
+  double risk_score = 2;
+  repeated string warnings = 3;
+  repeated string errors = 4;
+  RiskAssessment assessment = 5;
+}
+
+message RiskValidationResult {
+  bool approved = 1;
+  double risk_score = 2;
+  repeated string warnings = 3;
+}
+
+message RiskAssessment {
+  double position_risk = 1;
+  double portfolio_concentration = 2;
+  double correlation_risk = 3;
+  double drawdown_risk = 4;
+  double liquidity_risk = 5;
+  double overall_score = 6;
+}
+
+message RiskMetricsRequest {
+  string account_id = 1;
+  repeated string symbols = 2;
+}
+
+message RiskMetrics {
+  double portfolio_var = 1;
+  double portfolio_cvar = 2;
+  double max_position_size = 3;
+  double correlation_limit = 4;
+  map<string, double> symbol_limits = 5;
+  RiskLimits active_limits = 6;
+}
+
+message RiskLimitsRequest {
+  string account_id = 1;
+  RiskLimits limits = 2;
+}
+
+message RiskLimitsResponse {
+  bool success = 1;
+  RiskLimits applied_limits = 2;
+  google.protobuf.Timestamp effective_at = 3;
+}
+
+message RiskLimits {
+  double max_position_value = 1;
+  double max_daily_loss = 2;
+  double max_portfolio_concentration = 3;
+  double max_correlation_exposure = 4;
+  map<string, double> symbol_limits = 5;
+}
+
+message SignalRequest {
+  repeated string symbols = 1;
+  repeated string strategies = 2;
+  double min_confidence = 3;
+}
+
+message SignalResponse {
+  repeated TradingSignal signals = 1;
+  google.protobuf.Timestamp generated_at = 2;
+}
+
+message TradingSignal {
+  string signal_id = 1;
+  string symbol = 2;
+  SignalType signal_type = 3;
+  double strength = 4;
+  double confidence = 5;
+  string strategy_name = 6;
+  OrderRecommendation recommendation = 7;
+  RiskAssessment risk_assessment = 8;
+  string reasoning = 9;
+  google.protobuf.Timestamp valid_until = 10;
+}
+
+message OrderRecommendation {
+  OrderType order_type = 1;
+  double quantity = 2;
+  double suggested_price = 3;
+  double stop_loss = 4;
+  double take_profit = 5;
+  PositionSizing position_sizing = 6;
+}
+
+message PositionSizing {
+  string method = 1;
+  double risk_percentage = 2;
+  double max_position_size = 3;
+  double kelly_fraction = 4;
+}
+
+message StrategyRequest {
+  string strategy_name = 1;
+  repeated string symbols = 2;
+  map<string, string> parameters = 3;
+}
+
+message StrategyResponse {
+  bool success = 1;
+  string message = 2;
+  StrategyStatus status = 3;
+}
+
+message StrategyStatus {
+  string name = 1;
+  bool enabled = 2;
+  repeated string symbols = 3;
+  map<string, string> parameters = 4;
+  StrategyMetrics metrics = 5;
+}
+
+message StrategyMetrics {
+  int32 signals_generated = 1;
+  int32 trades_executed = 2;
+  double win_rate = 3;
+  double profit_loss = 4;
+  double average_trade_duration_hours = 5;
+}
+
+message EmergencyStopRequest {
+  string reason = 1;
+  bool cancel_all_orders = 2;
+  bool liquidate_positions = 3;
+}
+
+message EmergencyStopResponse {
+  bool success = 1;
+  string message = 2;
+  int32 orders_cancelled = 3;
+  int32 positions_liquidated = 4;
+  google.protobuf.Timestamp stopped_at = 5;
+}
+
+message ResumeRequest {
+  string reason = 1;
+}
+
+message ResumeResponse {
+  bool success = 1;
+  string message = 2;
+  google.protobuf.Timestamp resumed_at = 3;
+}
+
+enum OrderSide {
+  ORDER_SIDE_UNSPECIFIED = 0;
+  BUY = 1;
+  SELL = 2;
+}
+
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  MARKET = 1;
+  LIMIT = 2;
+  STOP = 3;
+  STOP_LIMIT = 4;
+}
+
+enum OrderState {
+  ORDER_STATE_UNSPECIFIED = 0;
+  PENDING = 1;
+  SUBMITTED = 2;
+  PARTIALLY_FILLED = 3;
+  FILLED = 4;
+  CANCELLED = 5;
+  REJECTED = 6;
+  EXPIRED = 7;
+}
+
+enum OrderSource {
+  ORDER_SOURCE_UNSPECIFIED = 0;
+  NEURAL_STRATEGY = 1;
+  MANUAL = 2;
+  RISK_MANAGEMENT = 3;
+  EMERGENCY = 4;
+}
+
+enum TimeInForce {
+  TIME_IN_FORCE_UNSPECIFIED = 0;
+  DAY = 1;
+  GTC = 2;  // Good Till Cancelled
+  IOC = 3;  // Immediate or Cancel
+  FOK = 4;  // Fill or Kill
+}
+
+enum SignalType {
+  SIGNAL_TYPE_UNSPECIFIED = 0;
+  BUY_SIGNAL = 1;
+  SELL_SIGNAL = 2;
+  HOLD_SIGNAL = 3;
+  NEUTRAL = 4;
+}
+
+// Error Codes
+enum TradingErrorCode {
+  TRADING_ERROR_UNSPECIFIED = 0;
+  INSUFFICIENT_FUNDS = 1;
+  INVALID_SYMBOL = 2;
+  ORDER_REJECTED = 3;
+  RISK_LIMIT_EXCEEDED = 4;
+  MARKET_CLOSED = 5;
+  POSITION_NOT_FOUND = 6;
+  BROKER_ERROR = 7;
+}
+
+message TradingError {
+  TradingErrorCode code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+  bool retryable = 4;
+  int32 retry_after_seconds = 5;
+}

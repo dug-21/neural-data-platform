@@ -1,0 +1,160 @@
+//! ProtoMessage implementations for generated protobuf types
+//!
+//! This module provides ProtoMessage trait implementations for all
+//! generated protobuf types used in the EventBus system.
+
+use crate::eventbus::types::ProtoMessage;
+use crate::eventbus::error::EventBusError;
+
+// Import the generated proto types
+use crate::proto::EventEnvelope;
+
+/// Implementation of ProtoMessage for EventEnvelope
+impl ProtoMessage for EventEnvelope {
+    fn proto_type_name() -> &'static str {
+        "neural_trader.interfaces.ingestion.EventEnvelope"
+    }
+    
+    fn validate(&self) -> Result<(), EventBusError> {
+        // Validate required fields
+        if self.message_id.is_empty() {
+            return Err(EventBusError::schema_validation("message_id is required"));
+        }
+        
+        if self.source.is_empty() {
+            return Err(EventBusError::schema_validation("source is required"));
+        }
+        
+        if self.domain.is_empty() {
+            return Err(EventBusError::schema_validation("domain is required"));
+        }
+        
+        if self.event_type.is_empty() {
+            return Err(EventBusError::schema_validation("event_type is required"));
+        }
+        
+        // Validate timestamps
+        if let Some(created_at) = &self.created_at {
+            if created_at.seconds < 0 {
+                return Err(EventBusError::schema_validation("created_at must be positive"));
+            }
+        }
+        
+        // Validate quality metadata if present
+        if let Some(quality) = &self.quality {
+            if quality.completeness < 0.0 || quality.completeness > 100.0 {
+                return Err(EventBusError::schema_validation("completeness must be 0-100"));
+            }
+            
+            if quality.quality_score < 0.0 || quality.quality_score > 100.0 {
+                return Err(EventBusError::schema_validation("quality_score must be 0-100"));
+            }
+        }
+        
+        // Validate routing metadata if present
+        if let Some(routing) = &self.routing {
+            if routing.priority < 0 || routing.priority > 9 {
+                return Err(EventBusError::schema_validation("priority must be 0-9"));
+            }
+            
+            if routing.ttl_seconds < 0 {
+                return Err(EventBusError::schema_validation("ttl_seconds must be non-negative"));
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+// Add other proto message implementations here as needed
+// Example for common types:
+
+/*
+use crate::proto::neural_trader::common::v1::ServiceHealth;
+
+impl ProtoMessage for ServiceHealth {
+    fn proto_type_name() -> &'static str {
+        "neural_trader.common.v1.ServiceHealth"
+    }
+    
+    fn validate(&self) -> Result<(), EventBusError> {
+        if self.latency_ms < 0.0 {
+            return Err(EventBusError::schema_validation("latency_ms must be non-negative"));
+        }
+        
+        if self.version.is_empty() {
+            return Err(EventBusError::schema_validation("version is required"));
+        }
+        
+        Ok(())
+    }
+}
+*/
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use prost_types::Timestamp;
+    use crate::proto::{QualityMetadata, RoutingMetadata};
+    
+    #[test]
+    fn test_event_envelope_validation() {
+        let mut envelope = EventEnvelope {
+            message_id: "test-123".to_string(),
+            correlation_id: "corr-456".to_string(),
+            source: "test-source".to_string(),
+            domain: "test-domain".to_string(),
+            event_type: "TestEvent".to_string(),
+            schema_version: "1.0".to_string(),
+            created_at: Some(Timestamp { seconds: 1693843200, nanos: 0 }),
+            ingested_at: None,
+            routing: None,
+            quality: None,
+            payload: None,
+            headers: std::collections::HashMap::new(),
+            tracing: None,
+        };
+        
+        // Valid envelope should pass
+        assert!(envelope.validate().is_ok());
+        
+        // Empty message_id should fail
+        envelope.message_id = "".to_string();
+        assert!(envelope.validate().is_err());
+        envelope.message_id = "test-123".to_string();
+        
+        // Invalid quality metadata should fail
+        envelope.quality = Some(QualityMetadata {
+            completeness: 150.0, // Invalid - should be 0-100
+            latency_ms: 100,
+            validation_status: 0,
+            quality_score: 80.0,
+            anomalies: vec![],
+        });
+        assert!(envelope.validate().is_err());
+        
+        // Fix quality and test routing
+        envelope.quality = Some(QualityMetadata {
+            completeness: 95.0,
+            latency_ms: 100,
+            validation_status: 1,
+            quality_score: 80.0,
+            anomalies: vec![],
+        });
+        
+        envelope.routing = Some(RoutingMetadata {
+            topic: "test-topic".to_string(),
+            partition_key: "test-key".to_string(),
+            priority: 15, // Invalid - should be 0-9
+            ttl_seconds: 3600,
+            tags: vec![],
+            retry_policy: None,
+        });
+        assert!(envelope.validate().is_err());
+    }
+    
+    #[test]
+    fn test_proto_type_name() {
+        assert_eq!(EventEnvelope::proto_type_name(), "neural_trader.interfaces.ingestion.EventEnvelope");
+    }
+}
