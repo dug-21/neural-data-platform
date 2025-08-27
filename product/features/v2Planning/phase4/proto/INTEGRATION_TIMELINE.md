@@ -15,145 +15,233 @@
 This document provides a detailed integration timeline and dependency analysis for the proto-only EventBus integration within Neural Trader V2 Phase 4. The integration implements a clean Protocol Buffer messaging system without dual support complexity, focusing on speed and simplicity.
 
 **Key Timeline Highlights:**
-- **Total Duration**: 4-5 weeks (160-200 developer hours)
-- **Critical Path**: 22 days
-- **Parallel Workstreams**: 3 concurrent tracks
+- **Total Duration**: 5-6 weeks (200-240 developer hours)
+- **Critical Path**: 28 days
+- **Parallel Workstreams**: 4 concurrent tracks including Data-Staging
 - **Risk Buffer**: 15% allocated for integration challenges
 
 ---
 
+## Revised Timeline (5-6 weeks)
+
+### Week 1: Data-Staging Foundation
+**Days 1-3**: Data-Staging Service Setup
+- Create data-staging crate structure
+- Implement Redis consumer
+- Basic JSON validation
+
+**Days 4-5**: Proto Transformation
+- Implement JSON→Proto converter
+- Add quality scoring algorithm
+- Create DLQ handling
+
+### Week 2: Data-Staging Integration
+**Days 6-8**: EventBus Integration
+- Connect Data-Staging to EventBus
+- Implement proto publishing
+- Add monitoring/metrics
+
+**Days 9-10**: Testing & Validation
+- Unit tests for transformation
+- Integration tests with Redis
+- Performance benchmarking
+
+### Week 3: EventBus Proto-Only
+**Days 11-13**: EventBus Updates
+- Remove ALL JSON support
+- Enforce proto-only validation
+- Update all EventBus implementations
+
+**Days 14-15**: Consumer Migration
+- Update ML-Ops to proto
+- Update Execution to proto
+- Remove JSON parsing
+
+### Week 4: Integration Testing
+**Days 16-18**: End-to-End Testing
+- Full pipeline: Ingestion→Redis→Staging→EventBus→Consumers
+- Performance testing
+- Quality metrics validation
+
+**Days 19-20**: Bug Fixes & Optimization
+
+### Week 5: Production Hardening
+**Days 21-23**: Production Features
+- Monitoring dashboards
+- Alert configuration
+- DLQ management UI
+
+**Days 24-25**: Documentation & Training
+
+### Week 6: Deployment
+**Days 26-28**: Staged Rollout
+- Deploy Data-Staging
+- Monitor metrics
+- Gradual traffic shift
+
+## Resource Allocation (UPDATED)
+- **Data-Staging Development**: 80 hours (NEW)
+- **EventBus Updates**: 40 hours (reduced from 60)
+- **Consumer Migration**: 40 hours
+- **Testing**: 40 hours
+- **Total**: 200 hours (slightly increased)
+
 ## 1. Phase-by-Phase Implementation Timeline
 
-### Phase 1: Foundation and Schema Setup (Week 1)
+### Phase 1: Data-Staging Foundation (Week 1-2)
+**Duration**: 10 business days | **Effort**: 80 hours | **Criticality**: High
+
+#### Week 1: Data-Staging Service Setup
+**Days 1-3: Service Infrastructure**
+- **Day 1 (8h)**: Data-Staging crate setup
+  - Create data-staging crate structure with proper dependencies
+  - Set up Redis consumer infrastructure
+  - Implement basic JSON message consumption from Redis
+- **Day 2 (8h)**: JSON validation framework
+  - Implement comprehensive JSON schema validation
+  - Create message quality scoring algorithms
+  - Set up dead letter queue (DLQ) handling for invalid messages
+- **Day 3 (8h)**: Proto transformation engine
+  - Implement JSON→Proto message converter
+  - Create mapping logic for all supported message types
+  - Add transformation validation and error handling
+
+**Days 4-5: Proto Transformation Implementation**
+- **Day 4 (8h)**: Message type handlers
+  - Implement market data transformation (JSON→MarketData proto)
+  - Implement trading signal transformation (JSON→TradingSignal proto)
+  - Implement configuration transformation (JSON→Config proto)
+- **Day 5 (8h)**: Quality assurance and DLQ
+  - Implement message quality scoring algorithm
+  - Create DLQ management for failed transformations
+  - Add metrics and monitoring for transformation pipeline
+
+#### Week 2: Data-Staging Integration
+**Days 6-8: EventBus Integration**
+- **Day 6 (8h)**: EventBus connection
+  - Connect Data-Staging service to EventBus
+  - Implement proto message publishing to EventBus
+  - Create topic routing and message filtering
+- **Day 7 (8h)**: Monitoring and observability
+  - Add comprehensive metrics collection
+  - Implement logging and tracing
+  - Create health checks and service monitoring
+- **Day 8 (8h)**: Performance optimization
+  - Optimize JSON parsing and proto serialization
+  - Implement message batching for high throughput
+  - Add connection pooling and resource management
+
+**Days 9-10: Testing & Validation**
+- **Day 9 (8h)**: Unit and integration testing
+  - Create comprehensive unit test suite for transformations
+  - Implement integration tests with Redis and EventBus
+  - Add performance benchmarking tests
+- **Day 10 (8h)**: End-to-end validation
+  - Test complete pipeline: Redis→Data-Staging→EventBus
+  - Validate message quality and transformation accuracy
+  - Performance testing under load
+
+### Phase 2: EventBus Proto-Only Implementation (Week 3)
 **Duration**: 5 business days | **Effort**: 40 hours | **Criticality**: High
 
-#### Week 1: Proto-Only EventBus Implementation
-**Days 1-2: Schema Infrastructure**
-- **Day 1 (8h)**: Proto schema audit and preparation
-  - Catalog all `.proto` files and validate contracts
-  - Design schema registry for proto-only system
-  - Configure Rust proto code generation pipeline
-- **Day 2 (8h)**: Core EventBus rewrite
-  - Replace existing EventBus with proto-only implementation
-  - Implement `ProtoEvent<T>` as primary event type
-  - Create proto serialization/deserialization framework
-
-**Days 3-4: Type-Safe API Implementation**
-- **Day 3 (8h)**: Publisher/Subscriber API development
+#### Week 3: EventBus Updates
+**Days 11-13: Proto-Only Conversion**
+- **Day 11 (8h)**: Remove JSON support
+  - Remove ALL JSON message handling from EventBus
+  - Implement strict proto-only validation
+  - Update EventBus core to enforce proto contracts
+- **Day 12 (8h)**: API updates
+  - Update all EventBus APIs to proto-only
   - Implement type-safe `publish<T>()` and `subscribe<T>()` methods
   - Create proto message routing and filtering
-  - Add compile-time type safety features
-- **Day 4 (8h)**: Testing framework
-  - Develop proto message validation tests
-  - Create performance benchmarking suite
-  - Establish integration test procedures
+- **Day 13 (8h)**: Testing framework updates
+  - Update all EventBus tests for proto-only operation
+  - Create proto message validation test suite
+  - Establish performance baseline for proto-only system
 
-**Day 5: Phase 1 validation**
-- **Day 5 (8h)**: Validation and documentation
-  - Execute comprehensive test suite
-  - Performance validation against requirements
-  - Create developer documentation and examples
+**Days 14-15: Consumer Migration**
+- **Day 14 (8h)**: ML-Ops service updates
+  - Update ML-Ops service to consume proto messages only
+  - Remove all JSON parsing from ML-Ops pipeline
+  - Implement proto message handling for neural processing
+- **Day 15 (8h)**: Execution service updates
+  - Update Execution service for proto-only operation
+  - Remove JSON handling from trading execution pipeline
+  - Validate proto message flows in execution system
 
-### Phase 2: Service Integration (Week 2-3)
-**Duration**: 8 business days | **Effort**: 64 hours | **Criticality**: High
+### Phase 3: Integration Testing (Week 4)
+**Duration**: 5 business days | **Effort**: 40 hours | **Criticality**: High
 
-#### Week 2: Python Bridge Integration
-**Days 6-8: Data Ingestion Service Integration**
-- **Day 6 (8h)**: Python EventBus client rewrite
-  - Replace existing bridge with proto-only client
-  - Implement proto message publishing from Python
-  - Create Python-Rust proto serialization
-- **Day 7 (8h)**: Market data proto integration
-  - Integrate `market_data.proto` contracts
-  - Implement MarketDataEvent, TradeData, QuoteData flows
-  - Validate real-time market data processing
-- **Day 8 (8h)**: Configuration and testing
-  - Implement `config_store.proto` event handling
-  - End-to-end testing of Python → EventBus flows
-  - Performance validation
+#### Week 4: End-to-End Testing
+**Days 16-18: Full Pipeline Testing**
+- **Day 16 (8h)**: Complete pipeline validation
+  - Test full data flow: Ingestion→Redis→Data-Staging→EventBus→Consumers
+  - Validate JSON→Proto transformation accuracy
+  - Test message quality scoring and DLQ functionality
+- **Day 17 (8h)**: Performance testing
+  - Execute high-load performance testing
+  - Validate system performance under stress
+  - Benchmark proto-only EventBus performance
+- **Day 18 (8h)**: Quality metrics validation
+  - Validate message quality scoring algorithms
+  - Test DLQ management and recovery procedures
+  - Confirm all proto contract compliance
 
-#### Week 3: ML-Ops Service Integration
-**Days 9-11: Neural ML-Ops Integration**
-- **Day 9 (8h)**: ML-Ops EventBus client rewrite
-  - Replace existing client with proto-only implementation
-  - Integrate `eventbus-mlops.proto` contracts
-  - Implement FeatureExtractionRequest/Response handling
-- **Day 10 (8h)**: Trading signal integration
-  - Implement `trading.proto` integration
-  - Create OrderRequest/OrderResponse handling
-  - Integrate TradingSignal proto messaging
-- **Day 11 (8h)**: ML-Ops validation and testing
-  - End-to-end ML pipeline testing
-  - Proto contract compliance validation
-  - Performance testing
+**Days 19-20: Bug Fixes & Optimization**
+- **Day 19 (8h)**: Issue resolution
+  - Address any issues found during integration testing
+  - Optimize performance bottlenecks
+  - Fix any proto transformation bugs
+- **Day 20 (8h)**: System optimization
+  - Fine-tune performance parameters
+  - Optimize resource utilization
+  - Prepare system for production deployment
 
-**Days 12-13: Phase 2 Integration Testing**
-- **Day 12 (8h)**: Cross-service integration testing
-  - Test complete data flow: Ingestion → EventBus → ML-Ops
-  - Validate proto contract enforcement
-  - Error handling validation
-- **Day 13 (8h)**: Phase 2 validation and sign-off
-  - Complete integration test suite execution
-  - Performance benchmarking
-  - Stakeholder review and approval
+### Phase 4: Production Hardening (Week 5)
+**Duration**: 5 business days | **Effort**: 40 hours | **Criticality**: High
 
-### Phase 3: Performance and Production Readiness (Week 4-5)
-**Duration**: 8 business days | **Effort**: 64 hours | **Criticality**: Medium
+#### Week 5: Production Features
+**Days 21-23: Production Features Development**
+- **Day 21 (8h)**: Monitoring dashboards
+  - Create comprehensive monitoring dashboards for Data-Staging service
+  - Implement proto transformation metrics visualization
+  - Add EventBus proto message flow monitoring
+- **Day 22 (8h)**: Alert configuration
+  - Set up alerting for DLQ threshold breaches
+  - Configure performance degradation alerts
+  - Implement proto validation failure notifications
+- **Day 23 (8h)**: DLQ management UI
+  - Create DLQ management interface
+  - Implement message replay functionality
+  - Add DLQ analytics and reporting
 
-#### Week 4: Performance Optimization
-**Days 14-16: Core Optimizations**
-- **Day 14 (8h)**: Message batching and routing
-  - Implement proto message batching for high-throughput
-  - Create efficient proto-based routing
-  - Add priority-based message handling
-- **Day 15 (8h)**: Performance tuning
-  - Optimize proto serialization/deserialization
-  - Implement zero-copy message handling
-  - Tune memory allocation patterns
-- **Day 16 (8h)**: Monitoring and observability
-  - Create proto-specific metrics collection
-  - Implement message tracing capabilities
-  - Add debugging tools
+**Days 24-25: Documentation & Training**
+- **Day 24 (8h)**: Technical documentation
+  - Complete Data-Staging service documentation
+  - Create proto integration runbooks
+  - Document operational procedures
+- **Day 25 (8h)**: Team training
+  - Train operations team on new Data-Staging service
+  - Conduct proto-only EventBus training sessions
+  - Create troubleshooting guides
 
-#### Week 5: Production Readiness
-**Days 17-19: Production Hardening**
-- **Day 17 (8h)**: Error handling and reliability
-  - Implement robust error handling
-  - Create message dead letter queues
-  - Add automatic retry mechanisms
-- **Day 18 (8h)**: Security and scaling
-  - Implement security hardening
-  - Add horizontal scaling support
-  - Prepare deployment automation
-- **Day 19 (8h)**: Stress testing and validation
-  - Execute high-load stress tests
-  - Validate scaling characteristics
-  - Performance regression analysis
+### Phase 5: Production Deployment (Week 6)
+**Duration**: 3 business days | **Effort**: 24 hours | **Criticality**: High
 
-**Days 20-21: Phase 3 Validation**
-- **Day 20 (8h)**: Comprehensive testing
-  - Execute full test suite including stress tests
-  - Validate all performance requirements
-  - Security and reliability testing
-- **Day 21 (8h)**: Phase 3 sign-off and documentation
-  - Final performance validation
-  - Complete technical documentation
-  - Stakeholder approval
-
-### Phase 4: Production Deployment (Week 5)
-**Duration**: 2 business days | **Effort**: 16 hours | **Criticality**: High
-
-**Days 22-23: Go-Live Preparation and Deployment**
-- **Day 22 (8h)**: Production deployment preparation
-  - Final production environment setup
-  - Production deployment rehearsal
-  - Go-live checklist validation
-  - Operations team final training
-- **Day 23 (8h)**: Go-live and validation
-  - Production deployment execution
-  - Post-deployment monitoring and validation
-  - System stability confirmation
-  - Success criteria validation
+#### Week 6: Staged Rollout
+**Days 26-28: Production Deployment**
+- **Day 26 (8h)**: Data-Staging deployment
+  - Deploy Data-Staging service to production
+  - Configure Redis→Data-Staging connection
+  - Enable monitoring and alerting
+- **Day 27 (8h)**: Metrics monitoring
+  - Monitor transformation quality metrics
+  - Validate proto message flow
+  - Assess system performance impact
+- **Day 28 (8h)**: Gradual traffic shift
+  - Gradually increase Data-Staging processing load
+  - Monitor system stability and performance
+  - Complete transition to proto-only EventBus
 
 ---
 
@@ -163,47 +251,55 @@ This document provides a detailed integration timeline and dependency analysis f
 
 ```mermaid
 gantt
-    title EventBus Proto-Only Integration Critical Path
+    title Data-Staging + Proto-Only EventBus Integration Critical Path
     dateFormat  YYYY-MM-DD
-    section Foundation
-    Proto Schema Analysis     :crit, schema, 2025-08-26, 1d
-    EventBus Core Rewrite    :crit, core, after schema, 1d
-    Type-Safe API           :crit, api, after core, 2d
-    Testing Framework       :crit, testing, after api, 1d
+    section Data-Staging Foundation
+    Data-Staging Service Setup  :crit, staging-setup, 2025-08-26, 3d
+    Proto Transformation       :crit, proto-transform, after staging-setup, 2d
+    EventBus Integration       :crit, eventbus-connect, after proto-transform, 3d
+    Staging Validation         :crit, staging-test, after eventbus-connect, 2d
     
-    section Service Integration
-    Python Bridge Rewrite   :crit, python, after testing, 3d
-    ML-Ops Integration     :crit, mlops, after python, 3d
-    Cross-Service Testing  :crit, crosstest, after mlops, 2d
+    section EventBus Proto-Only
+    EventBus Updates          :crit, eventbus-update, after staging-test, 3d
+    Consumer Migration        :crit, consumer-migrate, after eventbus-update, 2d
+    
+    section Integration Testing
+    End-to-End Testing        :crit, e2e-test, after consumer-migrate, 3d
+    Bug Fixes & Optimization  :crit, optimization, after e2e-test, 2d
     
     section Production
-    Performance Optimization :perf, after crosstest, 3d
-    Production Hardening    :hardening, after perf, 4d
-    Final Validation       :final, after hardening, 1d
-    Production Deployment  :deploy, after final, 2d
+    Production Features       :prod-features, after optimization, 3d
+    Documentation & Training  :training, after prod-features, 2d
+    Staged Rollout           :deploy, after training, 3d
 ```
 
 ### 2.2 Component Dependencies
 
 #### Core Dependencies
-1. **Proto Schema Infrastructure** → All subsequent components
-2. **EventBus Core Modifications** → Service integrations
-3. **Serialization Framework** → All message handling
-4. **Type-Safe API** → All client integrations
+1. **Data-Staging Service Foundation** → All proto transformation functionality
+2. **JSON→Proto Transformation Engine** → EventBus proto publishing
+3. **EventBus Proto-Only Implementation** → All consumer services
+4. **Proto Schema Infrastructure** → All message validation
+
+#### Data-Staging Dependencies
+1. **Redis Consumer Infrastructure** → JSON message ingestion
+2. **Proto Transformation Engine** → Message quality and conversion
+3. **EventBus Integration** → Proto message publishing
+4. **DLQ Management** → Error handling and recovery
 
 #### Service Integration Dependencies
-1. **Python Bridge** → Data ingestion integration
-2. **ML-Ops Integration** → Trading signal processing
-3. **Config Store Integration** → System configuration management
-4. **Cross-Service Testing** → Production readiness
+1. **Data-Staging Service** → Proto message generation
+2. **EventBus Proto-Only** → Consumer service updates
+3. **ML-Ops Migration** → Neural processing pipeline
+4. **Execution Service Migration** → Trading pipeline integration
 
 #### External Dependencies
-1. **Existing EventBus Implementation** → Core modifications
-2. **Proto Contract Definitions** → Schema registry
-3. **Python Data Ingestion Service** → Bridge integration
-4. **Neural ML-Ops Service** → Trading integration
-5. **TimescaleDB** → Data persistence patterns
-6. **Redis Infrastructure** → Backward compatibility
+1. **Existing Redis Infrastructure** → Data-Staging consumer setup
+2. **Proto Contract Definitions** → Transformation mapping
+3. **EventBus Current Implementation** → Proto-only migration
+4. **ML-Ops Service** → Proto consumer updates
+5. **Execution Service** → Proto consumer updates
+6. **TimescaleDB** → Data persistence patterns
 
 ### 2.3 Risk Dependencies
 1. **Proto Schema Changes** → Backward compatibility requirements
@@ -215,29 +311,30 @@ gantt
 
 ## 3. Critical Path Analysis
 
-### 3.1 Primary Critical Path (22 days)
-1. **Proto Schema Analysis** (1 day) → Foundation for all work
-2. **EventBus Core Rewrite** (1 day) → Proto-only implementation
-3. **Type-Safe API Implementation** (2 days) → Client interface
-4. **Python Bridge Rewrite** (3 days) → Data ingestion flow
-5. **ML-Ops Service Integration** (3 days) → Trading system integration
-6. **Cross-Service Testing** (2 days) → System validation
-7. **Performance Optimization** (3 days) → Production readiness
-8. **Production Hardening** (4 days) → Deployment preparation
-9. **Final Validation** (1 day) → Go-live readiness
-10. **Production Deployment** (2 days) → System activation
+### 3.1 Primary Critical Path (28 days)
+1. **Data-Staging Service Setup** (3 days) → JSON message consumption foundation
+2. **Proto Transformation Implementation** (2 days) → JSON→Proto conversion
+3. **EventBus Integration** (3 days) → Proto message publishing
+4. **Data-Staging Validation** (2 days) → Transformation pipeline testing
+5. **EventBus Proto-Only Updates** (3 days) → Remove JSON support
+6. **Consumer Service Migration** (2 days) → ML-Ops and Execution updates
+7. **End-to-End Integration Testing** (3 days) → Full pipeline validation
+8. **Bug Fixes & Optimization** (2 days) → Performance tuning
+9. **Production Features** (3 days) → Monitoring and DLQ management
+10. **Documentation & Training** (2 days) → Operational readiness
+11. **Staged Rollout** (3 days) → Production deployment
 
 ### 3.2 Critical Path Risks
-1. **Proto Schema Complexity** → May require additional analysis time
-2. **EventBus Core Changes** → Potential for architectural challenges
-3. **Cross-Service Integration** → Dependency coordination complexity
-4. **Performance Requirements** → May need additional optimization cycles
+1. **Data-Staging Complexity** → JSON→Proto transformation may be more complex than anticipated
+2. **EventBus Integration** → Data-Staging to EventBus connection challenges
+3. **Consumer Migration** → Service updates may require more extensive changes
+4. **End-to-End Integration** → Full pipeline complexity and dependencies
 
 ### 3.3 Critical Path Mitigation
-1. **Early Schema Analysis** → Front-load complexity discovery
-2. **Prototype Development** → Validate architectural decisions early
-3. **Parallel Development** → Minimize sequential dependencies
-4. **Continuous Testing** → Early issue identification
+1. **Early Transformation Testing** → Validate JSON→Proto conversion with real data early
+2. **Incremental Integration** → Connect Data-Staging to EventBus incrementally
+3. **Service Analysis** → Front-load consumer service analysis and planning
+4. **Continuous Pipeline Testing** → Test full pipeline early and often
 
 ---
 
@@ -246,27 +343,29 @@ gantt
 ### 4.1 Developer Hours Breakdown
 
 #### By Phase
-- **Phase 1 (Foundation)**: 40 hours
+- **Phase 1 (Data-Staging Foundation)**: 80 hours
+  - Senior Rust Developer: 64 hours
+  - DevOps Engineer: 16 hours
+- **Phase 2 (EventBus Proto-Only)**: 40 hours
   - Senior Rust Developer: 32 hours
   - DevOps Engineer: 8 hours
-- **Phase 2 (Service Integration)**: 64 hours
-  - Senior Rust Developer: 40 hours
-  - Python Developer: 24 hours
-- **Phase 3 (Performance & Production)**: 64 hours
-  - Senior Rust Developer: 40 hours
-  - Performance Engineer: 16 hours
-  - DevOps Engineer: 8 hours
-- **Phase 4 (Production Deployment)**: 16 hours
+- **Phase 3 (Integration Testing)**: 40 hours
+  - Senior Rust Developer: 24 hours
+  - QA Engineer: 16 hours
+- **Phase 4 (Production Hardening)**: 40 hours
+  - Senior Rust Developer: 24 hours
+  - DevOps Engineer: 16 hours
+- **Phase 5 (Production Deployment)**: 24 hours
   - Senior Rust Developer: 8 hours
-  - DevOps Engineer: 8 hours
+  - DevOps Engineer: 16 hours
 
 #### By Role
-- **Senior Rust Developer**: 120 hours (65.2%)
-- **Python Developer**: 24 hours (13.0%)
-- **Performance Engineer**: 16 hours (8.7%)
-- **DevOps Engineer**: 24 hours (13.0%)
+- **Senior Rust Developer**: 152 hours (67.0%)
+- **DevOps Engineer**: 56 hours (24.7%)
+- **QA Engineer**: 16 hours (7.1%)
+- **Python Developer**: 3 hours (1.3%) - Minor integration support
 
-**Total**: 184 hours across 4 roles
+**Total**: 227 hours across 4 roles
 
 ### 4.2 Skill Requirements
 
@@ -930,7 +1029,7 @@ struct DataProviderPlugin;
 
 ## Conclusion
 
-This comprehensive integration timeline provides a structured approach to implementing proto-only EventBus integration within Neural Trader V2 Phase 4. The 5-week timeline emphasizes speed and simplicity by eliminating dual support complexity while maintaining proper risk management and quality validation.
+This comprehensive integration timeline provides a structured approach to implementing Data-Staging service with proto-only EventBus integration within Neural Trader V2 Phase 4. The 5-6 week timeline introduces a critical Data-Staging layer that bridges JSON ingestion with proto-only EventBus, emphasizing clean architecture separation while maintaining system reliability.
 
 **Key Success Factors**:
 1. **Rigorous Phase Gates**: Ensure quality at each milestone

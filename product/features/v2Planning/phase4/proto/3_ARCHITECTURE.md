@@ -68,7 +68,37 @@ graph TB
     ContractEnforcer --> EventBus
 ```
 
-## 2. C4 Context Diagram: Proto-Only System
+## 2. Updated C4 Context Diagram: Neural-Trader Platform with Data-Staging
+
+```mermaid
+graph TB
+    subgraph External
+        MP[Market Providers]
+        MLM[ML Models]
+        TE[Trading Engine]
+    end
+    
+    subgraph "Neural-Trader Platform"
+        DI[Data Ingestion<br/>Raw JSON]
+        Redis[(Redis<br/>Raw Data)]
+        DS[Data-Staging<br/>NEW]
+        EB[EventBus<br/>Proto Only]
+        MLOps[ML-Ops]
+        EX[Execution]
+    end
+    
+    MP -->|WebSocket/REST| DI
+    DI -->|JSON| Redis
+    Redis -->|JSON| DS
+    DS -->|Proto Only| EB
+    EB -->|Proto| MLOps
+    EB -->|Proto| EX
+    MLOps -->|Proto| MLM
+    EX -->|Proto| TE
+    
+    style DS fill:#90EE90
+    style EB fill:#FFB6C1
+```
 
 ```xml
 <mxfile host="draw.io" version="24.7.17">
@@ -78,15 +108,15 @@ graph TB
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
         
-        <mxCell id="neural-trader-system" value="Neural Trader System&#xa;&#xa;Software System&#xa;&#xa;High-performance trading system with&#xa;strict Protocol Buffer contracts.&#xa;Only proto messages are accepted.&#xa;&#xa;Technology: Rust, gRPC, Protocol Buffers" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#1ba1e2;strokeColor=#006EAF;fontColor=#ffffff;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+        <mxCell id="neural-trader-system" value="Neural Trader System&#xa;&#xa;Software System&#xa;&#xa;High-performance trading system with&#xa;Data-Staging layer and strict Protocol&#xa;Buffer contracts. Raw JSON transformed&#xa;to proto-only EventBus.&#xa;&#xa;Technology: Rust, gRPC, Protocol Buffers" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#1ba1e2;strokeColor=#006EAF;fontColor=#ffffff;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
           <mxGeometry x="310" y="200" width="300" height="180" as="geometry"/>
         </mxCell>
         
-        <mxCell id="market-data-provider" value="Market Data Provider&#xa;&#xa;External System&#xa;&#xa;Provides real-time market data&#xa;via gRPC streaming with proto&#xa;contracts. Non-proto data rejected.&#xa;&#xa;Technology: gRPC, Protocol Buffers" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#8c8c8c;strokeColor=#666666;fontColor=#ffffff;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+        <mxCell id="market-data-provider" value="Market Data Provider&#xa;&#xa;External System&#xa;&#xa;Provides real-time market data&#xa;via WebSocket/REST as raw JSON.&#xa;Data-Staging transforms to proto.&#xa;&#xa;Technology: WebSocket, REST, JSON" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#8c8c8c;strokeColor=#666666;fontColor=#ffffff;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
           <mxGeometry x="50" y="50" width="250" height="120" as="geometry"/>
         </mxCell>
         
-        <mxCell id="trading-engine" value="Trading Engine&#xa;&#xa;External System&#xa;&#xa;Executes trades based on proto-defined&#xa;signals. All communication must&#xa;conform to proto contracts.&#xa;&#xa;Technology: gRPC, Protocol Buffers" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#8c8c8c;strokeColor=#666666;fontColor=#ffffff;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+        <mxCell id="trading-engine" value="Trading Engine&#xa;&#xa;External System&#xa;&#xa;Executes trades based on proto-defined&#xa;signals from EventBus. All communication&#xa;must conform to proto contracts.&#xa;&#xa;Technology: gRPC, Protocol Buffers" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#8c8c8c;strokeColor=#666666;fontColor=#ffffff;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
           <mxGeometry x="700" y="50" width="250" height="120" as="geometry"/>
         </mxCell>
         
@@ -104,7 +134,18 @@ graph TB
 </mxfile>
 ```
 
-## 3. C4 Container Diagram: Proto Contract Enforcement
+## 3. Updated C4 Container Diagram: Data Pipeline with Data-Staging
+
+### Data-Staging Service (NEW)
+- **Purpose**: Transform raw JSON to validated proto
+- **Technology**: Rust, Redis consumer, Proto compiler
+- **Responsibilities**:
+  - Subscribe to Redis raw data channels
+  - Validate data quality
+  - Transform JSON to EventEnvelope proto
+  - Calculate quality metrics
+  - Publish to EventBus
+  - Send invalid data to DLQ
 
 ```xml
 <mxfile host="draw.io" version="24.7.17">
@@ -114,28 +155,36 @@ graph TB
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
         
-        <mxCell id="proto-gateway" value="Proto Contract Gateway&#xa;&#xa;Container: Rust Service&#xa;&#xa;Enforces proto-only communication.&#xa;Rejects non-conforming messages&#xa;immediately. All ingress validated.&#xa;&#xa;Technology: Tonic gRPC" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
-          <mxGeometry x="100" y="100" width="250" height="120" as="geometry"/>
+        <mxCell id="data-ingestion" value="Data Ingestion Service&#xa;&#xa;Container: Rust Service&#xa;&#xa;Ingests raw JSON data from external&#xa;market providers via WebSocket/REST.&#xa;Stores in Redis for processing.&#xa;&#xa;Technology: Tokio, Redis" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="200" height="120" as="geometry"/>
         </mxCell>
         
-        <mxCell id="event-bus-core" value="EventBus Core&#xa;&#xa;Container: Rust Service&#xa;&#xa;Proto-only message routing and&#xa;processing. Schema validation&#xa;enforced at every boundary.&#xa;&#xa;Technology: Tokio, Prost" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
-          <mxGeometry x="450" y="100" width="250" height="120" as="geometry"/>
+        <mxCell id="redis-store" value="Redis Data Store&#xa;&#xa;Container: Redis Cache&#xa;&#xa;Temporary storage for raw JSON&#xa;market data. Provides pub/sub&#xa;channels for data distribution.&#xa;&#xa;Technology: Redis" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="300" y="50" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="data-staging" value="Data-Staging Service&#xa;&#xa;Container: Rust Service (NEW)&#xa;&#xa;Transforms raw JSON to validated&#xa;proto messages. Quality gate between&#xa;raw data and EventBus. DLQ for bad data.&#xa;&#xa;Technology: Rust, Prost, Redis" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="550" y="50" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="event-bus-core" value="EventBus Core&#xa;&#xa;Container: Rust Service&#xa;&#xa;Proto-only message routing and&#xa;processing. Schema validation&#xa;enforced at every boundary.&#xa;&#xa;Technology: Tokio, Prost" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="800" y="50" width="200" height="120" as="geometry"/>
         </mxCell>
         
         <mxCell id="proto-validator" value="Proto Schema Validator&#xa;&#xa;Container: Rust Service&#xa;&#xa;Validates all messages against&#xa;registered proto schemas.&#xa;Contract violations are fatal errors.&#xa;&#xa;Technology: Custom validation" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
-          <mxGeometry x="800" y="100" width="250" height="120" as="geometry"/>
+          <mxGeometry x="50" y="250" width="200" height="120" as="geometry"/>
         </mxCell>
         
         <mxCell id="schema-registry" value="Proto Schema Registry&#xa;&#xa;Container: Rust Service&#xa;&#xa;Manages Protocol Buffer schemas.&#xa;Single source of truth for&#xa;contract definitions.&#xa;&#xa;Technology: Git-based registry" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
-          <mxGeometry x="100" y="320" width="250" height="120" as="geometry"/>
+          <mxGeometry x="300" y="250" width="200" height="120" as="geometry"/>
         </mxCell>
         
         <mxCell id="neural-engine" value="Neural Processing Engine&#xa;&#xa;Container: Rust Service&#xa;&#xa;Processes proto-defined market data&#xa;and neural signals. Only accepts&#xa;validated proto messages.&#xa;&#xa;Technology: Candle, Rust" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
-          <mxGeometry x="450" y="320" width="250" height="120" as="geometry"/>
+          <mxGeometry x="550" y="250" width="200" height="120" as="geometry"/>
         </mxCell>
         
-        <mxCell id="proto-serializer" value="Proto Serialization Engine&#xa;&#xa;Container: Rust Library&#xa;&#xa;High-performance proto serialization&#xa;and deserialization. Zero-copy&#xa;optimizations where possible.&#xa;&#xa;Technology: Prost, Bytes" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
-          <mxGeometry x="800" y="320" width="250" height="120" as="geometry"/>
+        <mxCell id="execution-service" value="Execution Service&#xa;&#xa;Container: Rust Service&#xa;&#xa;Executes trades based on validated&#xa;proto signals from EventBus.&#xa;All outputs are proto-compliant.&#xa;&#xa;Technology: Rust, gRPC" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="800" y="250" width="200" height="120" as="geometry"/>
         </mxCell>
         
       </root>
@@ -144,11 +193,74 @@ graph TB
 </mxfile>
 ```
 
-## 4. C4 Component Diagram: EventBus Proto Contract Enforcement
+## 4. C4 Component Diagram: Data-Staging Internal Components
+
+```mermaid
+graph LR
+    subgraph "Data-Staging Components"
+        RC[Redis Consumer]
+        DV[Data Validator]
+        PT[Proto Transformer]
+        QC[Quality Calculator]
+        EP[EventBus Publisher]
+        DLQ[Dead Letter Queue]
+    end
+    
+    RC -->|Raw JSON| DV
+    DV -->|Valid JSON| PT
+    DV -->|Invalid| DLQ
+    PT -->|Proto| QC
+    QC -->|Enriched Proto| EP
+    PT -->|Transform Error| DLQ
+```
 
 ```xml
 <mxfile host="draw.io" version="24.7.17">
-  <diagram name="C4-Component" id="c4-component-proto">
+  <diagram name="C4-Component" id="c4-component-data-staging">
+    <mxGraphModel dx="1422" dy="759" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        
+        <mxCell id="redis-consumer" value="Redis Consumer&#xa;&#xa;Component&#xa;&#xa;Subscribes to Redis channels for&#xa;raw JSON market data. Handles&#xa;connection management and backpressure.&#xa;&#xa;Implementation: Redis streams" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="data-validator" value="Data Validator&#xa;&#xa;Component&#xa;&#xa;Validates incoming JSON against&#xa;expected schemas. Checks for required&#xa;fields, data types, and ranges.&#xa;&#xa;Implementation: JSON Schema validation" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="300" y="50" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="proto-transformer" value="Proto Transformer&#xa;&#xa;Component&#xa;&#xa;Transforms validated JSON to&#xa;EventEnvelope proto messages.&#xa;Handles type conversions and mapping.&#xa;&#xa;Implementation: Custom transformation" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="550" y="50" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="quality-calculator" value="Quality Calculator&#xa;&#xa;Component&#xa;&#xa;Calculates data quality metrics&#xa;and enriches proto messages with&#xa;confidence scores and metadata.&#xa;&#xa;Implementation: Statistical analysis" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="800" y="50" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="eventbus-publisher" value="EventBus Publisher&#xa;&#xa;Component&#xa;&#xa;Publishes validated and enriched&#xa;proto messages to EventBus.&#xa;Ensures proto-only communication.&#xa;&#xa;Implementation: gRPC client" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="300" y="220" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="dead-letter-queue" value="Dead Letter Queue&#xa;&#xa;Component&#xa;&#xa;Handles invalid data and transformation&#xa;errors. Stores failed messages for&#xa;analysis and potential reprocessing.&#xa;&#xa;Implementation: Persistent storage" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="550" y="220" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="metrics-collector" value="Metrics Collector&#xa;&#xa;Component&#xa;&#xa;Collects transformation metrics,&#xa;quality scores, and error rates.&#xa;Provides monitoring and alerting.&#xa;&#xa;Implementation: Prometheus metrics" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="50" y="220" width="200" height="120" as="geometry"/>
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+```
+
+### EventBus Component Diagram (Proto-Only)
+
+```xml
+<mxfile host="draw.io" version="24.7.17">
+  <diagram name="C4-Component-EventBus" id="c4-component-eventbus">
     <mxGraphModel dx="1422" dy="759" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
@@ -1545,54 +1657,75 @@ spec:
 - **Validation**: Custom schema enforcement
 - **Testing**: Contract-based testing suite
 
-### 11.2 Scalability Plan
+### 11.2 Scalability Plan with Data-Staging
 
 **Horizontal Scaling Strategy:**
+- Data-Staging service can be horizontally scaled across Redis partitions
 - Schema validation distributed across instances
 - Proto message routing with load balancing
 - Contract enforcement at service mesh level
 - Performance monitoring aggregated centrally
 
 **Vertical Scaling Considerations:**
-- Memory usage for schema registry
-- CPU impact of validation overhead
+- Data-Staging memory usage for JSON parsing and proto transformation
+- CPU impact of validation overhead in staging layer
+- Redis memory usage for raw data buffering
 - Network bandwidth for proto messages
-- Storage requirements for contract logs
+- Storage requirements for DLQ and contract logs
 
 **Growth Projections:**
-- 10,000+ messages/second with sub-millisecond validation
+- 50,000+ raw JSON messages/second ingestion
+- 10,000+ proto messages/second with sub-millisecond validation
 - 100+ different message types with full schema enforcement
 - 99.99% contract compliance rate
 - < 5ms average validation latency
+- 95%+ data quality transformation rate
 
-## 12. Best Practices Summary
+## 12. Key Architectural Decisions
 
-### 12.1 Development Guidelines
+1. **Separation of Concerns**: Raw data (Redis) vs Structured data (EventBus)
+2. **Single Transformation Point**: Only Data-Staging creates protos from raw data
+3. **Quality Gate**: Data-Staging enforces quality before EventBus
+4. **Proto-Only Boundary**: EventBus accepts nothing but valid protos
+
+## 13. Best Practices Summary
+
+### 13.1 Development Guidelines
 
 1. **Proto-First Development**
    - Define proto schemas before writing code
    - Generate Rust types from schemas
    - Validate messages at every boundary
 
-2. **Contract Enforcement**
+2. **Data-Staging Layer**
+   - All raw data must flow through Data-Staging
+   - Transform JSON to proto at single point
+   - Quality validation before EventBus entry
+   - Dead Letter Queue for failed transformations
+
+3. **Contract Enforcement**
    - Register all schemas at startup
    - Validate incoming messages immediately
    - Reject non-conforming data without processing
 
-3. **Error Handling**
+4. **Error Handling**
    - Treat contract violations as fatal errors
    - Provide detailed error messages for debugging
    - Log all validation failures for analysis
+   - Use DLQ for data quality issues
 
-4. **Testing Strategy**
+5. **Testing Strategy**
    - Test schema validation extensively
+   - Test Data-Staging transformation accuracy
    - Benchmark proto serialization performance
    - Verify contract enforcement under load
 
-5. **Monitoring**
+6. **Monitoring**
    - Track validation success rates
+   - Monitor data transformation quality
    - Monitor proto serialization performance
    - Alert on contract violation patterns
+   - Track DLQ message volumes
 
 ### 12.2 Operational Guidelines
 

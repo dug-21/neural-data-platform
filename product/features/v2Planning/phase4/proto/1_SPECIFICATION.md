@@ -16,6 +16,13 @@
 
 The neural-trader EventBus implementation must transition from generic `Vec<u8>` payloads to STRICT Protocol Buffer enforcement. The system has comprehensive Protocol Buffer definitions that define the contract - and contracts MUST be followed without exception.
 
+**Current Data Flow Issue:**
+- Data-ingestion currently publishes raw JSON directly to Redis streams
+- EventBus receives mixed JSON/binary data without validation
+- Quality control happens downstream, allowing invalid data propagation
+- No centralized transformation from raw data to validated proto contracts
+- Missing quality gate between raw data ingestion and EventBus consumption
+
 **ELIMINATED EventBus Event Structure:**
 ```rust
 // THIS STRUCTURE IS NO LONGER SUPPORTED
@@ -80,6 +87,29 @@ The neural-trader EventBus implementation must transition from generic `Vec<u8>`
 - **FR-4.2**: EventBus SHALL ONLY route validated proto messages
 - **FR-4.3**: EventBus SHALL MANDATE proto validation for ALL batch operations
 
+#### FR-5: Data-Staging Service (NEW)
+- **FR-5.1**: Data-Staging Service SHALL consume raw JSON from Redis streams (published by data-ingestion)
+- **FR-5.2**: Data-Staging Service SHALL validate ALL required fields before transformation
+- **FR-5.3**: Data-Staging Service SHALL transform validated JSON to protobuf EventEnvelope messages
+- **FR-5.4**: Data-Staging Service SHALL calculate and include data quality metrics (completeness, accuracy, timeliness)
+- **FR-5.5**: Data-Staging Service SHALL publish ONLY validated proto messages to EventBus
+- **FR-5.6**: Data-Staging Service SHALL act as the ONLY bridge between raw JSON and proto systems
+- **FR-5.7**: Data-Staging Service SHALL reject invalid data to Dead Letter Queue with detailed error logging
+- **FR-5.8**: Data-Staging Service SHALL enrich messages with processing metadata (source, quality score, timestamps)
+
+#### FR-6: EventBus Proto-Only Enforcement (UPDATED)
+- **FR-6.1**: EventBus SHALL ONLY accept protobuf messages from Data-Staging Service
+- **FR-6.2**: EventBus SHALL REJECT any non-protobuf messages with immediate failure
+- **FR-6.3**: EventBus SHALL provide ZERO JSON parsing or raw data support
+
+#### FR-7: Data-Staging Service Requirements (NEW)
+- **FR-7.1**: Data-Staging Service MUST consume raw JSON from Redis channels
+- **FR-7.2**: Data-Staging Service MUST validate all required fields before transformation
+- **FR-7.3**: Data-Staging Service MUST convert JSON to protobuf EventEnvelope
+- **FR-7.4**: Data-Staging Service MUST calculate and include data quality metrics
+- **FR-7.5**: Data-Staging Service MUST reject invalid data to DLQ
+- **FR-7.6**: Data-Staging Service MUST publish ONLY valid proto to EventBus
+
 ### 2.2 Non-Functional Requirements
 
 #### NFR-1: Performance
@@ -102,6 +132,13 @@ The neural-trader EventBus implementation must transition from generic `Vec<u8>`
 - **NFR-4.2**: Proto enforcement SHALL be MANDATORY - no opt-out mechanisms
 - **NFR-4.3**: `Vec<u8>` payloads SHALL be REJECTED with clear contract violation errors
 
+#### NFR-5: Data-Staging Service Performance (NEW)
+- **NFR-5.1**: Data-Staging transformation latency SHALL NOT exceed 5ms P95 for messages <10KB
+- **NFR-5.2**: Data-Staging throughput SHALL handle 10,000+ messages/second peak load
+- **NFR-5.3**: Data-Staging SHALL maintain 99.9% uptime with automatic failover
+- **NFR-5.4**: Invalid data rejection SHALL complete within 1ms with detailed logging
+- **NFR-5.5**: Quality metrics SHALL be updated in real-time with <100ms latency
+
 ---
 
 ## 3. Success Criteria
@@ -123,6 +160,16 @@ The neural-trader EventBus implementation must transition from generic `Vec<u8>`
    - ✅ ZERO backward compatibility with `Vec<u8>`
    - ✅ 100% proto compliance across all system components
 
+4. **Data-Staging Service Success (NEW)**
+   - ✅ Data-Staging processes 100% of Redis messages
+   - ✅ Zero raw JSON reaches EventBus
+   - ✅ 100% proto compliance at EventBus boundary
+   - ✅ Data quality metrics available for all messages
+   - ✅ ZERO invalid data propagation to EventBus
+   - ✅ Data-Staging validation metrics <1ms response time P95
+   - ✅ Quality gate effectiveness >99.9% (blocks all invalid data)
+   - ✅ Transformation throughput meets peak load requirements (10,000+ msg/s)
+
 ### 3.2 Quality Gates
 
 #### QG-1: Contract Compliance
@@ -136,9 +183,19 @@ The neural-trader EventBus implementation must transition from generic `Vec<u8>`
 - Documentation updated with proto examples
 
 #### QG-3: System Integration
-- Data ingestion service successfully publishes MarketDataEvents
+- Data ingestion service successfully publishes raw JSON to Redis
+- Data-Staging service successfully validates and transforms to proto
 - ML-Ops service successfully consumes FeatureExtractionRequests
 - Trading service successfully handles OrderRequests/Responses
+
+#### QG-4: Data-Staging Quality Gate (NEW)
+- ALL raw JSON data MUST pass validation before proto conversion
+- Data-Staging MUST reject invalid data with detailed error logging
+- Quality metrics MUST be tracked and reported in real-time
+- Data flow integrity: Raw Redis → Data-Staging → Proto EventBus → Consumers
+- ZERO invalid data propagation to EventBus consumers
+- 100% separation of concerns: Data-Staging handles ALL JSON→proto conversion
+- EventBus enforces ZERO tolerance for non-proto messages
 
 ---
 
@@ -193,11 +250,48 @@ The neural-trader EventBus implementation must transition from generic `Vec<u8>`
 
 ### 5.2 Service Dependencies
 
-#### Consuming Services
-- **Data Ingestion Service** (Python) → Publishes MarketDataEvents
-- **ML-Ops Service** → Consumes/produces FeatureExtractionRequest/Response
-- **Model Manager** → Publishes model lifecycle events
-- **Trading Service** → Handles OrderRequest/Response, TradingSignal
+#### Service Architecture (Updated with Data-Staging)
+- **Data Ingestion Service** (Python) → Publishes raw JSON to Redis streams (UNCHANGED)
+- **Data-Staging Service** (NEW) → Consumes raw JSON from Redis, validates, transforms to proto, publishes to EventBus
+- **EventBus** → Accepts ONLY protobuf messages (NO JSON support)
+- **ML-Ops Service** → Consumes/produces FeatureExtractionRequest/Response from EventBus
+- **Model Manager** → Publishes model lifecycle events to EventBus
+- **Trading Service** → Handles OrderRequest/Response, TradingSignal from EventBus
+
+#### System Components (UPDATED)
+
+### Data Flow Architecture
+1. **Data-Ingestion Service** (UNCHANGED)
+   - Continues publishing raw JSON to Redis
+   - No proto requirements
+   - Remains as-is
+
+2. **Data-Staging Service** (NEW)
+   - Consumes raw JSON from Redis
+   - Validates data quality
+   - Transforms to protobuf EventEnvelope
+   - ONLY component that bridges raw→proto
+   - Publishes validated proto to EventBus
+
+3. **EventBus** (PROTO-ONLY)
+   - Accepts ONLY protobuf messages
+   - No JSON support whatsoever
+   - Rejects any non-proto data
+
+4. **Consumers** (ML-Ops, Execution, etc.)
+   - Receive only validated proto messages
+   - No JSON parsing needed
+
+```
+Raw Market Data → Data Ingestion → Redis Streams (JSON) 
+                                      ↓
+EventBus Consumers ← EventBus (Proto ONLY) ← Data-Staging (Quality Gate + Transform)
+                                                      ↑
+                                                   Validation
+                                                   Transform
+                                                   Quality Metrics
+                                                   DLQ for Invalid Data
+```
 
 #### EventBus Implementation Dependencies
 - **Redis Streams** → Backend storage (must serialize proto to bytes)

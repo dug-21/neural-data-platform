@@ -96,6 +96,84 @@ service ConfigurationService {
 - No YAML/JSON configuration endpoints
 - Config validation includes proto schema compliance
 
+### 6. Data-Staging Service (NEW)
+
+While Data-Staging primarily consumes from Redis and publishes to EventBus, it exposes a gRPC service for monitoring and control:
+
+```proto
+service DataStagingService {
+    // Get current staging metrics
+    rpc GetMetrics(Empty) returns (StagingMetrics);
+    
+    // Get data quality report
+    rpc GetQualityReport(QualityRequest) returns (QualityReport);
+    
+    // Control staging pipeline
+    rpc PauseStaging(PauseRequest) returns (PauseResponse);
+    rpc ResumeStaging(ResumeRequest) returns (ResumeResponse);
+    
+    // Health check
+    rpc HealthCheck(Empty) returns (HealthStatus);
+}
+
+message StagingMetrics {
+    uint64 messages_processed = 1;
+    uint64 messages_failed = 2;
+    double average_quality_score = 3;
+    uint64 proto_conversion_errors = 4;
+    double processing_rate_per_sec = 5;
+}
+
+message QualityRequest {
+    string time_range = 1;  // e.g., "1h", "24h", "7d"
+    string symbol_filter = 2; // Optional symbol filter
+}
+
+message QualityReport {
+    double overall_quality_score = 1;
+    uint64 total_messages = 2;
+    uint64 valid_proto_messages = 3;
+    uint64 failed_conversions = 4;
+    repeated SymbolQuality symbol_quality = 5;
+}
+
+message SymbolQuality {
+    string symbol = 1;
+    double quality_score = 2;
+    uint64 message_count = 3;
+    uint64 error_count = 4;
+}
+
+message PauseRequest {
+    string reason = 1;
+    bool drain_current_batch = 2;
+}
+
+message PauseResponse {
+    bool success = 1;
+    string status_message = 2;
+    int64 messages_in_pipeline = 3;
+}
+
+message ResumeRequest {
+    bool validate_pipeline_health = 1;
+}
+
+message ResumeResponse {
+    bool success = 1;
+    string status_message = 2;
+    double current_processing_rate = 3;
+}
+```
+
+**Enforcement Rules:**
+- The service ensures no raw JSON passes through to EventBus
+- All output is valid protobuf with strict validation
+- Quality metrics track proto conversion success rates
+- Failed conversions automatically go to Dead Letter Queue (DLQ)
+- Pipeline control operations validate proto compliance before resuming
+- Monitoring endpoints provide proto-specific error tracking
+
 ## Validation Pipeline
 
 ### Request Validation Sequence
