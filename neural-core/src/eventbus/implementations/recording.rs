@@ -4,14 +4,14 @@ use tokio::sync::RwLock;
 use chrono::Utc;
 
 use crate::eventbus::{
-    traits::{EventBus, EventSubscriber},
-    types::{Event, EventId, SubscriptionConfig, ChannelInfo},
+    traits::{DynamicEventBus, DynamicProtoEventSubscriber, ProtoChannelInfo},
+    types::{EventId, SubscriptionConfig},
     error::EventBusError,
 };
 
 /// Recording wrapper for EventBus implementations that records all operations for testing
 pub struct RecordingEventBus {
-    inner: Box<dyn EventBus>,
+    inner: Box<dyn DynamicEventBus>,
     recorded_publishes: Arc<RwLock<Vec<RecordedPublish>>>,
     recorded_subscriptions: Arc<RwLock<Vec<RecordedSubscription>>>,
     recorded_acks: Arc<RwLock<Vec<RecordedAck>>>,
@@ -22,8 +22,10 @@ pub struct RecordingEventBus {
 pub struct RecordedPublish {
     pub timestamp: i64,
     pub channel: String,
-    pub event: Event,
+    pub proto_type: String,
+    pub payload_size: usize,
     pub event_id: EventId,
+    pub quality_score: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +33,7 @@ pub struct RecordedSubscription {
     pub timestamp: i64,
     pub channels: Vec<String>,
     pub config: SubscriptionConfig,
+    pub proto_type: Option<String>, // For typed subscriptions
 }
 
 #[derive(Debug, Clone)]
@@ -43,7 +46,7 @@ pub struct RecordedAck {
 }
 
 impl RecordingEventBus {
-    pub fn new(inner: Box<dyn EventBus>) -> Self {
+    pub fn new(inner: Box<dyn DynamicEventBus>) -> Self {
         Self {
             inner,
             recorded_publishes: Arc::new(RwLock::new(Vec::new())),
@@ -65,9 +68,14 @@ impl RecordingEventBus {
         self.recorded_acks.read().await.clone()
     }
 
-    pub async fn assert_event_published(&self, channel: &str, event_type: &str) -> bool {
+    pub async fn assert_proto_event_published(&self, channel: &str, proto_type: &str) -> bool {
         let publishes = self.recorded_publishes.read().await;
-        publishes.iter().any(|p| p.channel == channel && p.event.event_type == event_type)
+        publishes.iter().any(|p| p.channel == channel && p.proto_type == proto_type)
+    }
+
+    /// Legacy method name compatibility
+    pub async fn assert_event_published(&self, channel: &str, proto_type: &str) -> bool {
+        self.assert_proto_event_published(channel, proto_type).await
     }
 
     pub async fn assert_subscription_created(&self, channel: &str) -> bool {
@@ -98,57 +106,109 @@ impl RecordingEventBus {
         }
     }
 
-    pub async fn get_last_published_event(&self, channel: &str) -> Option<Event> {
+    pub async fn get_last_published_proto_type(&self, channel: &str) -> Option<String> {
         let publishes = self.recorded_publishes.read().await;
         publishes.iter()
             .rev()
             .find(|p| p.channel == channel)
-            .map(|p| p.event.clone())
+            .map(|p| p.proto_type.clone())
+    }
+
+    pub async fn get_publish_count_for_proto_type(&self, channel: &str, proto_type: &str) -> usize {
+        let publishes = self.recorded_publishes.read().await;
+        publishes.iter()
+            .filter(|p| p.channel == channel && p.proto_type == proto_type)
+            .count()
+    }
+
+    /// Helper method to publish typed proto events (for tests)
+    pub async fn publish<T: crate::eventbus::types::ProtoMessage + Default>(
+        &self,
+        channel: &str,
+        event: crate::eventbus::types::ProtoEvent<T>,
+    ) -> Result<EventId, EventBusError> {
+        // Convert ProtoEvent to ProtoEventEnvelope
+        let envelope = crate::eventbus::types::ProtoEventEnvelope::new(
+            EventId::new(),
+            channel.to_string(),
+            event,
+        )?;
+        
+        self.publish_envelope(channel, envelope).await
+    }
+
+    /// Helper method to subscribe to typed proto events (for tests)
+    pub async fn subscribe<T: crate::eventbus::types::ProtoMessage + Default>(
+        &self,
+        channels: &[String],
+        config: SubscriptionConfig,
+    ) -> Result<Box<dyn crate::eventbus::traits::ProtoEventSubscriber<T>>, EventBusError> {
+        // For testing, we can create a wrapper around dynamic subscription
+        // This is a simplified approach - in production you'd use proper type registration
+        Err(EventBusError::not_implemented("Typed subscription not implemented for DynamicEventBus wrapper"))
     }
 }
 
 #[async_trait]
-impl EventBus for RecordingEventBus {
-    async fn publish(&self, channel: &str, event: Event) -> Result<EventId, EventBusError> {
-        let result = self.inner.publish(channel, event.clone()).await?;
+impl DynamicEventBus for RecordingEventBus {
+    async fn publish_envelope(
+        &self,
+        channel: &str,
+        envelope: crate::eventbus::types::ProtoEventEnvelope,
+    ) -> Result<EventId, EventBusError> {
+        let event_id = self.inner.publish_envelope(channel, envelope.clone()).await?;
         
         if *self.recording_enabled.read().await {
             let mut publishes = self.recorded_publishes.write().await;
             publishes.push(RecordedPublish {
                 timestamp: Utc::now().timestamp(),
                 channel: channel.to_string(),
-                event,
-                event_id: result.clone(),
+                proto_type: envelope.proto_type.clone(),
+                payload_size: envelope.proto_bytes.len(),
+                event_id: event_id.clone(),
+                quality_score: envelope.quality_score,
             });
         }
         
-        Ok(result)
+        Ok(event_id)
     }
 
-    async fn publish_batch(&self, channel: &str, events: Vec<Event>) -> Result<Vec<EventId>, EventBusError> {
-        let result = self.inner.publish_batch(channel, events.clone()).await?;
+    async fn publish_batch_envelopes(
+        &self,
+        channel: &str,
+        envelopes: Vec<crate::eventbus::types::ProtoEventEnvelope>,
+    ) -> Result<Vec<EventId>, EventBusError> {
+        let event_ids = self.inner.publish_batch_envelopes(channel, envelopes.clone()).await?;
         
         if *self.recording_enabled.read().await {
             let mut publishes = self.recorded_publishes.write().await;
-            for (event, event_id) in events.into_iter().zip(result.iter()) {
+            let timestamp = Utc::now().timestamp();
+            
+            for (envelope, event_id) in envelopes.iter().zip(event_ids.iter()) {
                 publishes.push(RecordedPublish {
-                    timestamp: Utc::now().timestamp(),
+                    timestamp,
                     channel: channel.to_string(),
-                    event,
+                    proto_type: envelope.proto_type.clone(),
+                    payload_size: envelope.proto_bytes.len(),
                     event_id: event_id.clone(),
+                    quality_score: envelope.quality_score,
                 });
             }
         }
         
-        Ok(result)
+        Ok(event_ids)
     }
 
-    async fn subscribe(
+    // Note: DynamicEventBus doesn't support typed subscriptions
+    // Use subscribe_dynamic instead
+
+    async fn subscribe_dynamic(
         &self,
         channels: &[String],
+        proto_types: &[&'static str],
         config: SubscriptionConfig,
-    ) -> Result<Box<dyn EventSubscriber>, EventBusError> {
-        let result = self.inner.subscribe(channels, config.clone()).await?;
+    ) -> Result<Box<dyn DynamicProtoEventSubscriber>, EventBusError> {
+        let subscriber = self.inner.subscribe_dynamic(channels, proto_types, config.clone()).await?;
         
         if *self.recording_enabled.read().await {
             let mut subscriptions = self.recorded_subscriptions.write().await;
@@ -156,10 +216,11 @@ impl EventBus for RecordingEventBus {
                 timestamp: Utc::now().timestamp(),
                 channels: channels.to_vec(),
                 config,
+                proto_type: None, // Dynamic subscription doesn't have single proto type
             });
         }
         
-        Ok(result)
+        Ok(subscriber)
     }
 
     async fn ack(
@@ -214,8 +275,20 @@ impl EventBus for RecordingEventBus {
         self.inner.create_consumer_group(channel, group).await
     }
 
-    async fn get_channel_info(&self, channel: &str) -> Result<ChannelInfo, EventBusError> {
+    async fn get_channel_info(&self, channel: &str) -> Result<ProtoChannelInfo, EventBusError> {
         self.inner.get_channel_info(channel).await
+    }
+
+    async fn list_proto_types_on_channel(&self, channel: &str) -> Result<Vec<String>, EventBusError> {
+        self.inner.list_proto_types_on_channel(channel).await
+    }
+
+    async fn list_channels(&self) -> Result<Vec<String>, EventBusError> {
+        self.inner.list_channels().await
+    }
+
+    async fn channel_subscriber_count(&self, channel: &str) -> Result<usize, EventBusError> {
+        self.inner.channel_subscriber_count(channel).await
     }
 }
 
@@ -225,34 +298,51 @@ mod tests {
     use crate::eventbus::implementations::inmemory::InMemoryEventBus;
     use std::collections::HashMap;
 
+    // Mock proto message for testing
+    #[derive(Clone, prost::Message)]
+    pub struct TestProtoMessage {
+        #[prost(string, tag = "1")]
+        pub content: String,
+        #[prost(int64, tag = "2")]
+        pub value: i64,
+    }
+
+    impl crate::eventbus::types::ProtoMessage for TestProtoMessage {
+        fn proto_type_name() -> &'static str {
+            "test.TestProtoMessage"
+        }
+    }
+
     #[tokio::test]
-    async fn test_recording_captures_publish() {
-        let inner = Box::new(InMemoryEventBus::new());
+    async fn test_recording_captures_proto_publish() {
+        let inner: Box<dyn DynamicEventBus> = Box::new(InMemoryEventBus::new());
         let recording_bus = RecordingEventBus::new(inner);
         
-        let event = Event {
-            event_type: "TestEvent".to_string(),
-            payload: vec![1, 2, 3],
-            metadata: HashMap::new(),
-            timestamp: Utc::now().timestamp(),
+        let message = TestProtoMessage {
+            content: "test content".to_string(),
+            value: 42,
         };
         
-        let event_id = recording_bus.publish("stream:symbol:TEST", event.clone()).await.unwrap();
+        let event = crate::eventbus::types::ProtoEvent::new(message);
         
-        assert!(recording_bus.assert_event_published("stream:symbol:TEST", "TestEvent").await);
+        let event_id = recording_bus.publish("stream:symbol:TEST", event).await.unwrap();
+        
+        assert!(recording_bus.assert_proto_event_published("stream:symbol:TEST", "test.TestProtoMessage").await);
         assert_eq!(recording_bus.get_publish_count(Some("stream:symbol:TEST")).await, 1);
+        assert_eq!(recording_bus.get_publish_count_for_proto_type("stream:symbol:TEST", "test.TestProtoMessage").await, 1);
         
-        let last_event = recording_bus.get_last_published_event("stream:symbol:TEST").await.unwrap();
-        assert_eq!(last_event.event_type, "TestEvent");
+        let proto_type = recording_bus.get_last_published_proto_type("stream:symbol:TEST").await.unwrap();
+        assert_eq!(proto_type, "test.TestProtoMessage");
         
         let publishes = recording_bus.get_recorded_publishes().await;
         assert_eq!(publishes.len(), 1);
         assert_eq!(publishes[0].event_id, event_id);
+        assert_eq!(publishes[0].proto_type, "test.TestProtoMessage");
     }
 
     #[tokio::test]
-    async fn test_recording_captures_subscription() {
-        let inner = Box::new(InMemoryEventBus::new());
+    async fn test_recording_captures_proto_subscription() {
+        let inner: Box<dyn DynamicEventBus> = Box::new(InMemoryEventBus::new());
         let recording_bus = RecordingEventBus::new(inner);
         
         let config = SubscriptionConfig {
@@ -268,8 +358,9 @@ mod tests {
             priority: 0,
         };
         
-        let _subscriber = recording_bus.subscribe(
+        let _subscriber = recording_bus.subscribe_dynamic(
             &["stream:symbol:TEST".to_string()],
+            &["test.TestProtoMessage"],
             config
         ).await.unwrap();
         
@@ -278,19 +369,19 @@ mod tests {
         let subscriptions = recording_bus.get_recorded_subscriptions().await;
         assert_eq!(subscriptions.len(), 1);
         assert_eq!(subscriptions[0].channels[0], "stream:symbol:TEST");
+        assert_eq!(subscriptions[0].proto_type, Some("test.TestProtoMessage".to_string()));
     }
 
     #[tokio::test]
     async fn test_recording_clear_and_disable() {
-        let inner = Box::new(InMemoryEventBus::new());
+        let inner: Box<dyn DynamicEventBus> = Box::new(InMemoryEventBus::new());
         let recording_bus = RecordingEventBus::new(inner);
         
-        let event = Event {
-            event_type: "TestEvent".to_string(),
-            payload: vec![1, 2, 3],
-            metadata: HashMap::new(),
-            timestamp: Utc::now().timestamp(),
+        let message = TestProtoMessage {
+            content: "test content".to_string(),
+            value: 42,
         };
+        let event = crate::eventbus::types::ProtoEvent::new(message);
         
         // Record some events
         recording_bus.publish("stream:symbol:TEST", event.clone()).await.unwrap();

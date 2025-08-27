@@ -1,7 +1,7 @@
 //! Market-related events
 //! Module size: <200 lines as per requirements
 
-use crate::events::traits::Event;
+use crate::events::traits::LegacyEvent as Event;
 use crate::types::market::{MarketTrend};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

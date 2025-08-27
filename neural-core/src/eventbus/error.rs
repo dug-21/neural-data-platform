@@ -5,7 +5,7 @@
 use thiserror::Error;
 
 /// EventBus error types
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum EventBusError {
     /// Invalid channel format or name
     #[error("Invalid channel: {0}")]
@@ -50,6 +50,26 @@ pub enum EventBusError {
     /// Internal system error
     #[error("Internal error: {0}")]
     Internal(String),
+    
+    /// Contract violation - non-proto message rejected
+    #[error("Contract violation: {0}")]
+    ContractViolation(String),
+    
+    /// Schema validation error
+    #[error("Schema validation error: {0}")]
+    SchemaValidation(String),
+    
+    /// Protocol buffer serialization error
+    #[error("Proto serialization error: {0}")]
+    ProtoSerialization(String),
+    
+    /// Protocol buffer deserialization error
+    #[error("Proto deserialization error: {0}")]
+    ProtoDeserialization(String),
+    
+    /// Feature not implemented
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
 }
 
 impl EventBusError {
@@ -96,5 +116,30 @@ impl EventBusError {
     /// Create a new SendFailed error
     pub fn send_failed<S: Into<String>>(message: S) -> Self {
         Self::SendFailed(message.into())
+    }
+    
+    /// Create a new ContractViolation error
+    pub fn contract_violation<S: Into<String>>(message: S) -> Self {
+        Self::ContractViolation(message.into())
+    }
+    
+    /// Create a new SchemaValidation error
+    pub fn schema_validation<S: Into<String>>(message: S) -> Self {
+        Self::SchemaValidation(message.into())
+    }
+    
+    /// Create a new ProtoSerialization error
+    pub fn proto_serialization<S: Into<String>>(message: S) -> Self {
+        Self::ProtoSerialization(message.into())
+    }
+    
+    /// Create a new ProtoDeserialization error
+    pub fn proto_deserialization<S: Into<String>>(message: S) -> Self {
+        Self::ProtoDeserialization(message.into())
+    }
+    
+    /// Create a new NotImplemented error
+    pub fn not_implemented<S: Into<String>>(message: S) -> Self {
+        Self::NotImplemented(message.into())
     }
 }

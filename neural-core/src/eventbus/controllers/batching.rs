@@ -197,7 +197,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn create_test_event(id: &str) -> Event {
+    fn create_test_event(_id: &str) -> Event {
         Event {
             event_type: "TestEvent".to_string(),
             payload: vec![1, 2, 3],
