@@ -1,0 +1,205 @@
+service:
+  name: data-ingestion
+  version: 1.0.0
+  
+api:
+  port: 8081
+  host: 0.0.0.0
+  rate_limit: 1000
+  timeout: 30
+  max_connections: 100
+
+# Data Providers Configuration
+providers:
+  # Alpaca Markets
+  alpaca:
+    enabled: true
+    rate_limit: 200
+    timeout: 10
+    websocket_enabled: false
+    
+  # Polygon.io
+  polygon:
+    enabled: false
+    rate_limit: 5
+    timeout: 10
+    websocket_enabled: false
+    
+  # Alpha Vantage
+  alpha_vantage:
+    enabled: false
+    rate_limit: 5
+    timeout: 10
+    
+  # Finnhub
+  finnhub:
+    enabled: false
+    rate_limit: 60
+    timeout: 10
+    
+  # IEX Cloud
+  iex_cloud:
+    enabled: false
+    rate_limit: 100
+    timeout: 10
+    
+  # Yahoo Finance
+  yahoo_finance:
+    enabled: true
+    rate_limit: 10
+    timeout: 15
+    
+  # FRED (Federal Reserve Economic Data)
+  fred:
+    enabled: false
+    rate_limit: 120
+    timeout: 10
+    
+  # NewsAPI
+  newsapi:
+    enabled: false
+    rate_limit: 500
+    timeout: 10
+    
+  # Reddit
+  reddit:
+    enabled: false
+    rate_limit: 60
+    timeout: 10
+    
+  # Nasdaq Data Link (formerly Quandl)
+  nasdaq:
+    enabled: false
+    rate_limit: 50
+    timeout: 10
+    
+  # Binance (Crypto)
+  binance:
+    enabled: false
+    rate_limit: 1200
+    timeout: 5
+    websocket_enabled: false
+    
+  # Synthetic Data (for testing)
+  synthetic:
+    enabled: true
+    interval: 5
+    volatility: 0.02
+
+# Trading Configuration
+trading:
+  symbols:
+    primary:
+      - AAPL
+      - MSFT
+      - GOOGL
+      - AMZN
+      - NVDA
+      - DDOG
+    secondary:
+      - META
+      - TSLA
+      - JPM
+      - V
+  update_interval: 60
+  batch_size: 100
+  
+# Storage Configuration
+storage:
+  # Redis for real-time data
+  redis:
+    stream: market_data_raw
+    max_len: 10000
+    consumer_group: data-ingestion
+    ttl: 3600
+    
+  # TimescaleDB for historical data
+  timescale:
+    batch_size: 1000
+    write_interval: 10
+    retention_days: 365
+    compression_after_days: 7
+    
+  # File storage for backups
+  file:
+    enabled: false
+    path: /data/backups
+    format: parquet
+    compression: snappy
+  
+# Processing Configuration
+processing:
+  # Data normalization
+  normalization:
+    enabled: true
+    decimal_places: 4
+    
+  # Data validation
+  validation:
+    enabled: true
+    check_nulls: true
+    check_ranges: true
+    outlier_detection: true
+    
+  # Data quality
+  quality:
+    min_quality_score: 0.7
+    gap_detection: true
+    checksum_validation: true
+    
+# Buffer Configuration
+buffer:
+  size: 10000
+  flush_interval: 1000
+  
+# Retry Configuration
+retry:
+  max_attempts: 3
+  backoff_ms: 1000
+  max_backoff_ms: 30000
+  
+# Circuit Breaker
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  recovery_timeout: 60
+  half_open_requests: 3
+
+# Health Check
+health:
+  port: 8081
+  path: /health
+  check_providers: true
+  check_storage: true
+  
+# Logging Configuration
+logging:
+  level: info
+  format: json
+  file: /var/log/data-ingestion/service.log
+  max_size_mb: 100
+  max_backups: 5
+  
+# Monitoring Configuration
+monitoring:
+  metrics:
+    enabled: true
+    port: 9091
+    path: /metrics
+  tracing:
+    enabled: false
+    endpoint: http://jaeger:14268/api/traces
+    
+# Market Hours Configuration
+market_hours:
+  timezone: America/New_York
+  pre_market_start: "04:00"
+  market_open: "09:30"
+  market_close: "16:00"
+  after_hours_end: "20:00"
+  trading_days:
+    - monday
+    - tuesday
+    - wednesday
+    - thursday
+    - friday
