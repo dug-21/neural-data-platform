@@ -133,7 +133,6 @@ impl SecureInMemoryConfigStore {
         let version_entry = ConfigVersion::new(
             node.version,
             node.value.clone(),
-            node.metadata.updated_by.clone(),
         );
         
         let versions = history.entry(path.to_string()).or_insert_with(Vec::new);
@@ -253,7 +252,7 @@ impl ConfigStore for SecureInMemoryConfigStore {
         
         let tree: ConfigTree = data.iter()
             .filter(|(k, _)| k.starts_with(prefix))
-            .map(|(k, v)| (k.clone(), v.clone()))
+            .map(|(k, v)| (k.clone(), v.value.clone()))
             .collect();
         
         Ok(tree)
@@ -276,7 +275,7 @@ impl ConfigStore for SecureInMemoryConfigStore {
         history.iter()
             .find(|v| v.version == version)
             .map(|v| v.value.clone())
-            .ok_or_else(|| ConfigError::VersionNotFound(version, path.to_string()))
+            .ok_or_else(|| ConfigError::VersionNotFound(path.to_string(), version))
             .map_err(|e| self.error_sanitizer.sanitize(e))
     }
     

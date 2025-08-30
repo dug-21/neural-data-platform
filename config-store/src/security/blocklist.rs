@@ -49,7 +49,7 @@ impl SecretBlocker {
         // Check the key itself
         if self.is_blocked_key(key) {
             return Err(ConfigError::ValidationFailed(
-                format!("Secrets/passwords cannot be stored in config-store. Key '{}' appears to contain sensitive data.", key)
+                vec![format!("Secrets/passwords cannot be stored in config-store. Key '{}' appears to contain sensitive data.", key)]
             ));
         }
 
@@ -58,7 +58,7 @@ impl SecretBlocker {
             ConfigValue::String(s) => {
                 if self.is_blocked_value(s) {
                     return Err(ConfigError::ValidationFailed(
-                        "Value appears to be a secret/credential and cannot be stored".to_string()
+                        vec!["Value appears to be a secret/credential and cannot be stored".to_string()]
                     ));
                 }
             },
