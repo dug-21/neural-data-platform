@@ -123,6 +123,9 @@ Thumbs.db
 
 # Environment variables
 .env
+.env.*
+!.env.template
+!.env.*.template
 .env.test
 .env.production
 .env.local
