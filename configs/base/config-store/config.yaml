@@ -1,0 +1,34 @@
+service:
+  name: config-store
+  version: 1.0.0
+  
+server:
+  grpc:
+    port: 50051
+    max_connections: 100
+  health:
+    port: 8090
+    path: /health
+
+git:
+  sync_interval: 300
+  branch: main
+  shallow_clone: true
+  
+redis:
+  db: 0
+  cache_ttl: 3600
+  key_prefix: "config:"
+  
+validation:
+  enabled: true
+  strict_mode: false
+  
+logging:
+  level: info
+  format: json
+  
+monitoring:
+  metrics:
+    enabled: true
+    port: 9091

@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Data Ingestion Configuration Schema",
+  "type": "object",
+  "required": ["service", "api", "redis"],
+  "properties": {
+    "service": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "data-ingestion"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        }
+      }
+    },
+    "api": {
+      "type": "object",
+      "required": ["port"],
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "host": {
+          "type": "string"
+        },
+        "rate_limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_connections": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "properties": {
+        "polygon": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "api_key": {"type": "string"},
+            "rate_limit": {"type": "integer"},
+            "timeout": {"type": "integer"}
+          }
+        },
+        "alpha_vantage": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "api_key": {"type": "string"},
+            "rate_limit": {"type": "integer"},
+            "timeout": {"type": "integer"}
+          }
+        },
+        "synthetic": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "interval": {"type": "integer"}
+          }
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "required": ["url", "stream"],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "stream": {
+          "type": "string"
+        },
+        "max_len": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "consumer_group": {
+          "type": "string"
+        }
+      }
+    },
+    "buffer": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "flush_interval": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["trace", "debug", "info", "warn", "error"]
+        },
+        "format": {
+          "type": "string",
+          "enum": ["json", "text", "pretty"]
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "port": {"type": "integer"},
+            "path": {"type": "string"}
+          }
+        },
+        "health": {
+          "type": "object",
+          "properties": {
+            "port": {"type": "integer"},
+            "path": {"type": "string"}
+          }
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "backoff_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_backoff_ms": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}
