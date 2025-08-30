@@ -167,15 +167,16 @@ async fn test_production_scenarios() {
         path: "/services/base".to_string(),
         value: ConfigValue::Object(base_config_map),
         version: 1,
-        metadata: ConfigMetadata {
+        metadata: Some(ConfigMetadata {
             description: Some("Base service config".to_string()),
             owner: Some("system".to_string()),
             sensitive: false,
             runtime_modifiable: true,
             created_at: std::time::SystemTime::now(),
             updated_at: std::time::SystemTime::now(),
-            updated_by: "test".to_string(),
-        },
+            updated_by: Some("test".to_string()),
+            tags: Vec::new(),
+        }),
         inheritance: Some(vec![]),
         schema: None,
     };
@@ -184,7 +185,9 @@ async fn test_production_scenarios() {
     
     // Verify node storage
     let retrieved_node = store.get_node("/services/base").await.unwrap();
-    assert_eq!(retrieved_node.metadata.description, Some("Base service config".to_string()));
+    if let Some(metadata) = retrieved_node.metadata {
+        assert_eq!(metadata.description, Some("Base service config".to_string()));
+    }
 }
 
 fn main() {

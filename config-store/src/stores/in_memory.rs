@@ -78,7 +78,6 @@ impl InMemoryConfigStore {
         let version_entry = ConfigVersion::new(
             node.version,
             node.value.clone(),
-            node.metadata.updated_by.clone(),
         );
         
         let versions = history.entry(path.to_string()).or_insert_with(Vec::new);
@@ -116,6 +115,25 @@ impl InMemoryConfigStore {
         
         Ok(resolved_value)
     }
+    
+    /// Navigate through nested object structure given a path
+    fn navigate_nested_path(&self, value: &ConfigValue, path_parts: &[&str]) -> Result<ConfigValue, ConfigError> {
+        let mut current = value;
+        
+        for part in path_parts {
+            match current {
+                ConfigValue::Object(obj) => {
+                    current = obj.get(*part)
+                        .ok_or_else(|| ConfigError::NotFound(format!("Key '{}' not found in nested structure", part)))?;
+                }
+                _ => {
+                    return Err(ConfigError::NotFound(format!("Cannot navigate into non-object value at '{}'", part)));
+                }
+            }
+        }
+        
+        Ok(current.clone())
+    }
 }
 
 impl Default for InMemoryConfigStore {
@@ -132,16 +150,50 @@ impl ConfigStore for InMemoryConfigStore {
             return Err(ConfigError::InvalidPath(path.to_string()));
         }
         
-        let node = {
+        // Try to get the exact path first
+        let exact_node = {
             let data = self.data.read()
                 .map_err(|e| ConfigError::OperationFailed(format!("Lock error: {}", e)))?;
-            
-            data.get(path)
-                .ok_or_else(|| ConfigError::NotFound(path.to_string()))?
-                .clone()
+            data.get(path).cloned()
         };
         
-        self.resolve_inheritance(&node).await
+        if let Some(node) = exact_node {
+            // Found exact match, resolve inheritance and return
+            return self.resolve_inheritance(&node).await;
+        }
+        
+        // No exact match found, try to find nested path access
+        // Look for a parent path that contains this data
+        let path_parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        
+        // Try progressively shorter parent paths
+        for i in (1..path_parts.len()).rev() {
+            let parent_path = format!("/{}", path_parts[..i].join("/"));
+            
+            let parent_node = {
+                let data = self.data.read()
+                    .map_err(|e| ConfigError::OperationFailed(format!("Lock error: {}", e)))?;
+                data.get(&parent_path).cloned()
+            };
+            
+            if let Some(parent_node) = parent_node {
+                // Found a parent, now navigate through its nested structure
+                let remaining_path: Vec<&str> = path_parts[i..].to_vec();
+                
+                let parent_value = if parent_node.has_inheritance() {
+                    // Resolve inheritance for the parent first
+                    self.resolve_inheritance(&parent_node).await?
+                } else {
+                    parent_node.value.clone()
+                };
+                
+                // Navigate through the nested structure
+                return self.navigate_nested_path(&parent_value, &remaining_path);
+            }
+        }
+        
+        // No matching path found
+        Err(ConfigError::NotFound(path.to_string()))
     }
     
     async fn set(&self, path: &str, value: ConfigValue) -> Result<(), ConfigError> {
@@ -196,7 +248,7 @@ impl ConfigStore for InMemoryConfigStore {
         
         for (path, node) in data.iter() {
             if path_utils::is_prefix_of(prefix, path) {
-                tree.insert(path.clone(), node.clone());
+                tree.insert(path.clone(), node.value.clone());
             }
         }
         
@@ -224,7 +276,7 @@ impl ConfigStore for InMemoryConfigStore {
         
         let version_entry = versions.iter()
             .find(|v| v.version == version)
-            .ok_or_else(|| ConfigError::VersionNotFound(version, path.to_string()))?;
+            .ok_or_else(|| ConfigError::VersionNotFound(path.to_string(), version))?;
         
         Ok(version_entry.value.clone())
     }
@@ -248,7 +300,6 @@ impl ConfigStore for InMemoryConfigStore {
             let current_version = ConfigVersion::new(
                 current_node.version,
                 current_node.value.clone(),
-                current_node.metadata.updated_by.clone(),
             );
             all_versions.push(current_version);
         }
@@ -281,7 +332,9 @@ impl ConfigStore for InMemoryConfigStore {
             if existing.version >= node.version {
                 node.version = existing.version + 1;
             }
-            node.metadata.touch("system".to_string());
+            if let Some(ref mut metadata) = node.metadata {
+                metadata.touch("system".to_string());
+            }
             
             data.insert(path.to_string(), node);
             drop(data); // Release write lock before storing version
