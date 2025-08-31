@@ -70,6 +70,12 @@ setup_rust() {
         source "$HOME/.cargo/env"
     fi
     
+    # Install protoc for building gRPC services
+    if ! command -v protoc >/dev/null 2>&1; then
+        log_info "Installing protobuf-compiler for Rust gRPC builds..."
+        sudo apt-get update && sudo apt-get install -y protobuf-compiler
+    fi
+    
     # Install required Rust tools in parallel
     log_parallel "Installing Rust tools in parallel..."
     (
