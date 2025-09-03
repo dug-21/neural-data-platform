@@ -11,6 +11,8 @@ MODULE=${1:-}
 CACHE_DIR=${MODULE_CACHE_DIR:-/tmp/module-cache}
 BUILD_CACHE=${BUILD_CACHE:-true}
 PARALLEL_BUILD=${PARALLEL_BUILD:-true}
+USE_WORKSPACE_CACHE=${USE_WORKSPACE_CACHE:-true}
+DEPENDENCY_PREBUILD_SCRIPT="$SCRIPT_DIR/dependency-prebuild.sh"
 
 # Color output
 RED='\033[0;31m'
@@ -23,6 +25,16 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step() { echo -e "${BLUE}[STEP]${NC} $1"; }
+
+# Ensure dependencies are pre-built
+ensure_dependencies_built() {
+    if [ "$USE_WORKSPACE_CACHE" = "true" ] && [ -x "$DEPENDENCY_PREBUILD_SCRIPT" ]; then
+        log_step "Ensuring workspace dependencies are pre-built..."
+        "$DEPENDENCY_PREBUILD_SCRIPT" build
+    else
+        log_warn "Dependency pre-build disabled or script not found"
+    fi
+}
 
 # Timer functions
 start_timer() {
@@ -105,6 +117,12 @@ check_cache() {
         return 1
     fi
     
+    # Also check if Docker image exists
+    if ! docker images | grep -q "neural-trader/$MODULE"; then
+        log_info "Docker image missing, forcing rebuild"
+        return 1
+    fi
+    
     # Calculate source hash using MODULE_PATH
     if [ -z "$MODULE_PATH" ]; then
         get_module_path || return 1
@@ -124,32 +142,31 @@ check_cache() {
     return 1
 }
 
-# Build Rust module
+# Build Rust module using workspace cache
 build_rust_module() {
     log_step "Building Rust module: $MODULE"
     
     start_timer
     
-    # Use MODULE_PATH
-    if [ -z "$MODULE_PATH" ]; then
-        get_module_path || return 1
-    fi
-    cd "$MODULE_PATH"
+    # Get workspace root directory
+    WORKSPACE_ROOT="$SCRIPT_DIR/../.."
     
-    # Use cargo cache if available
-    if [ -d "$CACHE_DIR/$MODULE/build/target" ]; then
-        ln -sf "$CACHE_DIR/$MODULE/build/target" target
-    fi
+    # Build from workspace root to leverage shared target directory
+    # This ensures config-store is built once and reused by all modules
+    cd "$WORKSPACE_ROOT"
     
-    # Build with optimizations for testing
+    log_info "Building $MODULE from workspace root (enables dependency caching)..."
+    
+    # Build specific package from workspace root - this reuses cached dependencies
     if [ "$PARALLEL_BUILD" = "true" ]; then
-        cargo build --release --jobs $(nproc)
+        cargo build --package "$MODULE" --release --jobs $(nproc)
     else
-        cargo build --release
+        cargo build --package "$MODULE" --release
     fi
     
-    # Cache the build artifacts (we're still in MODULE_PATH directory)
-    if [ ! -L "target" ]; then
+    # Cache the build artifacts
+    if [ "$USE_WORKSPACE_CACHE" != "true" ] && [ ! -L "target" ]; then
+        # Only use old caching method when workspace cache is disabled
         mkdir -p "$CACHE_DIR/$MODULE/build"
         if [ -d "target" ]; then
             mv target "$CACHE_DIR/$MODULE/build/"
@@ -157,16 +174,20 @@ build_rust_module() {
         else
             log_warn "No target directory found to cache"
         fi
+    else
+        log_info "Using workspace target cache at $(pwd)/target"
     fi
     
     duration=$(end_timer)
     log_info "Rust build completed in ${duration}s"
     
-    # Return to root directory
+    # Ensure we're back at the script location
     cd "$SCRIPT_DIR/../.."
     
-    # Mark cache as valid
-    touch "$CACHE_DIR/$MODULE/build/.cache-marker"
+    # Mark cache as valid only for module-specific cache
+    if [ "$USE_WORKSPACE_CACHE" != "true" ]; then
+        touch "$CACHE_DIR/$MODULE/build/.cache-marker"
+    fi
 }
 
 # Build Python module
@@ -222,13 +243,22 @@ build_docker_image() {
         return 1
     fi
     
-    # Build with cache
-    docker build \
-        --cache-from neural-trader/$MODULE:cache \
-        --tag neural-trader/$MODULE:latest \
-        --tag neural-trader/$MODULE:cache \
-        --file "$dockerfile" \
-        .
+    # Build with cache if available
+    if docker images | grep -q "neural-trader/$MODULE:cache"; then
+        docker build \
+            --cache-from neural-trader/$MODULE:cache \
+            --tag neural-trader/$MODULE:latest \
+            --tag neural-trader/$MODULE:cache \
+            --file "$dockerfile" \
+            .
+    else
+        # First build without cache-from
+        docker build \
+            --tag neural-trader/$MODULE:latest \
+            --tag neural-trader/$MODULE:cache \
+            --file "$dockerfile" \
+            .
+    fi
     
     duration=$(end_timer)
     log_info "Docker build completed in ${duration}s"
