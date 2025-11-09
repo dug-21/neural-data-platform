@@ -30,28 +30,10 @@
   },
 
   
-  "postCreateCommand": "chmod +x .devcontainer/setup.sh && .devcontainer/setup.sh",
-  "postStartCommand": "chmod +x .devcontainer/post-start.sh && .devcontainer/post-start.sh",
-  
   "remoteUser": "vscode",
   
   "runArgs": [
     "--privileged",
-    "--network=neural-trader_neural-net"
-  ],
 
-  "mounts": [
-    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/repos/ndp-config,target=/workspaces/ndp-config,type=bind"
-  ],
-  
-  "containerEnv": {
-    "DOCKER_BUILDKIT": "1",
-    "COMPOSE_DOCKER_CLI_BUILD": "1",
-    "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}",
-    "REDIS_HOST": "redis",
-    "REDIS_URL": "redis://redis:6379",
-    "POSTGRES_HOST": "timescaledb",
-    "DATABASE_URL": "postgresql://postgres:postgres@timescaledb:5432/neural_trader"
-  }
+  ]
 }
