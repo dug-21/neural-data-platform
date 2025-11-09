@@ -123,6 +123,9 @@ Thumbs.db
 
 # Environment variables
 .env
+.env.*
+!.env.template
+!.env.*.template
 .env.test
 .env.production
 .env.local
@@ -274,8 +277,10 @@ tests/emergency/target/
 tests/emergency/Cargo.lock
 
 
+
 # Claude Flow generated files
 .claude/settings.local.json
+.claude-flow/
 .mcp.json
 claude-flow.config.json
 .swarm/
@@ -298,3 +303,16 @@ claude-flow
 claude-flow.bat
 claude-flow.ps1
 hive-mind-prompt-*.txt
+
+# Deprecated source directory (moved to modules)
+/src/
+/OLDSRC-DONOTUSE/
+
+# Setup and report files
+setup-report.txt
+*_report.txt
+*_status.txt
+
+# Test artifacts
+test_*.rs
+check_*.rs

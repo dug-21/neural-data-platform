@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "config-store",
-    "mcp-trading-server",
     "neural-core",
     "neural-trading",
     "neural-ml-ops",
