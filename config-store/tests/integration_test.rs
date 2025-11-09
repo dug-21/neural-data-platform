@@ -1,6 +1,6 @@
 use config_store::stores::SecureInMemoryConfigStore;
 use config_store::traits::ConfigStore;
-use config_store::{ConfigValue, ConfigError};
+use config_store::ConfigValue;
 use std::collections::HashMap;
 
 #[tokio::test]

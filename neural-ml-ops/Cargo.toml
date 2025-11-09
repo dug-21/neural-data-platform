@@ -30,7 +30,7 @@ futures = "0.3"
 config-store = { path = "../config-store" }
 
 # Neural core - required for EventBus integration
-# neural-core = { path = "../neural-core" }
+neural-core = { path = "../neural-core" }
 
 # Protobuf dependencies
 prost = "0.12"

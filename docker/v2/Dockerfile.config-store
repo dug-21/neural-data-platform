@@ -1,0 +1,59 @@
+# Config Store Service - GitOps Configuration Manager
+FROM rust:1.87-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy necessary files including shared build.rs
+COPY build.rs ./build.rs
+COPY config-store ./config-store
+COPY proto ./proto
+
+# Build the service
+WORKDIR /build/config-store
+RUN cargo build --release
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
+# Copy binary
+COPY --from=builder /build/config-store/target/release/config-store-server /usr/local/bin/config-store
+
+# Create config directories
+RUN mkdir -p /configs /app/cache && \
+    chown -R appuser:appuser /configs /app
+
+USER appuser
+WORKDIR /app
+
+# Environment variables
+ENV RUST_LOG=info
+ENV CONFIG_STORE_PORT=50051
+ENV CONFIG_REPO_PATH=/configs
+ENV CACHE_DIR=/app/cache
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/config-store", "health"]
+
+EXPOSE 50051
+
+ENTRYPOINT ["/usr/local/bin/config-store"]
+CMD ["serve"]
