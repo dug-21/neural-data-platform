@@ -50,6 +50,9 @@ opentelemetry = "0.25"
 # Add missing dependencies for compilation
 rand = "0.8"
 
+# Neural core integration
+neural-core = { path = "../neural-core" }
+
 [dev-dependencies]
 tokio-test = "0.4"
 mockall = "0.12"

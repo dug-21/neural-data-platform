@@ -1,0 +1,53 @@
+service:
+  name: neural-ml-ops
+  version: 1.0.0
+  
+api:
+  port: 50053
+  host: 0.0.0.0
+  
+models:
+  path: /app/models
+  registry_type: filesystem
+  retention_days: 90
+  
+features:
+  store_type: memory
+  cache_size: 10000
+  ttl_seconds: 3600
+  
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  validation_split: 0.2
+  early_stopping: true
+  patience: 10
+  
+scheduler:
+  enabled: true
+  interval_seconds: 3600
+  max_concurrent: 2
+
+# EventBus configuration inherited from neural-core
+eventbus:
+  type: redis
+  channels:
+    - "ml:features:*"
+    - "ml:models:*"
+    - "ml:training:*"
+  batch_size: 100
+  buffer_size: 1024
+  block_timeout_ms: 5000
+  ack_timeout_ms: 30000
+  
+logging:
+  level: info
+  format: json
+  
+monitoring:
+  metrics:
+    enabled: true
+    port: 9093
+  health:
+    port: 50053

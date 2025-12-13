@@ -38,14 +38,14 @@ impl InputValidator {
         // Length check
         if key.is_empty() || key.len() > self.max_key_length {
             return Err(ConfigError::ValidationFailed(
-                format!("Key length must be between 1 and {} characters", self.max_key_length)
+                vec![format!("Key length must be between 1 and {} characters", self.max_key_length)]
             ));
         }
 
         // Format check
         if !KEY_PATTERN.is_match(key) {
             return Err(ConfigError::ValidationFailed(
-                "Key contains invalid characters. Only alphanumeric, _, -, ., and / are allowed".to_string()
+                vec!["Key contains invalid characters. Only alphanumeric, _, -, ., and / are allowed".to_string()]
             ));
         }
 
@@ -53,7 +53,7 @@ impl InputValidator {
         for pattern in INJECTION_PATTERNS.iter() {
             if pattern.is_match(key) {
                 return Err(ConfigError::ValidationFailed(
-                    "Potential injection pattern detected in key".to_string()
+                    vec!["Potential injection pattern detected in key".to_string()]
                 ));
             }
         }
@@ -67,7 +67,7 @@ impl InputValidator {
                 // Size check
                 if s.len() > self.max_value_size {
                     return Err(ConfigError::ValidationFailed(
-                        format!("String value exceeds maximum size of {} bytes", self.max_value_size)
+                        vec![format!("String value exceeds maximum size of {} bytes", self.max_value_size)]
                     ));
                 }
 
@@ -75,7 +75,7 @@ impl InputValidator {
                 for pattern in INJECTION_PATTERNS.iter() {
                     if pattern.is_match(s) {
                         return Err(ConfigError::ValidationFailed(
-                            "Potential injection pattern detected in value".to_string()
+                            vec!["Potential injection pattern detected in value".to_string()]
                         ));
                     }
                 }
@@ -86,7 +86,7 @@ impl InputValidator {
             ConfigValue::Float(f) => {
                 if !f.is_finite() {
                     return Err(ConfigError::ValidationFailed(
-                        "Invalid number: infinite or NaN values not allowed".to_string()
+                        vec!["Invalid number: infinite or NaN values not allowed".to_string()]
                     ));
                 }
                 Ok(())
@@ -96,8 +96,8 @@ impl InputValidator {
                 // Check object size
                 if map.len() > self.max_object_keys {
                     return Err(ConfigError::ValidationFailed(
-                        format!("Object has too many keys ({}), maximum is {}", 
-                                map.len(), self.max_object_keys)
+                        vec![format!("Object has too many keys ({}), maximum is {}", 
+                                map.len(), self.max_object_keys)]
                     ));
                 }
 
@@ -113,8 +113,8 @@ impl InputValidator {
                 // Check array size
                 if arr.len() > self.max_array_size {
                     return Err(ConfigError::ValidationFailed(
-                        format!("Array too large ({}), maximum is {} items", 
-                                arr.len(), self.max_array_size)
+                        vec![format!("Array too large ({}), maximum is {} items", 
+                                arr.len(), self.max_array_size)]
                     ));
                 }
 

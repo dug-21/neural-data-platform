@@ -65,7 +65,7 @@ fi
 git config --global init.defaultBranch main
 git config --global pull.rebase false
 git config --global user.name "Codespace User"
-git config --global user.email "codespace@example.com"
+git config --global user.email "angryweed@gmail.com"
 
 # Create useful aliases
 cat >> ~/.bashrc << 'EOF'
@@ -114,43 +114,43 @@ EOF
 # fi
 
 # Set up Rust environment
-echo "🦀 Setting up Rust environment..."
-rustup update
-rustup component add clippy rustfmt rust-src
-cargo install cargo-watch cargo-edit cargo-tree cargo-audit
+#echo "🦀 Setting up Rust environment..."
+#rustup update
+#rustup component add clippy rustfmt rust-src
+#cargo install cargo-watch cargo-edit cargo-tree cargo-audit
 
 # Install common Rust tools
-cargo install \
-    tokio-console \
-    cargo-nextest \
-    cargo-deny \
-    cargo-outdated \
-    cargo-udeps \
-    cargo-expand
+#cargo install \
+#    tokio-console \
+#   cargo-nextest \
+#    cargo-deny \
+#    cargo-outdated \
+#    cargo-udeps \
+#    cargo-expand
 
 # Set up Node.js environment
 echo "📦 Setting up Node.js environment..."
-npm install -g \
-    typescript \
-    ts-node \
-    @types/node \
-    eslint \
-    prettier \
-    nodemon \
-    pm2 \
-    create-react-app \
-    @vue/cli \
-    @angular/cli
+#npm install -g \
+#    typescript \
+#    ts-node \
+#    @types/node \
+#    eslint \
+#    prettier \
+#    nodemon \
+#    pm2 \
+#    create-react-app \
+#    @vue/cli \
+#    @angular/cli
 
 # Set up Python environment
 echo "🐍 Setting up Python environment..."
-pip install --upgrade pip
-pip install \
-    pipenv \
-    black \
-    flake8 \
-    mypy \
-    pytest 
+#pip install --upgrade pip
+#pip install \
+#    pipenv \
+#    black \
+#    flake8 \
+#    mypy \
+#    pytest 
     
 
 # Source the new aliases
