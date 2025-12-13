@@ -28,7 +28,7 @@ sudo apt-get install -y \
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
 if ! command -v claude &> /dev/null; then
-    npm install -g @anthropic-ai/claude-code | sh
+    npm install -g @anthropic-ai/claude-code
 fi
 
 # Install claude-flow
