@@ -1,0 +1,166 @@
+<mxfile host="app.diagrams.net" modified="2025-01-01T00:00:00.000Z" agent="Claude" etag="v2" version="21.1.2" type="device">
+  <diagram name="Container Diagram" id="neural-trader-containers">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Title -->
+        <mxCell id="title" value="Neural Trader V2 - Container Diagram (C4 Level 2)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="600" y="20" width="400" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- System Boundary -->
+        <mxCell id="boundary" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#1168BD;strokeWidth=2;dashed=1" vertex="1" parent="1">
+          <mxGeometry x="260" y="80" width="1140" height="840" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="boundary-label" value="Neural Trader Platform [Software System]" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;fontColor=#1168BD" vertex="1" parent="1">
+          <mxGeometry x="280" y="90" width="300" height="20" as="geometry" />
+        </mxCell>
+        
+        <!-- Data Ingestion (Python) -->
+        <mxCell id="data-ingestion" value="&lt;b&gt;Data Ingestion Service&lt;/b&gt;&lt;br&gt;[Python Application]&lt;br&gt;&lt;br&gt;Fetches market data from Alpaca API, stores raw data in Redis/TimescaleDB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#85C1F5;strokeColor=#4A90D9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="150" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Data Staging (Rust) -->
+        <mxCell id="data-staging" value="&lt;b&gt;Data Staging Service&lt;/b&gt;&lt;br&gt;[Rust Application]&lt;br&gt;&lt;br&gt;Validates JSON, transforms to Proto, enforces quality gates, manages DLQ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#85C1F5;strokeColor=#4A90D9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="540" y="150" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural Core (Rust Library) -->
+        <mxCell id="neural-core" value="&lt;b&gt;Neural Core&lt;/b&gt;&lt;br&gt;[Rust Library]&lt;br&gt;&lt;br&gt;Shared EventBus implementation, Proto messages, common traits and types" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B8E0B8;strokeColor=#82B366;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="660" y="320" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Config Store (Rust) -->
+        <mxCell id="config-store" value="&lt;b&gt;Config Store Service&lt;/b&gt;&lt;br&gt;[Rust Application]&lt;br&gt;&lt;br&gt;Centralized configuration management with hot reload, validation, gRPC API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#85C1F5;strokeColor=#4A90D9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="320" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural ML-Ops (Rust) -->
+        <mxCell id="ml-ops" value="&lt;b&gt;Neural ML-Ops Service&lt;/b&gt;&lt;br&gt;[Rust Application]&lt;br&gt;&lt;br&gt;Feature engineering, model training, drift detection, model registry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#85C1F5;strokeColor=#4A90D9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="540" y="500" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Neural Trading (Rust) -->
+        <mxCell id="trading" value="&lt;b&gt;Neural Trading Service&lt;/b&gt;&lt;br&gt;[Rust Application]&lt;br&gt;&lt;br&gt;DAA coordinator, strategy execution, risk management, trade execution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#85C1F5;strokeColor=#4A90D9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="900" y="500" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- Redis Streams -->
+        <mxCell id="redis" value="&lt;b&gt;Redis (2 Logical Layers)&lt;/b&gt;&lt;br&gt;[In-Memory Data Store]&lt;br&gt;&lt;br&gt;1. Raw: Pub/Sub for data-ingestion&lt;br&gt;2. Proto: Streams backing EventBus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8C8C8;strokeColor=#999999;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="700" width="200" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- TimescaleDB -->
+        <mxCell id="timescale" value="&lt;b&gt;TimescaleDB&lt;/b&gt;&lt;br&gt;[Time-Series Database]&lt;br&gt;&lt;br&gt;Historical market data, ML training datasets, performance metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8C8C8;strokeColor=#999999;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="540" y="700" width="200" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- EventBus -->
+        <mxCell id="eventbus" value="&lt;b&gt;Proto EventBus&lt;/b&gt;&lt;br&gt;[Message Bus]&lt;br&gt;&lt;br&gt;Proto-only messaging, type-safe contracts, quality validation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="900" y="320" width="200" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- External Systems -->
+        <mxCell id="alpaca" value="&lt;b&gt;Alpaca API&lt;/b&gt;&lt;br&gt;[External System]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#666666;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="60" y="150" width="140" height="80" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="monitoring" value="&lt;b&gt;Prometheus/Grafana&lt;/b&gt;&lt;br&gt;[External System]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#666666;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="400" width="140" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Relationships -->
+        <mxCell id="rel1" value="WebSocket/REST" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="alpaca" target="data-ingestion">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel2" value="Publish JSON" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;entryX=0.25;entryY=0;" edge="1" parent="1" source="data-ingestion" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="450" />
+              <mxPoint x="350" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="rel2b" value="Consume Stream" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.75;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="redis" target="data-staging">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="450" y="450" />
+              <mxPoint x="640" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="rel3" value="Proto Events" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.25;" edge="1" parent="1" source="data-staging" target="eventbus">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel4" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="data-staging" target="neural-core">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel5" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="ml-ops" target="neural-core">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel6" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="trading" target="neural-core">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel7" value="Subscribe Events" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="ml-ops" target="eventbus">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" x="20" y="0" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="rel8" value="Publish Features" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;entryX=0;entryY=0.75;" edge="1" parent="1" source="ml-ops" target="eventbus">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel9" value="Subscribe" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="trading" target="eventbus">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel10" value="Store/Query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="data-ingestion" target="redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel11" value="Store/Query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.75;entryY=0;" edge="1" parent="1" source="data-ingestion" target="timescale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        
+        <mxCell id="rel13" value="Read Historical" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ml-ops" target="timescale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel14" value="gRPC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="trading" target="config-store">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel15" value="gRPC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;entryX=0;entryY=0.5;" edge="1" parent="1" source="ml-ops" target="config-store">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel16" value="Metrics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="config-store" target="monitoring">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="mlops-note" value="&lt;b&gt;ML-Ops Data Sources:&lt;/b&gt;&lt;br&gt;1. EventBus: Proto events (via Redis Streams)&lt;br&gt;2. TimescaleDB: Historical data&lt;br&gt;&lt;br&gt;NOTE: ML-Ops gets ALL real-time data through EventBus (post data-staging), never raw Redis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f3ff;strokeColor=#4A90D9;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="780" y="700" width="200" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Architecture Notes -->
+        <mxCell id="notes" value="&lt;b&gt;Key Implementation Details:&lt;/b&gt;&lt;br&gt;• 5 microservices + 1 shared library&lt;br&gt;• Proto-only EventBus (backed by Redis Streams)&lt;br&gt;• Data Staging: Quality gate between raw and proto&lt;br&gt;• ML-Ops: EventBus (real-time) + TimescaleDB (history)&lt;br&gt;• Two Redis layers: Raw (Pub/Sub) + Proto (Streams)&lt;br&gt;• Python ingestion, Rust processing&lt;br&gt;• gRPC for service communication" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="700" width="280" height="160" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

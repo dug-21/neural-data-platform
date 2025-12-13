@@ -30,16 +30,22 @@ impl ErrorSanitizer {
                     ConfigError::Parse("Invalid configuration format".to_string())
                 }
             },
-            ConfigError::ValidationFailed(ref msg) => {
+            ConfigError::ValidationFailed(ref messages) => {
                 // Sanitize validation errors to avoid exposing internals
-                if msg.contains("path") || msg.contains("/") || msg.contains("..") {
-                    ConfigError::ValidationFailed("Invalid configuration value".to_string())
-                } else if msg.to_lowercase().contains("secret") || msg.to_lowercase().contains("password") {
-                    // Keep the secret blocking message as it's intentional
-                    error
-                } else {
-                    ConfigError::ValidationFailed("Invalid configuration value".to_string())
-                }
+                let sanitized_messages: Vec<String> = messages.iter()
+                    .map(|msg| {
+                        if msg.contains("path") || msg.contains("/") || msg.contains("..") {
+                            "Invalid configuration value".to_string()
+                        } else if msg.to_lowercase().contains("secret") || msg.to_lowercase().contains("password") {
+                            // Keep the secret blocking message as it's intentional
+                            msg.clone()
+                        } else {
+                            "Invalid configuration value".to_string()
+                        }
+                    })
+                    .collect();
+                
+                ConfigError::ValidationFailed(sanitized_messages)
             },
             ConfigError::NotFound(_) => ConfigError::NotFound("Configuration not found".to_string()),
             ConfigError::TypeMismatch { expected, actual } => {
@@ -48,7 +54,7 @@ impl ErrorSanitizer {
             },
             _ => {
                 // For any other error types, return a generic message
-                ConfigError::ValidationFailed("Configuration error".to_string())
+                ConfigError::ValidationFailed(vec!["Configuration error".to_string()])
             }
         }
     }

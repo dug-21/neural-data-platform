@@ -1,0 +1,405 @@
+networks:
+  neural-net:
+    driver: bridge
+
+volumes:
+  timescale-data:
+  redis-data:
+  config-repo:
+  prometheus-data:
+  grafana-data:
+  data_ingestion_logs:
+
+services:
+  # =============================================================================
+  # INFRASTRUCTURE SERVICES (Start First)
+  # =============================================================================
+  
+  redis:
+    image: redis:7-alpine
+    container_name: neural-redis
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: neural-timescale
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+      # - ./scripts/v2/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      POSTGRES_DB: neural_trader
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    env_file:
+      - .env.${CONFIG_ENV:-dev}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # CONFIG STORE (Must Start Before Services)
+  # =============================================================================
+  
+  config-store:
+    build:
+      context: .
+      dockerfile: docker/v2/Dockerfile.config-store
+    image: neural-trader/config-store:${BUILD_ID:-latest}
+    container_name: neural-config-store
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "50051:50051"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./configs:/configs:ro
+      - config-repo:/config-repo
+    environment:
+      CONFIG_REPO_URL: ${CONFIG_REPO_URL:-}
+      CONFIG_BRANCH: ${CONFIG_BRANCH:-main}
+      CONFIG_ENV: ${CONFIG_ENV:-dev}
+      CONFIG_PATH: /configs
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    env_file:
+      - .env.${CONFIG_ENV:-dev}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/config-store", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # DATA PIPELINE SERVICES
+  # =============================================================================
+  
+  data-ingestion:
+    build:
+      context: .
+      dockerfile: docker/v2/Dockerfile.data-ingestion
+    image: neural-trader/data-ingestion:${BUILD_ID:-latest}
+    container_name: neural-data-ingestion
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "8081:8081"
+      - "9091:9091"  # Metrics port
+    depends_on:
+      config-store:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      # Service configuration
+      CONFIG_STORE_URL: config-store:50051
+      SERVICE_NAME: data-ingestion
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+      # Database connections
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@timescaledb:5432/neural_trader
+      REDIS_URL: redis://redis:6379
+      
+      # TimescaleDB connection settings
+      TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: 5432
+      TIMESCALE_DATABASE: neural_trader
+      TIMESCALE_USER: postgres
+      TIMESCALE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      
+      # Redis connection settings
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # API Keys and secrets from environment variables (.env file)
+      ALPACA_API_KEY: ${ALPACA_API_KEY:-}
+      ALPACA_API_SECRET: ${ALPACA_API_SECRET:-}
+      POLYGON_API_KEY: ${POLYGON_API_KEY:-}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      FRED_API_KEY: ${FRED_API_KEY:-}
+      IEX_CLOUD_API_KEY: ${IEX_CLOUD_API_KEY:-}
+      NASDAQ_API_KEY: ${NASDAQ_API_KEY:-}
+      QUANDL_API_KEY: ${QUANDL_API_KEY:-}
+      NEWSAPI_KEY: ${NEWSAPI_KEY:-}
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
+      
+      # Health and metrics
+      HEALTH_PORT: 8081
+      METRICS_PORT: 9091
+    env_file:
+      - .env.${CONFIG_ENV:-dev}
+    volumes:
+      - data_ingestion_logs:/var/log/data-ingestion
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  data-staging:
+    build:
+      context: .
+      dockerfile: docker/v2/Dockerfile.data-staging
+    image: neural-trader/data-staging:${BUILD_ID:-latest}
+    container_name: neural-data-staging
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "50052:50052"
+    depends_on:
+      config-store:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      CONFIG_STORE_URL: config-store:50051
+      REDIS_URL: redis://redis:6379
+      TIMESCALE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@timescaledb:5432/neural_trader
+      SERVICE_NAME: data-staging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    env_file:
+      - .env.${CONFIG_ENV:-dev}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/data-staging", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # =============================================================================
+  # ML AND TRADING SERVICES
+  # =============================================================================
+  
+  neural-ml-ops:
+    build:
+      context: .
+      dockerfile: docker/v2/Dockerfile.neural-ml-ops
+    image: neural-trader/neural-ml-ops:${BUILD_ID:-latest}
+    container_name: neural-ml-ops
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "50053:50053"
+    depends_on:
+      config-store:
+        condition: service_healthy
+      data-staging:
+        condition: service_healthy
+    volumes:
+      - ./models:/app/models
+    environment:
+      CONFIG_STORE_URL: config-store:50051
+      SERVICE_NAME: neural-ml-ops
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    env_file:
+      - .env.${CONFIG_ENV:-dev}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/neural-ml-ops", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  neural-trading:
+    build:
+      context: .
+      dockerfile: docker/v2/Dockerfile.neural-trading
+    image: neural-trader/neural-trading:${BUILD_ID:-latest}
+    container_name: neural-trading
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "50054:50054"
+      - "8080:8080"
+    depends_on:
+      config-store:
+        condition: service_healthy
+      neural-ml-ops:
+        condition: service_healthy
+    environment:
+      CONFIG_STORE_URL: config-store:50051
+      SERVICE_NAME: neural-trading
+      TRADING_MODE: ${TRADING_MODE:-paper}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    env_file:
+      - .env.${CONFIG_ENV:-dev}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/neural-trading", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # =============================================================================
+  # TEST RUNNER SERVICE (Only for Testing)
+  # =============================================================================
+  
+  test-runner:
+    build:
+      context: .
+      dockerfile: docker/v2/Dockerfile.test-runner
+    image: neural-trader/test-runner:${BUILD_ID:-latest}
+    container_name: neural-test-runner
+    networks:
+      - neural-net
+    depends_on:
+      - config-store
+      - data-ingestion
+      - data-staging
+      - neural-ml-ops
+      - neural-trading
+    volumes:
+      - ./tests:/tests
+      - ./reports:/reports
+    environment:
+      CONFIG_ENV: test
+      TEST_TYPE: ${TEST_TYPE:-all}
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@timescaledb:5432/neural_trader
+    profiles:
+      - test
+
+  # =============================================================================
+  # MONITORING SERVICES (Matching Production Setup)
+  # =============================================================================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: neural-prometheus
+    restart: unless-stopped
+    networks:
+      - neural-net
+    ports:
+      - "9090:9090"
+    volumes:
+      # - ./configs/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'  # Shorter retention for dev
+      - '--web.enable-lifecycle'
+    environment:
+      - TIMESCALE_HOST=timescaledb
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_DATABASE=${POSTGRES_DB:-neural_trader}
+      - TIMESCALE_USER=${POSTGRES_USER:-postgres}
+      - TIMESCALE_PASSWORD=${POSTGRES_PASSWORD:-dev_password}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  grafana:
+    image: grafana/grafana:latest
+    container_name: neural-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - timescaledb
+    networks:
+      - neural-net
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      # - ./configs/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-devpassword}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  # Postgres Exporter for database metrics
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: neural-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dev_password}@timescaledb:5432/${POSTGRES_DB:-neural_trader}?sslmode=disable"
+    networks:
+      - neural-net
+    ports:
+      - "9187:9187"  # Expose in dev for debugging
+    depends_on:
+      - timescaledb
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-postgres}", "-h", "timescaledb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  # Redis Exporter for cache metrics
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: neural-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+    networks:
+      - neural-net
+    ports:
+      - "9121:9121"  # Expose in dev for debugging
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9121/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: neural-node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - neural-net
+    ports:
+      - "9100:9100"  # Expose in dev for debugging

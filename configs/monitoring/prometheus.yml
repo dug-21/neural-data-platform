@@ -1,0 +1,114 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'neural-trader-dev'
+    environment: 'development'
+    
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files for alerts (if needed)
+rule_files:
+  # - "alerts.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  
+  # Node exporter for system metrics
+  - job_name: 'node'
+    static_configs:
+      - targets: ['neural-node-exporter:9100']
+      
+  # PostgreSQL/TimescaleDB metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['neural-postgres-exporter:9187']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'pg_.*'
+        action: keep
+      
+  # Redis metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['neural-redis-exporter:9121']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'redis_.*'
+        action: keep
+  
+  # Config Store Service (when implemented)
+  - job_name: 'config-store'
+    static_configs:
+      - targets: ['neural-config-store:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  # Data Ingestion Service
+  - job_name: 'data-ingestion'
+    static_configs:
+      - targets: ['neural-data-ingestion:8081']  # Health/metrics port
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    metric_relabel_configs:
+      # Keep all data ingestion metrics
+      - source_labels: [__name__]
+        regex: 'data_ingestion_.*'
+        action: keep
+      # Keep Python application metrics
+      - source_labels: [__name__]
+        regex: 'python_.*'
+        action: keep
+      # Keep neural trader metrics
+      - source_labels: [__name__]
+        regex: 'neural_trader_.*'
+        action: keep
+    
+  # Data Staging Service (when implemented)
+  - job_name: 'data-staging'
+    static_configs:
+      - targets: ['neural-data-staging:9092']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  # Neural ML Ops Service (when implemented)
+  - job_name: 'neural-ml-ops'
+    static_configs:
+      - targets: ['neural-ml-ops:9093']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    metric_relabel_configs:
+      # Keep all ML metrics
+      - source_labels: [__name__]
+        regex: 'ml_.*'
+        action: keep
+      # Keep model metrics
+      - source_labels: [__name__]
+        regex: 'model_.*'
+        action: keep
+    
+  # Neural Trading Service (when implemented)
+  - job_name: 'neural-trading'
+    static_configs:
+      - targets: ['neural-trading:9094']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    metric_relabel_configs:
+      # Keep all trading metrics
+      - source_labels: [__name__]
+        regex: 'trading_.*'
+        action: keep
+      # Keep portfolio metrics
+      - source_labels: [__name__]
+        regex: 'portfolio_.*'
+        action: keep
+      # Keep order metrics
+      - source_labels: [__name__]
+        regex: 'order_.*'
+        action: keep

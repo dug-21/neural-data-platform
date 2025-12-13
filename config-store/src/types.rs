@@ -4,7 +4,7 @@
 /// the configuration management system, including values, errors, and metadata.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::time::SystemTime;
 use thiserror::Error;
 
@@ -156,9 +156,9 @@ pub enum ConfigError {
     #[error("Configuration not found: {0}")]
     NotFound(String),
     
-    /// Validation failed
-    #[error("Validation failed: {0}")]
-    ValidationFailed(String),
+    /// Validation failed with multiple errors
+    #[error("Validation failed: {}", .0.join(", "))]
+    ValidationFailed(Vec<String>),
     
     /// Serialization/deserialization error
     #[error("Serialization error: {0}")]
@@ -177,8 +177,8 @@ pub enum ConfigError {
     OperationFailed(String),
     
     /// Version not found
-    #[error("Version {0} not found for path {1}")]
-    VersionNotFound(u32, String),
+    #[error("Version {1} not found for path {0}")]
+    VersionNotFound(String, u32),
     
     /// Inheritance cycle detected
     #[error("Inheritance cycle detected: {0}")]
@@ -187,6 +187,10 @@ pub enum ConfigError {
     /// I/O error
     #[error("I/O error: {0}")]
     Io(String),
+    
+    /// Custom error
+    #[error("{0}")]
+    Custom(String),
     
     /// Parse error
     #[error("Parse error: {0}")]
@@ -212,7 +216,7 @@ impl From<std::io::Error> for ConfigError {
 }
 
 /// Metadata associated with a configuration node
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConfigMetadata {
     /// Human-readable description
     pub description: Option<String>,
@@ -233,7 +237,10 @@ pub struct ConfigMetadata {
     pub updated_at: SystemTime,
     
     /// Who last updated this configuration
-    pub updated_by: String,
+    pub updated_by: Option<String>,
+    
+    /// Tags for organization
+    pub tags: Vec<String>,
 }
 
 impl ConfigMetadata {
@@ -247,19 +254,20 @@ impl ConfigMetadata {
             runtime_modifiable: true,
             created_at: now,
             updated_at: now,
-            updated_by,
+            updated_by: Some(updated_by),
+            tags: Vec::new(),
         }
     }
     
     /// Update the modification timestamp and user
     pub fn touch(&mut self, updated_by: String) {
         self.updated_at = SystemTime::now();
-        self.updated_by = updated_by;
+        self.updated_by = Some(updated_by);
     }
 }
 
 /// Represents a single configuration node with full metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConfigNode {
     /// Hierarchical path for this configuration
     pub path: String,
@@ -271,7 +279,7 @@ pub struct ConfigNode {
     pub version: u32,
     
     /// Metadata about this configuration
-    pub metadata: ConfigMetadata,
+    pub metadata: Option<ConfigMetadata>,
     
     /// Paths from which this configuration inherits
     pub inheritance: Option<Vec<String>>,
@@ -291,7 +299,7 @@ impl ConfigNode {
             path,
             value,
             version: 1,
-            metadata: ConfigMetadata::new(updated_by),
+            metadata: Some(ConfigMetadata::new(updated_by)),
             inheritance: None,
             schema: None,
         }
@@ -335,7 +343,9 @@ impl ConfigNode {
         let mut node = self.clone();
         node.value = value;
         node.version += 1;
-        node.metadata.touch(updated_by);
+        if let Some(ref mut metadata) = node.metadata {
+            metadata.touch(updated_by);
+        }
         node
     }
     
@@ -346,7 +356,7 @@ impl ConfigNode {
 }
 
 /// Version information for configuration history
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConfigVersion {
     /// Version number
     pub version: u32,
@@ -355,26 +365,36 @@ pub struct ConfigVersion {
     pub value: ConfigValue,
     
     /// When this version was created
-    pub created_at: SystemTime,
+    pub timestamp: SystemTime,
     
-    /// Who created this version
-    pub created_by: String,
+    /// Optional metadata for this version
+    pub metadata: Option<ConfigMetadata>,
 }
 
 impl ConfigVersion {
     /// Create a new version entry
-    pub fn new(version: u32, value: ConfigValue, created_by: String) -> Self {
+    pub fn new(version: u32, value: ConfigValue) -> Self {
         Self {
             version,
             value,
-            created_at: SystemTime::now(),
-            created_by,
+            timestamp: SystemTime::now(),
+            metadata: None,
+        }
+    }
+    
+    /// Create a new version entry with metadata
+    pub fn with_metadata(version: u32, value: ConfigValue, metadata: ConfigMetadata) -> Self {
+        Self {
+            version,
+            value,
+            timestamp: SystemTime::now(),
+            metadata: Some(metadata),
         }
     }
 }
 
-/// A tree of configuration nodes organized hierarchically
-pub type ConfigTree = HashMap<String, ConfigNode>;
+/// A tree of configuration values organized hierarchically
+pub type ConfigTree = BTreeMap<String, ConfigValue>;
 
 /// Snapshot of configuration store state
 pub type ConfigSnapshot = HashMap<String, ConfigNode>;

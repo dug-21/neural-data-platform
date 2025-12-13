@@ -34,14 +34,14 @@ impl SecureFileLoader {
 
         if !is_allowed {
             return Err(ConfigError::ValidationFailed(
-                "Access denied: path outside allowed directories".to_string()
+                vec!["Access denied: path outside allowed directories".to_string()]
             ));
         }
 
         // Additional safety check - the canonical path shouldn't contain ..
         if canonical_path.to_string_lossy().contains("..") {
             return Err(ConfigError::ValidationFailed(
-                "Path traversal detected".to_string()
+                vec!["Path traversal detected".to_string()]
             ));
         }
 
@@ -51,7 +51,7 @@ impl SecureFileLoader {
         
         if metadata.len() > self.max_file_size as u64 {
             return Err(ConfigError::ValidationFailed(
-                format!("File exceeds maximum size of {} bytes", self.max_file_size)
+                vec![format!("File exceeds maximum size of {} bytes", self.max_file_size)]
             ));
         }
 
