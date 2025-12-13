@@ -36,5 +36,4 @@
     "--privileged"
   ],
 
-  "postCreateCommand": "chmod +x .devcontainer/setup.sh && .devcontainer/setup.sh"
 }
