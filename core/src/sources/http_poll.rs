@@ -137,7 +137,7 @@ impl HttpPollingSource {
         let timestamp = Utc::now();
         let mut points = Vec::new();
 
-        let source = measures
+        let location_id = measures
             .serial_no
             .as_ref()
             .unwrap_or(&serial_number.to_string())
@@ -145,93 +145,120 @@ impl HttpPollingSource {
 
         // Standard metrics (available in both MQTT and HTTP)
         if let Some(pm02) = measures.pm02 {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "pm02".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "pm02".to_string(),
+                location_id: location_id.clone(),
                 value: pm02,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         if let Some(co2) = measures.co2 {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "co2".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "co2".to_string(),
+                location_id: location_id.clone(),
                 value: co2,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         if let Some(temp) = measures.temperature {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "temperature".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "temperature".to_string(),
+                location_id: location_id.clone(),
                 value: temp,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         if let Some(humidity) = measures.humidity {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "humidity".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "humidity".to_string(),
+                location_id: location_id.clone(),
                 value: humidity,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         if let Some(wifi) = measures.wifi_strength {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "wifi_strength".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "wifi_strength".to_string(),
+                location_id: location_id.clone(),
                 value: wifi as f64,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         // Extended metrics (HTTP only)
         if let Some(pm10) = measures.pm10 {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "pm10".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "pm10".to_string(),
+                location_id: location_id.clone(),
                 value: pm10,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         if let Some(pm01) = measures.pm01 {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "pm01".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "pm01".to_string(),
+                location_id: location_id.clone(),
                 value: pm01,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         if let Some(tvoc) = measures.tvoc {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "tvoc".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "tvoc".to_string(),
+                location_id: location_id.clone(),
                 value: tvoc,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
         if let Some(nox) = measures.nox_index {
+            let mut tags = HashMap::new();
+            tags.insert("metric".to_string(), "nox_index".to_string());
+            tags.insert("source".to_string(), "http".to_string());
+
             points.push(TimeSeriesPoint {
                 timestamp,
-                source: source.clone(),
-                metric: "nox_index".to_string(),
+                location_id: location_id.clone(),
                 value: nox,
-                metadata: HashMap::new(),
+                tags,
             });
         }
 
@@ -287,16 +314,31 @@ impl HttpPollingSource {
 
 #[async_trait]
 impl Source for HttpPollingSource {
-    fn id(&self) -> &str {
-        "http_polling_source"
+    async fn fetch(&self) -> CoreResult<Vec<TimeSeriesPoint>> {
+        let mut receiver = self.receiver.lock().await;
+        let mut points = Vec::new();
+
+        // Drain all available points from the channel
+        while let Ok(point) = receiver.try_recv() {
+            points.push(point);
+        }
+
+        Ok(points)
     }
 
-    async fn health(&self) -> CoreResult<HealthStatus> {
+    async fn health_check(&self) -> CoreResult<HealthStatus> {
         let is_running = *self.is_running.lock().await;
+
+        let mut details = HashMap::new();
+        details.insert("source_type".to_string(), "http_polling".to_string());
+        details.insert("is_running".to_string(), is_running.to_string());
+
         if !is_running {
-            return Ok(HealthStatus::Unhealthy(
-                "HTTP polling source not running".to_string(),
-            ));
+            return Ok(HealthStatus {
+                healthy: false,
+                message: "HTTP polling source not running".to_string(),
+                details,
+            });
         }
 
         let last_poll = self.last_successful_poll.lock().await;
@@ -318,21 +360,35 @@ impl Source for HttpPollingSource {
             .collect();
 
         if unhealthy_sensors.is_empty() {
-            Ok(HealthStatus::Healthy)
+            details.insert("status".to_string(), "all_sensors_healthy".to_string());
+            Ok(HealthStatus {
+                healthy: true,
+                message: "All sensors operational".to_string(),
+                details,
+            })
         } else if unhealthy_sensors.len() == self.config.sensors.len() {
-            Ok(HealthStatus::Unhealthy(format!(
-                "All sensors unhealthy: {:?}",
-                unhealthy_sensors
-            )))
+            details.insert("status".to_string(), "all_sensors_unhealthy".to_string());
+            details.insert("unhealthy_sensors".to_string(), format!("{:?}", unhealthy_sensors));
+            Ok(HealthStatus {
+                healthy: false,
+                message: format!("All sensors unhealthy: {:?}", unhealthy_sensors),
+                details,
+            })
         } else {
-            Ok(HealthStatus::Degraded(format!(
-                "Some sensors unhealthy: {:?}",
-                unhealthy_sensors
-            )))
+            details.insert("status".to_string(), "some_sensors_unhealthy".to_string());
+            details.insert("unhealthy_sensors".to_string(), format!("{:?}", unhealthy_sensors));
+            Ok(HealthStatus {
+                healthy: false,
+                message: format!("Some sensors unhealthy: {:?}", unhealthy_sensors),
+                details,
+            })
         }
     }
+}
 
-    async fn start(&mut self) -> CoreResult<()> {
+impl HttpPollingSource {
+    /// Start the HTTP polling source
+    pub async fn start(&mut self) -> CoreResult<()> {
         info!("Starting HTTP polling source");
 
         if self.config.sensors.is_empty() {
@@ -364,7 +420,8 @@ impl Source for HttpPollingSource {
         Ok(())
     }
 
-    async fn stop(&mut self) -> CoreResult<()> {
+    /// Stop the HTTP polling source
+    pub async fn stop(&mut self) -> CoreResult<()> {
         info!("Stopping HTTP polling source");
         *self.is_running.lock().await = false;
         Ok(())
@@ -390,8 +447,8 @@ mod tests {
         let config = HttpPollingConfig::default();
         let source = HttpPollingSource::new(config).unwrap();
 
-        let health = source.health().await.unwrap();
-        assert!(matches!(health, HealthStatus::Unhealthy(_)));
+        let health = source.health_check().await.unwrap();
+        assert!(!health.healthy);
     }
 
     #[tokio::test]
@@ -416,20 +473,20 @@ mod tests {
         assert_eq!(points.len(), 9);
 
         // Check standard metrics
-        assert!(points.iter().any(|p| p.metric == "pm02"));
-        assert!(points.iter().any(|p| p.metric == "co2"));
-        assert!(points.iter().any(|p| p.metric == "temperature"));
-        assert!(points.iter().any(|p| p.metric == "humidity"));
-        assert!(points.iter().any(|p| p.metric == "wifi_strength"));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm02".to_string())));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"co2".to_string())));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"temperature".to_string())));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"humidity".to_string())));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"wifi_strength".to_string())));
 
         // Check extended metrics (HTTP only)
-        assert!(points.iter().any(|p| p.metric == "pm10"));
-        assert!(points.iter().any(|p| p.metric == "pm01"));
-        assert!(points.iter().any(|p| p.metric == "tvoc"));
-        assert!(points.iter().any(|p| p.metric == "nox_index"));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm10".to_string())));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm01".to_string())));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"tvoc".to_string())));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"nox_index".to_string())));
 
         // Verify source ID
-        assert!(points.iter().all(|p| p.source == "ABC123"));
+        assert!(points.iter().all(|p| p.location_id == "ABC123"));
     }
 
     #[tokio::test]
@@ -452,7 +509,7 @@ mod tests {
 
         let points = source.parse_measures(measures, "ABC123").unwrap();
         assert_eq!(points.len(), 1);
-        assert_eq!(points[0].metric, "pm02");
+        assert_eq!(points[0].tags.get("metric").unwrap(), "pm02");
         assert_eq!(points[0].value, 12.5);
     }
 
@@ -491,8 +548,8 @@ mod tests {
         let points = source.poll_sensor(&sensor).await.unwrap();
 
         assert!(points.len() >= 6);
-        assert!(points.iter().any(|p| p.metric == "pm02" && p.value == 10.5));
-        assert!(points.iter().any(|p| p.metric == "co2" && p.value == 400.0));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm02".to_string()) && p.value == 10.5));
+        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"co2".to_string()) && p.value == 400.0));
     }
 
     #[tokio::test]

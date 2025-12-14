@@ -1,0 +1,121 @@
+AIR-002 Integration Test Structure
+=====================================
+
+integration_test.rs (850+ lines, 35 tests)
+│
+├── Basic Storage Integration (5 tests)
+│   ├── test_parquet_write_and_query
+│   ├── test_data_persistence_after_restart
+│   ├── test_storage_health_check
+│   ├── test_multi_location_partitioning
+│   └── test_batch_write_performance
+│
+├── WAL (Write-Ahead Log) Tests (2 tests)
+│   ├── test_wal_replay_correctness
+│   └── test_wal_replay_empty
+│
+├── Aggregation Query Tests (4 tests)
+│   ├── test_aggregation_mean
+│   ├── test_aggregation_sum
+│   ├── test_aggregation_max
+│   └── test_aggregation_min
+│
+├── Time Range Filtering (3 tests)
+│   ├── test_time_range_exact_boundaries
+│   ├── test_time_range_no_data
+│   └── test_time_range_cross_day_boundaries
+│
+├── Invalid Input Handling (6 tests)
+│   ├── test_invalid_empty_location_id
+│   ├── test_invalid_nan_values
+│   ├── test_invalid_infinity_values
+│   ├── test_invalid_reversed_time_range
+│   └── test_invalid_empty_batch
+│
+├── Concurrent Access (2 tests)
+│   ├── test_concurrent_writes_different_locations (5 parallel)
+│   └── test_concurrent_reads_same_location (10 parallel)
+│
+├── Stress Tests (2 tests)
+│   ├── test_air002_batch_size (100 points, <5s)
+│   └── test_multiple_sequential_batches (10 × 100 = 1000 points)
+│
+└── Edge Cases (4 tests)
+    ├── test_query_nonexistent_location
+    ├── test_long_location_id (500 chars)
+    ├── test_special_characters_in_location_id
+    └── test_extreme_timestamp_values (100 years)
+
+Test Coverage Map
+=================
+
+AIR-002 Requirements → Test Coverage
+────────────────────────────────────
+Batch Size: 100         → test_air002_batch_size ✓
+Timeout: 5 seconds      → test_air002_batch_size ✓
+Data Persistence        → test_data_persistence_after_restart ✓
+WAL Replay              → test_wal_replay_correctness ✓
+Location Partitioning   → test_multi_location_partitioning ✓
+Time Partitioning       → test_time_range_cross_day_boundaries ✓
+Write Operations        → test_parquet_write_and_query ✓
+Query Operations        → test_time_range_exact_boundaries ✓
+Aggregations            → test_aggregation_* (4 tests) ✓
+Health Checks           → test_storage_health_check ✓
+Concurrent Access       → test_concurrent_* (2 tests) ✓
+Error Handling          → test_invalid_* (6 tests) ✓
+
+Performance Targets
+===================
+
+Operation               Target      Test
+──────────────────────────────────────────
+Single Write            < 10ms      test_parquet_write_and_query
+Batch Write (100)       < 5s        test_air002_batch_size
+Batch Write (1000)      < 5s        test_batch_write_performance
+Query (1 day)           < 100ms     test_time_range_exact_boundaries
+Aggregation             < 200ms     test_aggregation_*
+Health Check            < 10ms      test_storage_health_check
+Concurrent Writes (5)   < 1s        test_concurrent_writes_different_locations
+Concurrent Reads (10)   < 1s        test_concurrent_reads_same_location
+
+Test Execution Commands
+=======================
+
+All tests:
+  cargo test -p air-quality-app --test integration_test
+
+Compile check only:
+  cargo test -p air-quality-app --test integration_test --no-run
+
+By category:
+  cargo test -p air-quality-app --test integration_test test_parquet
+  cargo test -p air-quality-app --test integration_test test_wal
+  cargo test -p air-quality-app --test integration_test test_aggregation
+  cargo test -p air-quality-app --test integration_test test_time_range
+  cargo test -p air-quality-app --test integration_test test_invalid
+  cargo test -p air-quality-app --test integration_test test_concurrent
+  cargo test -p air-quality-app --test integration_test test_air002
+
+Single test:
+  cargo test -p air-quality-app --test integration_test test_name -- --exact
+
+With output:
+  cargo test -p air-quality-app --test integration_test -- --nocapture
+
+Files Created
+=============
+
+✓ /workspaces/neural-data-platform/apps/air-quality-app/tests/integration_test.rs
+  → 850+ lines, 35 comprehensive tests
+
+✓ /workspaces/neural-data-platform/apps/air-quality-app/tests/README.md
+  → Complete documentation and usage guide
+
+✓ /workspaces/neural-data-platform/apps/air-quality-app/Cargo.toml
+  → Added tempfile dev-dependency
+
+✓ /workspaces/neural-data-platform/docs/tests/air-002-integration-test-summary.md
+  → Implementation summary and statistics
+
+✓ /workspaces/neural-data-platform/docs/tests/air-002-test-structure.txt
+  → This file - visual structure reference
