@@ -31,6 +31,8 @@ pub struct MqttConfig {
 pub struct StorageConfig {
     pub base_path: String,
     pub wal_enabled: bool,
+    pub batch_size: usize,
+    pub batch_timeout_secs: u64,
 }
 
 impl AppConfig {
@@ -63,6 +65,8 @@ impl AppConfig {
             storage: StorageConfig {
                 base_path: "./data/parquet".to_string(),
                 wal_enabled: true,
+                batch_size: 100,
+                batch_timeout_secs: 5,
             },
         };
 
@@ -139,6 +143,8 @@ mod tests {
         assert_eq!(config.mqtt.buffer_capacity, 1000);
         assert_eq!(config.storage.base_path, "./data/parquet");
         assert_eq!(config.storage.wal_enabled, true);
+        assert_eq!(config.storage.batch_size, 100);
+        assert_eq!(config.storage.batch_timeout_secs, 5);
 
         // Restore original state
         if let Some(val) = saved_broker {
@@ -170,6 +176,8 @@ mqtt:
 storage:
   base_path: "/data/parquet"
   wal_enabled: false
+  batch_size: 50
+  batch_timeout_secs: 10
 "#;
 
         let temp_dir = std::env::temp_dir();
@@ -189,6 +197,8 @@ storage:
         assert_eq!(config.mqtt.buffer_capacity, 2000);
         assert_eq!(config.storage.base_path, "/data/parquet");
         assert_eq!(config.storage.wal_enabled, false);
+        assert_eq!(config.storage.batch_size, 50);
+        assert_eq!(config.storage.batch_timeout_secs, 10);
 
         std::fs::remove_file(temp_file).ok();
     }

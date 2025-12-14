@@ -23,6 +23,32 @@ services:
       retries: 3
       start_period: 10s
 
+  # etcd - Distributed Configuration Store
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.11
+    container_name: etcd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    environment:
+      - ETCD_NAME=etcd0
+      - ETCD_DATA_DIR=/etcd-data
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER=etcd0=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster
+      - ETCD_INITIAL_CLUSTER_STATE=new
+    volumes:
+      - etcd-data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   # Air Quality Application
   air-quality-app:
     build:
@@ -48,8 +74,11 @@ services:
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
       - HTTP_PORT=8080
       - METRICS_PORT=9090
+      - ETCD_ENDPOINTS=http://etcd:2379
     depends_on:
       mosquitto:
+        condition: service_healthy
+      etcd:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -109,6 +138,8 @@ volumes:
   prometheus-data:
     driver: local
   grafana-data:
+    driver: local
+  etcd-data:
     driver: local
 
 networks:

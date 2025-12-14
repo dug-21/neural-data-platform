@@ -1,0 +1,20 @@
+# Production environment overrides
+
+server:
+  port: 8080
+
+mqtt:
+  broker_url: "mosquitto.internal"
+  port: 1883
+
+storage:
+  base_path: "/var/data/air-quality/parquet"
+  batch_size: 500
+  batch_timeout_secs: 10
+
+logging:
+  level: "info"
+  format: "json"
+
+alerts:
+  enabled: true
