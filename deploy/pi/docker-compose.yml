@@ -72,10 +72,10 @@ services:
       - "8080:8080"     # HTTP API
       - "9090:9090"     # Metrics
     volumes:
-      - air-quality-data:/data
+      - air-quality-data:/app/data
     environment:
       - RUST_LOG=info
-      - DATA_DIR=/data
+      - DATA_DIR=/app/data
       - ETCD_ENDPOINT=http://etcd:2379
       - MQTT_BROKER_URL=mosquitto
       - MQTT_PORT=1883
