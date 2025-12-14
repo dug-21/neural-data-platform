@@ -2,7 +2,7 @@
 # Supports: linux/amd64 (Mac Intel, cloud), linux/arm64 (Mac M-series, Pi 5)
 
 # Stage 1: Chef - prepare build environment
-FROM lukemathwalker/cargo-chef:latest-rust-1.75 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.82 AS chef
 WORKDIR /app
 
 # Stage 2: Planner - analyze dependencies and generate recipe
