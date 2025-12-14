@@ -1,0 +1,146 @@
+# Production Environment Configuration Overrides for Raspberry Pi 5
+# Optimized for: 8GB RAM, 4 cores, arm64 architecture
+# These settings override config/base/air-quality.yaml
+
+app:
+  environment: production
+
+# Production logging (less verbose)
+logging:
+  level: info
+  format: json
+  output: stdout
+  file:
+    enabled: true
+    path: /data/logs/air-quality.log
+    max_size_mb: 100
+    max_backups: 5
+
+# Production MQTT settings
+mqtt:
+  broker_url: mqtt://mosquitto:1883
+  client_id: air-quality-pi5
+  keep_alive_seconds: 60
+  clean_session: false
+  qos: 2  # Exactly once delivery
+  reconnect:
+    min_delay_ms: 2000
+    max_delay_ms: 120000
+    max_retries: -1  # Infinite retries
+
+# Pi 5 optimized storage
+storage:
+  data_dir: /data
+  max_size_mb: 2048  # 2GB max
+  retention_days: 30
+  backup_enabled: true
+  compression: true  # Save space
+  format: parquet
+
+# Pi 5 optimized model settings
+models:
+  cache_size_mb: 512  # Larger cache for Pi 5's 8GB RAM
+  inference:
+    batch_size: 4  # Small batches for memory efficiency
+    timeout_ms: 2000
+    device: cpu
+  # Model optimization for ARM
+  optimization:
+    use_fp16: false  # Full precision for accuracy
+    num_threads: 2   # Match allocated cores
+    inter_op_threads: 1
+    intra_op_threads: 2
+
+# Production prediction settings
+prediction:
+  enabled: true
+  interval_minutes: 5
+  horizon_minutes: 60
+  confidence_threshold: 0.75  # Higher threshold for production
+  publish_results: true
+
+# Preprocessing optimized for Pi 5
+preprocessing:
+  enabled: true
+  window_size_minutes: 60
+  features:
+    - pm02
+    - rco2
+    - atmp
+    - rhum
+  normalization: standard
+  outlier_detection: true
+  outlier_threshold: 3.5  # More conservative
+  # Performance settings
+  max_buffer_size: 10000
+  flush_interval_seconds: 60
+
+# Production HTTP settings
+http:
+  host: 0.0.0.0
+  port: 8080
+  max_connections: 100
+  request_timeout_seconds: 30
+  shutdown_timeout_seconds: 30
+  # Security headers
+  security:
+    enable_cors: false
+    enable_rate_limiting: true
+    rate_limit_requests_per_minute: 60
+
+# Metrics configuration
+metrics:
+  enabled: true
+  host: 0.0.0.0
+  port: 9090
+  path: /metrics
+  # Additional Pi 5 system metrics
+  include_system_metrics: true
+  system_metrics:
+    - cpu_usage
+    - memory_usage
+    - disk_usage
+    - temperature
+
+# Health check configuration
+health:
+  enabled: true
+  endpoint: /health
+  checks:
+    - mqtt_connection
+    - model_loaded
+    - storage_available
+    - memory_available
+    - temperature_ok
+
+# Resource limits for Pi 5
+resources:
+  max_memory_mb: 1536  # ~1.5GB to leave headroom
+  max_cpu_percent: 80
+  thread_pool_size: 4
+  io_threads: 2
+
+# Production features
+features:
+  enable_predictions: true
+  enable_preprocessing: true
+  enable_metrics: true
+  enable_health_checks: true
+  enable_graceful_shutdown: true
+  enable_auto_restart: true
+  enable_watchdog: true
+
+# Watchdog settings
+watchdog:
+  enabled: true
+  interval_seconds: 300  # Check every 5 minutes
+  restart_on_failure: true
+  max_restarts: 3
+  restart_cooldown_seconds: 600
+
+# Alert thresholds for Pi 5
+alerts:
+  cpu_threshold_percent: 85
+  memory_threshold_percent: 85
+  temperature_threshold_celsius: 75
+  disk_threshold_percent: 90

@@ -1,0 +1,25 @@
+{
+  "country": "US",
+  "pmStandard": "ugm3",
+  "ledBarMode": "co2",
+  "abcDays": 8,
+  "tvocLearningOffset": 12,
+  "noxLearningOffset": 12,
+  "mqttBrokerUrl": "",
+  "httpDomain": "",
+  "temperatureUnit": "f",
+  "disableCloudConnection": false,
+  "configurationControl": "both",
+  "postDataToAirGradient": true,
+  "ledBarBrightness": 100,
+  "displayBrightness": 100,
+  "offlineMode": false,
+  "monitorDisplayCompensatedValues": false,
+  "model": "I-9PSL-DE",
+  "corrections": {
+    "pm02": {
+      "correctionAlgorithm": "epa_2021",
+      "slr": null
+    }
+  }
+}

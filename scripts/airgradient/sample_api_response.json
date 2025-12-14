@@ -1,0 +1,21 @@
+[
+  {
+    "locationId": 12345,
+    "locationName": "Living Room",
+    "pm01": 3,
+    "pm02": 5,
+    "pm10": 7,
+    "pm003Count": 450,
+    "atmp": 23.5,
+    "rhum": 45.2,
+    "rco2": 650,
+    "tvoc": 120,
+    "tvocIndex": 85,
+    "noxIndex": 12,
+    "wifi": -62,
+    "timestamp": "2024-12-13T19:20:00Z",
+    "ledMode": "default",
+    "serialno": "84fce12345ab",
+    "firmwareVersion": "3.1.4"
+  }
+]

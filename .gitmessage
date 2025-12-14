@@ -1,0 +1,60 @@
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+
+# Type should be one of the following:
+# * feat: A new feature
+# * fix: A bug fix
+# * docs: Documentation only changes
+# * style: Changes that do not affect the meaning of the code
+# * refactor: A code change that neither fixes a bug nor adds a feature
+# * perf: A code change that improves performance
+# * test: Adding missing tests or correcting existing tests
+# * build: Changes that affect the build system or external dependencies
+# * ci: Changes to CI configuration files and scripts
+# * chore: Other changes that don't modify src or test files
+
+# Scope for air-001 feature:
+# * core: Core traits and types
+# * domain: Air quality domain implementations
+# * storage: Parquet storage and data pipeline
+# * ingestion: MQTT and HTTP data sources
+# * intelligence: AQI, alerts, and forecasting
+# * api: REST API and MCP server
+# * docker: Container and deployment
+# * ci: CI/CD workflows
+# * docs: Documentation
+# * tests: Test suite
+
+# Subject line:
+# - Use imperative, present tense: "change" not "changed" nor "changes"
+# - Don't capitalize first letter
+# - No period (.) at the end
+# - Maximum 50 characters
+
+# Body:
+# - Wrap at 72 characters
+# - Explain what and why vs. how
+# - Can include multiple paragraphs
+
+# Footer:
+# - Reference issues and pull requests
+# - Breaking changes should start with BREAKING CHANGE:
+# - Use "Refs: #issue-number" for related issues
+# - Use "Closes: #issue-number" for issues this commit closes
+
+# Example:
+# feat(ingestion): add MQTT reconnection logic
+#
+# Implement automatic reconnection with exponential backoff
+# when MQTT broker connection is lost. This ensures reliable
+# data ingestion from AirGradient sensors.
+#
+# - Add reconnection state machine
+# - Implement exponential backoff (1s to 60s)
+# - Add connection health metrics
+#
+# Refs: #air-001
+# Closes: #123

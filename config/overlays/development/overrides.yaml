@@ -1,0 +1,71 @@
+# Development Environment Configuration Overrides
+# These settings override config/base/air-quality.yaml for local development
+
+app:
+  environment: development
+
+# More verbose logging for debugging
+logging:
+  level: debug
+  format: pretty
+  file:
+    enabled: true
+    path: /data/logs/air-quality-dev.log
+    max_size_mb: 50
+    max_backups: 2
+
+# Local MQTT broker
+mqtt:
+  broker_url: mqtt://mosquitto:1883
+  clean_session: true
+  reconnect:
+    min_delay_ms: 500
+    max_delay_ms: 5000
+    max_retries: 3
+
+# Development storage settings
+storage:
+  data_dir: /data
+  max_size_mb: 512
+  retention_days: 7
+  backup_enabled: false
+  compression: false  # Faster writes for development
+
+# Relaxed model settings
+models:
+  cache_size_mb: 128
+  inference:
+    batch_size: 1
+    timeout_ms: 5000  # Longer timeout for debugging
+    device: cpu
+
+# More frequent predictions for testing
+prediction:
+  interval_minutes: 1
+  horizon_minutes: 15
+  confidence_threshold: 0.5  # Lower threshold for testing
+  publish_results: true
+
+# Development-specific features
+features:
+  enable_predictions: true
+  enable_preprocessing: true
+  enable_metrics: true
+  enable_health_checks: true
+  enable_graceful_shutdown: true
+
+# Development HTTP settings
+http:
+  max_connections: 50
+  request_timeout_seconds: 60  # Longer timeout for debugging
+
+# Additional development settings
+dev:
+  hot_reload: false
+  mock_data: false
+  seed_data: false
+  disable_auth: true
+  cors_enabled: true
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:8080

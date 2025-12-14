@@ -1,0 +1,110 @@
+# Air Quality Application Base Configuration
+# Per FR-8.4: Hierarchical configuration with environment overlays
+
+# Application Metadata
+app:
+  name: air-quality-app
+  version: 0.1.0
+  environment: base
+
+# HTTP Server Configuration
+http:
+  host: 0.0.0.0
+  port: 8080
+  max_connections: 100
+  request_timeout_seconds: 30
+  shutdown_timeout_seconds: 10
+
+# Metrics Server Configuration
+metrics:
+  enabled: true
+  host: 0.0.0.0
+  port: 9090
+  path: /metrics
+
+# MQTT Configuration
+mqtt:
+  broker_url: mqtt://localhost:1883
+  client_id: air-quality-app
+  keep_alive_seconds: 60
+  clean_session: false
+  qos: 1
+  topics:
+    airgradient: airgradient/+/measures
+    predictions: neural/predictions
+    commands: neural/commands
+  reconnect:
+    min_delay_ms: 1000
+    max_delay_ms: 60000
+    max_retries: 10
+
+# Data Storage Configuration
+storage:
+  data_dir: /data
+  max_size_mb: 1024
+  retention_days: 30
+  backup_enabled: false
+  compression: true
+  format: parquet
+
+# Model Configuration
+models:
+  dir: /models
+  cache_size_mb: 256
+  auto_load: true
+  formats:
+    - onnx
+    - pytorch
+  inference:
+    batch_size: 1
+    timeout_ms: 1000
+    device: cpu
+
+# Preprocessing Configuration
+preprocessing:
+  enabled: true
+  window_size_minutes: 60
+  features:
+    - pm02
+    - rco2
+    - atmp
+    - rhum
+  normalization: standard
+  outlier_detection: true
+  outlier_threshold: 3.0
+
+# Prediction Configuration
+prediction:
+  enabled: true
+  interval_minutes: 5
+  horizon_minutes: 60
+  confidence_threshold: 0.7
+  publish_results: true
+
+# Logging Configuration
+logging:
+  level: info
+  format: json
+  output: stdout
+  file:
+    enabled: false
+    path: /var/log/air-quality.log
+    max_size_mb: 100
+    max_backups: 3
+
+# Health Check Configuration
+health:
+  enabled: true
+  endpoint: /health
+  checks:
+    - mqtt_connection
+    - model_loaded
+    - storage_available
+
+# Feature Flags
+features:
+  enable_predictions: true
+  enable_preprocessing: true
+  enable_metrics: true
+  enable_health_checks: true
+  enable_graceful_shutdown: true

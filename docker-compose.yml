@@ -1,0 +1,117 @@
+# Development Docker Compose Stack
+# Usage: ./scripts/dev-up.sh
+
+version: '3.8'
+
+services:
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: neural-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-logs:/mosquitto/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Air Quality Application
+  air-quality-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: neural-air-quality
+    ports:
+      - "8080:8080"  # HTTP API
+      - "9090:9090"  # Metrics
+    volumes:
+      - ./config/base/air-quality.yaml:/config/air-quality.yaml:ro
+      - ./config/overlays/development/overrides.yaml:/config/overrides.yaml:ro
+      - air-quality-data:/data
+      - air-quality-models:/models
+    environment:
+      - RUST_LOG=debug
+      - CONFIG_PATH=/config/air-quality.yaml
+      - CONFIG_OVERLAY=/config/overrides.yaml
+      - DATA_DIR=/data
+      - MODELS_DIR=/models
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - HTTP_PORT=8080
+      - METRICS_PORT=9090
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Prometheus (Optional - for metrics monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: neural-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana (Optional - for dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: neural-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  mosquitto-data:
+    driver: local
+  mosquitto-logs:
+    driver: local
+  air-quality-data:
+    driver: local
+  air-quality-models:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  default:
+    name: neural-network
+    driver: bridge
