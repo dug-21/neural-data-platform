@@ -55,8 +55,27 @@ async fn load_config_from_client(client: &ConfigClient) -> Result<EtcdAppConfig,
     };
 
     let storage = StorageConfig {
-        base_path: client.get_with_env("/storage/base_path", "AIR_QUALITY").await
-            .unwrap_or_else(|_| "./data/parquet".to_string()),
+        base_path: {
+            // Priority: etcd > DATA_DIR env var > STORAGE_PATH env var > default
+            match client.get::<String>("/storage/base_path").await {
+                Ok(path) => {
+                    info!("Using storage base_path from etcd: {}", path);
+                    path
+                }
+                Err(_) => {
+                    if let Ok(data_dir) = std::env::var("DATA_DIR") {
+                        info!("Using storage base_path from DATA_DIR env var: {}", data_dir);
+                        data_dir
+                    } else if let Ok(storage_path) = std::env::var("STORAGE_PATH") {
+                        info!("Using storage base_path from STORAGE_PATH env var: {}", storage_path);
+                        storage_path
+                    } else {
+                        warn!("No storage base_path in etcd or env vars, using default: ./data/parquet");
+                        "./data/parquet".to_string()
+                    }
+                }
+            }
+        },
         wal_enabled: client.get_with_env("/storage/wal_enabled", "AIR_QUALITY").await
             .unwrap_or(true),
         batch_size: client.get_with_env("/storage/batch_size", "AIR_QUALITY").await

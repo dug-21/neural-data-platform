@@ -8,7 +8,7 @@ mqtt:
   port: 1883
 
 storage:
-  base_path: "/var/data/air-quality/parquet"
+  base_path: "/app/data"
   batch_size: 500
   batch_timeout_secs: 10
 
