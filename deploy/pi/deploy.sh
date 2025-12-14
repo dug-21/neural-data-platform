@@ -94,7 +94,7 @@ status() {
     echo ""
 
     log "Data Volume:"
-    docker exec air-quality-app du -sh /data 2>/dev/null || echo "  Not available"
+    docker exec air-quality-app du -sh /app/data 2>/dev/null || echo "  Not available"
     echo ""
 
     log "Useful URLs:"
