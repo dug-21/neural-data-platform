@@ -1,0 +1,155 @@
+<mxfile host="app.diagrams.net" modified="2025-12-14T00:00:00.000Z" agent="Claude" version="24.0.0">
+  <diagram name="C4 Component - Ingestion Pipeline" id="component">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="boundary" value="Air Quality Ingestion Pipeline" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#08427b;strokeWidth=3;fontSize=18;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=10;" parent="1" vertex="1">
+          <mxGeometry x="40" y="120" width="1320" height="800" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mqtt_source_boundary" value="MqttSource (neural-core)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#438dd5;strokeWidth=2;dashed=1;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;" parent="1" vertex="1">
+          <mxGeometry x="80" y="180" width="380" height="360" as="geometry" />
+        </mxCell>
+
+        <mxCell id="conn_mgr" value="Connection Manager&#xa;[Component]&#xa;&#xa;Manages WebSocket/MQTT connection lifecycle" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="120" y="220" width="140" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="reconn_handler" value="Reconnection Handler&#xa;[Component]&#xa;&#xa;Exponential backoff 1s-30s" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="290" y="220" width="140" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="parser" value="Message Parser&#xa;[Component]&#xa;&#xa;Parses AirGradient JSON payloads" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="120" y="330" width="140" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ts_converter" value="TimeSeriesPoint Converter&#xa;[Component]&#xa;&#xa;Creates multiple points per reading" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="290" y="330" width="140" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cache" value="Point Cache&#xa;[Component]&#xa;&#xa;Arc&lt;Mutex&lt;Vec&lt;TimeSeriesPoint&gt;&gt;&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f39c12;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="120" y="440" width="310" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mqtt_handler_boundary" value="MqttHandler (air-quality-app)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#08427b;strokeWidth=2;dashed=1;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;" parent="1" vertex="1">
+          <mxGeometry x="520" y="180" width="300" height="360" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fetch_loop" value="Fetch Loop&#xa;[Component]&#xa;&#xa;Polls every 100ms" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="560" y="220" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="channel_sender" value="Channel Sender&#xa;[Component]&#xa;&#xa;mpsc::Sender&lt;TimeSeriesPoint&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="560" y="330" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="health_check" value="Health Check&#xa;[Component]&#xa;&#xa;Delegates to MqttSource" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="560" y="440" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="storage_writer_boundary" value="StorageWriter (air-quality-app)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#08427b;strokeWidth=2;dashed=1;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;" parent="1" vertex="1">
+          <mxGeometry x="880" y="180" width="320" height="360" as="geometry" />
+        </mxCell>
+
+        <mxCell id="channel_receiver" value="Channel Receiver&#xa;[Component]&#xa;&#xa;mpsc::Receiver&lt;TimeSeriesPoint&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="920" y="220" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="batch_buffer" value="Batch Buffer&#xa;[Component]&#xa;&#xa;Vec capacity: 100" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f39c12;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="920" y="330" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="flush_logic" value="Flush Logic&#xa;[Component]&#xa;&#xa;Size: 100 or Timeout: 5s" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="920" y="440" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="parquet_store_boundary" value="ParquetStore (neural-core)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#27ae60;strokeWidth=2;dashed=1;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;" parent="1" vertex="1">
+          <mxGeometry x="80" y="600" width="1120" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wal" value="Write-Ahead Log&#xa;[Component]&#xa;&#xa;Append-only journal for crash recovery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#27ae60;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="120" y="640" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="partitioner" value="Partitioner&#xa;[Component]&#xa;&#xa;Hive partitioning: location/year/month/day" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#27ae60;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="400" y="640" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="parquet_writer" value="Parquet Writer&#xa;[Component]&#xa;&#xa;Polars ParquetWriter with Snappy compression" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#27ae60;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="680" y="640" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="file_system" value="File System&#xa;[Component]&#xa;&#xa;Append or create Parquet files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#95a5a6;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="960" y="640" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="query_engine" value="Query Engine&#xa;[Component]&#xa;&#xa;Time-range queries with partition pruning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#27ae60;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="120" y="760" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="aggregator" value="Aggregator&#xa;[Component]&#xa;&#xa;Mean, Min, Max, Median, Percentile" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#27ae60;strokeColor=none;fontColor=#ffffff;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="400" y="760" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge1" value="on disconnect" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="conn_mgr" target="reconn_handler" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge2" value="raw message" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="conn_mgr" target="parser" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge3" value="parsed data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="parser" target="ts_converter" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge4" value="store" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="ts_converter" target="cache" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge5" value="fetch()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="fetch_loop" target="cache" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge6" value="points" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="fetch_loop" target="channel_sender" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge7" value="send()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="channel_sender" target="channel_receiver" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge8" value="recv()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="channel_receiver" target="batch_buffer" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge9" value="trigger" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="batch_buffer" target="flush_logic" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge10" value="write_batch()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="flush_logic" target="wal" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge11" value="after WAL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="wal" target="partitioner" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge12" value="grouped by partition" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="partitioner" target="parquet_writer" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge13" value="persist" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;" parent="1" source="parquet_writer" target="file_system" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="title" value="C4 Component Diagram - Air Quality Ingestion Pipeline" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="40" y="40" width="600" height="40" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
