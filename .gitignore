@@ -180,7 +180,7 @@ python_test_results.log
 .swarm/
 
 # Docker
-.dockerignore
+# Keep .dockerignore tracked
 docker-compose.override.yml
 
 # Terraform

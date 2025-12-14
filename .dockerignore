@@ -1,0 +1,120 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Documentation
+*.md
+docs/
+README*
+LICENSE
+CHANGELOG*
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+target/
+dist/
+build/
+*.o
+*.so
+*.dylib
+
+# Dependencies (will be downloaded during build)
+node_modules/
+.npm/
+.pnpm-store/
+
+# Test files
+tests/
+test/
+*_test.rs
+*.test.js
+coverage/
+.coverage
+htmlcov/
+
+# Data and logs
+data/
+logs/
+*.log
+*.db
+*.sqlite
+
+# Models (large files)
+models/
+*.onnx
+*.pt
+*.pth
+*.h5
+*.pkl
+
+# Environment files
+.env
+.env.*
+*.env
+secrets/
+.secrets
+
+# Docker files (avoid recursion)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# Rust specific
+**/*.rs.bk
+.cargo/
+# Keep Cargo.lock for reproducible builds
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.cache
+
+# OS specific
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# IDE specific
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# Product and research files
+product/
+scripts/airgradient/
+
+# Vendor (external dependencies)
+vendor/
+
+# Deployment files
+deploy/
+
+# Dev container
+.devcontainer/
+
+# Claude flow
+.claude-flow/
