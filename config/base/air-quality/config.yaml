@@ -17,7 +17,7 @@ mqtt:
   buffer_capacity: 1000
 
 storage:
-  base_path: "/data/parquet"
+  base_path: "/app/data"
   wal_enabled: true
   batch_size: 100
   batch_timeout_secs: 5
