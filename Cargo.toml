@@ -4,7 +4,10 @@ members = [
     "neural-core",
     "neural-trading",
     "neural-ml-ops",
-    "data-staging"
+    "data-staging",
+    "core",
+    "domains/air-quality",
+    "apps/air-quality-app"
 ]
 exclude = [
     "vendor",
@@ -25,10 +28,13 @@ anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
 sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres", "macros", "chrono"] }
+rumqttc = "0.24"
+reqwest = { version = "0.12", features = ["json"] }
+polars = { version = "0.35", features = ["parquet", "lazy", "dtype-datetime", "dtype-duration"] }
 
 # Note: NO [package] section
 # Note: NO [[bin]] sections

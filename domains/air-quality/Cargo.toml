@@ -1,0 +1,17 @@
+[package]
+name = "air-quality"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neural Data Platform Team"]
+description = "Air quality data domain models and parsers for AirGradient devices"
+
+[dependencies]
+platform_core = { path = "../../core", package = "platform-core" }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+mockall = "0.13"

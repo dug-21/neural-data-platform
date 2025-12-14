@@ -1,0 +1,86 @@
+# Production Docker Compose Stack for Raspberry Pi 5
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+# Optimized for: 8GB RAM, 4 cores (2 allocated), arm64 architecture
+
+version: '3.8'
+
+services:
+  # MQTT Broker (lightweight for Pi 5)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: pi5-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - /opt/neural/data/mosquitto:/mosquitto/data
+      - /opt/neural/logs/mosquitto:/mosquitto/log
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Air Quality Application (production settings)
+  air-quality-app:
+    image: ghcr.io/neural-data-platform/air-quality:latest
+    container_name: pi5-air-quality
+    ports:
+      - "8080:8080"  # HTTP API
+      - "9090:9090"  # Metrics
+    volumes:
+      - ./config/base/air-quality.yaml:/config/air-quality.yaml:ro
+      - ./config/overlays/production/overrides.yaml:/config/overrides.yaml:ro
+      - /opt/neural/data/air-quality:/data
+      - /opt/neural/models:/models
+    environment:
+      - RUST_LOG=info
+      - CONFIG_PATH=/config/air-quality.yaml
+      - CONFIG_OVERLAY=/config/overrides.yaml
+      - DATA_DIR=/data
+      - MODELS_DIR=/models
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - HTTP_PORT=8080
+      - METRICS_PORT=9090
+      - RUST_BACKTRACE=1
+      # Pi 5 optimizations
+      - RAYON_NUM_THREADS=2
+      - TOKIO_WORKER_THREADS=2
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'      # 2 cores max
+          memory: 1792M    # ~1.75GB max (leaving headroom)
+        reservations:
+          cpus: '1.0'      # 1 core guaranteed
+          memory: 1024M    # 1GB guaranteed
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: pi5-neural-network
+    driver: bridge

@@ -1,0 +1,14 @@
+{
+  "wifi": -75,
+  "ssid": "HomeNetwork",
+  "hwVersion": 0,
+  "rco2": 532,
+  "atmp": 29.34,
+  "rhum": 37.74,
+  "tvoc": 1074,
+  "pm01": 0,
+  "pm02": 0,
+  "pm10": 0,
+  "boot": 1,
+  "wdog": 1
+}

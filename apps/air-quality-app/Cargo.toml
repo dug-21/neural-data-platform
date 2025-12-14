@@ -1,0 +1,61 @@
+[package]
+name = "air-quality-app"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neural Data Platform Team"]
+description = "REST API for air quality data using Axum framework"
+
+[[bin]]
+name = "air-quality-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "air-quality-mcp"
+path = "src/mcp_main.rs"
+required-features = ["mcp"]
+
+[dependencies]
+# Core dependencies
+neural_core = { path = "../../core", package = "platform-core" }
+air-quality = { path = "../../domains/air-quality" }
+config-store = { path = "../../config-store" }
+
+# Web framework
+axum = { version = "0.7", features = ["macros", "json"] }
+tower = { version = "0.4", features = ["util", "timeout", "limit"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "request-id"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging and tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
+uuid = { workspace = true }
+serde_yaml = "0.9"
+async-trait = "0.1"
+
+# MCP SDK (optional)
+mcp-sdk = { version = "0.0.3", optional = true }
+futures = "0.3"
+
+[dev-dependencies]
+mockall = "0.13"
+axum-test = "14.0"
+tokio-test = "0.4"
+urlencoding = "2.1"
+
+[features]
+default = []
+mcp = ["dep:mcp-sdk"]
