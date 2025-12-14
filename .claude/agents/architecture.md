@@ -399,6 +399,49 @@ scalability_patterns:
 5. **Technology Decisions**: Rationale for technology choices
 6. **Scalability Plan**: Growth and scaling strategies
 
+## Architecture Memory Integration
+
+**CRITICAL**: Always interact with the `architecture` namespace in ReasoningBank.
+
+### Before Designing - Lookup Existing Patterns
+
+```bash
+# Search for existing architecture decisions
+claude-flow memory query "system design" --reasoningbank
+claude-flow memory query "deployment pattern" --reasoningbank
+claude-flow memory query "config hierarchy" --reasoningbank
+claude-flow memory query "<domain-specific-query>" --reasoningbank
+```
+
+### After Designing - Store Architecture Decisions
+
+```bash
+# Store architecture decisions for future reference
+claude-flow memory store architecture/<system-name>-<pattern> '{
+  "pattern": "<pattern-identifier>",
+  "description": "<architectural decision and rationale>",
+  "components": ["<affected-components>"],
+  "interfaces": ["<api-contracts>"],
+  "deployment": {
+    "platform": "<target-platform>",
+    "services": ["<service-list>"],
+    "volumes": {},
+    "networking": {}
+  },
+  "scalability": "<scaling-strategy>",
+  "security": "<security-considerations>",
+  "tradeoffs": ["<documented-tradeoffs>"]
+}' --reasoningbank
+```
+
+### Required Storage Patterns
+- **System designs**: Store C4 context, container, component decisions
+- **Data architectures**: Schema designs, partitioning strategies
+- **API contracts**: OpenAPI specs, gRPC definitions
+- **Deployment topologies**: Infrastructure as code patterns
+- **Security architectures**: Auth flows, encryption strategies
+- **Config management**: Configuration hierarchy and loading patterns
+
 ## Best Practices
 
 1. **Design for Failure**: Assume components will fail
@@ -407,5 +450,7 @@ scalability_patterns:
 4. **Security First**: Build security into the architecture
 5. **Observable Systems**: Design for monitoring and debugging
 6. **Documentation**: Keep architecture docs up-to-date
+7. **Memory First**: Check architecture namespace before designing
+8. **Store Decisions**: Persist all significant architecture decisions
 
-Remember: Good architecture enables change. Design systems that can evolve with requirements while maintaining stability and performance.
+Remember: Good architecture enables change. Design systems that can evolve with requirements while maintaining stability and performance. Always check and update the architecture memory namespace.

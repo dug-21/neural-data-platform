@@ -257,3 +257,45 @@ async function retryOperation(fn, maxRetries = 3) {
 - Setup instructions
 - Configuration options
 - Usage examples
+
+## Architecture Memory Integration
+
+**CRITICAL**: Always interact with the `architecture` namespace in ReasoningBank.
+
+### Before Implementation - Lookup Patterns
+
+```bash
+# Check for existing patterns before implementing
+claude-flow memory query "implementation pattern" --reasoningbank
+claude-flow memory query "config hierarchy" --reasoningbank
+claude-flow memory query "<feature-domain>" --reasoningbank
+```
+
+### After Implementation - Store Patterns
+
+```bash
+# Store implementation patterns for team knowledge
+claude-flow memory store architecture/<feature>-impl-pattern '{
+  "pattern": "<pattern-name>",
+  "description": "<what problem this solves>",
+  "implementation": {
+    "files": ["<modified-files>"],
+    "approach": "<implementation-approach>",
+    "dependencies": ["<key-dependencies>"]
+  },
+  "testing": {
+    "strategy": "<test-approach>",
+    "coverage": "<coverage-notes>"
+  },
+  "learnings": ["<key-insights-for-future>"]
+}' --reasoningbank
+```
+
+### When to Store
+- New service integrations
+- Configuration patterns (env vars, files, etcd)
+- Error handling strategies
+- Performance optimizations
+- Security implementations
+- Deployment configurations
+- Testing patterns

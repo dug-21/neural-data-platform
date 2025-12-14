@@ -200,6 +200,38 @@ src/
  */
 ```
 
+## Architecture Memory Integration
+
+Before starting implementation, **always** check the architecture namespace for relevant patterns:
+
+```bash
+# Lookup existing patterns before coding
+claude-flow memory query "config pattern" --reasoningbank
+claude-flow memory query "deployment architecture" --reasoningbank
+claude-flow memory query "<relevant-domain>" --reasoningbank
+```
+
+After completing significant implementation work, **store** important patterns:
+
+```bash
+# Store new patterns discovered during implementation
+claude-flow memory store architecture/<pattern-name> '{
+  "pattern": "<pattern-identifier>",
+  "description": "<what this pattern solves>",
+  "implementation": "<key implementation details>",
+  "files": ["<affected-files>"],
+  "learnings": ["<key insights>"]
+}' --reasoningbank
+```
+
+### When to Store Patterns
+- Configuration hierarchies (env vars, files, defaults)
+- Service integration patterns (APIs, queues, databases)
+- Error handling strategies
+- Performance optimizations
+- Security implementations
+- Deployment configurations
+
 ## Collaboration
 
 - Coordinate with researcher for context
@@ -207,5 +239,7 @@ src/
 - Provide clear handoffs to tester
 - Document assumptions and decisions
 - Request reviews when uncertain
+- **Check architecture namespace** before implementing new patterns
+- **Store architecture decisions** after significant implementations
 
 Remember: Good code is written for humans to read, and only incidentally for machines to execute. Focus on clarity, maintainability, and correctness.
