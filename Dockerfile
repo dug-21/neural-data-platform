@@ -51,7 +51,7 @@ COPY data-staging ./data-staging
 
 # Build application
 RUN cargo build --release -p air-quality-app && \
-    strip /app/target/release/air-quality-app
+    strip /app/target/release/air-quality-server
 
 # Stage 4: Runtime - minimal final image
 FROM debian:bookworm-slim AS runtime
@@ -71,10 +71,10 @@ RUN useradd -m -u 1000 -s /bin/bash appuser && \
     chown -R appuser:appuser /data /config
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/air-quality-app /usr/local/bin/air-quality-app
+COPY --from=builder /app/target/release/air-quality-server /usr/local/bin/air-quality-server
 
 # Set ownership
-RUN chown appuser:appuser /usr/local/bin/air-quality-app
+RUN chown appuser:appuser /usr/local/bin/air-quality-server
 
 # Switch to non-root user
 USER appuser
@@ -95,4 +95,4 @@ ENV RUST_LOG=info \
 WORKDIR /app
 
 # Entrypoint
-ENTRYPOINT ["/usr/local/bin/air-quality-app"]
+ENTRYPOINT ["/usr/local/bin/air-quality-server"]
