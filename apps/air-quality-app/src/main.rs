@@ -1,5 +1,13 @@
-use air_quality_app::{api::create_router, config::AppConfig};
+use air_quality_app::{
+    api::create_router,
+    config::AppConfig,
+    ingestion::MqttHandler,
+    pipeline::StorageWriter,
+};
+use neural_core::{MqttConfig, ParquetStore};
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -31,9 +39,77 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.server.port
     );
 
-    // For now, we'll use mock implementations
-    // In production, these would be real implementations
-    let services = create_mock_services();
+    // Initialize real ParquetStore
+    tracing::info!("Initializing ParquetStore at: {}", config.storage.base_path);
+    let store = Arc::new(ParquetStore::new(&config.storage.base_path)?);
+
+    // Replay WAL on startup for crash recovery
+    if config.storage.wal_enabled {
+        tracing::info!("Replaying WAL for crash recovery...");
+        match store.replay_wal().await {
+            Ok(_) => tracing::info!("WAL replay completed successfully"),
+            Err(e) => tracing::warn!("WAL replay failed (may be empty): {}", e),
+        }
+    }
+
+    // Create channel for MQTT -> Storage pipeline
+    let (tx, rx) = mpsc::channel(config.mqtt.buffer_capacity);
+
+    // Create MqttConfig from AppConfig
+    let mqtt_config = MqttConfig {
+        broker_url: config.mqtt.broker_url.clone(),
+        port: config.mqtt.port,
+        client_id: config.mqtt.client_id.clone(),
+        topic_pattern: config.mqtt.topic_pattern.clone(),
+        qos: config.mqtt.get_qos(),
+        reconnect_delay: config.mqtt.get_reconnect_delay(),
+        max_reconnect_delay: config.mqtt.get_max_reconnect_delay(),
+        buffer_capacity: config.mqtt.buffer_capacity,
+    };
+
+    // Initialize MQTT handler (may fail if broker not available)
+    let mqtt_handler = match MqttHandler::new(mqtt_config.clone(), tx.clone()).await {
+        Ok(handler) => {
+            tracing::info!("MQTT handler initialized successfully");
+            Some(handler)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to initialize MQTT handler: {}. Running in degraded mode (no ingestion)",
+                e
+            );
+            None
+        }
+    };
+
+    // Create StorageWriter
+    let storage_writer = StorageWriter::new(
+        store.clone(),
+        rx,
+        Some(100), // batch size
+        Some(Duration::from_secs(5)), // batch timeout
+    );
+
+    // Spawn storage writer background task
+    let storage_task = tokio::spawn(async move {
+        if let Err(e) = storage_writer.run().await {
+            tracing::error!("Storage writer failed: {}", e);
+        }
+    });
+
+    // Spawn MQTT ingestion background task if handler was initialized
+    let ingestion_task = if let Some(handler) = mqtt_handler {
+        Some(tokio::spawn(async move {
+            if let Err(e) = handler.run().await {
+                tracing::error!("MQTT handler failed: {}", e);
+            }
+        }))
+    } else {
+        None
+    };
+
+    // Create mock source and forecast (these will be replaced in future tasks)
+    let services = create_services_with_real_store(store.clone());
 
     // Create router
     let app = create_router(services);
@@ -44,65 +120,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Listening on {}", addr);
 
-    // Start server
-    axum::serve(listener, app).await?;
+    // Set up graceful shutdown handler
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    // Spawn task to handle shutdown signals
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for Ctrl+C");
+        tracing::info!("Received shutdown signal");
+        let _ = shutdown_tx.send(());
+    });
+
+    // Start server with graceful shutdown
+    tracing::info!("Server running. Press Ctrl+C to gracefully shutdown.");
+
+    tokio::select! {
+        result = axum::serve(listener, app) => {
+            if let Err(e) = result {
+                tracing::error!("Server error: {}", e);
+            }
+        }
+        _ = &mut shutdown_rx => {
+            tracing::info!("Starting graceful shutdown...");
+
+            // Close the channel to signal shutdown to storage writer
+            drop(tx);
+
+            // Wait for background tasks to complete
+            if let Some(task) = ingestion_task {
+                let _ = task.await;
+            }
+            let _ = storage_task.await;
+
+            tracing::info!("All background tasks completed. Shutdown complete.");
+        }
+    }
 
     Ok(())
 }
 
-fn create_mock_services() -> air_quality_app::api::routes::AppServices {
+/// Create services with real ParquetStore
+/// Note: Source and Forecast still use mock implementations (to be replaced in future tasks)
+fn create_services_with_real_store(
+    store: Arc<ParquetStore>,
+) -> air_quality_app::api::routes::AppServices {
     use air_quality_app::api::handlers::alerts::AlertStore;
     use air_quality_app::api::handlers::locations::LocationStore;
-    use neural_core::{Forecast, Source, Store};
-    use std::sync::Arc;
+    use neural_core::{Forecast, Source};
 
-    // Create mock implementations
-    struct MockStore;
+    // Mock source (still needed for health endpoint until we have a real implementation)
     struct MockSource;
-    struct MockForecast;
-
-    #[async_trait::async_trait]
-    impl Store for MockStore {
-        async fn write(&self, _point: neural_core::TimeSeriesPoint) -> Result<(), neural_core::CoreError> {
-            Ok(())
-        }
-
-        async fn write_batch(
-            &self,
-            _points: Vec<neural_core::TimeSeriesPoint>,
-        ) -> Result<(), neural_core::CoreError> {
-            Ok(())
-        }
-
-        async fn query(
-            &self,
-            _location_id: &str,
-            _start: chrono::DateTime<chrono::Utc>,
-            _end: chrono::DateTime<chrono::Utc>,
-            _filters: Option<std::collections::HashMap<String, String>>,
-        ) -> Result<Vec<neural_core::TimeSeriesPoint>, neural_core::CoreError> {
-            Ok(vec![])
-        }
-
-        async fn aggregate(
-            &self,
-            _location_id: &str,
-            _start: chrono::DateTime<chrono::Utc>,
-            _end: chrono::DateTime<chrono::Utc>,
-            _aggregation: neural_core::AggregationType,
-            _interval: chrono::Duration,
-        ) -> Result<Vec<neural_core::AggregatedPoint>, neural_core::CoreError> {
-            Ok(vec![])
-        }
-
-        async fn health_check(&self) -> Result<neural_core::HealthStatus, neural_core::CoreError> {
-            Ok(neural_core::HealthStatus {
-                healthy: true,
-                message: "Mock store operational".to_string(),
-                details: std::collections::HashMap::new(),
-            })
-        }
-    }
 
     #[async_trait::async_trait]
     impl Source for MockSource {
@@ -113,11 +181,14 @@ fn create_mock_services() -> air_quality_app::api::routes::AppServices {
         async fn health_check(&self) -> Result<neural_core::HealthStatus, neural_core::CoreError> {
             Ok(neural_core::HealthStatus {
                 healthy: true,
-                message: "Mock source operational".to_string(),
+                message: "Mock source operational (MQTT handler running separately)".to_string(),
                 details: std::collections::HashMap::new(),
             })
         }
     }
+
+    // Mock forecast (to be replaced in future tasks)
+    struct MockForecast;
 
     #[async_trait::async_trait]
     impl Forecast for MockForecast {
@@ -153,7 +224,7 @@ fn create_mock_services() -> air_quality_app::api::routes::AppServices {
     }
 
     air_quality_app::api::routes::AppServices {
-        store: Arc::new(MockStore),
+        store, // Using real ParquetStore!
         source: Arc::new(MockSource),
         forecast: Arc::new(MockForecast),
         alert_store: Arc::new(AlertStore::new()),

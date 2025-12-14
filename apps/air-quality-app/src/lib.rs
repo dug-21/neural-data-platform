@@ -1,6 +1,8 @@
 pub mod api;
 pub mod config;
 pub mod error;
+pub mod ingestion;
+pub mod pipeline;
 pub mod response;
 
 #[cfg(feature = "mcp")]

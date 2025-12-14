@@ -67,7 +67,6 @@ struct AirGradientReading {
 pub struct MqttSource {
     config: MqttConfig,
     client: Option<AsyncClient>,
-    event_loop: Option<EventLoop>,
     receiver: Arc<Mutex<mpsc::Receiver<TimeSeriesPoint>>>,
     sender: mpsc::Sender<TimeSeriesPoint>,
     is_running: Arc<Mutex<bool>>,
@@ -83,7 +82,6 @@ impl MqttSource {
         Self {
             config,
             client: None,
-            event_loop: None,
             receiver: Arc::new(Mutex::new(receiver)),
             sender,
             is_running: Arc::new(Mutex::new(false)),
@@ -169,85 +167,197 @@ impl MqttSource {
         Ok(points)
     }
 
-    /// Handle reconnection with exponential backoff
-    async fn reconnect(&mut self, attempt: u32) -> CoreResult<()> {
-        let delay = std::cmp::min(
-            self.config.reconnect_delay.as_secs() * 2_u64.pow(attempt),
-            self.config.max_reconnect_delay.as_secs(),
-        );
-
-        warn!(
-            "Reconnecting to MQTT broker in {} seconds (attempt {})",
-            delay, attempt
-        );
-
-        tokio::time::sleep(Duration::from_secs(delay)).await;
-
+    /// Create a new connection and return the event loop
+    fn create_connection(config: &MqttConfig) -> CoreResult<(AsyncClient, EventLoop)> {
         let mut mqtt_options = MqttOptions::new(
-            &self.config.client_id,
-            &self.config.broker_url,
-            self.config.port,
+            &config.client_id,
+            &config.broker_url,
+            config.port,
         );
         mqtt_options.set_keep_alive(Duration::from_secs(30));
 
-        let (client, event_loop) = AsyncClient::new(mqtt_options, self.config.buffer_capacity);
-        self.client = Some(client);
-        self.event_loop = Some(event_loop);
-
-        if let Some(client) = &self.client {
-            let topic = self.config.topic_pattern.replace("{SERIAL_NUMBER}", "+");
-            client
-                .subscribe(&topic, self.config.qos)
-                .await
-                .map_err(|e| CoreError::Source(format!("Failed to subscribe: {}", e)))?;
-            info!("Subscribed to topic: {}", topic);
-        }
-
-        *self.connection_healthy.lock().await = true;
-        Ok(())
+        let (client, event_loop) = AsyncClient::new(mqtt_options, config.buffer_capacity);
+        Ok((client, event_loop))
     }
 
-    /// Process MQTT events
-    async fn process_events(&mut self) -> CoreResult<()> {
+    /// Process MQTT events - runs in a spawned task
+    async fn process_events(
+        config: MqttConfig,
+        mut event_loop: EventLoop,
+        client: AsyncClient,
+        cached_points: Arc<Mutex<Vec<TimeSeriesPoint>>>,
+        is_running: Arc<Mutex<bool>>,
+        connection_healthy: Arc<Mutex<bool>>,
+    ) -> CoreResult<()> {
         let mut reconnect_attempt = 0_u32;
 
-        while *self.is_running.lock().await {
-            if let Some(event_loop) = &mut self.event_loop {
-                match event_loop.poll().await {
-                    Ok(Event::Incoming(Packet::Publish(publish))) => {
-                        debug!("Received MQTT message on topic: {}", publish.topic);
-                        reconnect_attempt = 0;
+        // Subscribe to topics
+        let topic = config.topic_pattern.replace("{SERIAL_NUMBER}", "+");
+        client
+            .subscribe(&topic, config.qos)
+            .await
+            .map_err(|e| CoreError::Source(format!("Failed to subscribe: {}", e)))?;
+        info!("Subscribed to topic: {}", topic);
 
-                        match self.parse_payload(&publish.payload) {
-                            Ok(points) => {
-                                // Add to cache for fetch()
-                                let mut cache = self.cached_points.lock().await;
-                                cache.extend(points);
+        while *is_running.lock().await {
+            match event_loop.poll().await {
+                Ok(Event::Incoming(Packet::Publish(publish))) => {
+                    debug!("Received MQTT message on topic: {}", publish.topic);
+                    reconnect_attempt = 0;
+
+                    // Parse payload inline since we can't call self.parse_payload
+                    match serde_json::from_slice::<AirGradientReading>(&publish.payload) {
+                        Ok(reading) => {
+                            let timestamp = Utc::now();
+                            let mut points = Vec::new();
+
+                            // Store each metric as a separate point with metric type in tags
+                            if let Some(pm02) = reading.pm02 {
+                                let mut tags = HashMap::new();
+                                tags.insert("metric".to_string(), "pm02".to_string());
+                                tags.insert("source".to_string(), "mqtt".to_string());
+
+                                points.push(TimeSeriesPoint {
+                                    timestamp,
+                                    location_id: reading.serial_no.clone(),
+                                    value: pm02,
+                                    tags,
+                                });
                             }
-                            Err(e) => {
-                                error!("Failed to parse payload: {}", e);
+
+                            if let Some(co2) = reading.co2 {
+                                let mut tags = HashMap::new();
+                                tags.insert("metric".to_string(), "co2".to_string());
+                                tags.insert("source".to_string(), "mqtt".to_string());
+
+                                points.push(TimeSeriesPoint {
+                                    timestamp,
+                                    location_id: reading.serial_no.clone(),
+                                    value: co2,
+                                    tags,
+                                });
                             }
+
+                            if let Some(temp) = reading.temperature {
+                                let mut tags = HashMap::new();
+                                tags.insert("metric".to_string(), "temperature".to_string());
+                                tags.insert("source".to_string(), "mqtt".to_string());
+
+                                points.push(TimeSeriesPoint {
+                                    timestamp,
+                                    location_id: reading.serial_no.clone(),
+                                    value: temp,
+                                    tags,
+                                });
+                            }
+
+                            if let Some(humidity) = reading.humidity {
+                                let mut tags = HashMap::new();
+                                tags.insert("metric".to_string(), "humidity".to_string());
+                                tags.insert("source".to_string(), "mqtt".to_string());
+
+                                points.push(TimeSeriesPoint {
+                                    timestamp,
+                                    location_id: reading.serial_no.clone(),
+                                    value: humidity,
+                                    tags,
+                                });
+                            }
+
+                            if let Some(wifi) = reading.wifi_strength {
+                                let mut tags = HashMap::new();
+                                tags.insert("metric".to_string(), "wifi_strength".to_string());
+                                tags.insert("source".to_string(), "mqtt".to_string());
+
+                                points.push(TimeSeriesPoint {
+                                    timestamp,
+                                    location_id: reading.serial_no.clone(),
+                                    value: wifi as f64,
+                                    tags,
+                                });
+                            }
+
+                            // Add to cache for fetch()
+                            let mut cache = cached_points.lock().await;
+                            cache.extend(points);
+                        }
+                        Err(e) => {
+                            error!("Failed to parse MQTT payload: {}", e);
                         }
                     }
-                    Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                        info!("Connected to MQTT broker");
-                        *self.connection_healthy.lock().await = true;
-                        reconnect_attempt = 0;
-                    }
-                    Ok(Event::Incoming(Packet::Disconnect)) => {
-                        warn!("Disconnected from MQTT broker");
-                        *self.connection_healthy.lock().await = false;
-                        self.reconnect(reconnect_attempt).await?;
-                        reconnect_attempt += 1;
-                    }
-                    Err(e) => {
-                        error!("MQTT connection error: {}", e);
-                        *self.connection_healthy.lock().await = false;
-                        self.reconnect(reconnect_attempt).await?;
-                        reconnect_attempt += 1;
-                    }
-                    _ => {}
                 }
+                Ok(Event::Incoming(Packet::ConnAck(_))) => {
+                    info!("Connected to MQTT broker");
+                    *connection_healthy.lock().await = true;
+                    reconnect_attempt = 0;
+                }
+                Ok(Event::Incoming(Packet::Disconnect)) => {
+                    warn!("Disconnected from MQTT broker");
+                    *connection_healthy.lock().await = false;
+
+                    // Reconnect with exponential backoff
+                    let delay = std::cmp::min(
+                        config.reconnect_delay.as_secs() * 2_u64.pow(reconnect_attempt),
+                        config.max_reconnect_delay.as_secs(),
+                    );
+
+                    warn!(
+                        "Reconnecting to MQTT broker in {} seconds (attempt {})",
+                        delay, reconnect_attempt
+                    );
+
+                    tokio::time::sleep(Duration::from_secs(delay)).await;
+                    reconnect_attempt += 1;
+
+                    // Create new connection
+                    match Self::create_connection(&config) {
+                        Ok((new_client, new_event_loop)) => {
+                            event_loop = new_event_loop;
+                            // Subscribe again
+                            if let Err(e) = new_client.subscribe(&topic, config.qos).await {
+                                error!("Failed to resubscribe: {}", e);
+                            }
+                            *connection_healthy.lock().await = true;
+                        }
+                        Err(e) => {
+                            error!("Failed to reconnect: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("MQTT connection error: {}", e);
+                    *connection_healthy.lock().await = false;
+
+                    // Reconnect with exponential backoff
+                    let delay = std::cmp::min(
+                        config.reconnect_delay.as_secs() * 2_u64.pow(reconnect_attempt),
+                        config.max_reconnect_delay.as_secs(),
+                    );
+
+                    warn!(
+                        "Reconnecting to MQTT broker in {} seconds (attempt {})",
+                        delay, reconnect_attempt
+                    );
+
+                    tokio::time::sleep(Duration::from_secs(delay)).await;
+                    reconnect_attempt += 1;
+
+                    // Create new connection
+                    match Self::create_connection(&config) {
+                        Ok((new_client, new_event_loop)) => {
+                            event_loop = new_event_loop;
+                            // Subscribe again
+                            if let Err(e) = new_client.subscribe(&topic, config.qos).await {
+                                error!("Failed to resubscribe: {}", e);
+                            }
+                            *connection_healthy.lock().await = true;
+                        }
+                        Err(e) => {
+                            error!("Failed to reconnect: {}", e);
+                        }
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -260,23 +370,28 @@ impl MqttSource {
 
         *self.is_running.lock().await = true;
 
-        // Initial connection
-        self.reconnect(0).await?;
+        // Create initial connection
+        let (client, event_loop) = Self::create_connection(&self.config)?;
+        self.client = Some(client.clone());
+
+        // Clone data for background task
+        let config = self.config.clone();
+        let cached_points = self.cached_points.clone();
+        let is_running = self.is_running.clone();
+        let connection_healthy = self.connection_healthy.clone();
 
         // Spawn background task for event processing
-        let mut source_clone = MqttSource {
-            config: self.config.clone(),
-            client: self.client.clone(),
-            event_loop: self.event_loop.take(),
-            receiver: self.receiver.clone(),
-            sender: self.sender.clone(),
-            is_running: self.is_running.clone(),
-            connection_healthy: self.connection_healthy.clone(),
-            cached_points: self.cached_points.clone(),
-        };
-
         tokio::spawn(async move {
-            if let Err(e) = source_clone.process_events().await {
+            if let Err(e) = Self::process_events(
+                config,
+                event_loop,
+                client,
+                cached_points,
+                is_running,
+                connection_healthy,
+            )
+            .await
+            {
                 error!("MQTT event processing failed: {}", e);
             }
         });
