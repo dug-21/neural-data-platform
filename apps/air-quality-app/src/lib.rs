@@ -1,5 +1,6 @@
 pub mod api;
 pub mod config;
+pub mod config_etcd;
 pub mod error;
 pub mod ingestion;
 pub mod pipeline;
@@ -9,5 +10,6 @@ pub mod response;
 pub mod mcp;
 
 pub use config::AppConfig;
+pub use config_etcd::{EtcdAppConfig, load_from_etcd};
 pub use error::{ApiError, ApiResult};
 pub use response::{ApiResponse, Meta};

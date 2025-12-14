@@ -19,6 +19,7 @@ required-features = ["mcp"]
 neural_core = { path = "../../core", package = "platform-core" }
 air-quality = { path = "../../domains/air-quality" }
 config-store = { path = "../../config-store" }
+config-client = { path = "../../config-client" }
 
 # Web framework
 axum = { version = "0.7", features = ["macros", "json"] }

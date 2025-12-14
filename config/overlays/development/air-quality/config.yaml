@@ -1,0 +1,18 @@
+# Development environment overrides
+
+server:
+  port: 8080
+
+mqtt:
+  broker_url: "localhost"
+  port: 1883
+
+storage:
+  base_path: "./data/parquet"
+
+logging:
+  level: "debug"
+  format: "pretty"
+
+alerts:
+  enabled: false
