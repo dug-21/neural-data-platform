@@ -200,46 +200,67 @@ src/
  */
 ```
 
-## Architecture Memory Integration
+## MCP Tool Integration
 
-Before starting implementation, **always** check the architecture namespace for relevant patterns:
+### Memory Coordination
+```javascript
+// Report implementation status
+mcp__claude-flow__memory_usage {
+  action: "store",
+  key: "swarm/coder/status",
+  namespace: "coordination",
+  value: JSON.stringify({
+    agent: "coder",
+    status: "implementing",
+    feature: "user authentication",
+    files: ["auth.service.ts", "auth.controller.ts"],
+    timestamp: Date.now()
+  })
+}
 
-```bash
-# Lookup existing patterns before coding
-claude-flow memory query "config pattern" --reasoningbank
-claude-flow memory query "deployment architecture" --reasoningbank
-claude-flow memory query "<relevant-domain>" --reasoningbank
+// Share code decisions
+mcp__claude-flow__memory_usage {
+  action: "store",
+  key: "swarm/shared/implementation",
+  namespace: "coordination",
+  value: JSON.stringify({
+    type: "code",
+    patterns: ["singleton", "factory"],
+    dependencies: ["express", "jwt"],
+    api_endpoints: ["/auth/login", "/auth/logout"]
+  })
+}
+
+// Check dependencies
+mcp__claude-flow__memory_usage {
+  action: "retrieve",
+  key: "swarm/shared/dependencies",
+  namespace: "coordination"
+}
 ```
 
-After completing significant implementation work, **store** important patterns:
+### Performance Monitoring
+```javascript
+// Track implementation metrics
+mcp__claude-flow__benchmark_run {
+  type: "code",
+  iterations: 10
+}
 
-```bash
-# Store new patterns discovered during implementation
-claude-flow memory store architecture/<pattern-name> '{
-  "pattern": "<pattern-identifier>",
-  "description": "<what this pattern solves>",
-  "implementation": "<key implementation details>",
-  "files": ["<affected-files>"],
-  "learnings": ["<key insights>"]
-}' --reasoningbank
+// Analyze bottlenecks
+mcp__claude-flow__bottleneck_analyze {
+  component: "api-endpoint",
+  metrics: ["response-time", "memory-usage"]
+}
 ```
-
-### When to Store Patterns
-- Configuration hierarchies (env vars, files, defaults)
-- Service integration patterns (APIs, queues, databases)
-- Error handling strategies
-- Performance optimizations
-- Security implementations
-- Deployment configurations
 
 ## Collaboration
 
 - Coordinate with researcher for context
 - Follow planner's task breakdown
 - Provide clear handoffs to tester
-- Document assumptions and decisions
+- Document assumptions and decisions in memory
 - Request reviews when uncertain
-- **Check architecture namespace** before implementing new patterns
-- **Store architecture decisions** after significant implementations
+- Share all implementation decisions via MCP memory tools
 
-Remember: Good code is written for humans to read, and only incidentally for machines to execute. Focus on clarity, maintainability, and correctness.
+Remember: Good code is written for humans to read, and only incidentally for machines to execute. Focus on clarity, maintainability, and correctness. Always coordinate through memory.

@@ -34,18 +34,61 @@ The Architecture phase transforms algorithms into system designs by:
 3. Selecting technology stacks
 4. Planning for scalability and resilience
 5. Creating deployment architectures
-6. Utilize C4 Context, Container, and Component level views in draw.io format -REQUIRED
 
 ## System Architecture Design
 
 ### 1. High-Level Architecture
 
-1. C4 Context Diagram (documenting the overall view) **AVOID COMMENTS IN XML FORMAT**
-2. Show technical relationships: At least 1 C4 Container level diagram 
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        WEB[Web App]
+        MOB[Mobile App]
+        API_CLIENT[API Clients]
+    end
+    
+    subgraph "API Gateway"
+        GATEWAY[Kong/Nginx]
+        RATE_LIMIT[Rate Limiter]
+        AUTH_FILTER[Auth Filter]
+    end
+    
+    subgraph "Application Layer"
+        AUTH_SVC[Auth Service]
+        USER_SVC[User Service]
+        NOTIF_SVC[Notification Service]
+    end
+    
+    subgraph "Data Layer"
+        POSTGRES[(PostgreSQL)]
+        REDIS[(Redis Cache)]
+        S3[S3 Storage]
+    end
+    
+    subgraph "Infrastructure"
+        QUEUE[RabbitMQ]
+        MONITOR[Prometheus]
+        LOGS[ELK Stack]
+    end
+    
+    WEB --> GATEWAY
+    MOB --> GATEWAY
+    API_CLIENT --> GATEWAY
+    
+    GATEWAY --> AUTH_SVC
+    GATEWAY --> USER_SVC
+    
+    AUTH_SVC --> POSTGRES
+    AUTH_SVC --> REDIS
+    USER_SVC --> POSTGRES
+    USER_SVC --> S3
+    
+    AUTH_SVC --> QUEUE
+    USER_SVC --> QUEUE
+    QUEUE --> NOTIF_SVC
+```
 
 ### 2. Component Architecture
-
-1. Show compenent relationships: At least 1 C4 Component level diagram
 
 ```yaml
 components:
@@ -417,49 +460,6 @@ scalability_patterns:
 5. **Technology Decisions**: Rationale for technology choices
 6. **Scalability Plan**: Growth and scaling strategies
 
-## Architecture Memory Integration
-
-**CRITICAL**: Always interact with the `architecture` namespace in ReasoningBank.
-
-### Before Designing - Lookup Existing Patterns
-
-```bash
-# Search for existing architecture decisions
-claude-flow memory query "system design" --reasoningbank
-claude-flow memory query "deployment pattern" --reasoningbank
-claude-flow memory query "config hierarchy" --reasoningbank
-claude-flow memory query "<domain-specific-query>" --reasoningbank
-```
-
-### After Designing - Store Architecture Decisions
-
-```bash
-# Store architecture decisions for future reference
-claude-flow memory store architecture/<system-name>-<pattern> '{
-  "pattern": "<pattern-identifier>",
-  "description": "<architectural decision and rationale>",
-  "components": ["<affected-components>"],
-  "interfaces": ["<api-contracts>"],
-  "deployment": {
-    "platform": "<target-platform>",
-    "services": ["<service-list>"],
-    "volumes": {},
-    "networking": {}
-  },
-  "scalability": "<scaling-strategy>",
-  "security": "<security-considerations>",
-  "tradeoffs": ["<documented-tradeoffs>"]
-}' --reasoningbank
-```
-
-### Required Storage Patterns
-- **System designs**: Store C4 context, container, component decisions
-- **Data architectures**: Schema designs, partitioning strategies
-- **API contracts**: OpenAPI specs, gRPC definitions
-- **Deployment topologies**: Infrastructure as code patterns
-- **Security architectures**: Auth flows, encryption strategies
-- **Config management**: Configuration hierarchy and loading patterns
-
 ## Best Practices
 
 1. **Design for Failure**: Assume components will fail
@@ -468,7 +468,5 @@ claude-flow memory store architecture/<system-name>-<pattern> '{
 4. **Security First**: Build security into the architecture
 5. **Observable Systems**: Design for monitoring and debugging
 6. **Documentation**: Keep architecture docs up-to-date
-7. **Memory First**: Check architecture namespace before designing
-8. **Store Decisions**: Persist all significant architecture decisions
 
-Remember: Good architecture enables change. Design systems that can evolve with requirements while maintaining stability and performance. Always check and update the architecture memory namespace.
+Remember: Good architecture enables change. Design systems that can evolve with requirements while maintaining stability and performance.
