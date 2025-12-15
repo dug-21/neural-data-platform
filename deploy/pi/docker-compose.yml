@@ -61,7 +61,7 @@ services:
         limits:
           memory: 256M
 
-  # Air Quality App - MQTT to Parquet ingestion
+  # Air Quality App - MQTT to Parquet ingestion with multi-stream support
   air-quality-app:
     build:
       context: ../..
@@ -70,15 +70,23 @@ services:
     container_name: air-quality-app
     ports:
       - "8080:8080"     # HTTP API
+      - "8081:8081"     # Webhook handler for dynamic stream management
       - "9090:9090"     # Metrics
     volumes:
       - air-quality-data:/app/data
+      - air-quality-streams:/app/data/streams  # Stream-specific data storage
     environment:
       - RUST_LOG=info
       - STORAGE_PATH=/app/data
       - ETCD_ENDPOINT=http://etcd:2379
       - MQTT_BROKER_URL=mosquitto
       - MQTT_PORT=1883
+      # Multi-stream configuration
+      - ENABLE_MULTI_STREAM=true
+      - MAX_CONCURRENT_STREAMS=8
+      - WEBHOOK_ENABLED=true
+      - WEBHOOK_PORT=8081
+      - STREAM_CONFIG_PREFIX=/air-quality/streams
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -104,6 +112,8 @@ volumes:
   etcd-data:
     driver: local
   air-quality-data:
+    driver: local
+  air-quality-streams:
     driver: local
 
 networks:

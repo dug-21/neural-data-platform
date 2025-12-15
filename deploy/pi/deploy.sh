@@ -51,6 +51,40 @@ sync_config() {
     cd "$SCRIPT_DIR"
 }
 
+init_streams() {
+    log "Initializing stream configurations..."
+
+    # Wait for etcd to be ready
+    until docker exec etcd etcdctl endpoint health >/dev/null 2>&1; do
+        warn "Waiting for etcd to be ready..."
+        sleep 2
+    done
+
+    # Check if streams are already initialized
+    if docker exec etcd etcdctl get --prefix "/air-quality/streams/" --keys-only >/dev/null 2>&1; then
+        stream_count=$(docker exec etcd etcdctl get --prefix "/air-quality/streams/" --keys-only | grep -c "/id$" || echo "0")
+        if [ "$stream_count" -gt 0 ]; then
+            log "Stream configurations already exist ($stream_count streams found)"
+            warn "Skip stream initialization? (Y/n)"
+            read -r response
+            if [[ "$response" =~ ^[Nn]$ ]]; then
+                log "Re-initializing streams..."
+            else
+                log "Keeping existing stream configurations"
+                return 0
+            fi
+        fi
+    fi
+
+    # Run stream initialization script
+    if [ -f "$SCRIPT_DIR/configs/streams/init-streams.sh" ]; then
+        bash "$SCRIPT_DIR/configs/streams/init-streams.sh" etcd
+    else
+        warn "Stream initialization script not found at $SCRIPT_DIR/configs/streams/init-streams.sh"
+        warn "Multi-stream mode enabled but no streams configured!"
+    fi
+}
+
 build() {
     log "Building Docker images (this may take 15-30 minutes on first run)..."
     docker compose build --progress=plain
@@ -66,6 +100,9 @@ start() {
 
     # Sync config after services are up
     sync_config
+
+    # Initialize stream configurations for multi-stream mode
+    init_streams
 
     log "Services started successfully!"
     status
@@ -97,9 +134,18 @@ status() {
     docker exec air-quality-app du -sh /app/data 2>/dev/null || echo "  Not available"
     echo ""
 
+    log "Stream Status:"
+    if [ -f "$SCRIPT_DIR/configs/streams/list-streams.sh" ]; then
+        bash "$SCRIPT_DIR/configs/streams/list-streams.sh" etcd 2>/dev/null || echo "  Unable to fetch stream status"
+    else
+        echo "  Stream listing tool not available"
+    fi
+    echo ""
+
     log "Useful URLs:"
     PI_IP=$(hostname -I | awk '{print $1}')
     echo "  Air Quality API: http://${PI_IP}:8080"
+    echo "  Stream Webhook:  http://${PI_IP}:8081"
     echo "  Metrics:         http://${PI_IP}:9090"
     echo "  MQTT Broker:     mqtt://${PI_IP}:1883"
 }
@@ -116,6 +162,7 @@ update() {
     build
     docker compose up -d
     sync_config
+    init_streams
 
     log "Update complete!"
     status
@@ -152,8 +199,18 @@ case "${1:-deploy}" in
     sync)
         sync_config
         ;;
+    init-streams)
+        init_streams
+        ;;
+    list-streams)
+        if [ -f "$SCRIPT_DIR/configs/streams/list-streams.sh" ]; then
+            bash "$SCRIPT_DIR/configs/streams/list-streams.sh" etcd
+        else
+            error "Stream listing script not found"
+        fi
+        ;;
     *)
-        echo "Usage: $0 {deploy|start|stop|logs|status|update|build|sync}"
+        echo "Usage: $0 {deploy|start|stop|logs|status|update|build|sync|init-streams|list-streams}"
         exit 1
         ;;
 esac
