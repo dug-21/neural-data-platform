@@ -765,6 +765,7 @@ name = "config-client"
 version = "0.1.0"
 dependencies = [
  "etcd-client",
+ "platform-core",
  "serde",
  "serde_json",
  "serde_yaml",
