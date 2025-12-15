@@ -5,6 +5,7 @@ pub mod error;
 pub mod ingestion;
 pub mod pipeline;
 pub mod response;
+pub mod stream_integration;
 
 #[cfg(feature = "mcp")]
 pub mod mcp;

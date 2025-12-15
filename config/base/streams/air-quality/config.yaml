@@ -1,0 +1,66 @@
+# Air Quality Stream Configuration
+# GitOps managed - synced to etcd at /streams/air-quality/*
+
+stream_id: "air-quality"
+description: "AirGradient sensor readings from MQTT"
+version: "1.0.0"
+enabled: true
+retention_days: 365
+compression_after_days: 7
+partitioning_strategy: "daily"
+
+# Data schema fields
+fields:
+  pm25:
+    type: "float"
+    unit: "µg/m³"
+    description: "Particulate Matter 2.5 micrometers"
+    nullable: false
+  pm10:
+    type: "float"
+    unit: "µg/m³"
+    description: "Particulate Matter 10 micrometers"
+    nullable: true
+  co2:
+    type: "int"
+    unit: "ppm"
+    description: "Carbon Dioxide concentration"
+    nullable: true
+  temperature:
+    type: "float"
+    unit: "celsius"
+    description: "Ambient temperature"
+    nullable: true
+  humidity:
+    type: "float"
+    unit: "percent"
+    description: "Relative humidity"
+    nullable: true
+  tvoc:
+    type: "int"
+    unit: "ppb"
+    description: "Total Volatile Organic Compounds"
+    nullable: true
+  nox:
+    type: "int"
+    unit: "ppb"
+    description: "Nitrogen Oxides"
+    nullable: true
+
+# MQTT source configuration
+mqtt:
+  enabled: true
+  broker_url: "mosquitto"
+  port: 1883
+  client_id: "air-quality-app"
+  topic_pattern: "airgradient/readings/+"
+  qos: 1
+  reconnect_delay_secs: 1
+  max_reconnect_delay_secs: 30
+  buffer_capacity: 1000
+
+# Storage configuration
+storage:
+  batch_size: 100
+  batch_timeout_secs: 5
+  buffer_capacity: 1000

@@ -3,6 +3,7 @@ use air_quality_app::{
     config::AppConfig,
     ingestion::MqttHandler,
     pipeline::StorageWriter,
+    stream_integration::load_from_stream_config,
 };
 use neural_core::{MqttConfig, ParquetStore};
 use std::sync::Arc;
@@ -21,44 +22,58 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Load configuration with priority: etcd > env vars > config.yaml > defaults
-    let config = match air_quality_app::load_from_etcd().await {
-        Ok(etcd_config) => {
-            tracing::info!("Loaded configuration from etcd");
-            // Convert EtcdAppConfig to AppConfig
-            AppConfig {
-                server: air_quality_app::config::ServerConfig {
-                    host: etcd_config.server.host,
-                    port: etcd_config.server.port,
-                },
-                mqtt: air_quality_app::config::MqttConfig {
-                    broker_url: etcd_config.mqtt.broker_url,
-                    port: etcd_config.mqtt.port,
-                    client_id: etcd_config.mqtt.client_id,
-                    topic_pattern: etcd_config.mqtt.topic_pattern,
-                    qos: etcd_config.mqtt.qos,
-                    reconnect_delay_secs: etcd_config.mqtt.reconnect_delay_secs,
-                    max_reconnect_delay_secs: etcd_config.mqtt.max_reconnect_delay_secs,
-                    buffer_capacity: etcd_config.mqtt.buffer_capacity,
-                },
-                storage: air_quality_app::config::StorageConfig {
-                    base_path: etcd_config.storage.base_path,
-                    wal_enabled: etcd_config.storage.wal_enabled,
-                    batch_size: etcd_config.storage.batch_size,
-                    batch_timeout_secs: etcd_config.storage.batch_timeout_secs,
-                },
-            }
+    // Load configuration with priority: StreamRegistry > etcd > config.yaml > defaults
+    let etcd_endpoint = std::env::var("ETCD_ENDPOINT")
+        .unwrap_or_else(|_| "http://localhost:2379".to_string());
+
+    let config = match load_from_stream_config(&[&etcd_endpoint], "air-quality").await {
+        Ok(stream_config) => {
+            tracing::info!("Loaded configuration from /streams/air-quality (GitOps)");
+            stream_config
         }
         Err(e) => {
-            tracing::warn!("Failed to load config from etcd: {}. Trying config.yaml...", e);
-            match AppConfig::from_yaml("config.yaml") {
-                Ok(cfg) => {
-                    tracing::info!("Loaded configuration from config.yaml");
-                    cfg
+            tracing::warn!("Failed to load stream config: {}. Trying legacy /air-quality...", e);
+
+            // Fallback to legacy etcd
+            match air_quality_app::load_from_etcd().await {
+                Ok(etcd_config) => {
+                    tracing::info!("Loaded configuration from etcd");
+                    // Convert EtcdAppConfig to AppConfig
+                    AppConfig {
+                        server: air_quality_app::config::ServerConfig {
+                            host: etcd_config.server.host,
+                            port: etcd_config.server.port,
+                        },
+                        mqtt: air_quality_app::config::MqttConfig {
+                            broker_url: etcd_config.mqtt.broker_url,
+                            port: etcd_config.mqtt.port,
+                            client_id: etcd_config.mqtt.client_id,
+                            topic_pattern: etcd_config.mqtt.topic_pattern,
+                            qos: etcd_config.mqtt.qos,
+                            reconnect_delay_secs: etcd_config.mqtt.reconnect_delay_secs,
+                            max_reconnect_delay_secs: etcd_config.mqtt.max_reconnect_delay_secs,
+                            buffer_capacity: etcd_config.mqtt.buffer_capacity,
+                        },
+                        storage: air_quality_app::config::StorageConfig {
+                            base_path: etcd_config.storage.base_path,
+                            wal_enabled: etcd_config.storage.wal_enabled,
+                            batch_size: etcd_config.storage.batch_size,
+                            batch_timeout_secs: etcd_config.storage.batch_timeout_secs,
+                        },
+                    }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to load config.yaml: {}, using defaults with env overrides", e);
-                    AppConfig::default_config()
+                    tracing::warn!("Failed to load config from etcd: {}. Trying config.yaml...", e);
+                    match AppConfig::from_yaml("config.yaml") {
+                        Ok(cfg) => {
+                            tracing::info!("Loaded configuration from config.yaml");
+                            cfg
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to load config.yaml: {}, using defaults with env overrides", e);
+                            AppConfig::default_config()
+                        }
+                    }
                 }
             }
         }
