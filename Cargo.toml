@@ -1,19 +1,10 @@
 [workspace]
 members = [
     "config-store",
-    "neural-core",
-    "neural-trading",
-    "neural-ml-ops",
-    "data-staging",
+    "config-client",
     "core",
     "domains/air-quality",
     "apps/air-quality-app"
-]
-exclude = [
-    "vendor",
-    "vendor/ruv-fann",
-    "vendor/ruv-fann/ruv-swarm",
-    "vendor/ruv-fann/neuro-divergent"
 ]
 resolver = "2"
 
