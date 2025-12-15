@@ -1,0 +1,110 @@
+{
+  "stream_id": "air-quality",
+  "description": "AirGradient air quality sensor data from MQTT",
+  "version": "1.0.0",
+  "enabled": true,
+  "retention_days": 365,
+  "compression_after_days": 7,
+  "partitioning_strategy": "daily",
+  "fields": [
+    {
+      "name": "pm25",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "Particulate Matter 2.5 (fine particles)",
+      "range": [0.0, 500.0],
+      "display_precision": 1,
+      "nullable": false
+    },
+    {
+      "name": "pm10",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "Particulate Matter 10 (coarse particles)",
+      "range": [0.0, 500.0],
+      "display_precision": 1,
+      "nullable": true
+    },
+    {
+      "name": "pm01",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "Particulate Matter 0.1 (ultrafine particles)",
+      "range": [0.0, 500.0],
+      "display_precision": 1,
+      "nullable": true
+    },
+    {
+      "name": "co2",
+      "type": "int",
+      "unit": "ppm",
+      "description": "Carbon Dioxide concentration",
+      "range": [400, 5000],
+      "nullable": true
+    },
+    {
+      "name": "tvoc",
+      "type": "int",
+      "unit": "ppb",
+      "description": "Total Volatile Organic Compounds",
+      "range": [0, 60000],
+      "nullable": true
+    },
+    {
+      "name": "nox",
+      "type": "int",
+      "unit": "ppb",
+      "description": "Nitrogen Oxides index",
+      "range": [0, 500],
+      "nullable": true
+    },
+    {
+      "name": "temperature",
+      "type": "float",
+      "unit": "celsius",
+      "description": "Ambient temperature",
+      "range": [-40.0, 60.0],
+      "display_precision": 1,
+      "nullable": true
+    },
+    {
+      "name": "humidity",
+      "type": "float",
+      "unit": "percent",
+      "description": "Relative humidity",
+      "range": [0.0, 100.0],
+      "display_precision": 1,
+      "nullable": true
+    },
+    {
+      "name": "location_id",
+      "type": "string",
+      "description": "Sensor location identifier",
+      "nullable": false
+    },
+    {
+      "name": "sensor_id",
+      "type": "string",
+      "description": "Unique sensor device identifier",
+      "nullable": true
+    }
+  ],
+  "sources": [
+    {
+      "type": "mqtt",
+      "enabled": true,
+      "broker_url": "10.0.0.100",
+      "port": 1883,
+      "client_id": "air-quality-app",
+      "topic_pattern": "airgradient/readings/+",
+      "qos": 1,
+      "reconnect_delay_secs": 1,
+      "max_reconnect_delay_secs": 30
+    }
+  ],
+  "storage": {
+    "batch_size": 100,
+    "batch_timeout_secs": 5,
+    "buffer_capacity": 1000
+  }
+}

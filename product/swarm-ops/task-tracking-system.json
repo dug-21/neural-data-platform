@@ -1,0 +1,44 @@
+{
+  "swarm_id": "swarm-hierarchical-coordinator-001",
+  "initialized_at": "2025-12-15T00:00:00Z",
+  "coordinator_version": "1.0.0",
+  "status": "INITIALIZED",
+
+  "active_tasks": [],
+  "completed_tasks": [],
+  "failed_tasks": [],
+
+  "agent_registry": {
+    "researchers": [],
+    "coders": [],
+    "analysts": [],
+    "testers": []
+  },
+
+  "metrics": {
+    "tasks_received": 0,
+    "tasks_completed": 0,
+    "tasks_failed": 0,
+    "average_completion_time": 0,
+    "resource_utilization": 0,
+    "success_rate": 100
+  },
+
+  "decision_log": [
+    {
+      "timestamp": "2025-12-15T00:00:00Z",
+      "decision": "Initialize hierarchical coordination framework",
+      "rationale": "Establish centralized command structure for efficient swarm operations",
+      "outcome": "INITIALIZED"
+    }
+  ],
+
+  "coordination_config": {
+    "max_agents": 10,
+    "topology": "hierarchical",
+    "auto_spawn": true,
+    "monitoring_interval_ms": 300000,
+    "escalation_threshold_minutes": 30,
+    "max_task_duration_multiplier": 2.0
+  }
+}
