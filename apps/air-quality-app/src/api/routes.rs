@@ -33,7 +33,7 @@ pub fn create_router(services: AppServices) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // Create subrouters with their specific states
+    // Create subrouters with their specific states - use full paths
     let health_router = Router::new()
         .route("/health", get(health_handler))
         .with_state(health_state);
@@ -56,12 +56,13 @@ pub fn create_router(services: AppServices) -> Router {
         .route("/api/v1/locations", get(locations_handler))
         .with_state(services.location_store);
 
-    // Merge all routers
+    // Merge all routers into a base router
+    // NOTE: Testing merge order hypothesis - locations works, let's test alerts after health
     Router::new()
         .merge(health_router)
+        .merge(alerts_router)
         .merge(readings_router)
         .merge(forecast_router)
-        .merge(alerts_router)
         .merge(locations_router)
         .layer(cors)
 }
@@ -216,7 +217,11 @@ mod tests {
         let server = TestServer::new(app).unwrap();
 
         let response = server
-            .get("/api/v1/alerts?location_id=test-loc&time_range=active")
+            .get("/api/v1/alerts")
+            .add_query_params(serde_json::json!({
+                "location_id": "test-loc",
+                "time_range": "active"
+            }))
             .await;
 
         response.assert_status_ok();
@@ -292,7 +297,10 @@ mod tests {
         let server = TestServer::new(app).unwrap();
 
         let response = server
-            .get("/api/v1/readings/latest?location_id=test-loc")
+            .get("/api/v1/readings/latest")
+            .add_query_params(serde_json::json!({
+                "location_id": "test-loc"
+            }))
             .await;
 
         response.assert_status_ok();
@@ -355,13 +363,15 @@ mod tests {
 
         let start = (now - chrono::Duration::hours(3)).to_rfc3339();
         let end = now.to_rfc3339();
-        let url = format!(
-            "/api/v1/readings?location_id=test-loc&start={}&end={}",
-            urlencoding::encode(&start),
-            urlencoding::encode(&end)
-        );
 
-        let response = server.get(&url).await;
+        let response = server
+            .get("/api/v1/readings")
+            .add_query_params(serde_json::json!({
+                "location_id": "test-loc",
+                "start": start,
+                "end": end
+            }))
+            .await;
 
         response.assert_status_ok();
         let json: serde_json::Value = response.json();
@@ -416,13 +426,17 @@ mod tests {
 
         let start = (now - chrono::Duration::hours(1)).to_rfc3339();
         let end = now.to_rfc3339();
-        let url = format!(
-            "/api/v1/aggregate?location_id=test-loc&start={}&end={}&interval=5m&agg=mean",
-            urlencoding::encode(&start),
-            urlencoding::encode(&end)
-        );
 
-        let response = server.get(&url).await;
+        let response = server
+            .get("/api/v1/aggregate")
+            .add_query_params(serde_json::json!({
+                "location_id": "test-loc",
+                "start": start,
+                "end": end,
+                "interval": "5m",
+                "agg": "mean"
+            }))
+            .await;
 
         response.assert_status_ok();
         let json: serde_json::Value = response.json();
@@ -481,7 +495,12 @@ mod tests {
         let server = TestServer::new(app).unwrap();
 
         let response = server
-            .get("/api/v1/forecast?location_id=test-loc&metric=pm25&horizon=6")
+            .get("/api/v1/forecast")
+            .add_query_params(serde_json::json!({
+                "location_id": "test-loc",
+                "metric": "pm25",
+                "horizon": 6
+            }))
             .await;
 
         response.assert_status_ok();
