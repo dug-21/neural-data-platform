@@ -70,7 +70,9 @@ impl ParquetStore {
             return Ok(());
         }
 
-        std::fs::create_dir_all(path.parent().unwrap())?;
+        let parent = path.parent()
+            .ok_or_else(|| CoreError::Storage("Invalid path: no parent directory".to_string()))?;
+        std::fs::create_dir_all(parent)?;
 
         let timestamps: Vec<i64> = points
             .iter()
