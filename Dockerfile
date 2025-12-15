@@ -88,7 +88,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 # Environment variables with defaults
 ENV RUST_LOG=info \
-    DATA_DIR=/data \
     ETCD_ENDPOINT=http://etcd:2379
 
 # Set working directory
