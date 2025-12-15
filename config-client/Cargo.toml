@@ -5,6 +5,9 @@ edition = "2021"
 description = "Thin etcd wrapper for type-safe configuration"
 
 [dependencies]
+# Core platform types (AIR-004)
+neural_core = { path = "../core", package = "platform-core" }
+
 etcd-client = "0.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

@@ -17,10 +17,12 @@
 
 mod client;
 mod error;
+pub mod stream;
 mod watch;
 
 pub use client::ConfigClient;
 pub use error::ConfigError;
+pub use stream::StreamRegistry;
 pub use watch::WatchHandle;
 
 // Re-export for convenience
