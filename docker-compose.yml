@@ -59,22 +59,14 @@ services:
     container_name: neural-air-quality
     ports:
       - "8080:8080"  # HTTP API
-      - "9090:9090"  # Metrics
     volumes:
-      - ./config/base/air-quality.yaml:/config/air-quality.yaml:ro
-      - ./config/overlays/development/overrides.yaml:/config/overrides.yaml:ro
       - air-quality-data:/data
-      - air-quality-models:/models
     environment:
       - RUST_LOG=debug
-      - CONFIG_PATH=/config/air-quality.yaml
-      - CONFIG_OVERLAY=/config/overrides.yaml
       - DATA_DIR=/data
-      - MODELS_DIR=/models
-      - MQTT_BROKER_URL=mqtt://mosquitto:1883
-      - HTTP_PORT=8080
-      - METRICS_PORT=9090
-      - ETCD_ENDPOINTS=http://etcd:2379
+      - ETCD_ENDPOINT=http://etcd:2379
+      - MQTT_BROKER_URL=mosquitto
+      - MQTT_PORT=1883
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -132,8 +124,6 @@ volumes:
   mosquitto-logs:
     driver: local
   air-quality-data:
-    driver: local
-  air-quality-models:
     driver: local
   prometheus-data:
     driver: local
