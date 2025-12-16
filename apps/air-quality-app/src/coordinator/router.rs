@@ -163,6 +163,28 @@ impl IngestionRouter {
         point: &TimeSeriesPoint,
         config: &StreamConfig,
     ) -> Result<(), ValidationError> {
+        // Check if this is a per-metric point model (OpenWeatherMap parsers)
+        // In this model, each point represents ONE metric with:
+        // - tags["metric"] = field name (e.g., "temperature")
+        // - point.value = the actual value
+        if let Some(metric_name) = point.tags.get("metric") {
+            // Per-metric point model: validate only the field this point represents
+            if let Some(schema_field) = config.get_field(metric_name) {
+                // Validate the point's value against the schema field
+                let value_str = point.value.to_string();
+                self.validate_field_value(&value_str, schema_field)?;
+            } else if self.strict_validation {
+                // Unknown metric in strict mode
+                return Err(ValidationError::UnknownField {
+                    field: metric_name.clone(),
+                });
+            }
+            // Per-metric model passes - no need to check for "required fields missing"
+            // because required fields will come as separate points
+            return Ok(());
+        }
+
+        // Traditional model: all fields as tag key-value pairs
         // Check all required fields are present
         for field in &config.fields {
             if !field.nullable {
