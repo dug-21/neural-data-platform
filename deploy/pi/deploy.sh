@@ -60,19 +60,11 @@ init_streams() {
         sleep 2
     done
 
-    # Check if streams are already initialized
+    # Check if streams are already initialized (informational only)
     if docker exec etcd etcdctl get --prefix "/air-quality/streams/" --keys-only >/dev/null 2>&1; then
         stream_count=$(docker exec etcd etcdctl get --prefix "/air-quality/streams/" --keys-only | grep -c "/id$" || echo "0")
         if [ "$stream_count" -gt 0 ]; then
-            log "Stream configurations already exist ($stream_count streams found)"
-            warn "Skip stream initialization? (Y/n)"
-            read -r response
-            if [[ "$response" =~ ^[Nn]$ ]]; then
-                log "Re-initializing streams..."
-            else
-                log "Keeping existing stream configurations"
-                return 0
-            fi
+            log "Updating existing stream configurations ($stream_count streams found)"
         fi
     fi
 
