@@ -62,7 +62,9 @@ sources:
     endpoints:
       - endpoint_id: openweathermap_air_pollution
         location_id: home
-        url: "https://api.openweathermap.org/data/2.5/air_pollution?lat=${LAT}&lon=${LON}"
+        lat: 29.95838
+        lon: -81.30878
+        url: "https://api.openweathermap.org/data/2.5/air_pollution?lat=29.95838&lon=-81.30878"
         auth_type: query_param
         auth_key: appid
         auth_value: "${OPENWEATHERMAP_API_KEY}"
