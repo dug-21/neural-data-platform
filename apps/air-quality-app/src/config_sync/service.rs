@@ -365,9 +365,10 @@ impl StreamConfigYaml {
         for source_yaml in &self.sources {
             let source_type = parse_source_type(&source_yaml.source_type)?;
 
-            // Convert YAML params to JSON params
+            // Convert YAML params to JSON params, filtering out 'enabled' to avoid duplicate field
             let params: std::collections::HashMap<String, serde_json::Value> = source_yaml.params
                 .iter()
+                .filter(|(k, _)| k.as_str() != "enabled") // Filter out enabled - handled by explicit field
                 .filter_map(|(k, v)| {
                     yaml_to_json(v).ok().map(|json_v| (k.clone(), json_v))
                 })
@@ -398,11 +399,15 @@ impl StreamConfigYaml {
                             .and_then(|v| v.as_bool())
                             .unwrap_or(true);
 
-                        // Convert YAML mapping to JSON params
+                        // Convert YAML mapping to JSON params, filtering out 'enabled'
                         let params: std::collections::HashMap<String, serde_json::Value> = map
                             .iter()
                             .filter_map(|(k, v)| {
                                 if let serde_yaml::Value::String(key) = k {
+                                    // Filter out enabled - handled by explicit field
+                                    if key == "enabled" {
+                                        return None;
+                                    }
                                     yaml_to_json(v).ok().map(|json_v| (key.clone(), json_v))
                                 } else {
                                     None
