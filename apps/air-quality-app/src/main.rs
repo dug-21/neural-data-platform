@@ -156,6 +156,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
+    // ========== AIR-005: Config Sync - Sync YAML configs to etcd ==========
+    // Sync stream configurations from GitOps YAML files to etcd StreamRegistry
+    let config_dir = std::env::var("STREAM_CONFIG_DIR")
+        .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
+
+    if std::path::Path::new(&config_dir).exists() {
+        tracing::info!("Syncing stream configs from {}", config_dir);
+        let sync_service = air_quality_app::config_sync::ConfigSyncService::new(&config_dir);
+
+        // Create a temporary registry for syncing
+        match config_client::StreamRegistry::new(&[&etcd_endpoint]).await {
+            Ok(registry) => {
+                match sync_service.sync_all(&registry).await {
+                    Ok(count) => {
+                        tracing::info!("Synced {} stream configs to etcd (AIR-005 config sync)", count);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Config sync failed: {}. Using existing etcd configs.", e);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to connect to registry for config sync: {}", e);
+            }
+        }
+    } else {
+        tracing::warn!("Stream config directory not found: {}. Skipping config sync.", config_dir);
+    }
+
     // ========== AIR-005: Multi-Stream Coordinator with HTTP Polling ==========
     // Initialize the multi-stream ingestion coordinator for external APIs (OpenWeatherMap)
     let coordinator_task = match initialize_multi_stream_coordinator(&etcd_endpoint, store.clone()).await {

@@ -1,6 +1,7 @@
 pub mod api;
 pub mod config;
 pub mod config_etcd;
+pub mod config_sync;
 pub mod coordinator;
 pub mod error;
 pub mod ingestion;
