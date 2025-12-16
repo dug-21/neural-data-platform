@@ -1,0 +1,84 @@
+stream_id: outdoor-weather
+description: Outdoor weather data from OpenWeatherMap Current Weather API
+version: "1.0.0"
+enabled: true
+retention_days: 90
+compression_after_days: 7
+partitioning_strategy: daily
+
+fields:
+  - name: temperature
+    type: Float
+    nullable: false
+    unit: celsius
+    range: [-50.0, 60.0]
+  - name: feels_like
+    type: Float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+  - name: pressure
+    type: Float
+    nullable: true
+    unit: hpa
+    range: [800.0, 1200.0]
+  - name: humidity
+    type: Float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+  - name: wind_speed
+    type: Float
+    nullable: true
+    unit: m/s
+    range: [0.0, 100.0]
+  - name: wind_deg
+    type: Float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+  - name: wind_gust
+    type: Float
+    nullable: true
+    unit: m/s
+    range: [0.0, 150.0]
+  - name: clouds
+    type: Float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+  - name: visibility
+    type: Float
+    nullable: true
+    unit: meters
+    range: [0.0, 50000.0]
+  - name: rain_1h
+    type: Float
+    nullable: true
+    unit: mm
+    range: [0.0, 500.0]
+  - name: snow_1h
+    type: Float
+    nullable: true
+    unit: mm
+    range: [0.0, 500.0]
+
+sources:
+  - source_type: HttpPoll
+    enabled: true
+    params:
+      poll_interval_secs: 600  # 10 minutes (free tier limit)
+      timeout_secs: 30
+      parser_name: openweathermap_current_weather
+      endpoints:
+        - endpoint_id: openweathermap_weather
+          location_id: home
+          url: "https://api.openweathermap.org/data/2.5/weather?lat=${LAT}&lon=${LON}&units=metric"
+          auth_type: query_param
+          auth_key: appid
+          auth_value: "${OPENWEATHERMAP_API_KEY}"
+
+storage:
+  format: parquet
+  path: /data/outdoor-weather
+  partition_by: day

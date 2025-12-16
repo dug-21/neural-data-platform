@@ -1,0 +1,74 @@
+stream_id: outdoor-air-quality
+description: Outdoor air quality data from OpenWeatherMap Air Pollution API
+version: "1.0.0"
+enabled: true
+retention_days: 90
+compression_after_days: 7
+partitioning_strategy: daily
+
+fields:
+  - name: aqi
+    type: Float
+    nullable: false
+    unit: 1-5_scale
+    range: [1.0, 5.0]
+  - name: co
+    type: Float
+    nullable: true
+    unit: μg/m³
+    range: [0.0, 50000.0]
+  - name: no
+    type: Float
+    nullable: true
+    unit: μg/m³
+    range: [0.0, 1000.0]
+  - name: no2
+    type: Float
+    nullable: true
+    unit: μg/m³
+    range: [0.0, 1000.0]
+  - name: o3
+    type: Float
+    nullable: true
+    unit: μg/m³
+    range: [0.0, 1000.0]
+  - name: so2
+    type: Float
+    nullable: true
+    unit: μg/m³
+    range: [0.0, 1000.0]
+  - name: pm2_5
+    type: Float
+    nullable: false
+    unit: μg/m³
+    range: [0.0, 1000.0]
+  - name: pm10
+    type: Float
+    nullable: true
+    unit: μg/m³
+    range: [0.0, 1000.0]
+  - name: nh3
+    type: Float
+    nullable: true
+    unit: μg/m³
+    range: [0.0, 200.0]
+
+sources:
+  - source_type: HttpPoll
+    enabled: true
+    params:
+      poll_interval_secs: 600  # 10 minutes (free tier limit)
+      timeout_secs: 30
+      parser_name: openweathermap_air_pollution
+      endpoints:
+        - endpoint_id: openweathermap_air_pollution
+          location_id: home
+          url: "https://api.openweathermap.org/data/2.5/air_pollution?lat=${LAT}&lon=${LON}"
+          auth_type: query_param
+          auth_key: appid
+          auth_value: "${OPENWEATHERMAP_API_KEY}"
+
+storage:
+  format: parquet
+  path: /data/outdoor-air-quality
+  partition_by: day

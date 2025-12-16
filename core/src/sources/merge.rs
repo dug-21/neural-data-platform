@@ -58,18 +58,23 @@ impl ReadingMerger {
     }
 
     /// Check if a reading should be deduplicated
-    fn is_duplicate(&self, point: &TimeSeriesPoint, now: DateTime<Utc>) -> bool {
+    fn is_duplicate(&self, point: &TimeSeriesPoint) -> bool {
         let key = Self::cache_key(point);
         let metric = point.tags.get("metric").map(|s| s.as_str()).unwrap_or("unknown");
 
         if let Some(metrics) = self.mqtt_cache.get(&point.location_id) {
             if let Some(last_seen) = metrics.get(metric) {
-                let age = now - *last_seen;
-                if age < self.config.dedup_window {
+                // Compare timestamps of the actual readings
+                let time_diff = if point.timestamp >= *last_seen {
+                    point.timestamp - *last_seen
+                } else {
+                    *last_seen - point.timestamp
+                };
+                if time_diff < self.config.dedup_window {
                     trace!(
-                        "Duplicate detected for {} - age: {}s",
+                        "Duplicate detected for {} - time diff: {}s",
                         key,
-                        age.num_seconds()
+                        time_diff.num_seconds()
                     );
                     return true;
                 }
@@ -133,7 +138,7 @@ impl ReadingMerger {
             }
 
             // Check for duplicates with MQTT
-            if !self.is_duplicate(&point, now) {
+            if !self.is_duplicate(&point) {
                 debug!(
                     "Including non-duplicate HTTP point: {} - {}",
                     point.location_id, metric

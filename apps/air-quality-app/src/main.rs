@@ -1,14 +1,16 @@
 use air_quality_app::{
     api::create_router,
     config::AppConfig,
+    coordinator::{IngestionCoordinator, IngestionRouter, SourceManager},
     ingestion::MqttHandler,
     pipeline::StorageWriter,
     stream_integration::load_from_stream_config,
 };
-use neural_core::{MqttConfig, ParquetStore};
+use config_client::StreamRegistry;
+use neural_core::{MqttConfig, ParquetStore, Store, TimeSeriesPoint};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -154,6 +156,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
+    // ========== AIR-005: Multi-Stream Coordinator with HTTP Polling ==========
+    // Initialize the multi-stream ingestion coordinator for external APIs (OpenWeatherMap)
+    let coordinator_task = match initialize_multi_stream_coordinator(&etcd_endpoint, store.clone()).await {
+        Ok((_coordinator, task)) => {
+            tracing::info!("Multi-stream coordinator initialized (AIR-005)");
+            Some(task)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Multi-stream coordinator not available: {}. External data sources disabled.",
+                e
+            );
+            None
+        }
+    };
+
     // Create mock source and forecast (these will be replaced in future tasks)
     let services = create_services_with_real_store(store.clone());
 
@@ -197,6 +215,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(task) = ingestion_task {
                 let _ = task.await;
             }
+            if let Some(task) = coordinator_task {
+                let _ = task.await;
+            }
             let _ = storage_task.await;
 
             tracing::info!("All background tasks completed. Shutdown complete.");
@@ -204,6 +225,131 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Initialize the multi-stream ingestion coordinator (AIR-005)
+///
+/// This sets up HTTP polling sources for external APIs like OpenWeatherMap
+/// which provide outdoor weather and air quality data.
+async fn initialize_multi_stream_coordinator(
+    etcd_endpoint: &str,
+    store: Arc<ParquetStore>,
+) -> Result<(Arc<IngestionCoordinator>, tokio::task::JoinHandle<()>), Box<dyn std::error::Error + Send + Sync>> {
+    // Initialize StreamRegistry for loading stream configurations
+    let registry = Arc::new(
+        StreamRegistry::new(&[etcd_endpoint])
+            .await
+            .map_err(|e| format!("Failed to create StreamRegistry: {}", e))?
+    );
+
+    // Check if we have any HTTP polling streams configured
+    let streams = registry.list_streams().await.unwrap_or_default();
+    let has_http_streams = streams.iter().any(|s| {
+        s.contains("weather") || s.contains("air-quality")
+    });
+
+    if !has_http_streams && streams.is_empty() {
+        return Err("No streams configured in registry".into());
+    }
+
+    tracing::info!("Found {} stream configurations", streams.len());
+
+    // Create dead letter channel for invalid points
+    let (dead_letter_tx, mut dead_letter_rx) = mpsc::channel::<air_quality_app::coordinator::DeadLetterItem>(100);
+
+    // Spawn dead letter handler
+    tokio::spawn(async move {
+        while let Some(item) = dead_letter_rx.recv().await {
+            tracing::warn!(
+                "Dead letter: stream={}, source={}, error={}",
+                item.stream_id,
+                item.source_id,
+                item.error
+            );
+        }
+    });
+
+    // Create ingestion router
+    let router = Arc::new(IngestionRouter::new(registry.clone(), dead_letter_tx));
+
+    // Create storage channel for outdoor streams
+    let (storage_tx, mut storage_rx) = mpsc::channel::<TimeSeriesPoint>(1000);
+
+    // Register storage channels for known outdoor streams
+    for stream_id in &["outdoor-weather", "outdoor-air-quality"] {
+        router.register_storage_channel(stream_id.to_string(), storage_tx.clone()).await;
+    }
+
+    // Spawn storage writer for outdoor data
+    let store_clone = store.clone();
+    tokio::spawn(async move {
+        let mut batch = Vec::new();
+        let batch_size = 50;
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+
+        loop {
+            tokio::select! {
+                Some(point) = storage_rx.recv() => {
+                    batch.push(point);
+                    if batch.len() >= batch_size {
+                        let write_batch = std::mem::take(&mut batch);
+                        let count = write_batch.len();
+                        if let Err(e) = store_clone.write_batch(write_batch).await {
+                            tracing::error!("Failed to write outdoor data batch: {}", e);
+                        } else {
+                            tracing::debug!("Wrote {} outdoor data points", count);
+                        }
+                    }
+                }
+                _ = interval.tick() => {
+                    // Flush any remaining points
+                    if !batch.is_empty() {
+                        let write_batch = std::mem::take(&mut batch);
+                        let count = write_batch.len();
+                        if let Err(e) = store_clone.write_batch(write_batch).await {
+                            tracing::error!("Failed to flush outdoor data batch: {}", e);
+                        } else {
+                            tracing::debug!("Flushed {} outdoor data points", count);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Create source manager
+    let source_manager = Arc::new(RwLock::new(SourceManager::new(registry.clone())));
+
+    // Create coordinator
+    let coordinator = Arc::new(IngestionCoordinator::new(
+        router,
+        source_manager,
+        1000, // buffer size
+    ));
+
+    // Start coordinator
+    coordinator.start().await
+        .map_err(|e| format!("Failed to start coordinator: {}", e))?;
+
+    tracing::info!("Multi-stream coordinator started successfully");
+
+    // Create monitoring task
+    let coord_clone = coordinator.clone();
+    let monitor_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if coord_clone.is_running().await {
+                let health = coord_clone.get_source_health().await;
+                tracing::debug!("Coordinator health: {} sources active", health.len());
+            } else {
+                tracing::warn!("Coordinator stopped unexpectedly");
+                break;
+            }
+        }
+    });
+
+    Ok((coordinator, monitor_task))
 }
 
 /// Create services with real ParquetStore

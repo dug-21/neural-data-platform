@@ -28,6 +28,7 @@ tower-http = { version = "0.5", features = ["cors", "trace", "request-id"] }
 
 # Async runtime
 tokio = { workspace = true }
+tokio-util = "0.7"
 
 # Serialization
 serde = { workspace = true }
@@ -47,6 +48,7 @@ uuid = { workspace = true }
 serde_yaml = "0.9"
 async-trait = "0.1"
 rumqttc = { workspace = true }
+regex = "1"
 
 # MCP SDK (optional)
 mcp-sdk = { version = "0.0.3", optional = true }
