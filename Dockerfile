@@ -40,6 +40,7 @@ COPY apps ./apps
 COPY domains ./domains
 COPY config-store ./config-store
 COPY config-client ./config-client
+COPY config ./config
 
 # Build application
 RUN cargo build --release -p air-quality-app && \
@@ -65,8 +66,12 @@ RUN useradd -m -u 1000 -s /bin/bash appuser && \
 # Copy binary from builder
 COPY --from=builder /app/target/release/air-quality-server /usr/local/bin/air-quality-server
 
+# Copy stream configs for GitOps sync (AIR-005)
+COPY --from=builder /app/config/base/streams /config/streams
+
 # Set ownership
-RUN chown appuser:appuser /usr/local/bin/air-quality-server
+RUN chown appuser:appuser /usr/local/bin/air-quality-server && \
+    chown -R appuser:appuser /config
 
 # Switch to non-root user
 USER appuser
@@ -80,7 +85,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 # Environment variables with defaults
 ENV RUST_LOG=info \
-    ETCD_ENDPOINT=http://etcd:2379
+    ETCD_ENDPOINT=http://etcd:2379 \
+    STREAM_CONFIG_DIR=/config/streams
 
 # Set working directory
 WORKDIR /app
