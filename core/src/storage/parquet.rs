@@ -55,14 +55,23 @@ impl ParquetStore {
         Ok(())
     }
 
-    fn partition_path(&self, location_id: &str, timestamp: DateTime<Utc>) -> PathBuf {
+    /// Build partition path using stream_id (preferred) or location_id as fallback
+    /// This aligns storage structure with stream configuration for better discoverability
+    fn partition_path(&self, stream_id: &str, timestamp: DateTime<Utc>) -> PathBuf {
         self.base_path
             .join("data")
-            .join(location_id)
+            .join(stream_id)
             .join(format!("year={}", timestamp.year()))
             .join(format!("month={:02}", timestamp.month()))
             .join(format!("day={:02}", timestamp.day()))
             .join("readings.parquet")
+    }
+
+    /// Extract partition key from point: use stream_id tag if present, else location_id
+    fn get_partition_key(point: &TimeSeriesPoint) -> String {
+        point.tags.get("stream_id")
+            .cloned()
+            .unwrap_or_else(|| point.location_id.clone())
     }
 
     async fn write_parquet(&self, points: Vec<TimeSeriesPoint>, path: &Path) -> CoreResult<()> {
@@ -168,7 +177,8 @@ impl Store for ParquetStore {
         wal.append(&entry)?;
         drop(wal);
 
-        let path = self.partition_path(&point.location_id, point.timestamp);
+        let partition_key = Self::get_partition_key(&point);
+        let path = self.partition_path(&partition_key, point.timestamp);
         self.append_to_parquet(vec![point], &path).await
     }
 
@@ -187,7 +197,8 @@ impl Store for ParquetStore {
 
         let mut grouped: HashMap<PathBuf, Vec<TimeSeriesPoint>> = HashMap::new();
         for point in points {
-            let path = self.partition_path(&point.location_id, point.timestamp);
+            let partition_key = Self::get_partition_key(&point);
+            let path = self.partition_path(&partition_key, point.timestamp);
             grouped.entry(path).or_insert_with(Vec::new).push(point);
         }
 
