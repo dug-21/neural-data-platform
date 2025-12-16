@@ -15,10 +15,6 @@ COPY apps ./apps
 COPY domains ./domains
 COPY config-store ./config-store
 COPY config-client ./config-client
-COPY neural-core ./neural-core
-COPY neural-trading ./neural-trading
-COPY neural-ml-ops ./neural-ml-ops
-COPY data-staging ./data-staging
 
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -44,10 +40,6 @@ COPY apps ./apps
 COPY domains ./domains
 COPY config-store ./config-store
 COPY config-client ./config-client
-COPY neural-core ./neural-core
-COPY neural-trading ./neural-trading
-COPY neural-ml-ops ./neural-ml-ops
-COPY data-staging ./data-staging
 
 # Build application
 RUN cargo build --release -p air-quality-app && \
