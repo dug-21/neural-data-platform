@@ -77,16 +77,16 @@ Determine what fields your stream will have:
 
 ### Step 2: Create Stream Configuration Directory
 
-Create the stream config files:
+Create the stream config directory in the GitOps structure:
 
 ```bash
-# On development machine
-mkdir -p deploy/pi/configs/streams/weather
+# From repository root
+mkdir -p config/base/streams/weather
 ```
 
 ### Step 3: Create config.yaml
 
-**File**: `deploy/pi/configs/streams/weather/config.yaml`
+**File**: `config/base/streams/weather/config.yaml`
 
 ```yaml
 stream_id: weather
@@ -163,95 +163,71 @@ Field names must follow these rules:
 - **Start**: Must start with a lowercase letter
 - **Examples**: `pm25`, `temperature`, `event_type`, `sensor_id`
 
-### Step 6: Create the Stream Loader Script
+### Step 6: Create Stream Configuration Directory (GitOps Pattern)
 
-If not already present, create the loader script:
+Stream configurations are managed via GitOps YAML files and automatically synced to etcd.
 
-**File**: `deploy/pi/scripts/load-stream-configs.sh`
-
-```bash
-#!/bin/bash
-# Load stream configurations into etcd
-
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PI_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ETCD_CONTAINER="${ETCD_CONTAINER:-etcd}"
-CONFIG_DIR="$PI_DIR/configs/streams"
-
-echo "Loading stream configurations from $CONFIG_DIR"
-
-# Check etcd is running
-if ! docker ps | grep -q "$ETCD_CONTAINER"; then
-    echo "ERROR: etcd container not running"
-    exit 1
-fi
-
-# Function to load YAML to etcd
-load_to_etcd() {
-    local key=$1
-    local file=$2
-
-    if [ ! -f "$file" ]; then
-        echo "  SKIP: $file not found"
-        return
-    fi
-
-    echo "  Loading $key"
-    local content=$(cat "$file")
-    docker exec "$ETCD_CONTAINER" sh -c "etcdctl put '$key' '$content'"
-}
-
-# Iterate over stream directories
-for stream_dir in "$CONFIG_DIR"/*; do
-    [ ! -d "$stream_dir" ] && continue
-
-    stream_id=$(basename "$stream_dir")
-    echo "Processing stream: $stream_id"
-
-    # Load config
-    load_to_etcd "/streams/$stream_id/config" "$stream_dir/config.yaml"
-
-    # Load sources (if separate file)
-    load_to_etcd "/streams/$stream_id/sources" "$stream_dir/sources.yaml"
-done
-
-echo ""
-echo "Stream configurations loaded. Registered streams:"
-docker exec "$ETCD_CONTAINER" etcdctl get /streams/ --prefix --keys-only | \
-    grep config | sed 's|/streams/||' | sed 's|/config||' | sort -u
-```
-
-Make it executable:
-```bash
-chmod +x deploy/pi/scripts/load-stream-configs.sh
-```
-
-### Step 7: Load Stream into etcd
+**Create configuration in the GitOps structure:**
 
 ```bash
-# SSH to Pi or run from deployment directory
-cd /workspaces/neural-data-platform/deploy/pi
-
-# Start services if not running
-./deploy.sh start
-
-# Load stream configs
-./scripts/load-stream-configs.sh
+# From repository root
+mkdir -p config/base/streams/weather
 ```
+
+**File location:** `config/base/streams/weather/config.yaml`
+
+> **Note**: The configuration file should follow the same schema as shown in Step 3.
+
+### Step 7: Sync Configuration to etcd
+
+The platform uses a GitOps sync mechanism. Configurations are automatically synced from YAML files to etcd.
+
+**Manual sync (development/testing):**
+```bash
+# From repository root
+cd /workspaces/neural-data-platform
+
+# Sync all stream configurations to etcd
+ETCD_CONTAINER=etcd ./scripts/sync-config-to-etcd.sh production
+```
+
+**Via deployment script:**
+```bash
+# From deployment directory
+cd deploy/pi
+
+# Sync configurations
+./deploy.sh sync
+
+# Or initialize streams during first deployment
+./deploy.sh init-streams
+```
+
+**Automatic sync:**
+- On application startup, `ConfigSyncService` automatically discovers and syncs all YAML configs in `config/base/streams/`
+- Configs are validated before being stored in etcd
+- Invalid configs are skipped with warnings logged
 
 ### Step 8: Verify Stream Registration
 
 ```bash
-# Check stream is registered
-docker exec etcd etcdctl get /streams/weather/config
+# List all registered streams (keys are flattened)
+docker exec etcd etcdctl get --prefix /streams/ --keys-only
 
-# List all streams
-docker exec etcd etcdctl get /streams/ --prefix --keys-only
+# Check specific stream configuration
+docker exec etcd etcdctl get --prefix /streams/weather/ --keys-only
 
-# Verify via API (if stream API endpoint exists)
-curl http://localhost:8080/api/v1/streams
+# Verify via deployment script
+cd deploy/pi && ./deploy.sh list-streams
+
+# Check application logs for sync confirmation
+docker logs air-quality-app 2>&1 | grep -i "synced\|stream"
+```
+
+**Expected log output on successful sync:**
+```
+INFO  Synced 3 stream configs to registry
+INFO  Registered streams: ["air-quality", "outdoor-weather", "outdoor-air-quality"]
 ```
 
 ### Step 9: Configure Data Source

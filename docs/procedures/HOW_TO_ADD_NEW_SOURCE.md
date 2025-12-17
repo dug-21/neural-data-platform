@@ -457,12 +457,36 @@ sources:
       token_env: MY_SOURCE_TOKEN
 ```
 
-### etcd Storage
+### Configuration Sync (GitOps)
 
-Load into etcd:
+**IMPORTANT**: Stream and source configurations are now managed via GitOps YAML files and automatically synced to etcd. Manual `etcdctl put` commands are deprecated.
+
+**1. Add your source config to the stream's YAML file:**
 ```bash
-docker exec etcd etcdctl put /streams/my-stream/sources "$(cat sources.yaml)"
+# Edit the stream configuration
+vim config/base/streams/my-stream/config.yaml
+
+# Add your source under the 'sources:' array
 ```
+
+**2. Sync configurations to etcd:**
+```bash
+# From repository root
+cd /workspaces/neural-data-platform
+
+# Sync all configurations
+ETCD_CONTAINER=etcd ./scripts/sync-config-to-etcd.sh production
+
+# Or via deployment script
+cd deploy/pi && ./deploy.sh sync
+```
+
+**3. Verify source is registered:**
+```bash
+docker exec etcd etcdctl get --prefix /streams/my-stream/ --keys-only
+```
+
+> **Note**: The application's `ConfigSyncService` also syncs configs automatically on startup.
 
 ---
 

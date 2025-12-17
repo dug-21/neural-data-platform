@@ -89,7 +89,7 @@ tar -czf ~/backups/data-backup-$(date +%Y%m%d-%H%M%S).tar.gz /var/lib/docker/vol
 grep OPENWEATHER_API_KEY /workspaces/neural-data-platform/.env
 
 # Expected output:
-# OPENWEATHER_API_KEY=$OPENWEATHERMAP_API_KEY
+# OPENWEATHER_API_KEY=<your-api-key-here>
 ```
 
 **Add Additional Configuration** (if not present):

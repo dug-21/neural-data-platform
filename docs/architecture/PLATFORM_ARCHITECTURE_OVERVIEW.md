@@ -38,7 +38,7 @@ The Neural Data Platform is a multi-stream data ingestion and storage system des
 - etcd-based distributed configuration
 - Thin Rust wrapper (`config-client`, ~260 LOC)
 - Watch API for hot-reload
-- GitOps sync pattern (YAML → etcd)
+- GitOps sync pattern (YAML → etcd via ConfigSyncService)
 - Environment variable overrides
 
 ### AIR-004: Multi-Stream Platform
@@ -153,6 +153,7 @@ pub trait Store: Send + Sync {
 | Store | `ParquetStore` | `neural-core/src/storage/parquet.rs` | ✅ Production |
 | Config | `ConfigClient` | `config-client/src/client.rs` | ✅ Production |
 | Config | `StreamRegistry` | `config-client/src/stream/registry.rs` | ✅ Production |
+| Config | `ConfigSyncService` | `apps/air-quality-app/src/config_sync/service.rs` | ✅ Production |
 
 ---
 
@@ -198,6 +199,37 @@ The application loads configuration with this priority (highest to lowest):
 2. **Legacy etcd** (`/air-quality/*` paths)
 3. **config.yaml** (file-based fallback)
 4. **Defaults** (hardcoded in code)
+
+### GitOps Configuration Sync (AIR-005)
+
+Stream configurations are managed via GitOps YAML files and automatically synced to etcd on application startup:
+
+```
+config/base/streams/
+├── air-quality/
+│   └── config.yaml        → Indoor air quality stream
+├── outdoor-weather/
+│   └── config.yaml        → OpenWeatherMap weather data
+└── outdoor-air-quality/
+    └── config.yaml        → OpenWeatherMap air pollution data
+```
+
+**ConfigSyncService** handles the synchronization:
+1. Discovers `config.yaml` files in `config/base/streams/` subdirectories
+2. Parses YAML to `StreamConfig` structs with validation
+3. Saves each config to etcd via `StreamRegistry::save_stream()`
+4. Runs automatically at application startup
+
+**Sync Methods**:
+- **Automatic**: Application startup triggers `ConfigSyncService.sync_all()`
+- **Manual**: `ETCD_CONTAINER=etcd ./scripts/sync-config-to-etcd.sh production`
+- **Deployment**: `./deploy/pi/deploy.sh sync` or `./deploy/pi/deploy.sh init-streams`
+
+**Environment Variable Expansion**:
+Source configurations support environment variable references:
+```yaml
+auth_value: "${OPENWEATHERMAP_API_KEY}"  # Expanded at runtime
+```
 
 ### Configuration Flow
 
@@ -422,10 +454,10 @@ See: `WeatherParser` and `AirPollutionParser` as reference implementations
 
 ### Adding a New Stream
 
-1. Create stream configuration YAML
-2. Load into etcd via `load-stream-configs.sh`
-3. Update application to handle new stream (if needed)
-4. Configure storage path
+1. Create stream configuration directory: `config/base/streams/{stream-id}/`
+2. Create `config.yaml` with stream schema, sources, and storage settings
+3. Sync to etcd via `./deploy/pi/deploy.sh sync` or restart application
+4. Verify registration: `docker exec etcd etcdctl get --prefix /streams/{stream-id}/`
 
 See: [HOW_TO_ADD_NEW_STREAM.md](../procedures/HOW_TO_ADD_NEW_STREAM.md)
 
@@ -451,6 +483,7 @@ See: [HOW_TO_ADD_NEW_STREAM.md](../procedures/HOW_TO_ADD_NEW_STREAM.md)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2025-12-17 | Added GitOps ConfigSyncService documentation |
 | 1.2.0 | 2025-12-16 | AIR-005 complete with coordinator integration |
 | 1.1.0 | 2025-12-16 | Added HTTP polling sources and parsers |
 | 1.0.0 | 2025-12-16 | Initial comprehensive documentation |
