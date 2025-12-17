@@ -73,7 +73,7 @@ gh run view <run-id> --json jobs,conclusion | \
 
 ```bash
 # Usage example
-npx claude-flow@alpha github gh-coordinator \
+claude-flow github gh-coordinator \
   "Coordinate multi-repo release across 5 repositories"
 ```
 
@@ -99,7 +99,7 @@ gh pr create --title "Feature: New capability" \
 
 ```bash
 # Create coordinated issue workflow
-npx claude-flow@alpha github issue-tracker \
+claude-flow github issue-tracker \
   "Manage sprint issues with automated tracking"
 ```
 
@@ -111,7 +111,7 @@ npx claude-flow@alpha github issue-tracker \
 
 ```bash
 # Automated release management
-npx claude-flow@alpha github release-manager \
+claude-flow github release-manager \
   "Create v2.0.0 release with changelog and deployment"
 ```
 
@@ -123,7 +123,7 @@ npx claude-flow@alpha github release-manager \
 
 ```bash
 # Optimize repository structure
-npx claude-flow@alpha github repo-architect \
+claude-flow github repo-architect \
   "Restructure monorepo with optimal organization"
 ```
 
@@ -149,7 +149,7 @@ gh pr view 123 --json files | \
 
 ```bash
 # Orchestrate CI/CD pipeline
-npx claude-flow@alpha github ci-orchestrator \
+claude-flow github ci-orchestrator \
   "Setup parallel test execution with smart caching"
 ```
 
@@ -559,17 +559,17 @@ mcp__claude-flow__task_orchestrate {
 #### GitHub Hooks Integration
 ```bash
 # Pre-task: Setup GitHub context
-npx claude-flow@alpha hooks pre-task \
+claude-flow hooks pre-task \
   --description "PR review workflow" \
   --context "pr-123"
 
 # During task: Track progress
-npx claude-flow@alpha hooks notify \
+claude-flow hooks notify \
   --message "Completed security scan" \
   --type "github-action"
 
 # Post-task: Export results
-npx claude-flow@alpha hooks post-task \
+claude-flow hooks post-task \
   --task-id "pr-review-123" \
   --export-github-summary
 ```
@@ -917,7 +917,7 @@ jobs:
 #### Example 3: Multi-Repo Synchronization
 ```bash
 # Synchronize multiple repositories
-npx claude-flow@alpha github sync-coordinator \
+claude-flow github sync-coordinator \
   "Synchronize version updates across:
    - github.com/org/repo-a
    - github.com/org/repo-b

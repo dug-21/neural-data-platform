@@ -50,7 +50,7 @@ gh issue create \
   --label "enhancement,swarm-ready"
 
 # Initialize swarm for issue
-npx claude-flow@alpha hooks pre-task --description "Feature implementation"
+claude-flow hooks pre-task --description "Feature implementation"
 ```
 
 ### Project Board Quick Setup

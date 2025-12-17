@@ -19,7 +19,7 @@ Master advanced swarm patterns for distributed research, development, and testin
 npm install -g claude-flow@alpha
 
 # Add MCP server (if using MCP tools)
-claude mcp add claude-flow npx claude-flow@alpha mcp start
+claude mcp add claude-flow claude-flow mcp start
 ```
 
 ### Basic Pattern
