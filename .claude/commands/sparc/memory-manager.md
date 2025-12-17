@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run memory-manager "organize project knowledge"
 
 # For alpha features
-npx claude-flow@alpha sparc run memory-manager "organize project knowledge"
+claude-flow sparc run memory-manager "organize project knowledge"
 ```
 
 ### Option 3: Local Installation

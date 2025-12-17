@@ -25,7 +25,7 @@ mcp__claude-flow__task_orchestrate {
 npx claude-flow swarm "research topic X" --strategy research
 
 # For alpha features
-npx claude-flow@alpha swarm "research topic X" --strategy research
+claude-flow swarm "research topic X" --strategy research
 ```
 
 ### Option 3: Local Installation

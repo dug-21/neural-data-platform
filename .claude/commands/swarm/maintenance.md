@@ -26,7 +26,7 @@ mcp__claude-flow__task_orchestrate {
 npx claude-flow swarm "update dependencies" --strategy maintenance
 
 # For alpha features
-npx claude-flow@alpha swarm "update dependencies" --strategy maintenance
+claude-flow swarm "update dependencies" --strategy maintenance
 ```
 
 ### Option 3: Local Installation

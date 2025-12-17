@@ -25,7 +25,7 @@ mcp__claude-flow__task_orchestrate {
 npx claude-flow swarm "build feature X" --strategy development
 
 # For alpha features
-npx claude-flow@alpha swarm "build feature X" --strategy development
+claude-flow swarm "build feature X" --strategy development
 ```
 
 ### Option 3: Local Installation

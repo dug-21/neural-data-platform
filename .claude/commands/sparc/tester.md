@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run tester "full regression suite"
 
 # For alpha features
-npx claude-flow@alpha sparc run tester "full regression suite"
+claude-flow sparc run tester "full regression suite"
 ```
 
 ### Option 3: Local Installation

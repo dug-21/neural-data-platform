@@ -25,7 +25,7 @@ mcp__claude-flow__task_orchestrate {
 npx claude-flow swarm "test application" --strategy testing
 
 # For alpha features
-npx claude-flow@alpha swarm "test application" --strategy testing
+claude-flow swarm "test application" --strategy testing
 ```
 
 ### Option 3: Local Installation

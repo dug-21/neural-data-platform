@@ -25,7 +25,7 @@ mcp__claude-flow__task_orchestrate {
 npx claude-flow swarm "analyze system performance" --strategy analysis
 
 # For alpha features
-npx claude-flow@alpha swarm "analyze system performance" --strategy analysis
+claude-flow swarm "analyze system performance" --strategy analysis
 ```
 
 ### Option 3: Local Installation

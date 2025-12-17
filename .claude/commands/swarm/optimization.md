@@ -25,7 +25,7 @@ mcp__claude-flow__task_orchestrate {
 npx claude-flow swarm "optimize performance" --strategy optimization
 
 # For alpha features
-npx claude-flow@alpha swarm "optimize performance" --strategy optimization
+claude-flow swarm "optimize performance" --strategy optimization
 ```
 
 ### Option 3: Local Installation
