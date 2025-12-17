@@ -1,0 +1,429 @@
+# Neural Data Platform - Pattern Index
+#
+# This index maps pattern queries to both memory keys and documentation files.
+# Use with get-pattern skill to find established project patterns.
+#
+# Memory Namespace: ndp-patterns
+#
+# Format:
+#   category:
+#     pattern-name:
+#       key: "memory key in ndp-patterns namespace"
+#       files: ["list of relevant files"]
+#       summary: "brief description"
+#       queries: ["trigger phrases that should match this pattern"]
+
+architecture:
+  overview:
+    key: "architecture:domain-adapter-pattern"
+    files:
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+      - "docs/architecture/diagrams/neural-data-platform-c4.drawio"
+      - "docs/architecture/COMPONENT_DEPENDENCY_MAP.md"
+    summary: "System architecture, domain adapter pattern, component relationships"
+    queries:
+      - "what is the architecture"
+      - "how is the system designed"
+      - "system overview"
+      - "component diagram"
+
+  domain-adapter-pattern:
+    key: "architecture:domain-adapter-pattern"
+    files:
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+      - "core/src/traits.rs"
+    summary: "Hexagonal architecture with Source, Store, Forecast traits as ports, concrete implementations as adapters"
+    queries:
+      - "domain adapter pattern"
+      - "hexagonal architecture"
+      - "ports and adapters"
+      - "core traits"
+
+  channel-ownership-adr-001:
+    key: "architecture:channel-ownership-adr-001"
+    files:
+      - "docs/architecture/AIR-005_ADR_SUMMARY.md"
+      - "apps/air-quality-app/src/coordinator/ingestion_coordinator.rs"
+    summary: "IngestionCoordinator owns master mpsc channel for clean shutdown and clear ownership"
+    queries:
+      - "channel ownership"
+      - "who owns the channel"
+      - "mpsc channel pattern"
+      - "adr-001"
+
+  source-factory-pattern-adr-002:
+    key: "architecture:source-factory-pattern-adr-002"
+    files:
+      - "docs/architecture/AIR-005_ADR_SUMMARY.md"
+      - "core/src/coordinator/source_factory.rs"
+    summary: "SourceFactory trait for type-safe dynamic source spawning without closed enum"
+    queries:
+      - "source factory"
+      - "how to spawn sources"
+      - "dynamic source creation"
+      - "adr-002"
+
+  cancellation-token-shutdown-adr-003:
+    key: "architecture:cancellation-token-shutdown-adr-003"
+    files:
+      - "docs/architecture/AIR-005_ADR_SUMMARY.md"
+      - "apps/air-quality-app/src/coordinator/ingestion_coordinator.rs"
+    summary: "tokio_util CancellationToken for coordinated async shutdown without busy polling"
+    queries:
+      - "cancellation token"
+      - "graceful shutdown"
+      - "how to shutdown"
+      - "adr-003"
+
+  registry-watcher-pattern-adr-004:
+    key: "architecture:registry-watcher-pattern-adr-004"
+    files:
+      - "docs/architecture/AIR-005_ADR_SUMMARY.md"
+      - "core/src/coordinator/source_manager.rs"
+    summary: "SourceManager watches etcd for config changes, spawns/stops sources dynamically"
+    queries:
+      - "registry watcher"
+      - "hot reload config"
+      - "config watch"
+      - "adr-004"
+
+  response-parser-trait:
+    key: "architecture:response-parser-trait"
+    files:
+      - "docs/architecture/HTTP_POLLING_SOURCE_REFACTOR.md"
+      - "core/src/sources/parsers/mod.rs"
+      - "core/src/sources/parsers/weather.rs"
+    summary: "ResponseParser trait with ParserRegistry for pluggable HTTP response parsing"
+    queries:
+      - "response parser"
+      - "how to parse http"
+      - "parser registry"
+      - "pluggable parsing"
+
+  auth-method-pattern:
+    key: "architecture:auth-method-pattern"
+    files:
+      - "docs/architecture/HTTP_POLLING_SOURCE_REFACTOR.md"
+      - "core/src/sources/http_poll.rs"
+    summary: "AuthMethod enum (QueryParam, Header, BasicAuth) with environment variable references"
+    queries:
+      - "authentication pattern"
+      - "api key handling"
+      - "auth method"
+      - "credentials"
+
+  retry-exponential-backoff:
+    key: "architecture:retry-exponential-backoff"
+    files:
+      - "docs/architecture/HTTP_POLLING_SOURCE_REFACTOR.md"
+      - "core/src/sources/http_poll.rs"
+    summary: "RetryConfig with error classification, exponential backoff, and jitter"
+    queries:
+      - "retry pattern"
+      - "exponential backoff"
+      - "error retry"
+      - "backoff strategy"
+
+  configuration-hierarchy:
+    key: "architecture:configuration-hierarchy"
+    files:
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+      - "apps/air-quality-app/src/config_etcd.rs"
+    summary: "Four-tier config: Stream Registry → Legacy etcd → YAML → Defaults"
+    queries:
+      - "config hierarchy"
+      - "configuration priority"
+      - "config loading order"
+      - "fallback chain"
+
+  stream-config-schema:
+    key: "architecture:stream-config-schema"
+    files:
+      - "core/src/types/stream_config.rs"
+      - "docs/procedures/HOW_TO_ADD_NEW_STREAM.md"
+    summary: "StreamConfig struct with fields, sources, retention, partitioning settings"
+    queries:
+      - "stream config structure"
+      - "streamconfig"
+      - "schema definition"
+      - "field definition"
+
+  data-layers:
+    key: "architecture:data-layers"
+    files:
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+      - "product/features/v2Planning/architecture/MLOPS-BUILDING-BLOCKS.md"
+    summary: "Bronze (Parquet), Silver (TimescaleDB), Gold (Features) layers"
+    queries:
+      - "data layers"
+      - "bronze silver gold"
+      - "data lakehouse"
+      - "storage layers"
+
+development:
+  add-stream-procedure:
+    key: "development:add-stream-procedure"
+    files:
+      - "docs/procedures/HOW_TO_ADD_NEW_STREAM.md"
+    summary: "Step-by-step: create dir, write config.yaml, sync to etcd, verify"
+    queries:
+      - "add new stream"
+      - "create stream"
+      - "new data stream"
+      - "stream procedure"
+
+  add-source-procedure:
+    key: "development:add-source-procedure"
+    files:
+      - "docs/procedures/HOW_TO_ADD_NEW_SOURCE.md"
+      - "core/src/sources/mqtt.rs"
+      - "core/src/sources/http_poll.rs"
+    summary: "Procedure to implement new Source type: enum variant, config, trait impl, handler"
+    queries:
+      - "add new source"
+      - "implement source"
+      - "new data source"
+      - "source trait"
+
+  add-parser:
+    files:
+      - "core/src/sources/parsers/weather.rs"
+      - "core/src/sources/parsers/air_pollution.rs"
+    summary: "Implement ResponseParser trait for HTTP API responses"
+    queries:
+      - "add parser"
+      - "response parser"
+      - "parse api response"
+      - "http parser"
+
+data-flow:
+  ingestion-pipeline:
+    key: "data-flow:ingestion-pipeline"
+    files:
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+      - "apps/air-quality-app/src/coordinator/"
+    summary: "Multi-source pipeline: Sources → mpsc channel → Router → StorageWriter → Parquet"
+    queries:
+      - "data pipeline"
+      - "ingestion pipeline"
+      - "channel pattern"
+      - "data flow"
+
+  storage-pattern:
+    files:
+      - "core/src/storage/parquet.rs"
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+    summary: "Parquet storage with WAL, batch writes, daily partitioning"
+    queries:
+      - "storage pattern"
+      - "parquet storage"
+      - "write pattern"
+      - "wal pattern"
+
+  batch-settings:
+    summary: "Batch size: 100 points, timeout: 5 seconds, buffer: 1000"
+    queries:
+      - "batch settings"
+      - "batch size"
+      - "buffer size"
+      - "timeout settings"
+
+deployment:
+  gitops-config-sync:
+    key: "deployment:gitops-config-sync"
+    files:
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+      - "apps/air-quality-app/src/config_sync/service.rs"
+    summary: "ConfigSyncService syncs YAML files from Git to etcd on startup"
+    queries:
+      - "gitops sync"
+      - "config sync"
+      - "yaml to etcd"
+      - "config sync service"
+
+  docker-minimal-changes:
+    key: "deployment:docker-minimal-changes"
+    files:
+      - "docs/procedures/AIR-005-DOCKER-DEPLOYMENT-ANALYSIS.md"
+      - "docs/procedures/AIR-005-DOCKER-DEPLOYMENT-SUMMARY.md"
+      - "deploy/pi/docker-compose.yml"
+    summary: "Extend Docker with env vars, avoid structural changes. Total <896MB for Pi"
+    queries:
+      - "docker deployment"
+      - "minimal docker changes"
+      - "container setup"
+      - "add feature to docker"
+
+  commands:
+    files:
+      - "deploy/pi/README.md"
+      - "deploy/pi/deploy.sh"
+    summary: "deploy.sh start|stop|logs|status|sync|update commands"
+    queries:
+      - "deployment commands"
+      - "deploy.sh"
+      - "how to deploy"
+      - "start services"
+
+  resource-limits:
+    files:
+      - "deploy/pi/README.md"
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+    summary: "mosquitto 128MB, etcd 256MB, app 512MB, total ~350MB actual"
+    queries:
+      - "resource limits"
+      - "memory limits"
+      - "pi resources"
+      - "container resources"
+
+troubleshooting:
+  code-review-checklist:
+    key: "troubleshooting:code-review-checklist"
+    files:
+      - "docs/procedures/AIR-005_CODE_REVIEW_REPORT.md"
+    summary: "Code review checklist based on AIR-005 learnings: spec compliance, architecture, tests"
+    queries:
+      - "code review checklist"
+      - "review checklist"
+      - "what to check in code review"
+      - "pr review"
+
+  etcd-issues:
+    files:
+      - "deploy/pi/README.md"
+    summary: "Connection refused, data corruption, health checks"
+    queries:
+      - "etcd not working"
+      - "etcd connection refused"
+      - "config not loading"
+
+  mqtt-issues:
+    files:
+      - "deploy/pi/README.md"
+    summary: "Broker not receiving, topic mismatch, connection issues"
+    queries:
+      - "mqtt not working"
+      - "mqtt not receiving"
+      - "sensor data not appearing"
+
+  build-issues:
+    files:
+      - "deploy/pi/README.md"
+    summary: "Memory errors on Pi, cargo build issues"
+    queries:
+      - "build failing"
+      - "cargo build error"
+      - "memory error during build"
+
+conventions:
+  naming:
+    files:
+      - "docs/procedures/HOW_TO_ADD_NEW_STREAM.md"
+    summary: "Stream IDs: kebab-case (3-64 chars), Fields: snake_case (1-64 chars)"
+    queries:
+      - "naming conventions"
+      - "naming rules"
+      - "how to name"
+      - "field names"
+
+  file-organization:
+    files:
+      - "docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md"
+    summary: "core/ for library, apps/ for binaries, config/ for configs"
+    queries:
+      - "file organization"
+      - "directory structure"
+      - "where to put files"
+      - "project structure"
+
+  error-handling:
+    files:
+      - "core/src/error.rs"
+    summary: "CoreError enum, CoreResult<T>, tracing macros, map_err for context"
+    queries:
+      - "error handling"
+      - "how to handle errors"
+      - "logging pattern"
+      - "tracing"
+
+  pattern-organization:
+    key: "conventions:pattern-organization"
+    files:
+      - ".claude/patterns/INDEX.yaml"
+      - ".claude/skills/get-pattern/SKILL.md"
+      - ".claude/skills/save-pattern/SKILL.md"
+    summary: "5-category pattern hierarchy: architecture, deployment, development, data-flow, troubleshooting"
+    queries:
+      - "how are patterns organized"
+      - "pattern structure"
+      - "pattern categories"
+      - "where to save patterns"
+      - "pattern inventory"
+
+configuration:
+  etcd-paths:
+    summary: "/streams/{id}/config for streams, /config/{app}/* for legacy"
+    queries:
+      - "etcd paths"
+      - "etcd keys"
+      - "where is config stored"
+      - "stream registry paths"
+
+  environment-vars:
+    files:
+      - ".env.example"
+      - ".env.template"
+    summary: "MQTT_BROKER_URL, ETCD_ENDPOINTS, OPENWEATHERMAP_API_KEY, LAT, LON"
+    queries:
+      - "environment variables"
+      - "env vars"
+      - "configuration variables"
+
+# Current Data Streams
+streams:
+  indoor-air-quality:
+    files:
+      - "config/base/streams/air-quality/"
+    summary: "AirGradient sensor via MQTT, PM2.5, CO2, temperature, humidity"
+    queries:
+      - "indoor air stream"
+      - "airgradient"
+      - "mqtt stream"
+
+  outdoor-weather:
+    files:
+      - "config/base/streams/outdoor-weather/"
+    summary: "OpenWeatherMap Current Weather API via HTTP polling (10 min interval)"
+    queries:
+      - "outdoor weather stream"
+      - "weather api"
+      - "openweathermap weather"
+
+  outdoor-air-quality:
+    files:
+      - "config/base/streams/outdoor-air-quality/"
+    summary: "OpenWeatherMap Air Pollution API via HTTP polling (10 min interval)"
+    queries:
+      - "outdoor air stream"
+      - "air pollution api"
+      - "openweathermap air"
+
+# Memory Pattern Keys Quick Reference (17 patterns)
+#
+# architecture:channel-ownership-adr-001
+# architecture:source-factory-pattern-adr-002
+# architecture:cancellation-token-shutdown-adr-003
+# architecture:registry-watcher-pattern-adr-004
+# architecture:response-parser-trait
+# architecture:auth-method-pattern
+# architecture:retry-exponential-backoff
+# architecture:domain-adapter-pattern
+# architecture:configuration-hierarchy
+# architecture:stream-config-schema
+# deployment:gitops-config-sync
+# deployment:docker-minimal-changes
+# development:add-source-procedure
+# development:add-stream-procedure
+# data-flow:ingestion-pipeline
+# troubleshooting:code-review-checklist
+# conventions:pattern-organization
