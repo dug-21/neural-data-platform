@@ -318,3 +318,4 @@ claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
 deploy/pi/.env
+test_exports
