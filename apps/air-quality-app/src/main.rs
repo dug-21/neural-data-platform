@@ -2,12 +2,10 @@ use air_quality_app::{
     api::create_router,
     config::AppConfig,
     coordinator::{IngestionCoordinator, IngestionRouter, SourceManager},
-    ingestion::MqttHandler,
-    pipeline::StorageWriter,
     stream_integration::load_from_stream_config,
 };
 use config_client::StreamRegistry;
-use neural_core::{MqttConfig, ParquetStore, Store, TimeSeriesPoint};
+use neural_core::{ParquetStore, Store, TimeSeriesPoint};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
@@ -100,61 +98,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Create channel for MQTT -> Storage pipeline
-    let (tx, rx) = mpsc::channel(config.mqtt.buffer_capacity);
-
-    // Create MqttConfig from AppConfig
-    let mqtt_config = MqttConfig {
-        broker_url: config.mqtt.broker_url.clone(),
-        port: config.mqtt.port,
-        client_id: config.mqtt.client_id.clone(),
-        topic_pattern: config.mqtt.topic_pattern.clone(),
-        qos: config.mqtt.get_qos(),
-        reconnect_delay: config.mqtt.get_reconnect_delay(),
-        max_reconnect_delay: config.mqtt.get_max_reconnect_delay(),
-        buffer_capacity: config.mqtt.buffer_capacity,
-    };
-
-    // Initialize MQTT handler (may fail if broker not available)
-    let mqtt_handler = match MqttHandler::new(mqtt_config.clone(), tx.clone()).await {
-        Ok(handler) => {
-            tracing::info!("MQTT handler initialized successfully");
-            Some(handler)
-        }
-        Err(e) => {
-            tracing::warn!(
-                "Failed to initialize MQTT handler: {}. Running in degraded mode (no ingestion)",
-                e
-            );
-            None
-        }
-    };
-
-    // Create StorageWriter
-    let storage_writer = StorageWriter::new(
-        store.clone(),
-        rx,
-        Some(100), // batch size
-        Some(Duration::from_secs(5)), // batch timeout
-    );
-
-    // Spawn storage writer background task
-    let storage_task = tokio::spawn(async move {
-        if let Err(e) = storage_writer.run().await {
-            tracing::error!("Storage writer failed: {}", e);
-        }
-    });
-
-    // Spawn MQTT ingestion background task if handler was initialized
-    let ingestion_task = if let Some(handler) = mqtt_handler {
-        Some(tokio::spawn(async move {
-            if let Err(e) = handler.run().await {
-                tracing::error!("MQTT handler failed: {}", e);
-            }
-        }))
-    } else {
-        None
-    };
+    // Note: Legacy MQTT path removed. MQTT is now managed by IngestionCoordinator
+    // and routes through IngestionRouter for proper stream_id tagging.
 
     // ========== AIR-005: Config Sync - Sync YAML configs to etcd ==========
     // Sync stream configurations from GitOps YAML files to etcd StreamRegistry
@@ -185,16 +130,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Stream config directory not found: {}. Skipping config sync.", config_dir);
     }
 
-    // ========== AIR-005: Multi-Stream Coordinator with HTTP Polling ==========
-    // Initialize the multi-stream ingestion coordinator for external APIs (OpenWeatherMap)
+    // ========== AIR-005: Multi-Stream Coordinator - ALL SOURCES (MQTT + HTTP) ==========
+    // Initialize the multi-stream ingestion coordinator for all data sources
+    // MQTT now routes through IngestionRouter for proper stream_id tagging
     let coordinator_task = match initialize_multi_stream_coordinator(&etcd_endpoint, store.clone()).await {
         Ok((_coordinator, task)) => {
-            tracing::info!("Multi-stream coordinator initialized (AIR-005)");
+            tracing::info!("Multi-stream coordinator initialized - managing all sources (MQTT + HTTP)");
             Some(task)
         }
         Err(e) => {
             tracing::warn!(
-                "Multi-stream coordinator not available: {}. External data sources disabled.",
+                "Multi-stream coordinator not available: {}. All data sources disabled.",
                 e
             );
             None
@@ -237,17 +183,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ = &mut shutdown_rx => {
             tracing::info!("Starting graceful shutdown...");
 
-            // Close the channel to signal shutdown to storage writer
-            drop(tx);
-
             // Wait for background tasks to complete
-            if let Some(task) = ingestion_task {
-                let _ = task.await;
-            }
             if let Some(task) = coordinator_task {
                 let _ = task.await;
             }
-            let _ = storage_task.await;
 
             tracing::info!("All background tasks completed. Shutdown complete.");
         }
@@ -301,15 +240,15 @@ async fn initialize_multi_stream_coordinator(
     // Create ingestion router
     let router = Arc::new(IngestionRouter::new(registry.clone(), dead_letter_tx));
 
-    // Create storage channel for outdoor streams
+    // Create storage channel for all streams (MQTT + HTTP)
     let (storage_tx, mut storage_rx) = mpsc::channel::<TimeSeriesPoint>(1000);
 
-    // Register storage channels for known outdoor streams
-    for stream_id in &["outdoor-weather", "outdoor-air-quality"] {
+    // Register storage channels for known streams (both indoor MQTT and outdoor HTTP)
+    for stream_id in &["air-quality", "outdoor-weather", "outdoor-air-quality"] {
         router.register_storage_channel(stream_id.to_string(), storage_tx.clone()).await;
     }
 
-    // Spawn storage writer for outdoor data
+    // Spawn storage writer for all data (MQTT + HTTP)
     let store_clone = store.clone();
     tokio::spawn(async move {
         let mut batch = Vec::new();
@@ -324,9 +263,9 @@ async fn initialize_multi_stream_coordinator(
                         let write_batch = std::mem::take(&mut batch);
                         let count = write_batch.len();
                         if let Err(e) = store_clone.write_batch(write_batch).await {
-                            tracing::error!("Failed to write outdoor data batch: {}", e);
+                            tracing::error!("Failed to write data batch: {}", e);
                         } else {
-                            tracing::debug!("Wrote {} outdoor data points", count);
+                            tracing::debug!("Wrote {} data points", count);
                         }
                     }
                 }
@@ -336,9 +275,9 @@ async fn initialize_multi_stream_coordinator(
                         let write_batch = std::mem::take(&mut batch);
                         let count = write_batch.len();
                         if let Err(e) = store_clone.write_batch(write_batch).await {
-                            tracing::error!("Failed to flush outdoor data batch: {}", e);
+                            tracing::error!("Failed to flush data batch: {}", e);
                         } else {
-                            tracing::debug!("Flushed {} outdoor data points", count);
+                            tracing::debug!("Flushed {} data points", count);
                         }
                     }
                 }

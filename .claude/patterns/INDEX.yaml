@@ -48,6 +48,21 @@ architecture:
     queries:
       - "channel ownership"
       - "who owns the channel"
+
+  mqtt-ingestion-router:
+    key: "architecture:mqtt-ingestion-router-pattern"
+    files:
+      - "apps/air-quality-app/src/coordinator/source_manager.rs"
+      - "apps/air-quality-app/src/coordinator/router.rs"
+      - "core/src/sources/mqtt.rs"
+      - "config/base/streams/air-quality/config.yaml"
+    summary: "MQTT data routes through IngestionRouter for stream_id tagging and validation (not directly to storage)"
+    queries:
+      - "mqtt routing"
+      - "mqtt ingestion"
+      - "why mqtt goes to wrong directory"
+      - "stream_id tag missing"
+      - "mqtt bypass router"
       - "mpsc channel pattern"
       - "adr-001"
 

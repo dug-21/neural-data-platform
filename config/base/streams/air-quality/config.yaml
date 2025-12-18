@@ -47,7 +47,21 @@ fields:
     description: "Nitrogen Oxides"
     nullable: true
 
-# MQTT source configuration
+# Data sources configuration (SourceManager format)
+sources:
+  - source_type: mqtt
+    enabled: true
+    params:
+      broker_url: "mosquitto"
+      port: 1883
+      client_id: "air-quality-app"
+      topic_pattern: "airgradient/readings/+"
+      qos: 1
+      reconnect_delay_secs: 1
+      max_reconnect_delay_secs: 30
+      buffer_capacity: 1000
+
+# Legacy MQTT configuration (kept for backward compatibility)
 mqtt:
   enabled: true
   broker_url: "mosquitto"

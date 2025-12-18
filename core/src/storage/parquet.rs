@@ -648,4 +648,245 @@ mod tests {
         assert_eq!(results1[0].value, 10.0);
         assert_eq!(results2[0].value, 20.0);
     }
+
+    #[tokio::test]
+    async fn test_metric_column_persistence() {
+        let (store, _temp) = create_test_store();
+        let base_time = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
+
+        // Create points with different metrics
+        let mut points = Vec::new();
+
+        let mut temp_point = TimeSeriesPoint {
+            timestamp: base_time,
+            location_id: "sensor-001".to_string(),
+            value: 23.5,
+            tags: HashMap::new(),
+        };
+        temp_point
+            .tags
+            .insert("metric".to_string(), "temperature".to_string());
+        points.push(temp_point);
+
+        let mut humidity_point = TimeSeriesPoint {
+            timestamp: base_time + chrono::Duration::minutes(1),
+            location_id: "sensor-001".to_string(),
+            value: 65.0,
+            tags: HashMap::new(),
+        };
+        humidity_point
+            .tags
+            .insert("metric".to_string(), "humidity".to_string());
+        points.push(humidity_point);
+
+        let mut pm25_point = TimeSeriesPoint {
+            timestamp: base_time + chrono::Duration::minutes(2),
+            location_id: "sensor-001".to_string(),
+            value: 12.3,
+            tags: HashMap::new(),
+        };
+        pm25_point
+            .tags
+            .insert("metric".to_string(), "pm2_5".to_string());
+        points.push(pm25_point);
+
+        // Write batch
+        store.write_batch(points).await.unwrap();
+
+        // Query back
+        let start = base_time - chrono::Duration::hours(1);
+        let end = base_time + chrono::Duration::hours(1);
+        let results = store.query("sensor-001", start, end, None).await.unwrap();
+
+        // Verify we got all 3 points back
+        assert_eq!(results.len(), 3);
+
+        // Verify each metric was persisted correctly
+        let temp_result = results
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"temperature".to_string()))
+            .unwrap();
+        assert_eq!(temp_result.value, 23.5);
+
+        let humidity_result = results
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"humidity".to_string()))
+            .unwrap();
+        assert_eq!(humidity_result.value, 65.0);
+
+        let pm25_result = results
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"pm2_5".to_string()))
+            .unwrap();
+        assert_eq!(pm25_result.value, 12.3);
+    }
+
+    #[tokio::test]
+    async fn test_metric_column_default_to_unknown() {
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        // Create point without metric tag
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "sensor-001".to_string(),
+            value: 42.0,
+            tags: HashMap::new(), // No metric tag
+        };
+
+        store.write(point).await.unwrap();
+
+        // Query back
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store.query("sensor-001", start, end, None).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        // Should default to "unknown" when metric tag is missing
+        assert_eq!(results[0].tags.get("metric"), Some(&"unknown".to_string()));
+        assert_eq!(results[0].value, 42.0);
+    }
+
+    // ========== MQTT ROUTING PARTITION KEY TESTS (REGRESSION PREVENTION) ==========
+
+    #[tokio::test]
+    async fn test_partition_key_uses_stream_id_over_location_id() {
+        // CRITICAL REGRESSION TEST: Verify partition path uses stream_id, not device MAC
+        // This is the storage-layer fix for MQTT routing
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        // Create point with device MAC as location_id but stream_id in tags
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "pm25".to_string());
+        tags.insert("stream_id".to_string(), "air-quality".to_string()); // Router adds this
+
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "d83bda1cd074".to_string(), // Device MAC
+            value: 25.5,
+            tags,
+        };
+
+        // Act - write point
+        store.write(point.clone()).await.unwrap();
+
+        // Assert - verify partition path uses "air-quality", NOT "d83bda1cd074"
+        let path = store.partition_path("air-quality", timestamp);
+        assert!(path.exists(), "File should exist in air-quality directory");
+        assert!(path.to_string_lossy().contains("air-quality"));
+        assert!(!path.to_string_lossy().contains("d83bda1cd074"));
+
+        // Verify wrong path does NOT exist
+        let wrong_path = store.partition_path("d83bda1cd074", timestamp);
+        assert!(!wrong_path.exists(), "File should NOT exist in device MAC directory");
+    }
+
+    #[tokio::test]
+    async fn test_partition_key_falls_back_to_location_id() {
+        // When stream_id tag is missing, use location_id (backward compatibility)
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        // Point WITHOUT stream_id tag (old behavior)
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "temperature".to_string());
+
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "legacy-sensor-001".to_string(),
+            value: 22.5,
+            tags,
+        };
+
+        store.write(point.clone()).await.unwrap();
+
+        // Should use location_id as partition key
+        let path = store.partition_path("legacy-sensor-001", timestamp);
+        assert!(path.exists());
+        assert!(path.to_string_lossy().contains("legacy-sensor-001"));
+    }
+
+    #[tokio::test]
+    async fn test_mqtt_points_written_to_stream_directory() {
+        // End-to-end test: MQTT points go to correct directory
+        let (store, temp_dir) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        // Simulate MQTT point after router enrichment
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "pm25".to_string());
+        tags.insert("stream_id".to_string(), "air-quality".to_string());
+        tags.insert("source_id".to_string(), "air-quality-Mqtt".to_string());
+        tags.insert("device_mac".to_string(), "d83bda1cd074".to_string());
+
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "d83bda1cd074".to_string(), // Device MAC from MQTT
+            value: 25.5,
+            tags,
+        };
+
+        // Write point
+        store.write(point).await.unwrap();
+
+        // Verify file structure
+        let expected_path = temp_dir.path()
+            .join("data")
+            .join("air-quality") // Stream ID, NOT device MAC
+            .join("year=2024")
+            .join("month=01")
+            .join("day=15")
+            .join("readings.parquet");
+
+        assert!(expected_path.exists(), "File should be in air-quality directory");
+
+        // Verify wrong path does NOT exist
+        let wrong_path = temp_dir.path()
+            .join("data")
+            .join("d83bda1cd074") // Device MAC directory should NOT exist
+            .join("year=2024")
+            .join("month=01")
+            .join("day=15")
+            .join("readings.parquet");
+
+        assert!(!wrong_path.exists(), "File should NOT be in device MAC directory");
+    }
+
+    #[tokio::test]
+    async fn test_get_partition_key_function() {
+        // Unit test for get_partition_key helper
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        // Test 1: stream_id tag present (preferred)
+        let mut tags1 = HashMap::new();
+        tags1.insert("stream_id".to_string(), "air-quality".to_string());
+        let point1 = TimeSeriesPoint {
+            timestamp,
+            location_id: "d83bda1cd074".to_string(),
+            value: 25.5,
+            tags: tags1,
+        };
+        assert_eq!(ParquetStore::get_partition_key(&point1), "air-quality");
+
+        // Test 2: No stream_id tag (fallback to location_id)
+        let point2 = TimeSeriesPoint {
+            timestamp,
+            location_id: "sensor-001".to_string(),
+            value: 22.0,
+            tags: HashMap::new(),
+        };
+        assert_eq!(ParquetStore::get_partition_key(&point2), "sensor-001");
+
+        // Test 3: Both present (stream_id wins)
+        let mut tags3 = HashMap::new();
+        tags3.insert("stream_id".to_string(), "outdoor-weather".to_string());
+        let point3 = TimeSeriesPoint {
+            timestamp,
+            location_id: "old-location".to_string(),
+            value: 18.5,
+            tags: tags3,
+        };
+        assert_eq!(ParquetStore::get_partition_key(&point3), "outdoor-weather");
+    }
 }
