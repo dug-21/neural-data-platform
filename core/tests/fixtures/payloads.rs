@@ -342,7 +342,15 @@ mod tests {
     fn test_nested_structure_requires_paths() {
         let payload = nested_structure();
         // Verify nested access is required
-        assert!(payload.get("readings").unwrap().get("environmental").is_some());
-        assert!(payload.get("readings").unwrap().get("air_quality").is_some());
+        assert!(payload
+            .get("readings")
+            .unwrap()
+            .get("environmental")
+            .is_some());
+        assert!(payload
+            .get("readings")
+            .unwrap()
+            .get("air_quality")
+            .is_some());
     }
 }

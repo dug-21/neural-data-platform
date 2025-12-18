@@ -20,7 +20,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
-use crate::parsers::{FlatJsonParser, Parser, ParserConfig, ParserType};
+use crate::parsers::Parser;
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 
 /// Authentication method for HTTP endpoints
@@ -355,7 +355,7 @@ pub struct HttpPollingSource {
 
 impl HttpPollingSource {
     /// Create a new HTTP polling source with injected parser
-    pub fn new_with_parser(
+    pub fn new(
         config: HttpPollingConfig,
         parser: Box<dyn Parser + Send + Sync>,
     ) -> CoreResult<Self> {
@@ -375,25 +375,6 @@ impl HttpPollingSource {
             is_running: Arc::new(Mutex::new(false)),
             last_successful_poll: Arc::new(Mutex::new(HashMap::new())),
         })
-    }
-
-    /// Create a new HTTP polling source with default FlatJsonParser
-    ///
-    /// This constructor provides backward compatibility by creating a default
-    /// FlatJsonParser configured for AirGradient sensors.
-    pub fn new(config: HttpPollingConfig) -> CoreResult<Self> {
-        let parser_config = ParserConfig {
-            parser_type: ParserType::FlatJson,
-            location_id_field: "serialno".to_string(),
-            skip_fields: vec!["serialno", "firmware", "model", "ledMode"]
-                .into_iter()
-                .map(String::from)
-                .collect(),
-            default_tags: [("source".to_string(), "http".to_string())].into(),
-            ..Default::default()
-        };
-        let parser = Box::new(FlatJsonParser::from_config(parser_config)?);
-        Self::new_with_parser(config, parser)
     }
 
     /// Poll a single sensor
@@ -977,13 +958,28 @@ impl Source for GenericHttpPollingSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parsers::{FlatJsonParser, ParserConfig, ParserType};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn create_default_parser() -> Box<dyn Parser + Send + Sync> {
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            skip_fields: vec!["serialno", "firmware", "model", "ledMode"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            default_tags: [("source".to_string(), "http".to_string())].into(),
+            ..Default::default()
+        };
+        Box::new(FlatJsonParser::from_config(parser_config).unwrap())
+    }
 
     #[tokio::test]
     async fn test_http_source_creation() {
         let config = HttpPollingConfig::default();
-        let source = HttpPollingSource::new(config);
+        let source = HttpPollingSource::new(config, create_default_parser());
 
         assert!(source.is_ok());
     }
@@ -991,7 +987,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_not_running() {
         let config = HttpPollingConfig::default();
-        let source = HttpPollingSource::new(config).unwrap();
+        let source = HttpPollingSource::new(config, create_default_parser()).unwrap();
 
         let health = source.health_check().await.unwrap();
         assert!(!health.healthy);
@@ -999,7 +995,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_with_default_parser() {
-        use crate::parsers::{FlatJsonParser, Parser, ParserConfig, ParserType};
+        use crate::parsers::{FlatJsonParser, ParserConfig, ParserType};
         use chrono::Utc;
         use serde_json::json;
 
@@ -1064,28 +1060,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_new_with_parser() {
-        use crate::parsers::{FlatJsonParser, ParserConfig, ParserType};
-
-        let parser_config = ParserConfig {
-            parser_type: ParserType::FlatJson,
-            location_id_field: "serialno".to_string(),
-            skip_fields: vec!["serialno".to_string()],
-            default_tags: [("source".to_string(), "custom".to_string())].into(),
-            ..Default::default()
-        };
-
-        let parser = Box::new(FlatJsonParser::from_config(parser_config).unwrap());
-
-        let config = HttpPollingConfig::default();
-        let source = HttpPollingSource::new_with_parser(config, parser);
-
-        assert!(source.is_ok());
-        let source = source.unwrap();
-        assert_eq!(source.parser.name(), "flat_json");
-    }
-
-    #[tokio::test]
     async fn test_poll_sensor_success() {
         let mock_server = MockServer::start().await;
 
@@ -1116,7 +1090,7 @@ mod tests {
             ..Default::default()
         };
 
-        let source = HttpPollingSource::new(config).unwrap();
+        let source = HttpPollingSource::new(config, create_default_parser()).unwrap();
         let points = source.poll_sensor(&sensor).await.unwrap();
 
         // Should extract 7 numeric fields (pm02, rco2, atmp, rhum, wifi, pm10, tvocIndex)
@@ -1162,7 +1136,7 @@ mod tests {
             ..Default::default()
         };
 
-        let source = HttpPollingSource::new(config).unwrap();
+        let source = HttpPollingSource::new(config, create_default_parser()).unwrap();
         let result = source.poll_sensor(&sensor).await;
 
         assert!(result.is_err());
@@ -1181,7 +1155,7 @@ mod tests {
             ..Default::default()
         };
 
-        let source = HttpPollingSource::new(config).unwrap();
+        let source = HttpPollingSource::new(config, create_default_parser()).unwrap();
         let result = source.poll_sensor(&sensor).await;
 
         assert!(result.is_err());
@@ -1207,7 +1181,7 @@ mod tests {
             ..Default::default()
         };
 
-        let source = HttpPollingSource::new(config).unwrap();
+        let source = HttpPollingSource::new(config, create_default_parser()).unwrap();
         let result = source.poll_sensor(&sensor).await;
 
         assert!(result.is_err());
@@ -1220,7 +1194,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mut source = HttpPollingSource::new(config).unwrap();
+        let mut source = HttpPollingSource::new(config, create_default_parser()).unwrap();
         let result = source.start().await;
 
         assert!(result.is_err());
@@ -1244,7 +1218,7 @@ mod tests {
             ..Default::default()
         };
 
-        let source = HttpPollingSource::new(config).unwrap();
+        let source = HttpPollingSource::new(config, create_default_parser()).unwrap();
         assert_eq!(source.sender.capacity(), 500);
     }
 

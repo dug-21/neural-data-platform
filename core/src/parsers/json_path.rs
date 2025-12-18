@@ -5,7 +5,7 @@
 //! response formats (e.g., OpenWeatherMap).
 
 use crate::error::{CoreError, CoreResult};
-use crate::parsers::config::{FieldMapping, ParserConfig};
+use crate::parsers::config::ParserConfig;
 use crate::parsers::traits::Parser;
 use crate::traits::TimeSeriesPoint;
 use chrono::{DateTime, Utc};
@@ -73,7 +73,10 @@ impl JsonPathParser {
             "mps_to_mph" => value * 2.237,
             "mps_to_kmh" => value * 3.6,
             _ => {
-                warn!("Unknown transformation: {}, returning value unchanged", transform);
+                warn!(
+                    "Unknown transformation: {}, returning value unchanged",
+                    transform
+                );
                 value
             }
         }
@@ -108,11 +111,7 @@ impl JsonPathParser {
 }
 
 impl Parser for JsonPathParser {
-    fn parse(
-        &self,
-        payload: &Value,
-        timestamp: DateTime<Utc>,
-    ) -> CoreResult<Vec<TimeSeriesPoint>> {
+    fn parse(&self, payload: &Value, timestamp: DateTime<Utc>) -> CoreResult<Vec<TimeSeriesPoint>> {
         let mappings = self
             .config
             .field_mappings
@@ -175,7 +174,7 @@ impl Parser for JsonPathParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsers::config::ParserType;
+    use crate::parsers::config::{FieldMapping, ParserType};
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -225,14 +224,12 @@ mod tests {
 
     #[test]
     fn test_json_path_parser_handles_array_access() {
-        let mappings = vec![
-            FieldMapping {
-                path: "list[0].main.aqi".to_string(),
-                metric_name: "aqi".to_string(),
-                unit: Some("1-5_scale".to_string()),
-                transform: None,
-            },
-        ];
+        let mappings = vec![FieldMapping {
+            path: "list[0].main.aqi".to_string(),
+            metric_name: "aqi".to_string(),
+            unit: Some("1-5_scale".to_string()),
+            transform: None,
+        }];
 
         let config = create_test_config_with_mappings(mappings);
         let parser = JsonPathParser::from_config(config).unwrap();

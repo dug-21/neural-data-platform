@@ -4,18 +4,31 @@
 //! to hardcoded parsing logic.
 //!
 //! See: product/features/dp-001/bugs/BUG-002-CONFIG-DRIVEN-TESTING-STRATEGY.md
+//!
+//! ## IMPORTANT: Constructor Architecture
+//!
+//! As of BUG-002 fix, sources NO LONGER create default parsers automatically.
+//! The old `MqttSource::new()` and `HttpPollingSource::new()` constructors
+//! that created default parsers have been removed.
+//!
+//! **Required pattern:**
+//! 1. Create parsers explicitly via `FlatJsonParser::from_config()` or `JsonPathParser::from_config()`
+//! 2. Pass parsers to sources via `with_parsers()` or use `with_default_parsers()` helper
+//!
+//! This enforces the contract that ALL parsing behavior comes from configuration,
+//! not hardcoded defaults.
 
 mod fixtures;
 
+use chrono::Utc;
 use fixtures::payloads;
 use platform_core::parsers::{
-    config::{ParserConfig, ParserType, FieldMapping},
+    config::{FieldMapping, ParserConfig, ParserType},
     flat_json::FlatJsonParser,
     json_path::JsonPathParser,
     traits::Parser,
 };
 use std::collections::HashMap;
-use chrono::Utc;
 
 // ============================================================================
 // PARSER BINDING TESTS
@@ -37,7 +50,10 @@ fn flat_parser_requires_config() {
     };
 
     let parser = FlatJsonParser::from_config(config);
-    assert!(parser.is_ok(), "FlatJsonParser should be created from config");
+    assert!(
+        parser.is_ok(),
+        "FlatJsonParser should be created from config"
+    );
 }
 
 /// CONTRACT: JsonPathParser requires explicit field mappings in config
@@ -49,19 +65,20 @@ fn json_path_parser_requires_mappings() {
         location_id_field: "name".to_string(),
         default_location_id: Some("test-location".to_string()),
         skip_fields: vec![],
-        field_mappings: Some(vec![
-            FieldMapping {
-                path: "main.temp".to_string(),
-                metric_name: "temperature".to_string(),
-                unit: Some("celsius".to_string()),
-                transform: None,
-            },
-        ]),
+        field_mappings: Some(vec![FieldMapping {
+            path: "main.temp".to_string(),
+            metric_name: "temperature".to_string(),
+            unit: Some("celsius".to_string()),
+            transform: None,
+        }]),
         default_tags: HashMap::new(),
     };
 
     let parser = JsonPathParser::from_config(config);
-    assert!(parser.is_ok(), "JsonPathParser should be created from config with mappings");
+    assert!(
+        parser.is_ok(),
+        "JsonPathParser should be created from config with mappings"
+    );
 }
 
 // ============================================================================
@@ -90,8 +107,11 @@ fn flat_parser_extracts_all_numeric_fields() {
 
     // Should extract all 7 numeric fields (all except "id" which is skipped)
     // integer_field, float_field, scientific_notation, large_number, negative, zero, zero_float
-    assert!(points.len() >= 7,
-        "Should extract ALL numeric fields. Got {} but expected at least 7", points.len());
+    assert!(
+        points.len() >= 7,
+        "Should extract ALL numeric fields. Got {} but expected at least 7",
+        points.len()
+    );
 }
 
 /// CONTRACT: FlatJsonParser extracts FUTURE fields without code changes
@@ -112,18 +132,25 @@ fn flat_parser_extracts_unknown_future_fields() {
     let timestamp = Utc::now();
 
     let points = parser.parse(&payload, timestamp).unwrap();
-    let metrics: Vec<&str> = points.iter()
+    let metrics: Vec<&str> = points
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
 
     // These are "future" fields that don't exist in current firmware
     // A truly config-driven parser should extract them
-    assert!(metrics.contains(&"soilMoisture"),
-        "Parser should extract unknown field 'soilMoisture'");
-    assert!(metrics.contains(&"uvIndex"),
-        "Parser should extract unknown field 'uvIndex'");
-    assert!(metrics.contains(&"pm01Compensated"),
-        "Parser should extract unknown field 'pm01Compensated'");
+    assert!(
+        metrics.contains(&"soilMoisture"),
+        "Parser should extract unknown field 'soilMoisture'"
+    );
+    assert!(
+        metrics.contains(&"uvIndex"),
+        "Parser should extract unknown field 'uvIndex'"
+    );
+    assert!(
+        metrics.contains(&"pm01Compensated"),
+        "Parser should extract unknown field 'pm01Compensated'"
+    );
 }
 
 /// CONTRACT: FlatJsonParser extracts brand new fields from generic payloads
@@ -144,17 +171,24 @@ fn flat_parser_extracts_generic_unknown_fields() {
     let timestamp = Utc::now();
 
     let points = parser.parse(&payload, timestamp).unwrap();
-    let metrics: Vec<&str> = points.iter()
+    let metrics: Vec<&str> = points
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
 
     // These fields have arbitrary names - not from any known API
-    assert!(metrics.contains(&"brand_new_field"),
-        "Parser should extract arbitrary field 'brand_new_field'");
-    assert!(metrics.contains(&"future_sensor_reading"),
-        "Parser should extract arbitrary field 'future_sensor_reading'");
-    assert!(metrics.contains(&"experimental_metric"),
-        "Parser should extract arbitrary field 'experimental_metric'");
+    assert!(
+        metrics.contains(&"brand_new_field"),
+        "Parser should extract arbitrary field 'brand_new_field'"
+    );
+    assert!(
+        metrics.contains(&"future_sensor_reading"),
+        "Parser should extract arbitrary field 'future_sensor_reading'"
+    );
+    assert!(
+        metrics.contains(&"experimental_metric"),
+        "Parser should extract arbitrary field 'experimental_metric'"
+    );
 }
 
 // ============================================================================
@@ -172,7 +206,7 @@ fn config_skip_fields_affects_extraction() {
         default_location_id: None,
         skip_fields: vec![
             "serialno".to_string(),
-            "pm02".to_string(),  // Skip a metric field
+            "pm02".to_string(), // Skip a metric field
         ],
         field_mappings: None,
         default_tags: HashMap::new(),
@@ -182,7 +216,7 @@ fn config_skip_fields_affects_extraction() {
         parser_type: ParserType::FlatJson,
         location_id_field: "serialno".to_string(),
         default_location_id: None,
-        skip_fields: vec!["serialno".to_string()],  // Only skip ID
+        skip_fields: vec!["serialno".to_string()], // Only skip ID
         field_mappings: None,
         default_tags: HashMap::new(),
     };
@@ -196,17 +230,23 @@ fn config_skip_fields_affects_extraction() {
     let points_with_skip = parser_with_skip.parse(&payload, timestamp).unwrap();
     let points_without_skip = parser_without_skip.parse(&payload, timestamp).unwrap();
 
-    let metrics_with_skip: Vec<&str> = points_with_skip.iter()
+    let metrics_with_skip: Vec<&str> = points_with_skip
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
-    let metrics_without_skip: Vec<&str> = points_without_skip.iter()
+    let metrics_without_skip: Vec<&str> = points_without_skip
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
 
-    assert!(!metrics_with_skip.contains(&"pm02"),
-        "pm02 should be skipped when in skip_fields");
-    assert!(metrics_without_skip.contains(&"pm02"),
-        "pm02 should be extracted when NOT in skip_fields");
+    assert!(
+        !metrics_with_skip.contains(&"pm02"),
+        "pm02 should be skipped when in skip_fields"
+    );
+    assert!(
+        metrics_without_skip.contains(&"pm02"),
+        "pm02 should be extracted when NOT in skip_fields"
+    );
 }
 
 /// CONTRACT: Changing location_id_field config is honored
@@ -231,8 +271,10 @@ fn config_location_id_field_is_honored() {
     // All points should have the location_id from the "serialno" field
     assert!(!points.is_empty(), "Should have parsed points");
     for point in &points {
-        assert_eq!(point.location_id, "d83bda1cd074",
-            "Location ID should come from configured field");
+        assert_eq!(
+            point.location_id, "d83bda1cd074",
+            "Location ID should come from configured field"
+        );
     }
 }
 
@@ -261,10 +303,16 @@ fn config_default_tags_propagate() {
 
     assert!(!points.is_empty(), "Should have parsed points");
     for point in &points {
-        assert_eq!(point.tags.get("source"), Some(&"test-source".to_string()),
-            "source tag should come from config");
-        assert_eq!(point.tags.get("stream_id"), Some(&"test-stream".to_string()),
-            "stream_id tag should come from config");
+        assert_eq!(
+            point.tags.get("source"),
+            Some(&"test-source".to_string()),
+            "source tag should come from config"
+        );
+        assert_eq!(
+            point.tags.get("stream_id"),
+            Some(&"test-stream".to_string()),
+            "stream_id tag should come from config"
+        );
     }
 }
 
@@ -281,7 +329,7 @@ fn empty_skip_fields_extracts_all() {
         parser_type: ParserType::FlatJson,
         location_id_field: "id".to_string(),
         default_location_id: Some("test".to_string()),
-        skip_fields: vec![],  // EMPTY - should skip nothing
+        skip_fields: vec![], // EMPTY - should skip nothing
         field_mappings: None,
         default_tags: HashMap::new(),
     };
@@ -291,14 +339,17 @@ fn empty_skip_fields_extracts_all() {
     let timestamp = Utc::now();
 
     let points = parser.parse(&payload, timestamp).unwrap();
-    let metrics: Vec<&str> = points.iter()
+    let metrics: Vec<&str> = points
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
 
     // With empty skip_fields, ALL numeric fields should be extracted
     // including "id" if it were numeric (it's not in this case)
-    assert!(points.len() >= 7,
-        "Empty skip_fields should extract all numeric fields");
+    assert!(
+        points.len() >= 7,
+        "Empty skip_fields should extract all numeric fields"
+    );
 }
 
 /// CONTRACT: Field names are NOT transformed (preserved as-is)
@@ -319,25 +370,38 @@ fn field_names_not_transformed() {
     let timestamp = Utc::now();
 
     let points = parser.parse(&payload, timestamp).unwrap();
-    let metrics: Vec<&str> = points.iter()
+    let metrics: Vec<&str> = points
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
 
     // Fields should use ORIGINAL names from payload
-    assert!(metrics.contains(&"rco2"),
-        "Field should be 'rco2' not 'co2'");
-    assert!(metrics.contains(&"atmp"),
-        "Field should be 'atmp' not 'temperature'");
-    assert!(metrics.contains(&"rhum"),
-        "Field should be 'rhum' not 'humidity'");
+    assert!(
+        metrics.contains(&"rco2"),
+        "Field should be 'rco2' not 'co2'"
+    );
+    assert!(
+        metrics.contains(&"atmp"),
+        "Field should be 'atmp' not 'temperature'"
+    );
+    assert!(
+        metrics.contains(&"rhum"),
+        "Field should be 'rhum' not 'humidity'"
+    );
 
     // These transformed names should NOT exist
-    assert!(!metrics.contains(&"co2"),
-        "Transformed name 'co2' should not exist");
-    assert!(!metrics.contains(&"temperature"),
-        "Transformed name 'temperature' should not exist");
-    assert!(!metrics.contains(&"humidity"),
-        "Transformed name 'humidity' should not exist");
+    assert!(
+        !metrics.contains(&"co2"),
+        "Transformed name 'co2' should not exist"
+    );
+    assert!(
+        !metrics.contains(&"temperature"),
+        "Transformed name 'temperature' should not exist"
+    );
+    assert!(
+        !metrics.contains(&"humidity"),
+        "Transformed name 'humidity' should not exist"
+    );
 }
 
 // ============================================================================
@@ -382,16 +446,23 @@ fn json_path_extracts_nested_fields() {
     let timestamp = Utc::now();
 
     let points = parser.parse(&payload, timestamp).unwrap();
-    let metrics: Vec<&str> = points.iter()
+    let metrics: Vec<&str> = points
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
 
-    assert!(metrics.contains(&"temperature"),
-        "Should extract temperature via path main.temp");
-    assert!(metrics.contains(&"humidity"),
-        "Should extract humidity via path main.humidity");
-    assert!(metrics.contains(&"wind_speed"),
-        "Should extract wind_speed via path wind.speed");
+    assert!(
+        metrics.contains(&"temperature"),
+        "Should extract temperature via path main.temp"
+    );
+    assert!(
+        metrics.contains(&"humidity"),
+        "Should extract humidity via path main.humidity"
+    );
+    assert!(
+        metrics.contains(&"wind_speed"),
+        "Should extract wind_speed via path wind.speed"
+    );
 }
 
 /// CONTRACT: JsonPathParser extracts array elements via path config
@@ -425,12 +496,17 @@ fn json_path_extracts_array_elements() {
     let timestamp = Utc::now();
 
     let points = parser.parse(&payload, timestamp).unwrap();
-    let metrics: Vec<&str> = points.iter()
+    let metrics: Vec<&str> = points
+        .iter()
         .filter_map(|p| p.tags.get("metric").map(|s| s.as_str()))
         .collect();
 
-    assert!(metrics.contains(&"aqi"),
-        "Should extract aqi via path list[0].main.aqi");
-    assert!(metrics.contains(&"pm2_5"),
-        "Should extract pm2_5 via path list[0].components.pm2_5");
+    assert!(
+        metrics.contains(&"aqi"),
+        "Should extract aqi via path list[0].main.aqi"
+    );
+    assert!(
+        metrics.contains(&"pm2_5"),
+        "Should extract pm2_5 via path list[0].components.pm2_5"
+    );
 }

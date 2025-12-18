@@ -17,7 +17,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
-use crate::parsers::{FlatJsonParser, Parser, ParserConfig, ParserType};
+use crate::parsers::Parser;
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 
 /// Configuration for MQTT source
@@ -62,7 +62,7 @@ pub struct MqttSource {
 
 impl MqttSource {
     /// Create a new MQTT source with injected parser
-    pub fn new_with_parser(config: MqttConfig, parser: Box<dyn Parser + Send + Sync>) -> Self {
+    pub fn new(config: MqttConfig, parser: Box<dyn Parser + Send + Sync>) -> Self {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         Self {
@@ -75,34 +75,6 @@ impl MqttSource {
             connection_healthy: Arc::new(Mutex::new(false)),
             cached_points: Arc::new(Mutex::new(Vec::new())),
         }
-    }
-
-    /// Create a new MQTT source with default FlatJsonParser (backward compatible)
-    pub fn new(config: MqttConfig) -> Self {
-        // Create default parser config for backward compatibility
-        let parser_config = ParserConfig {
-            parser_type: ParserType::FlatJson,
-            location_id_field: "serialno".to_string(),
-            default_location_id: Some("unknown".to_string()),
-            skip_fields: vec![
-                "serialno".to_string(),
-                "firmware".to_string(),
-                "model".to_string(),
-                "ledMode".to_string(),
-            ],
-            field_mappings: None,
-            default_tags: {
-                let mut tags = HashMap::new();
-                tags.insert("source".to_string(), "mqtt".to_string());
-                tags
-            },
-        };
-
-        let parser = Box::new(
-            FlatJsonParser::from_config(parser_config).expect("Failed to create default parser"),
-        );
-
-        Self::new_with_parser(config, parser)
     }
 
     /// Parse MQTT payload into time series points using injected parser
@@ -338,17 +310,37 @@ impl Source for MqttSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parsers::{FlatJsonParser, ParserConfig, ParserType};
+
+    fn create_default_parser() -> Box<dyn Parser + Send + Sync> {
+        let config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: Some("unknown".to_string()),
+            skip_fields: vec![
+                "serialno".to_string(),
+                "firmware".to_string(),
+                "model".to_string(),
+                "ledMode".to_string(),
+            ],
+            field_mappings: None,
+            default_tags: [("source".to_string(), "mqtt".to_string())]
+                .into_iter()
+                .collect(),
+        };
+        Box::new(FlatJsonParser::from_config(config).unwrap())
+    }
 
     #[tokio::test]
     async fn test_mqtt_source_creation() {
         let config = MqttConfig::default();
-        let _source = MqttSource::new(config.clone());
+        let _source = MqttSource::new(config.clone(), create_default_parser());
     }
 
     #[tokio::test]
     async fn test_health_check_before_start() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         let health = source.health_check().await.unwrap();
         assert!(!health.healthy);
@@ -357,7 +349,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_payload_success() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         let payload = r#"{
             "serialno": "ABC123",
@@ -404,7 +396,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_payload_invalid_json() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         let payload = b"invalid json";
         let result = source.parse_payload(payload);
@@ -415,7 +407,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_payload_partial_data() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         let payload = r#"{
             "serialno": "ABC123",
@@ -431,7 +423,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_payload_all_fields() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         // Real sensor payload with ALL fields
         let payload = r#"{
@@ -512,7 +504,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_returns_cached_points() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         // Add some points to cache
         let mut cache = source.cached_points.lock().await;
@@ -537,7 +529,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_payload_extracts_all_numeric_fields() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         // Full AirGradient payload with ALL possible fields including compensated values
         let payload = r#"{
@@ -634,7 +626,7 @@ mod tests {
     #[tokio::test]
     async fn test_field_names_not_renamed_at_ingestion() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         let payload = r#"{
             "rco2": 400,
@@ -700,7 +692,7 @@ mod tests {
     #[tokio::test]
     async fn test_non_metric_fields_excluded() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         let payload = r#"{
             "pm02": 2.0,
@@ -758,7 +750,7 @@ mod tests {
     #[tokio::test]
     async fn test_all_numeric_types_extracted() {
         let config = MqttConfig::default();
-        let source = MqttSource::new(config);
+        let source = MqttSource::new(config, create_default_parser());
 
         // Test integer, float, negative values
         let payload = r#"{

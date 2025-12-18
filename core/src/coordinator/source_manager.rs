@@ -3,6 +3,8 @@
 //! Spawns and manages source instances based on SourceConfig type
 
 use crate::error::{CoreError, CoreResult};
+use crate::parsers::traits::Parser;
+use crate::parsers::{create_parser_from_config, ParserConfig, ParserType};
 use crate::sources::{HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, SensorConfig};
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 use crate::types::{SourceConfig, SourceType};
@@ -136,7 +138,10 @@ impl SourceManager {
             buffer_capacity,
         };
 
-        let mqtt_source = MqttSource::new(mqtt_config);
+        // Extract parser configuration
+        let parser = self.create_parser_from_params(&config.params, "mqtt")?;
+
+        let mqtt_source = MqttSource::new(mqtt_config, parser);
 
         // Create stop signal channel
         let (stop_tx, mut stop_rx) = tokio::sync::oneshot::channel();
@@ -254,7 +259,10 @@ impl SourceManager {
             buffer_capacity,
         };
 
-        let mut http_source = HttpPollingSource::new(http_config)?;
+        // Extract parser configuration
+        let parser = self.create_parser_from_params(&config.params, "http_poll")?;
+
+        let mut http_source = HttpPollingSource::new(http_config, parser)?;
 
         // Start the source
         http_source.start().await?;
@@ -363,6 +371,39 @@ impl SourceManager {
     /// Get count of active sources
     pub async fn active_source_count(&self) -> usize {
         self.sources.lock().await.len()
+    }
+
+    /// Create parser from params with backward compatibility
+    fn create_parser_from_params(
+        &self,
+        params: &HashMap<String, serde_json::Value>,
+        default_source: &str,
+    ) -> CoreResult<Box<dyn Parser + Send + Sync>> {
+        let parser_config = if let Some(parser_json) = params.get("parser") {
+            // Parse from config
+            serde_json::from_value::<ParserConfig>(parser_json.clone())
+                .map_err(|e| CoreError::Config(format!("Invalid parser config: {}", e)))?
+        } else {
+            // Default FlatJson parser for backward compatibility with configs that don't have parser section
+            ParserConfig {
+                parser_type: ParserType::FlatJson,
+                location_id_field: "serialno".to_string(),
+                default_location_id: None,
+                skip_fields: vec![
+                    "serialno".to_string(),
+                    "firmware".to_string(),
+                    "model".to_string(),
+                    "ledMode".to_string(),
+                ],
+                field_mappings: None,
+                default_tags: [("source".to_string(), default_source.to_string())]
+                    .into_iter()
+                    .collect(),
+            }
+        };
+
+        create_parser_from_config(parser_config)
+            .map_err(|e| CoreError::Config(format!("Failed to create parser: {}", e)))
     }
 }
 

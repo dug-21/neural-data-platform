@@ -1,6 +1,15 @@
 //! Integration tests for OpenWeatherMap polling workflow
 //!
 //! Tests the complete flow from HTTP polling to parsed TimeSeriesPoints
+//!
+//! ## IMPORTANT: Constructor Pattern
+//!
+//! These tests use `GenericHttpPollingSource::with_default_parsers(config)` which
+//! creates the source WITH pre-configured OpenWeatherMap parsers.
+//!
+//! The old `new()` constructor that created default parsers has been removed.
+//! Sources now require parsers to be explicitly provided or use helper methods
+//! like `with_default_parsers()`.
 
 use platform_core::sources::{
     AuthMethod, EndpointConfig, GenericHttpPollingConfig, GenericHttpPollingSource, RetryConfig,

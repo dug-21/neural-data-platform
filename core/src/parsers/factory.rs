@@ -18,8 +18,10 @@ use crate::parsers::traits::Parser;
 /// * `config` - Parser configuration
 ///
 /// # Returns
-/// A boxed Parser trait object, or CoreError if the parser type is unknown
-pub fn create_parser_from_config(config: ParserConfig) -> CoreResult<Box<dyn Parser>> {
+/// A boxed Parser trait object with Send + Sync bounds, or CoreError if the parser type is unknown
+pub fn create_parser_from_config(
+    config: ParserConfig,
+) -> CoreResult<Box<dyn Parser + Send + Sync>> {
     match config.parser_type {
         ParserType::FlatJson => {
             let parser = FlatJsonParser::from_config(config)?;
@@ -42,7 +44,6 @@ pub fn create_parser_from_config(config: ParserConfig) -> CoreResult<Box<dyn Par
 mod tests {
     use super::*;
     use crate::parsers::config::FieldMapping;
-    use serde_json::json;
     use std::collections::HashMap;
 
     #[test]
