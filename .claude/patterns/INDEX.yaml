@@ -241,6 +241,21 @@ deployment:
       - "yaml to etcd"
       - "config sync service"
 
+  gitops-config-layers:
+    key: "deployment:gitops-config-layers"
+    files:
+      - "deploy/pi/docker-compose.yml"
+      - "config/duckdb/"
+      - "config/grafana/"
+      - "config/base/streams/"
+    summary: "Two-tier config: static configs (SQL, dashboards) volume mounted, dynamic configs (streams) via etcd"
+    queries:
+      - "config layers"
+      - "static vs dynamic config"
+      - "volume mount config"
+      - "duckdb grafana config"
+      - "which configs use etcd"
+
   docker-minimal-changes:
     key: "deployment:docker-minimal-changes"
     files:
@@ -408,7 +423,7 @@ streams:
       - "air pollution api"
       - "openweathermap air"
 
-# Memory Pattern Keys Quick Reference (17 patterns)
+# Memory Pattern Keys Quick Reference (18 patterns)
 #
 # architecture:channel-ownership-adr-001
 # architecture:source-factory-pattern-adr-002
@@ -421,6 +436,7 @@ streams:
 # architecture:configuration-hierarchy
 # architecture:stream-config-schema
 # deployment:gitops-config-sync
+# deployment:gitops-config-layers  (NEW - DP-001)
 # deployment:docker-minimal-changes
 # development:add-source-procedure
 # development:add-stream-procedure
