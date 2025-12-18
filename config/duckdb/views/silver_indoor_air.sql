@@ -31,17 +31,36 @@ WITH bronze_data AS (
 ),
 
 -- PIVOT from long format to wide format
+-- Note: Maps from AirGradient sensor field names to Silver schema names
+-- Sensor sends: pm02, rco2, atmp, rhum, tvocIndex, noxIndex, pm10
+-- Silver exposes: pm25, co2, temperature, humidity, tvoc, nox, pm10
 pivoted AS (
     SELECT
         ts as timestamp,
         location_id,
-        MAX(CASE WHEN metric = 'pm25' THEN value END) as pm25_raw,
+        -- pm02 in Bronze → pm25 in Silver (PM2.5 measurement)
+        MAX(CASE WHEN metric = 'pm02' THEN value END) as pm25_raw,
+        -- pm10 stays pm10
         MAX(CASE WHEN metric = 'pm10' THEN value END) as pm10_raw,
-        MAX(CASE WHEN metric = 'co2' THEN value END) as co2_raw,
-        MAX(CASE WHEN metric = 'temperature' THEN value END) as temperature_raw,
-        MAX(CASE WHEN metric = 'humidity' THEN value END) as humidity_raw,
-        MAX(CASE WHEN metric = 'tvoc' THEN value END) as tvoc_raw,
-        MAX(CASE WHEN metric = 'nox' THEN value END) as nox_raw
+        -- rco2 in Bronze → co2 in Silver (some parsers write as 'co2')
+        COALESCE(
+            MAX(CASE WHEN metric = 'rco2' THEN value END),
+            MAX(CASE WHEN metric = 'co2' THEN value END)
+        ) as co2_raw,
+        -- atmp in Bronze → temperature in Silver (some parsers write as 'temperature')
+        COALESCE(
+            MAX(CASE WHEN metric = 'atmp' THEN value END),
+            MAX(CASE WHEN metric = 'temperature' THEN value END)
+        ) as temperature_raw,
+        -- rhum in Bronze → humidity in Silver (some parsers write as 'humidity')
+        COALESCE(
+            MAX(CASE WHEN metric = 'rhum' THEN value END),
+            MAX(CASE WHEN metric = 'humidity' THEN value END)
+        ) as humidity_raw,
+        -- tvocIndex in Bronze → tvoc in Silver
+        MAX(CASE WHEN metric = 'tvocIndex' THEN value END) as tvoc_raw,
+        -- noxIndex in Bronze → nox in Silver
+        MAX(CASE WHEN metric = 'noxIndex' THEN value END) as nox_raw
     FROM bronze_data
     GROUP BY ts, location_id
 )
