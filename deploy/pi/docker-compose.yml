@@ -134,6 +134,27 @@ services:
       air-quality-app:
         condition: service_healthy
 
+  # Grafana Plugin Installer - Downloads DuckDB plugin before Grafana starts
+  grafana-plugin-init:
+    image: curlimages/curl:latest
+    container_name: grafana-plugin-init
+    volumes:
+      - grafana-plugins:/plugins
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      if [ ! -d /plugins/motherduck-duckdb-datasource ]; then
+        echo 'Downloading DuckDB Grafana plugin...' &&
+        cd /tmp &&
+        curl -L -o plugin.zip https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v0.4.0/motherduck-duckdb-datasource-0.4.0.zip &&
+        unzip -q plugin.zip -d /plugins/ &&
+        rm plugin.zip &&
+        echo 'DuckDB plugin installed successfully'
+      else
+        echo 'DuckDB plugin already installed'
+      fi
+      "
+
   # Grafana - Data Visualization & Dashboards (DP-001)
   # Uses Ubuntu image for DuckDB plugin compatibility (glibc 2.38+ required)
   # Grafana 12.x uses Ubuntu 24.04 base with glibc 2.39
@@ -144,6 +165,7 @@ services:
       - "3000:3000"     # Grafana web UI
     volumes:
       - grafana-data:/var/lib/grafana
+      - grafana-plugins:/var/lib/grafana/plugins    # Pre-installed plugins
       - ../../config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ../../config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ../../config/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -161,8 +183,12 @@ services:
       - GF_LOG_LEVEL=info
       # Plugins - Allow unsigned DuckDB plugin
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=motherduck-duckdb-datasource
-      - GF_INSTALL_PLUGINS=https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v0.4.0/motherduck-duckdb-datasource-0.4.0.zip;motherduck-duckdb-datasource
     restart: unless-stopped
+    depends_on:
+      grafana-plugin-init:
+        condition: service_completed_successfully
+      duckdb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
@@ -189,6 +215,8 @@ volumes:
   duckdb-data:
     driver: local
   grafana-data:
+    driver: local
+  grafana-plugins:
     driver: local
 
 networks:
