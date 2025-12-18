@@ -173,7 +173,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_us_aqi AS \"US AQI\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_us_aqi AS \"US AQI\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom\n    AND bucket <= $__timeTo\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -229,7 +229,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm2_5 AS \"Outdoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm2_5 AS \"Outdoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom\n    AND bucket <= $__timeTo\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -285,7 +285,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm2_5 AS \"PM2.5\",\n    avg_pm10 AS \"PM10\",\n    avg_no2 AS \"NO2\",\n    avg_o3 AS \"O3\",\n    avg_co AS \"CO\",\n    avg_so2 AS \"SO2\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm2_5 AS \"PM2.5\",\n    avg_pm10 AS \"PM10\",\n    avg_no2 AS \"NO2\",\n    avg_o3 AS \"O3\",\n    avg_co AS \"CO\",\n    avg_so2 AS \"SO2\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom\n    AND bucket <= $__timeTo\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }

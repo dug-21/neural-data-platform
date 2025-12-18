@@ -213,7 +213,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm25 AS \"PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm25 AS \"PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom\n    AND bucket <= $__timeTo\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -269,7 +269,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom\n    AND bucket <= $__timeTo\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -324,7 +324,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_temperature AS \"Temperature (°C)\",\n    avg_humidity AS \"Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_temperature AS \"Temperature (°C)\",\n    avg_humidity AS \"Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom\n    AND bucket <= $__timeTo\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
