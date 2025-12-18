@@ -13,7 +13,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Helper to run docker compose with the correct file
+dc() {
+    docker compose -f "$COMPOSE_FILE" "$@"
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -42,13 +48,11 @@ sync_config() {
     done
 
     # Run the sync script from the repo root
-    cd ../..
-    if [ -f scripts/sync-config-to-etcd.sh ]; then
-        ETCD_CONTAINER=etcd ./scripts/sync-config-to-etcd.sh production
+    if [ -f "$REPO_ROOT/scripts/sync-config-to-etcd.sh" ]; then
+        ETCD_CONTAINER=etcd "$REPO_ROOT/scripts/sync-config-to-etcd.sh" production
     else
         warn "Config sync script not found, skipping"
     fi
-    cd "$SCRIPT_DIR"
 }
 
 init_streams() {
@@ -79,13 +83,13 @@ init_streams() {
 
 build() {
     log "Building Docker images (this may take 15-30 minutes on first run)..."
-    docker compose build --progress=plain
+    dc build --progress=plain
     log "Build complete"
 }
 
 start() {
     log "Starting services..."
-    docker compose up -d
+    dc up -d
 
     log "Waiting for services to be healthy..."
     sleep 10
@@ -102,12 +106,12 @@ start() {
 
 stop() {
     log "Stopping services..."
-    docker compose down
+    dc down
     log "Services stopped"
 }
 
 logs() {
-    docker compose logs -f
+    dc logs -f
 }
 
 wait_for_health() {
@@ -118,7 +122,7 @@ wait_for_health() {
     log "Waiting for $service to be healthy..."
 
     while [ $elapsed -lt $timeout ]; do
-        if docker compose ps "$service" 2>/dev/null | grep -q "healthy"; then
+        if dc ps "$service" 2>/dev/null | grep -q "healthy"; then
             log "$service is healthy"
             return 0
         fi
@@ -133,7 +137,7 @@ wait_for_health() {
 status() {
     echo ""
     log "Service Status:"
-    docker compose ps
+    dc ps
     echo ""
 
     log "Health Checks:"
@@ -168,14 +172,12 @@ status() {
 update() {
     log "Updating deployment..."
 
-    # Pull latest code
-    cd ../..
-    git pull origin main || git pull origin feature/air-001-implementation
-    cd "$SCRIPT_DIR"
+    # Pull latest code from repo root
+    git -C "$REPO_ROOT" pull origin main
 
     # Rebuild and restart
     build
-    docker compose up -d
+    dc up -d
     sync_config
     init_streams
 
@@ -226,17 +228,17 @@ case "${1:-deploy}" in
         ;;
     analytics)
         log "Starting analytics stack (DuckDB + Grafana)..."
-        docker compose up -d duckdb
+        dc up -d duckdb
         wait_for_health duckdb 60
-        docker compose up -d grafana
+        dc up -d grafana
         wait_for_health grafana 60
         log "Analytics stack started"
         status
         ;;
     rollback)
         log "Rolling back analytics stack..."
-        docker compose stop grafana duckdb
-        docker compose rm -f grafana duckdb
+        dc stop grafana duckdb
+        dc rm -f grafana duckdb
         warn "DuckDB and Grafana stopped. Data volumes preserved."
         warn "To remove data: docker volume rm pi_duckdb_data pi_grafana_data"
         ;;
