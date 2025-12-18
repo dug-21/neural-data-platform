@@ -110,6 +110,26 @@ logs() {
     docker compose logs -f
 }
 
+wait_for_health() {
+    local service=$1
+    local timeout=${2:-60}
+    local elapsed=0
+
+    log "Waiting for $service to be healthy..."
+
+    while [ $elapsed -lt $timeout ]; do
+        if docker compose ps "$service" 2>/dev/null | grep -q "healthy"; then
+            log "$service is healthy"
+            return 0
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+
+    warn "$service did not become healthy within ${timeout}s"
+    return 1
+}
+
 status() {
     echo ""
     log "Service Status:"
@@ -120,6 +140,8 @@ status() {
     echo "  MQTT Broker: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:1883 2>/dev/null || echo 'N/A (TCP only)')"
     echo "  etcd:        $(docker exec etcd etcdctl endpoint health 2>/dev/null || echo 'Not running')"
     echo "  Air Quality: $(curl -s http://localhost:8080/health 2>/dev/null || echo 'Not running')"
+    echo "  DuckDB:      $(curl -s -o /dev/null -w '%{http_code}' http://localhost:9090/health 2>/dev/null || echo 'Not running')"
+    echo "  Grafana:     $(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health 2>/dev/null || echo 'Not running')"
     echo ""
 
     log "Data Volume:"
@@ -137,9 +159,10 @@ status() {
     log "Useful URLs:"
     PI_IP=$(hostname -I | awk '{print $1}')
     echo "  Air Quality API: http://${PI_IP}:8080"
-    echo "  Stream Webhook:  http://${PI_IP}:8081"
-    echo "  Metrics:         http://${PI_IP}:9090"
+    echo "  Grafana UI:      http://${PI_IP}:3000"
+    echo "  DuckDB API:      http://${PI_IP}:9090"
     echo "  MQTT Broker:     mqtt://${PI_IP}:1883"
+    echo "  etcd:            http://${PI_IP}:2379"
 }
 
 update() {
@@ -201,8 +224,38 @@ case "${1:-deploy}" in
             error "Stream listing script not found"
         fi
         ;;
+    analytics)
+        log "Starting analytics stack (DuckDB + Grafana)..."
+        docker compose up -d duckdb
+        wait_for_health duckdb 60
+        docker compose up -d grafana
+        wait_for_health grafana 60
+        log "Analytics stack started"
+        status
+        ;;
+    rollback)
+        log "Rolling back analytics stack..."
+        docker compose stop grafana duckdb
+        docker compose rm -f grafana duckdb
+        warn "DuckDB and Grafana stopped. Data volumes preserved."
+        warn "To remove data: docker volume rm pi_duckdb_data pi_grafana_data"
+        ;;
     *)
-        echo "Usage: $0 {deploy|start|stop|logs|status|update|build|sync|init-streams|list-streams}"
+        echo "Usage: $0 {deploy|start|stop|logs|status|update|build|sync|init-streams|list-streams|analytics|rollback}"
+        echo ""
+        echo "Commands:"
+        echo "  deploy       - Full deploy (build + start all services)"
+        echo "  start        - Start all services"
+        echo "  stop         - Stop all services"
+        echo "  logs         - View logs"
+        echo "  status       - Check service health and URLs"
+        echo "  update       - Pull latest and rebuild"
+        echo "  build        - Build Docker images"
+        echo "  sync         - Sync configuration to etcd"
+        echo "  init-streams - Initialize stream configurations"
+        echo "  list-streams - List configured streams"
+        echo "  analytics    - Start DuckDB + Grafana analytics stack"
+        echo "  rollback     - Stop and remove analytics stack"
         exit 1
         ;;
 esac

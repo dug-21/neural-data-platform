@@ -1,8 +1,8 @@
 # Neural Data Platform - Architecture Overview
 
-**Version**: 1.2.0
-**Last Updated**: 2025-12-16
-**Status**: Production (Raspberry Pi 5) + External Data Integration (AIR-005 Complete)
+**Version**: 1.4.0
+**Last Updated**: 2025-12-18
+**Status**: Production (Raspberry Pi 5) + Silver Layer Analytics (DP-001 Complete)
 
 ---
 
@@ -12,11 +12,12 @@ The Neural Data Platform is a multi-stream data ingestion and storage system des
 
 ### Key Characteristics
 
-- **Edge-First**: Designed for resource-constrained deployment (Raspberry Pi 5, <1GB memory)
+- **Edge-First**: Designed for resource-constrained deployment (Raspberry Pi 5, <2GB memory)
 - **Domain Adapter Pattern**: Pluggable sources and storage backends via trait abstractions
 - **Configuration-Driven**: etcd-based configuration with hot-reload capability
 - **Stream Registry**: Dynamic stream management without code changes
-- **Dual-Layer Storage**: Bronze (Parquet) for raw data, Silver (TimescaleDB) for queries
+- **Virtual Silver Layer**: DuckDB views over Bronze Parquet for analytics (no ETL, no data duplication)
+- **Real-Time Analytics**: Grafana dashboards with sub-second query performance
 
 ---
 
@@ -61,6 +62,28 @@ The Neural Data Platform is a multi-stream data ingestion and storage system des
 - SourceManager for source lifecycle management
 - IngestionRouter for schema validation and dead-letter queue
 
+### DP-001: Silver Layer Query Infrastructure ✅ COMPLETE
+- **Virtual Silver Layer**: DuckDB views over Bronze Parquet files
+  - No ETL pipeline - query-time data quality filtering
+  - No data duplication - reads directly from Parquet
+  - Zero staleness - always queries latest data
+- **DuckDB HTTP API**: `marcboeker/duckdb-http` for REST queries
+  - Read-only access to Bronze layer
+  - SQL views with data quality rules (range validation, NULL handling, precision rounding)
+  - Cross-stream time bucket alignment (10-minute intervals)
+- **Grafana Integration**: Real-time analytics dashboards
+  - 4 provisioned dashboards: Indoor Air Quality, Outdoor Weather, Outdoor AQI, Indoor vs Outdoor
+  - Anonymous viewer access for home deployment
+  - Sub-second query performance for 7-day ranges
+- **GitOps Configuration Pattern**:
+  - Static configs (SQL views, Grafana provisioning): Git-managed, volume mounted
+  - Dynamic configs (stream definitions): GitOps → ConfigSyncService → etcd
+- **Performance Optimizations**:
+  - Partition pruning by timestamp
+  - Columnar Parquet scanning
+  - Predicate pushdown to row group level
+  - 512MB memory limit (sufficient for Pi 5)
+
 ---
 
 ## System Architecture
@@ -104,14 +127,52 @@ The Neural Data Platform is a multi-stream data ingestion and storage system des
 │                    └───────────────────────────┘                       │
 └─────────────────────────────────────────────────────────────────────────┘
                                    │
+                                   │ write Parquet
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        BRONZE LAYER (Parquet)                           │
 │                                                                         │
-│    /data/air-quality/2025-12-16_00.parquet                             │
-│    /data/air-quality/2025-12-16_01.parquet                             │
-│    ...                                                                  │
+│    /data/air-quality/2025-12-18_readings.parquet                       │
+│    /data/outdoor-weather/2025-12-18_readings.parquet                   │
+│    /data/outdoor-air-quality/2025-12-18_readings.parquet               │
 └─────────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   │ read-only mount
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                   SILVER LAYER (Virtual DuckDB Views)                   │
+│                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │                         DuckDB                                    │ │
+│  │  ┌─────────────────────────────────────────────────────────────┐ │ │
+│  │  │ silver_indoor_air        - Data quality filtering           │ │ │
+│  │  │ silver_outdoor_weather   - Range validation                 │ │ │
+│  │  │ silver_outdoor_air       - NULL handling                    │ │ │
+│  │  │ cross_stream_aligned     - 10-min time buckets              │ │ │
+│  │  └─────────────────────────────────────────────────────────────┘ │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   │ HTTP :9090 (SQL queries)
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              Grafana                                    │
+│                                                                         │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐     │
+│  │  Indoor Air      │  │ Outdoor Weather  │  │  Outdoor AQI     │     │
+│  │  Quality         │  │  Conditions      │  │  Dashboard       │     │
+│  │  Dashboard       │  │  Dashboard       │  │                  │     │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘     │
+│  ┌──────────────────┐                                                  │
+│  │  Indoor vs       │                                                  │
+│  │  Outdoor Compare │                                                  │
+│  │  Dashboard       │                                                  │
+│  └──────────────────┘                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   │ HTTP :3000
+                                   ▼
+                               Web Browser
 ```
 
 ---
@@ -147,10 +208,13 @@ pub trait Store: Send + Sync {
 | Port | Adapter | Location | Status |
 |------|---------|----------|--------|
 | Source | `MqttSource` | `neural-core/src/sources/mqtt.rs` | ✅ Production |
-| Source | `HttpPollingSource` | `neural-core/src/sources/http_poll.rs` | ✅ Implemented |
-| Parser | `WeatherParser` | `neural-core/src/sources/parsers/weather.rs` | ✅ Implemented |
-| Parser | `AirPollutionParser` | `neural-core/src/sources/parsers/air_pollution.rs` | ✅ Implemented |
+| Source | `HttpPollingSource` | `neural-core/src/sources/http_poll.rs` | ✅ Production |
+| Parser | `WeatherParser` | `neural-core/src/sources/parsers/weather.rs` | ✅ Production |
+| Parser | `AirPollutionParser` | `neural-core/src/sources/parsers/air_pollution.rs` | ✅ Production |
 | Store | `ParquetStore` | `neural-core/src/storage/parquet.rs` | ✅ Production |
+| Analytics | `DuckDB` | `marcboeker/duckdb-http` container | ✅ Production (DP-001) |
+| Analytics | `DuckDB Views` | `config/duckdb/views/*.sql` | ✅ Production (DP-001) |
+| Visualization | `Grafana` | `grafana/grafana-oss` container | ✅ Production (DP-001) |
 | Config | `ConfigClient` | `config-client/src/client.rs` | ✅ Production |
 | Config | `StreamRegistry` | `config-client/src/stream/registry.rs` | ✅ Production |
 | Config | `ConfigSyncService` | `apps/air-quality-app/src/config_sync/service.rs` | ✅ Production |
@@ -315,16 +379,32 @@ services:
   air-quality-app: # Main Application (512MB limit)
     ports: ["8080:8080"]
     depends_on: [mosquitto, etcd]
+
+  duckdb:         # Analytics Engine (512MB limit) - DP-001
+    ports: ["9090:9090"]
+    volumes:
+      - air-quality-data:/data:ro           # Read-only Bronze access
+      - config/duckdb:/config/duckdb:ro     # SQL view definitions
+    depends_on: [air-quality-app]
+
+  grafana:        # Dashboards (256MB limit) - DP-001
+    ports: ["3000:3000"]
+    volumes:
+      - config/grafana:/etc/grafana:ro      # Provisioning configs
+      - grafana-data:/var/lib/grafana       # Dashboard storage
+    depends_on: [duckdb]
 ```
 
 ### Resource Constraints
 
-| Service | Memory Limit | Actual Usage |
-|---------|-------------|--------------|
-| mosquitto | 128MB | ~50MB |
-| etcd | 256MB | ~100MB |
-| air-quality-app | 512MB | ~200MB |
-| **Total** | **896MB** | **~350MB** |
+| Service | Memory Limit | Actual Usage | Purpose |
+|---------|-------------|--------------|---------|
+| mosquitto | 128MB | ~50MB | MQTT broker |
+| etcd | 256MB | ~100MB | Configuration |
+| air-quality-app | 512MB | ~200MB | Data ingestion |
+| duckdb | 512MB | ~250MB | Analytics queries (DP-001) |
+| grafana | 256MB | ~150MB | Dashboards (DP-001) |
+| **Total** | **1664MB** | **~750MB** | **10.4% of 16GB** |
 
 ---
 
@@ -432,6 +512,140 @@ The generic HTTP polling source uses a plugin-based parser registry:
 
 This pattern makes it easy to add new external data sources (AccuWeather, PurpleAir, etc.) by implementing the `ResponseParser` trait.
 
+---
+
+## Silver Layer Architecture (DP-001)
+
+### Virtual Views Over Bronze Parquet
+
+The Silver Layer uses DuckDB to provide a **virtual query layer** over Bronze Parquet files without ETL or data duplication:
+
+```
+Bronze (Raw Parquet)              Silver (Virtual DuckDB Views)
+─────────────────────             ─────────────────────────────
+/data/air-quality/*.parquet  →    silver_indoor_air
+/data/outdoor-weather/*.parquet → silver_outdoor_weather
+/data/outdoor-air-quality/*.parquet → silver_outdoor_air
+                                  cross_stream_aligned
+```
+
+### Data Quality Transformation
+
+Each Silver view applies data quality rules at query time:
+
+1. **Range Validation**: Out-of-range values → NULL
+   - Temperature: -10 to 50°C (indoor realistic range)
+   - Humidity: 0-100% (physical limits)
+   - CO2: 400-5000 ppm (outdoor to OSHA limit)
+   - PM2.5/PM10: 0-500 µg/m³ (EPA AQI scale)
+
+2. **NULL Handling**: Required fields enforced
+   - Timestamp: Always required
+   - Metrics: Optional (NULL allowed after validation)
+
+3. **Precision Rounding**: Consistent precision
+   - Temperature/Humidity: 1 decimal place
+   - PM2.5/PM10: 1 decimal place
+   - CO2/VOC/NOx: Integer
+
+4. **Type Coercion**: Consistent types
+   - Timestamps: BIGINT (Unix epoch)
+   - Metrics: DOUBLE
+   - Metadata: VARCHAR
+
+### Cross-Stream Alignment
+
+The `cross_stream_aligned` view provides time-bucketed data for multi-stream analysis:
+
+```sql
+-- 10-minute time buckets aligned across all streams
+SELECT
+  time_bucket(INTERVAL '10 minutes', timestamp) AS bucket,
+  AVG(indoor_temp) AS avg_indoor_temp,
+  AVG(outdoor_temp) AS avg_outdoor_temp,
+  AVG(indoor_pm25) AS avg_indoor_pm25,
+  AVG(outdoor_aqi) AS avg_outdoor_aqi
+FROM (
+  -- JOIN all three streams on aligned timestamps
+)
+GROUP BY bucket
+ORDER BY bucket;
+```
+
+**Benefits**:
+- Comparable time periods across heterogeneous sources
+- Efficient JOINs (pre-aggregated before JOIN)
+- Consistent dashboard time axes
+- Flexible granularity (5 min, 10 min, 1 hour)
+
+### Performance Characteristics
+
+**Query Latency** (Raspberry Pi 5):
+- 24-hour range: <500ms
+- 7-day range: <1 second
+- 30-day range: <5 seconds
+- Cross-stream (7 days): <2 seconds
+
+**Optimization Techniques**:
+1. **Partition Pruning**: Only scan relevant date files
+2. **Columnar Scanning**: Read only requested columns
+3. **Predicate Pushdown**: Filter at Parquet row group level
+4. **View Inlining**: DuckDB optimizes view expansion
+5. **Parallel Execution**: Multi-threaded query processing
+
+### GitOps Configuration Pattern
+
+**Static Configs** (Git-managed, volume mounted):
+- DuckDB SQL views: `config/duckdb/views/*.sql`
+- Grafana provisioning: `config/grafana/provisioning/`
+- Dashboard definitions: `config/grafana/dashboards/*.json`
+
+**Dynamic Configs** (GitOps → etcd):
+- Stream definitions: `config/base/streams/*/config.yaml`
+- Source configurations: Synced via ConfigSyncService
+- Runtime parameters: Environment variables
+
+**Rationale**:
+- Static configs benefit from version control and code review
+- Dynamic configs enable runtime reconfiguration
+- Clear separation of concerns
+- Pi deployment uses volume mounts (no rebuild needed)
+
+### Grafana Dashboard Integration
+
+**Provisioned Dashboards**:
+1. **Indoor Air Quality**: Real-time sensor readings (PM2.5, CO2, VOC, Temperature, Humidity)
+2. **Outdoor Weather Conditions**: OpenWeatherMap data (Temperature, Pressure, Wind, Clouds)
+3. **Outdoor Air Quality Index**: EPA AQI and pollutant levels
+4. **Indoor vs Outdoor Comparison**: Correlations and differentials
+
+**Features**:
+- Anonymous viewer access (home deployment)
+- 5-minute auto-refresh (configurable)
+- Time range selector (1h, 6h, 24h, 7d, 30d)
+- Query caching (5-minute TTL)
+- Mobile-responsive layouts
+
+### DuckDB Container Strategy
+
+**Image**: `marcboeker/duckdb-http:latest`
+- Provides HTTP REST API for Grafana datasource plugin
+- Read-only access to Bronze Parquet files
+- 512MB memory limit (sufficient for Pi 5)
+- Health checks via `/health` endpoint
+
+**Alternatives Considered**:
+- Official `duckdb/duckdb` + custom HTTP wrapper (higher maintenance)
+- DuckDB JDBC + bridge (Java overhead)
+- Embedded in Grafana plugin (version conflicts)
+
+**Migration Path**: If marcboeker/duckdb-http becomes unmaintained:
+1. Fork and maintain internally
+2. Build custom HTTP server with DuckDB C++ API
+3. Migrate to TimescaleDB (Silver layer ETL)
+
+---
+
 ## Extension Points
 
 ### Adding a New Source Type
@@ -483,6 +697,7 @@ See: [HOW_TO_ADD_NEW_STREAM.md](../procedures/HOW_TO_ADD_NEW_STREAM.md)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2025-12-18 | DP-001 complete: DuckDB Silver Layer + Grafana dashboards |
 | 1.3.0 | 2025-12-17 | Added GitOps ConfigSyncService documentation |
 | 1.2.0 | 2025-12-16 | AIR-005 complete with coordinator integration |
 | 1.1.0 | 2025-12-16 | Added HTTP polling sources and parsers |

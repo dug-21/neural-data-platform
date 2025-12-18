@@ -60,6 +60,10 @@ axum-test = "14.0"
 tokio-test = "0.4"
 urlencoding = "2.1"
 tempfile = "3.8"
+# DuckDB tests (requires libduckdb-dev installed)
+# Uncomment when DuckDB C library is available:
+# duckdb = "1.4"
+# parquet = "57"
 
 [features]
 default = []
