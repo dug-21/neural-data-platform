@@ -22,7 +22,7 @@ WITH bronze_data AS (
         metric,
         value
     FROM read_parquet(
-        '/data/outdoor-air-quality/**/*.parquet',
+        '/data/data/outdoor-air-quality/**/*.parquet',
         union_by_name = true,
         filename = true,
         hive_partitioning = true
