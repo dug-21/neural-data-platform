@@ -1,6 +1,6 @@
 use crate::error::{CoreError, CoreResult};
-use crate::traits::{AggregatedPoint, AggregationType, HealthStatus, Store, TimeSeriesPoint};
 use crate::storage::wal::WriteAheadLog;
+use crate::traits::{AggregatedPoint, AggregationType, HealthStatus, Store, TimeSeriesPoint};
 use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Utc};
 use polars::prelude::*;
@@ -38,8 +38,9 @@ impl ParquetStore {
 
         let mut points = Vec::new();
         for entry in entries {
-            let point: TimeSeriesPoint = serde_json::from_slice(&entry)
-                .map_err(|e| CoreError::Storage(format!("Failed to deserialize WAL entry: {}", e)))?;
+            let point: TimeSeriesPoint = serde_json::from_slice(&entry).map_err(|e| {
+                CoreError::Storage(format!("Failed to deserialize WAL entry: {}", e))
+            })?;
             points.push(point);
         }
 
@@ -69,7 +70,9 @@ impl ParquetStore {
 
     /// Extract partition key from point: use stream_id tag if present, else location_id
     fn get_partition_key(point: &TimeSeriesPoint) -> String {
-        point.tags.get("stream_id")
+        point
+            .tags
+            .get("stream_id")
             .cloned()
             .unwrap_or_else(|| point.location_id.clone())
     }
@@ -79,7 +82,8 @@ impl ParquetStore {
             return Ok(());
         }
 
-        let parent = path.parent()
+        let parent = path
+            .parent()
             .ok_or_else(|| CoreError::Storage("Invalid path: no parent directory".to_string()))?;
         std::fs::create_dir_all(parent)?;
 
@@ -89,6 +93,16 @@ impl ParquetStore {
             .collect();
 
         let location_ids: Vec<String> = points.iter().map(|p| p.location_id.clone()).collect();
+
+        let metrics: Vec<String> = points
+            .iter()
+            .map(|p| {
+                p.tags
+                    .get("metric")
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string())
+            })
+            .collect();
 
         let values: Vec<f64> = points.iter().map(|p| p.value).collect();
 
@@ -104,10 +118,16 @@ impl ParquetStore {
 
         let timestamp_series = Series::new("timestamp", timestamps);
         let location_series = Series::new("location_id", location_ids);
+        let metric_series = Series::new("metric", metrics);
         let value_series = Series::new("value", values);
 
-        let mut df = DataFrame::new(vec![timestamp_series, location_series, value_series])
-            .map_err(|e| CoreError::Storage(format!("Failed to create DataFrame: {}", e)))?;
+        let mut df = DataFrame::new(vec![
+            timestamp_series,
+            location_series,
+            metric_series,
+            value_series,
+        ])
+        .map_err(|e| CoreError::Storage(format!("Failed to create DataFrame: {}", e)))?;
 
         let file = std::fs::File::create(path)?;
         ParquetWriter::new(file)
@@ -123,9 +143,9 @@ impl ParquetStore {
 
         if path.exists() {
             let file = std::fs::File::open(path)?;
-            let df = ParquetReader::new(file)
-                .finish()
-                .map_err(|e| CoreError::Storage(format!("Failed to read existing Parquet: {}", e)))?;
+            let df = ParquetReader::new(file).finish().map_err(|e| {
+                CoreError::Storage(format!("Failed to read existing Parquet: {}", e))
+            })?;
 
             let timestamps = df
                 .column("timestamp")
@@ -139,6 +159,12 @@ impl ParquetStore {
                 .utf8()
                 .map_err(|e| CoreError::Storage(format!("Invalid location_id type: {}", e)))?;
 
+            let metrics = df
+                .column("metric")
+                .map_err(|e| CoreError::Storage(format!("Missing metric column: {}", e)))?
+                .utf8()
+                .map_err(|e| CoreError::Storage(format!("Invalid metric type: {}", e)))?;
+
             let values = df
                 .column("value")
                 .map_err(|e| CoreError::Storage(format!("Missing value column: {}", e)))?
@@ -146,19 +172,23 @@ impl ParquetStore {
                 .map_err(|e| CoreError::Storage(format!("Invalid value type: {}", e)))?;
 
             for i in 0..df.height() {
-                if let (Some(ts), Some(loc), Some(val)) = (
+                if let (Some(ts), Some(loc), Some(metric), Some(val)) = (
                     timestamps.get(i),
                     location_ids.get(i),
+                    metrics.get(i),
                     values.get(i),
                 ) {
                     let timestamp = DateTime::from_timestamp_micros(ts)
                         .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
 
+                    let mut tags = HashMap::new();
+                    tags.insert("metric".to_string(), metric.to_string());
+
                     all_points.push(TimeSeriesPoint {
                         timestamp,
                         location_id: loc.to_string(),
                         value: val,
-                        tags: HashMap::new(),
+                        tags,
                     });
                 }
             }
@@ -243,22 +273,27 @@ impl Store for ParquetStore {
 
                 let timestamps = df.column("timestamp")?.i64()?;
                 let location_ids = df.column("location_id")?.utf8()?;
+                let metrics = df.column("metric")?.utf8()?;
                 let values = df.column("value")?.f64()?;
 
                 for i in 0..df.height() {
-                    if let (Some(ts), Some(loc), Some(val)) = (
+                    if let (Some(ts), Some(loc), Some(metric), Some(val)) = (
                         timestamps.get(i),
                         location_ids.get(i),
+                        metrics.get(i),
                         values.get(i),
                     ) {
                         let timestamp = DateTime::from_timestamp_micros(ts)
                             .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
 
+                        let mut tags = HashMap::new();
+                        tags.insert("metric".to_string(), metric.to_string());
+
                         all_points.push(TimeSeriesPoint {
                             timestamp,
                             location_id: loc.to_string(),
                             value: val,
-                            tags: HashMap::new(),
+                            tags,
                         });
                     }
                 }
@@ -287,8 +322,8 @@ impl Store for ParquetStore {
         let mut buckets: HashMap<DateTime<Utc>, Vec<f64>> = HashMap::new();
 
         for point in points {
-            let bucket_ts = (point.timestamp.timestamp() / interval.num_seconds())
-                * interval.num_seconds();
+            let bucket_ts =
+                (point.timestamp.timestamp() / interval.num_seconds()) * interval.num_seconds();
             let bucket_time = DateTime::from_timestamp(bucket_ts, 0)
                 .ok_or_else(|| CoreError::Storage("Invalid bucket timestamp".to_string()))?;
 
@@ -340,12 +375,15 @@ impl Store for ParquetStore {
     async fn health_check(&self) -> CoreResult<HealthStatus> {
         let mut details = HashMap::new();
         details.insert("storage_type".to_string(), "parquet".to_string());
-        details.insert("base_path".to_string(), self.base_path.display().to_string());
+        details.insert(
+            "base_path".to_string(),
+            self.base_path.display().to_string(),
+        );
 
         let wal_exists = self.wal.lock().await.path().exists();
         details.insert("wal_exists".to_string(), wal_exists.to_string());
 
-        let base_path_writable = self.base_path.exists() 
+        let base_path_writable = self.base_path.exists()
             && std::fs::metadata(&self.base_path)
                 .map(|m| !m.permissions().readonly())
                 .unwrap_or(false);
@@ -379,11 +417,14 @@ mod tests {
         location_id: &str,
         value: f64,
     ) -> TimeSeriesPoint {
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "test_metric".to_string());
+
         TimeSeriesPoint {
             timestamp,
             location_id: location_id.to_string(),
             value,
-            tags: HashMap::new(),
+            tags,
         }
     }
 
@@ -569,7 +610,10 @@ mod tests {
         let health = store.health_check().await.unwrap();
 
         assert!(health.healthy);
-        assert_eq!(health.details.get("storage_type"), Some(&"parquet".to_string()));
+        assert_eq!(
+            health.details.get("storage_type"),
+            Some(&"parquet".to_string())
+        );
     }
 
     #[tokio::test]
@@ -618,8 +662,14 @@ mod tests {
         let day1 = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
         let day2 = Utc.with_ymd_and_hms(2024, 1, 16, 10, 0, 0).unwrap();
 
-        store.write(create_test_point(day1, "sensor-001", 10.0)).await.unwrap();
-        store.write(create_test_point(day2, "sensor-001", 20.0)).await.unwrap();
+        store
+            .write(create_test_point(day1, "sensor-001", 10.0))
+            .await
+            .unwrap();
+        store
+            .write(create_test_point(day2, "sensor-001", 20.0))
+            .await
+            .unwrap();
 
         let path1 = store.partition_path("sensor-001", day1);
         let path2 = store.partition_path("sensor-001", day2);
@@ -634,8 +684,14 @@ mod tests {
         let (store, _temp) = create_test_store();
         let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
 
-        store.write(create_test_point(timestamp, "sensor-001", 10.0)).await.unwrap();
-        store.write(create_test_point(timestamp, "sensor-002", 20.0)).await.unwrap();
+        store
+            .write(create_test_point(timestamp, "sensor-001", 10.0))
+            .await
+            .unwrap();
+        store
+            .write(create_test_point(timestamp, "sensor-002", 20.0))
+            .await
+            .unwrap();
 
         let start = timestamp - chrono::Duration::hours(1);
         let end = timestamp + chrono::Duration::hours(1);

@@ -71,8 +71,8 @@ impl Default for RetryConfig {
 impl RetryConfig {
     /// Calculate delay for a given retry attempt (0-indexed)
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
-        let base_delay = self.initial_delay.as_millis() as f64
-            * self.backoff_multiplier.powi(attempt as i32);
+        let base_delay =
+            self.initial_delay.as_millis() as f64 * self.backoff_multiplier.powi(attempt as i32);
         let capped_delay = base_delay.min(self.max_delay.as_millis() as f64);
 
         let final_delay = if self.jitter {
@@ -139,7 +139,11 @@ impl PollingError {
         }
     }
 
-    pub fn from_status(endpoint_id: impl Into<String>, status: u16, body: impl Into<String>) -> Self {
+    pub fn from_status(
+        endpoint_id: impl Into<String>,
+        status: u16,
+        body: impl Into<String>,
+    ) -> Self {
         let endpoint_id = endpoint_id.into();
         let message = body.into();
 
@@ -160,7 +164,10 @@ impl PollingError {
 
     /// Check if this error should be retried
     pub fn should_retry(&self) -> bool {
-        matches!(self.classification, ErrorClassification::Transient | ErrorClassification::RateLimited { .. })
+        matches!(
+            self.classification,
+            ErrorClassification::Transient | ErrorClassification::RateLimited { .. }
+        )
     }
 }
 
@@ -192,7 +199,12 @@ pub struct EndpointConfig {
 }
 
 impl EndpointConfig {
-    pub fn new(endpoint_id: impl Into<String>, url: impl Into<String>, location_id: impl Into<String>, parser_name: impl Into<String>) -> Self {
+    pub fn new(
+        endpoint_id: impl Into<String>,
+        url: impl Into<String>,
+        location_id: impl Into<String>,
+        parser_name: impl Into<String>,
+    ) -> Self {
         Self {
             endpoint_id: endpoint_id.into(),
             url: url.into(),
@@ -229,7 +241,11 @@ impl ParserRegistry {
     }
 
     /// Register a parser with the given name
-    pub fn register<P: ResponseParser + Send + Sync + 'static>(&mut self, name: impl Into<String>, parser: P) {
+    pub fn register<P: ResponseParser + Send + Sync + 'static>(
+        &mut self,
+        name: impl Into<String>,
+        parser: P,
+    ) {
         self.parsers.insert(name.into(), Arc::new(parser));
     }
 
@@ -252,8 +268,14 @@ impl ParserRegistry {
     pub fn with_default_parsers() -> Self {
         let mut registry = Self::new();
         // Register OpenWeatherMap parsers
-        registry.register("openweathermap_current_weather", super::parsers::WeatherParser::new());
-        registry.register("openweathermap_air_pollution", super::parsers::AirPollutionParser::new());
+        registry.register(
+            "openweathermap_current_weather",
+            super::parsers::WeatherParser::new(),
+        );
+        registry.register(
+            "openweathermap_air_pollution",
+            super::parsers::AirPollutionParser::new(),
+        );
         registry
     }
 }
@@ -621,7 +643,8 @@ impl Source for HttpPollingSource {
             .iter()
             .filter(|sensor| {
                 if let Some(last_time) = last_poll.get(&sensor.serial_number) {
-                    (now - *last_time).num_seconds() > (self.config.poll_interval.as_secs() * 2) as i64
+                    (now - *last_time).num_seconds()
+                        > (self.config.poll_interval.as_secs() * 2) as i64
                 } else {
                     true // Never polled
                 }
@@ -638,7 +661,10 @@ impl Source for HttpPollingSource {
             })
         } else if unhealthy_sensors.len() == self.config.sensors.len() {
             details.insert("status".to_string(), "all_sensors_unhealthy".to_string());
-            details.insert("unhealthy_sensors".to_string(), format!("{:?}", unhealthy_sensors));
+            details.insert(
+                "unhealthy_sensors".to_string(),
+                format!("{:?}", unhealthy_sensors),
+            );
             Ok(HealthStatus {
                 healthy: false,
                 message: format!("All sensors unhealthy: {:?}", unhealthy_sensors),
@@ -646,7 +672,10 @@ impl Source for HttpPollingSource {
             })
         } else {
             details.insert("status".to_string(), "some_sensors_unhealthy".to_string());
-            details.insert("unhealthy_sensors".to_string(), format!("{:?}", unhealthy_sensors));
+            details.insert(
+                "unhealthy_sensors".to_string(),
+                format!("{:?}", unhealthy_sensors),
+            );
             Ok(HealthStatus {
                 healthy: false,
                 message: format!("Some sensors unhealthy: {:?}", unhealthy_sensors),
@@ -739,7 +768,10 @@ pub struct GenericHttpPollingSource {
 
 impl GenericHttpPollingSource {
     /// Create a new generic HTTP polling source
-    pub fn new(config: GenericHttpPollingConfig, parser_registry: ParserRegistry) -> CoreResult<Self> {
+    pub fn new(
+        config: GenericHttpPollingConfig,
+        parser_registry: ParserRegistry,
+    ) -> CoreResult<Self> {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         let client = Client::builder()
@@ -765,7 +797,10 @@ impl GenericHttpPollingSource {
     }
 
     /// Build the request with authentication
-    fn build_request(&self, endpoint: &EndpointConfig) -> Result<reqwest::RequestBuilder, CoreError> {
+    fn build_request(
+        &self,
+        endpoint: &EndpointConfig,
+    ) -> Result<reqwest::RequestBuilder, CoreError> {
         let mut url = endpoint.url.clone();
 
         // Handle query parameter auth
@@ -796,18 +831,34 @@ impl GenericHttpPollingSource {
     }
 
     /// Poll a single endpoint with retry logic
-    async fn poll_endpoint(&self, endpoint: &EndpointConfig) -> Result<Vec<TimeSeriesPoint>, PollingError> {
-        let parser = self.parser_registry.get(&endpoint.parser_name).ok_or_else(|| {
-            PollingError::permanent(&endpoint.endpoint_id, format!("Parser not found: {}", endpoint.parser_name))
-        })?;
+    async fn poll_endpoint(
+        &self,
+        endpoint: &EndpointConfig,
+    ) -> Result<Vec<TimeSeriesPoint>, PollingError> {
+        let parser = self
+            .parser_registry
+            .get(&endpoint.parser_name)
+            .ok_or_else(|| {
+                PollingError::permanent(
+                    &endpoint.endpoint_id,
+                    format!("Parser not found: {}", endpoint.parser_name),
+                )
+            })?;
 
         let mut retry_count = 0;
 
         loop {
-            debug!("Polling endpoint: {} (attempt {})", endpoint.endpoint_id, retry_count + 1);
+            debug!(
+                "Polling endpoint: {} (attempt {})",
+                endpoint.endpoint_id,
+                retry_count + 1
+            );
 
             let request = self.build_request(endpoint).map_err(|e| {
-                PollingError::permanent(&endpoint.endpoint_id, format!("Failed to build request: {}", e))
+                PollingError::permanent(
+                    &endpoint.endpoint_id,
+                    format!("Failed to build request: {}", e),
+                )
             })?;
 
             match request.send().await {
@@ -816,13 +867,21 @@ impl GenericHttpPollingSource {
 
                     if status >= 200 && status < 300 {
                         let body = response.text().await.map_err(|e| {
-                            PollingError::transient(&endpoint.endpoint_id, format!("Failed to read response body: {}", e))
+                            PollingError::transient(
+                                &endpoint.endpoint_id,
+                                format!("Failed to read response body: {}", e),
+                            )
                         })?;
 
                         let timestamp = Utc::now();
-                        let points = parser.parse(&body, &endpoint.location_id, timestamp).map_err(|e| {
-                            PollingError::permanent(&endpoint.endpoint_id, format!("Failed to parse response: {}", e))
-                        })?;
+                        let points = parser
+                            .parse(&body, &endpoint.location_id, timestamp)
+                            .map_err(|e| {
+                                PollingError::permanent(
+                                    &endpoint.endpoint_id,
+                                    format!("Failed to parse response: {}", e),
+                                )
+                            })?;
 
                         // Update successful poll time
                         let mut last_poll = self.last_successful_poll.lock().await;
@@ -837,7 +896,9 @@ impl GenericHttpPollingSource {
                         let body = response.text().await.unwrap_or_default();
                         let error = PollingError::from_status(&endpoint.endpoint_id, status, body);
 
-                        if !error.should_retry() || retry_count >= self.config.retry_config.max_retries {
+                        if !error.should_retry()
+                            || retry_count >= self.config.retry_config.max_retries
+                        {
                             return Err(error);
                         }
 
@@ -853,12 +914,19 @@ impl GenericHttpPollingSource {
                 }
                 Err(e) => {
                     let error = if e.is_timeout() || e.is_connect() {
-                        PollingError::transient(&endpoint.endpoint_id, format!("Request failed: {}", e))
+                        PollingError::transient(
+                            &endpoint.endpoint_id,
+                            format!("Request failed: {}", e),
+                        )
                     } else {
-                        PollingError::permanent(&endpoint.endpoint_id, format!("Request failed: {}", e))
+                        PollingError::permanent(
+                            &endpoint.endpoint_id,
+                            format!("Request failed: {}", e),
+                        )
                     };
 
-                    if !error.should_retry() || retry_count >= self.config.retry_config.max_retries {
+                    if !error.should_retry() || retry_count >= self.config.retry_config.max_retries
+                    {
                         return Err(error);
                     }
 
@@ -925,7 +993,9 @@ impl GenericHttpPollingSource {
 
         let enabled_count = self.config.endpoints.iter().filter(|e| e.enabled).count();
         if enabled_count == 0 {
-            return Err(CoreError::Source("No enabled endpoints configured".to_string()));
+            return Err(CoreError::Source(
+                "No enabled endpoints configured".to_string(),
+            ));
         }
 
         *self.is_running.lock().await = true;
@@ -979,7 +1049,10 @@ impl Source for GenericHttpPollingSource {
         let is_running = *self.is_running.lock().await;
 
         let mut details = HashMap::new();
-        details.insert("source_type".to_string(), "generic_http_polling".to_string());
+        details.insert(
+            "source_type".to_string(),
+            "generic_http_polling".to_string(),
+        );
         details.insert("is_running".to_string(), is_running.to_string());
 
         if !is_running {
@@ -1000,7 +1073,8 @@ impl Source for GenericHttpPollingSource {
             .filter(|ep| ep.enabled)
             .filter(|ep| {
                 if let Some(last_time) = last_poll.get(&ep.endpoint_id) {
-                    (now - *last_time).num_seconds() > (self.config.poll_interval.as_secs() * 2) as i64
+                    (now - *last_time).num_seconds()
+                        > (self.config.poll_interval.as_secs() * 2) as i64
                 } else {
                     true
                 }
@@ -1017,7 +1091,10 @@ impl Source for GenericHttpPollingSource {
             })
         } else {
             details.insert("status".to_string(), "some_endpoints_unhealthy".to_string());
-            details.insert("unhealthy_endpoints".to_string(), format!("{:?}", unhealthy_endpoints));
+            details.insert(
+                "unhealthy_endpoints".to_string(),
+                format!("{:?}", unhealthy_endpoints),
+            );
             Ok(HealthStatus {
                 healthy: false,
                 message: format!("Some endpoints unhealthy: {:?}", unhealthy_endpoints),
@@ -1072,17 +1149,35 @@ mod tests {
         assert_eq!(points.len(), 9);
 
         // Check standard metrics
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm02".to_string())));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"co2".to_string())));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"temperature".to_string())));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"humidity".to_string())));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"wifi_strength".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"pm02".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"co2".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"temperature".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"humidity".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"wifi_strength".to_string())));
 
         // Check extended metrics (HTTP only)
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm10".to_string())));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm01".to_string())));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"tvoc".to_string())));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"nox_index".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"pm10".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"pm01".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"tvoc".to_string())));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"nox_index".to_string())));
 
         // Verify source ID
         assert!(points.iter().all(|p| p.location_id == "ABC123"));
@@ -1147,8 +1242,12 @@ mod tests {
         let points = source.poll_sensor(&sensor).await.unwrap();
 
         assert!(points.len() >= 6);
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pm02".to_string()) && p.value == 10.5));
-        assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"co2".to_string()) && p.value == 400.0));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"pm02".to_string()) && p.value == 10.5));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"co2".to_string()) && p.value == 400.0));
     }
 
     #[tokio::test]
@@ -1411,7 +1510,7 @@ mod tests {
             "endpoint1",
             "https://api.example.com/data",
             "location1",
-            "json_parser"
+            "json_parser",
         );
 
         assert_eq!(config.endpoint_id, "endpoint1");
@@ -1429,8 +1528,9 @@ mod tests {
             "endpoint1",
             "https://api.example.com/data",
             "location1",
-            "json_parser"
-        ).with_auth(AuthMethod::Bearer {
+            "json_parser",
+        )
+        .with_auth(AuthMethod::Bearer {
             token: "test_token".to_string(),
         });
 
@@ -1447,13 +1547,16 @@ mod tests {
             "endpoint1",
             "https://api.example.com/data",
             "location1",
-            "json_parser"
+            "json_parser",
         )
         .with_header("Content-Type", "application/json")
         .with_header("Accept", "application/json");
 
         assert_eq!(config.headers.len(), 2);
-        assert_eq!(config.headers.get("Content-Type").unwrap(), "application/json");
+        assert_eq!(
+            config.headers.get("Content-Type").unwrap(),
+            "application/json"
+        );
         assert_eq!(config.headers.get("Accept").unwrap(), "application/json");
     }
 
@@ -1463,7 +1566,7 @@ mod tests {
             "weather_api",
             "https://api.weather.com/v1/current",
             "station_001",
-            "weather_parser"
+            "weather_parser",
         )
         .with_auth(AuthMethod::QueryParam {
             key: "apikey".to_string(),
@@ -1534,7 +1637,7 @@ mod tests {
 
     #[test]
     fn test_parser_registry_multiple_parsers() {
-        use crate::sources::parsers::{WeatherParser, AirPollutionParser};
+        use crate::sources::parsers::{AirPollutionParser, WeatherParser};
 
         let mut registry = ParserRegistry::new();
         registry.register("weather", WeatherParser::new());
@@ -1568,16 +1671,22 @@ mod tests {
 
         let weather_parser = registry.get("openweathermap_current_weather");
         assert!(weather_parser.is_some());
-        assert_eq!(weather_parser.unwrap().name(), "openweathermap_current_weather");
+        assert_eq!(
+            weather_parser.unwrap().name(),
+            "openweathermap_current_weather"
+        );
 
         let pollution_parser = registry.get("openweathermap_air_pollution");
         assert!(pollution_parser.is_some());
-        assert_eq!(pollution_parser.unwrap().name(), "openweathermap_air_pollution");
+        assert_eq!(
+            pollution_parser.unwrap().name(),
+            "openweathermap_air_pollution"
+        );
     }
 
     #[test]
     fn test_parser_registry_parser_names_returns_correct_names() {
-        use crate::sources::parsers::{WeatherParser, AirPollutionParser};
+        use crate::sources::parsers::{AirPollutionParser, WeatherParser};
 
         let mut registry = ParserRegistry::new();
         registry.register("custom_weather", WeatherParser::new());
@@ -1618,7 +1727,10 @@ mod tests {
 
         // Test RateLimited variant without retry_after
         let rate_limited = ErrorClassification::RateLimited { retry_after: None };
-        assert!(matches!(rate_limited, ErrorClassification::RateLimited { retry_after: None }));
+        assert!(matches!(
+            rate_limited,
+            ErrorClassification::RateLimited { retry_after: None }
+        ));
 
         // Test RateLimited variant with retry_after
         let rate_limited_with_delay = ErrorClassification::RateLimited {
@@ -1626,7 +1738,9 @@ mod tests {
         };
         assert!(matches!(
             rate_limited_with_delay,
-            ErrorClassification::RateLimited { retry_after: Some(_) }
+            ErrorClassification::RateLimited {
+                retry_after: Some(_)
+            }
         ));
     }
 
@@ -1660,7 +1774,9 @@ mod tests {
         assert_eq!(error.message, "Rate limited");
         assert!(matches!(
             error.classification,
-            ErrorClassification::RateLimited { retry_after: Some(_) }
+            ErrorClassification::RateLimited {
+                retry_after: Some(_)
+            }
         ));
         assert_eq!(error.status_code, Some(429));
         assert!(error.should_retry());
@@ -1813,9 +1929,18 @@ mod tests {
 
     #[test]
     fn test_error_classification_partial_eq() {
-        assert_eq!(ErrorClassification::Transient, ErrorClassification::Transient);
-        assert_eq!(ErrorClassification::Permanent, ErrorClassification::Permanent);
-        assert_ne!(ErrorClassification::Transient, ErrorClassification::Permanent);
+        assert_eq!(
+            ErrorClassification::Transient,
+            ErrorClassification::Transient
+        );
+        assert_eq!(
+            ErrorClassification::Permanent,
+            ErrorClassification::Permanent
+        );
+        assert_ne!(
+            ErrorClassification::Transient,
+            ErrorClassification::Permanent
+        );
 
         let rate1 = ErrorClassification::RateLimited { retry_after: None };
         let rate2 = ErrorClassification::RateLimited { retry_after: None };
@@ -1846,8 +1971,12 @@ mod tests {
         let source = source.unwrap();
 
         // Verify default parsers are available
-        assert!(source.parser_registry.contains("openweathermap_current_weather"));
-        assert!(source.parser_registry.contains("openweathermap_air_pollution"));
+        assert!(source
+            .parser_registry
+            .contains("openweathermap_current_weather"));
+        assert!(source
+            .parser_registry
+            .contains("openweathermap_air_pollution"));
     }
 
     #[test]
@@ -1859,8 +1988,9 @@ mod tests {
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather"
-        ).with_auth(AuthMethod::QueryParam {
+            "openweathermap_current_weather",
+        )
+        .with_auth(AuthMethod::QueryParam {
             key: "apikey".to_string(),
             value: "secret123".to_string(),
         });
@@ -1878,8 +2008,9 @@ mod tests {
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather"
-        ).with_auth(AuthMethod::Header {
+            "openweathermap_current_weather",
+        )
+        .with_auth(AuthMethod::Header {
             name: "X-API-Key".to_string(),
             value: "secret123".to_string(),
         });
@@ -1897,8 +2028,9 @@ mod tests {
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather"
-        ).with_auth(AuthMethod::Bearer {
+            "openweathermap_current_weather",
+        )
+        .with_auth(AuthMethod::Bearer {
             token: "bearer_token_123".to_string(),
         });
 
@@ -1915,7 +2047,7 @@ mod tests {
             "disabled",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather"
+            "openweathermap_current_weather",
         );
         endpoint.enabled = false;
         config.endpoints.push(endpoint);
@@ -1970,7 +2102,7 @@ mod tests {
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather"
+            "openweathermap_current_weather",
         )
         .with_header("User-Agent", "TestClient/1.0")
         .with_header("Accept", "application/json");
@@ -1989,8 +2121,9 @@ mod tests {
             "test_endpoint",
             "https://api.example.com/data?foo=bar",
             "location1",
-            "openweathermap_current_weather"
-        ).with_auth(AuthMethod::QueryParam {
+            "openweathermap_current_weather",
+        )
+        .with_auth(AuthMethod::QueryParam {
             key: "apikey".to_string(),
             value: "secret123".to_string(),
         });

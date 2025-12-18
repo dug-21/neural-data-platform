@@ -157,7 +157,13 @@ impl ResponseParser for WeatherParser {
         ));
 
         if let Some(gust) = weather.wind.gust {
-            points.push(Self::create_point(location_id, "wind_gust", gust, "m/s", timestamp));
+            points.push(Self::create_point(
+                location_id,
+                "wind_gust",
+                gust,
+                "m/s",
+                timestamp,
+            ));
         }
 
         // Cloud coverage
@@ -183,13 +189,25 @@ impl ResponseParser for WeatherParser {
         // Precipitation
         if let Some(rain) = weather.rain {
             if let Some(rain_1h) = rain.one_hour {
-                points.push(Self::create_point(location_id, "rain_1h", rain_1h, "mm", timestamp));
+                points.push(Self::create_point(
+                    location_id,
+                    "rain_1h",
+                    rain_1h,
+                    "mm",
+                    timestamp,
+                ));
             }
         }
 
         if let Some(snow) = weather.snow {
             if let Some(snow_1h) = snow.one_hour {
-                points.push(Self::create_point(location_id, "snow_1h", snow_1h, "mm", timestamp));
+                points.push(Self::create_point(
+                    location_id,
+                    "snow_1h",
+                    snow_1h,
+                    "mm",
+                    timestamp,
+                ));
             }
         }
 
@@ -252,11 +270,17 @@ mod tests {
         assert_eq!(points.len(), 11);
 
         // Verify temperature point
-        let temp_point = points.iter().find(|p| p.tags.get("metric") == Some(&"temperature".to_string())).unwrap();
+        let temp_point = points
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"temperature".to_string()))
+            .unwrap();
         assert_eq!(temp_point.value, 20.5);
         assert_eq!(temp_point.location_id, "test-location");
         assert_eq!(temp_point.tags.get("unit"), Some(&"celsius".to_string()));
-        assert_eq!(temp_point.tags.get("source"), Some(&"openweathermap".to_string()));
+        assert_eq!(
+            temp_point.tags.get("source"),
+            Some(&"openweathermap".to_string())
+        );
     }
 
     #[test]

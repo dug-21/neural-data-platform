@@ -299,10 +299,22 @@ impl IngestionCoordinator {
         let stats = self.stats.read().await;
 
         let mut details = HashMap::new();
-        details.insert("records_received".to_string(), stats.records_received.to_string());
-        details.insert("records_routed".to_string(), stats.records_routed.to_string());
-        details.insert("records_dropped".to_string(), stats.records_dropped.to_string());
-        details.insert("active_sources".to_string(), stats.active_sources.to_string());
+        details.insert(
+            "records_received".to_string(),
+            stats.records_received.to_string(),
+        );
+        details.insert(
+            "records_routed".to_string(),
+            stats.records_routed.to_string(),
+        );
+        details.insert(
+            "records_dropped".to_string(),
+            stats.records_dropped.to_string(),
+        );
+        details.insert(
+            "active_sources".to_string(),
+            stats.active_sources.to_string(),
+        );
         details.insert(
             "active_storage_channels".to_string(),
             stats.active_storage_channels.to_string(),
@@ -330,12 +342,7 @@ impl IngestionCoordinator {
 
     /// Get list of registered stream IDs
     pub async fn registered_streams(&self) -> Vec<String> {
-        self.storage_channels
-            .read()
-            .await
-            .keys()
-            .cloned()
-            .collect()
+        self.storage_channels.read().await.keys().cloned().collect()
     }
 }
 
@@ -501,7 +508,10 @@ mod tests {
         // Send records
         let handle = coordinator.create_handle("source-001".to_string()).await;
         for _ in 0..5 {
-            handle.send(create_test_record("test-stream")).await.unwrap();
+            handle
+                .send(create_test_record("test-stream"))
+                .await
+                .unwrap();
         }
 
         // Wait for processing
@@ -570,9 +580,8 @@ mod tests {
         coordinator.start().await.unwrap();
 
         let handle = coordinator.create_handle("source-001".to_string()).await;
-        let records: Vec<StreamRecord> = (0..3)
-            .map(|_| create_test_record("test-stream"))
-            .collect();
+        let records: Vec<StreamRecord> =
+            (0..3).map(|_| create_test_record("test-stream")).collect();
 
         handle.send_batch(records).await.unwrap();
 

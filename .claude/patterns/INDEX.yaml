@@ -175,6 +175,21 @@ architecture:
       - "data lakehouse"
       - "storage layers"
 
+  bronze-silver-data-layers:
+    key: "architecture:bronze-silver-data-layers"
+    files:
+      - "core/src/storage/parquet.rs"
+      - "config/duckdb/views/"
+      - "config/base/streams/"
+    summary: "Bronze=long format (flexible), Silver=wide format via PIVOT (queryable). Config-driven field definitions."
+    queries:
+      - "bronze silver pattern"
+      - "long format wide format"
+      - "pivot pattern"
+      - "data layer architecture"
+      - "parquet schema"
+      - "config driven data"
+
 development:
   add-stream-procedure:
     key: "development:add-stream-procedure"

@@ -98,21 +98,36 @@ async fn test_weather_polling_integration() {
     assert!(!points.is_empty());
 
     // Verify temperature point
-    let temp_point = points.iter().find(|p| p.tags.get("metric") == Some(&"temperature".to_string()));
+    let temp_point = points
+        .iter()
+        .find(|p| p.tags.get("metric") == Some(&"temperature".to_string()));
     assert!(temp_point.is_some());
     assert_eq!(temp_point.unwrap().value, 20.5);
 
     // Verify other metrics exist
-    assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"feels_like".to_string())));
-    assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"pressure".to_string())));
-    assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"humidity".to_string())));
-    assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"wind_speed".to_string())));
-    assert!(points.iter().any(|p| p.tags.get("metric") == Some(&"wind_deg".to_string())));
+    assert!(points
+        .iter()
+        .any(|p| p.tags.get("metric") == Some(&"feels_like".to_string())));
+    assert!(points
+        .iter()
+        .any(|p| p.tags.get("metric") == Some(&"pressure".to_string())));
+    assert!(points
+        .iter()
+        .any(|p| p.tags.get("metric") == Some(&"humidity".to_string())));
+    assert!(points
+        .iter()
+        .any(|p| p.tags.get("metric") == Some(&"wind_speed".to_string())));
+    assert!(points
+        .iter()
+        .any(|p| p.tags.get("metric") == Some(&"wind_deg".to_string())));
 
     // Verify all points have correct location and source tags
     for point in &points {
         assert_eq!(point.location_id, "test_location");
-        assert_eq!(point.tags.get("source"), Some(&"openweathermap".to_string()));
+        assert_eq!(
+            point.tags.get("source"),
+            Some(&"openweathermap".to_string())
+        );
         assert_eq!(point.tags.get("api"), Some(&"current_weather".to_string()));
     }
 
@@ -159,29 +174,40 @@ async fn test_air_pollution_polling_integration() {
     assert!(!points.is_empty());
 
     // Verify AQI point
-    let aqi_point = points.iter().find(|p| p.tags.get("metric") == Some(&"aqi".to_string()));
+    let aqi_point = points
+        .iter()
+        .find(|p| p.tags.get("metric") == Some(&"aqi".to_string()));
     assert!(aqi_point.is_some());
     assert_eq!(aqi_point.unwrap().value, 2.0);
 
     // Verify PM2.5 point
-    let pm25_point = points.iter().find(|p| p.tags.get("metric") == Some(&"pm2_5".to_string()));
+    let pm25_point = points
+        .iter()
+        .find(|p| p.tags.get("metric") == Some(&"pm2_5".to_string()));
     assert!(pm25_point.is_some());
     assert_eq!(pm25_point.unwrap().value, 8.59);
 
     // Verify PM10 point
-    let pm10_point = points.iter().find(|p| p.tags.get("metric") == Some(&"pm10".to_string()));
+    let pm10_point = points
+        .iter()
+        .find(|p| p.tags.get("metric") == Some(&"pm10".to_string()));
     assert!(pm10_point.is_some());
     assert_eq!(pm10_point.unwrap().value, 12.15);
 
     // Verify CO point
-    let co_point = points.iter().find(|p| p.tags.get("metric") == Some(&"co".to_string()));
+    let co_point = points
+        .iter()
+        .find(|p| p.tags.get("metric") == Some(&"co".to_string()));
     assert!(co_point.is_some());
     assert_eq!(co_point.unwrap().value, 230.31);
 
     // Verify all points have correct location and source tags
     for point in &points {
         assert_eq!(point.location_id, "test_location");
-        assert_eq!(point.tags.get("source"), Some(&"openweathermap".to_string()));
+        assert_eq!(
+            point.tags.get("source"),
+            Some(&"openweathermap".to_string())
+        );
         assert_eq!(point.tags.get("api"), Some(&"air_pollution".to_string()));
     }
 
@@ -241,14 +267,12 @@ async fn test_retry_on_transient_error() {
 #[tokio::test]
 async fn test_health_check_reports_unhealthy_endpoints() {
     let config = GenericHttpPollingConfig {
-        endpoints: vec![
-            EndpointConfig::new(
-                "unreachable",
-                "http://unreachable.invalid/api",
-                "test_location",
-                "openweathermap_current_weather",
-            ),
-        ],
+        endpoints: vec![EndpointConfig::new(
+            "unreachable",
+            "http://unreachable.invalid/api",
+            "test_location",
+            "openweathermap_current_weather",
+        )],
         poll_interval: Duration::from_secs(60),
         timeout: Duration::from_millis(100),
         retry_config: RetryConfig {
@@ -318,8 +342,12 @@ async fn test_multiple_endpoints_polling() {
     assert!(points.len() > 15); // Weather (11) + Pollution (9)
 
     // Verify both sources
-    assert!(points.iter().any(|p| p.tags.get("api") == Some(&"current_weather".to_string())));
-    assert!(points.iter().any(|p| p.tags.get("api") == Some(&"air_pollution".to_string())));
+    assert!(points
+        .iter()
+        .any(|p| p.tags.get("api") == Some(&"current_weather".to_string())));
+    assert!(points
+        .iter()
+        .any(|p| p.tags.get("api") == Some(&"air_pollution".to_string())));
 
     source.stop().await.unwrap();
 }
@@ -376,7 +404,7 @@ async fn test_timeout_handling() {
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(weather_api_response())
-                .set_delay(Duration::from_secs(5))
+                .set_delay(Duration::from_secs(5)),
         )
         .mount(&mock_server)
         .await;
@@ -627,7 +655,7 @@ async fn test_concurrent_endpoint_polling() {
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_string(weather_api_response())
-                    .set_delay(Duration::from_millis(100))
+                    .set_delay(Duration::from_millis(100)),
             )
             .mount(&mock_server)
             .await;

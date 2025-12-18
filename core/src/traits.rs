@@ -89,11 +89,7 @@ pub trait Source: Send + Sync {
 pub trait Forecast: Send + Sync {
     async fn train(&mut self, data: Vec<TimeSeriesPoint>) -> CoreResult<ModelMetrics>;
 
-    async fn predict(
-        &self,
-        location_id: &str,
-        horizon: usize,
-    ) -> CoreResult<Vec<ForecastedPoint>>;
+    async fn predict(&self, location_id: &str, horizon: usize) -> CoreResult<Vec<ForecastedPoint>>;
 
     async fn evaluate(&self, actual: Vec<TimeSeriesPoint>) -> CoreResult<ModelMetrics>;
 }
@@ -164,7 +160,10 @@ mod tests {
     fn test_aggregation_type_equality() {
         assert_eq!(AggregationType::Mean, AggregationType::Mean);
         assert_ne!(AggregationType::Mean, AggregationType::Median);
-        assert_eq!(AggregationType::Percentile(95.0), AggregationType::Percentile(95.0));
+        assert_eq!(
+            AggregationType::Percentile(95.0),
+            AggregationType::Percentile(95.0)
+        );
     }
 
     #[test]
@@ -331,10 +330,7 @@ mod tests {
             tags: HashMap::new(),
         };
 
-        mock_store
-            .expect_write()
-            .times(1)
-            .returning(|_| Ok(()));
+        mock_store.expect_write().times(1).returning(|_| Ok(()));
 
         let result = mock_store.write(point).await;
         assert!(result.is_ok());
@@ -387,11 +383,18 @@ mod tests {
 
         mock_store
             .expect_query()
-            .with(eq("sensor-001"), eq(start), eq(end), eq(Some(filters.clone())))
+            .with(
+                eq("sensor-001"),
+                eq(start),
+                eq(end),
+                eq(Some(filters.clone())),
+            )
             .times(1)
             .returning(move |_, _, _, _| Ok(vec![expected_point.clone()]));
 
-        let result = mock_store.query("sensor-001", start, end, Some(filters)).await;
+        let result = mock_store
+            .query("sensor-001", start, end, Some(filters))
+            .await;
         assert!(result.is_ok());
         let points = result.unwrap();
         assert_eq!(points.len(), 1);
@@ -475,12 +478,21 @@ mod tests {
             .returning(move |_, _, _, _, _| Ok(vec![expected_aggregated.clone()]));
 
         let result = mock_store
-            .aggregate("sensor-001", start, end, AggregationType::Percentile(95.0), interval)
+            .aggregate(
+                "sensor-001",
+                start,
+                end,
+                AggregationType::Percentile(95.0),
+                interval,
+            )
             .await;
 
         assert!(result.is_ok());
         let points = result.unwrap();
-        assert_eq!(points[0].aggregation_type, AggregationType::Percentile(95.0));
+        assert_eq!(
+            points[0].aggregation_type,
+            AggregationType::Percentile(95.0)
+        );
     }
 
     #[tokio::test]
@@ -592,7 +604,10 @@ mod tests {
 
         // Execute workflow
         mock_store.write(point_for_write).await.unwrap();
-        let queried = mock_store.query("sensor-001", start, end, None).await.unwrap();
+        let queried = mock_store
+            .query("sensor-001", start, end, None)
+            .await
+            .unwrap();
         assert_eq!(queried.len(), 1);
 
         let aggregated = mock_store
@@ -611,14 +626,12 @@ mod tests {
     async fn test_source_fetch_interaction() {
         let mut mock_source = MockSource::new();
 
-        let expected_points = vec![
-            TimeSeriesPoint {
-                timestamp: Utc::now(),
-                location_id: "sensor-001".to_string(),
-                value: 23.5,
-                tags: HashMap::new(),
-            },
-        ];
+        let expected_points = vec![TimeSeriesPoint {
+            timestamp: Utc::now(),
+            location_id: "sensor-001".to_string(),
+            value: 23.5,
+            tags: HashMap::new(),
+        }];
 
         mock_source
             .expect_fetch()
@@ -636,10 +649,7 @@ mod tests {
     async fn test_source_fetch_empty_interaction() {
         let mut mock_source = MockSource::new();
 
-        mock_source
-            .expect_fetch()
-            .times(1)
-            .returning(|| Ok(vec![]));
+        mock_source.expect_fetch().times(1).returning(|| Ok(vec![]));
 
         let result = mock_source.fetch().await;
         assert!(result.is_ok());
@@ -711,14 +721,12 @@ mod tests {
     async fn test_forecast_train_interaction() {
         let mut mock_forecast = MockForecast::new();
 
-        let training_data = vec![
-            TimeSeriesPoint {
-                timestamp: Utc::now(),
-                location_id: "sensor-001".to_string(),
-                value: 23.5,
-                tags: HashMap::new(),
-            },
-        ];
+        let training_data = vec![TimeSeriesPoint {
+            timestamp: Utc::now(),
+            location_id: "sensor-001".to_string(),
+            value: 23.5,
+            tags: HashMap::new(),
+        }];
 
         let expected_metrics = ModelMetrics {
             mae: 0.5,
@@ -797,14 +805,12 @@ mod tests {
     async fn test_forecast_evaluate_interaction() {
         let mut mock_forecast = MockForecast::new();
 
-        let actual_data = vec![
-            TimeSeriesPoint {
-                timestamp: Utc::now(),
-                location_id: "sensor-001".to_string(),
-                value: 23.5,
-                tags: HashMap::new(),
-            },
-        ];
+        let actual_data = vec![TimeSeriesPoint {
+            timestamp: Utc::now(),
+            location_id: "sensor-001".to_string(),
+            value: 23.5,
+            tags: HashMap::new(),
+        }];
 
         let expected_metrics = ModelMetrics {
             mae: 0.3,
@@ -827,14 +833,12 @@ mod tests {
     async fn test_forecast_complete_ml_workflow() {
         let mut mock_forecast = MockForecast::new();
 
-        let training_data = vec![
-            TimeSeriesPoint {
-                timestamp: Utc::now(),
-                location_id: "sensor-001".to_string(),
-                value: 23.5,
-                tags: HashMap::new(),
-            },
-        ];
+        let training_data = vec![TimeSeriesPoint {
+            timestamp: Utc::now(),
+            location_id: "sensor-001".to_string(),
+            value: 23.5,
+            tags: HashMap::new(),
+        }];
 
         let expected_metrics_train = ModelMetrics {
             mae: 0.5,
@@ -933,10 +937,11 @@ mod tests {
 
         let training_data = vec![];
 
-        mock_forecast
-            .expect_train()
-            .times(1)
-            .returning(|_| Err(CoreError::Forecast("Insufficient training data".to_string())));
+        mock_forecast.expect_train().times(1).returning(|_| {
+            Err(CoreError::Forecast(
+                "Insufficient training data".to_string(),
+            ))
+        });
 
         let result = mock_forecast.train(training_data).await;
         assert!(result.is_err());

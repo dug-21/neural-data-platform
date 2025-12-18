@@ -6,9 +6,9 @@
 -- Purpose: Export hourly aggregated views to SQLite format for Grafana consumption
 --
 -- Usage:
---   duckdb /duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql
+--   duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql
 --
--- Output: /duckdb/grafana.db (SQLite database for Grafana)
+-- Output: /var/duckdb/grafana.db (SQLite database for Grafana)
 --
 -- Schedule: Run this every 5 minutes via cron or systemd timer
 
@@ -17,7 +17,7 @@ INSTALL sqlite;
 LOAD sqlite;
 
 -- Attach SQLite database (will create if doesn't exist)
-ATTACH '/duckdb/grafana.db' AS grafana_db (TYPE SQLITE);
+ATTACH '/var/duckdb/grafana.db' AS grafana_db (TYPE SQLITE);
 
 -- Drop and recreate readings_hourly table in SQLite
 DROP TABLE IF EXISTS grafana_db.readings_hourly;

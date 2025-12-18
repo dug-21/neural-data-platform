@@ -1,7 +1,6 @@
 -- Hourly Aggregation View for All Streams
 -- Feature: DP-001 - Grafana Dashboard Support
--- Author: ndp-grafana-dev
--- Date: 2025-12-18
+-- Sources: Silver layer views (wide format after PIVOT)
 --
 -- Purpose: Provide hourly aggregations across all streams for dashboard performance
 --
@@ -9,7 +8,7 @@
 --
 -- Columns:
 --   - bucket: Hourly time bucket (timestamp)
---   - stream_id: Stream identifier (air-quality, outdoor-conditions, outdoor-air-quality)
+--   - stream_id: Stream identifier (air-quality, outdoor-weather, outdoor-air-quality)
 --   - Aggregated metrics: avg_*, max_*, min_* for each stream's fields
 
 CREATE OR REPLACE VIEW readings_hourly AS
@@ -73,10 +72,10 @@ GROUP BY time_bucket(INTERVAL '1 hour', timestamp)
 
 UNION ALL
 
--- Outdoor Weather Stream (outdoor-conditions)
+-- Outdoor Weather Stream (outdoor-weather)
 SELECT
     time_bucket(INTERVAL '1 hour', timestamp) as bucket,
-    'outdoor-conditions' as stream_id,
+    'outdoor-weather' as stream_id,
 
     -- Indoor air quality placeholders (NULL for outdoor weather stream)
     NULL as avg_pm25,
@@ -107,7 +106,7 @@ SELECT
     NULL as max_nox,
     NULL as min_nox,
 
-    -- Feels Like temperature (corrected field name)
+    -- Feels Like temperature
     ROUND(AVG(feels_like), 1) as avg_apparent_temperature,
 
     -- Wind speed
@@ -116,7 +115,7 @@ SELECT
     -- Pressure
     ROUND(AVG(pressure), 1) as avg_pressure,
 
-    -- Cloud cover (corrected field name)
+    -- Cloud cover
     ROUND(AVG(clouds), 0) as avg_cloud_cover,
 
     -- Outdoor air quality placeholders (NULL for weather stream)
@@ -205,6 +204,7 @@ ORDER BY bucket DESC, stream_id;
 -- ============================================================================
 -- View Metadata
 -- ============================================================================
+-- Source: Silver layer views (wide format after PIVOT)
 -- Expected row count: ~24 rows/day per stream (72 total)
 -- Expected columns: 32 (bucket, stream_id + 30 metric columns)
 -- Performance: Fast aggregation for 7-30 day dashboard queries

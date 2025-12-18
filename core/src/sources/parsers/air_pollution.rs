@@ -31,14 +31,14 @@ struct AirQualityIndex {
 
 #[derive(Debug, Clone, Deserialize)]
 struct PollutionComponents {
-    co: f64,       // Carbon monoxide (μg/m³)
-    no: f64,       // Nitrogen monoxide (μg/m³)
-    no2: f64,      // Nitrogen dioxide (μg/m³)
-    o3: f64,       // Ozone (μg/m³)
-    so2: f64,      // Sulphur dioxide (μg/m³)
-    pm2_5: f64,    // Fine particles (μg/m³)
-    pm10: f64,     // Coarse particulate matter (μg/m³)
-    nh3: f64,      // Ammonia (μg/m³)
+    co: f64,    // Carbon monoxide (μg/m³)
+    no: f64,    // Nitrogen monoxide (μg/m³)
+    no2: f64,   // Nitrogen dioxide (μg/m³)
+    o3: f64,    // Ozone (μg/m³)
+    so2: f64,   // Sulphur dioxide (μg/m³)
+    pm2_5: f64, // Fine particles (μg/m³)
+    pm10: f64,  // Coarse particulate matter (μg/m³)
+    nh3: f64,   // Ammonia (μg/m³)
 }
 
 /// Parser for OpenWeatherMap air pollution API responses
@@ -86,8 +86,9 @@ impl ResponseParser for AirPollutionParser {
         location_id: &str,
         timestamp: DateTime<Utc>,
     ) -> CoreResult<Vec<TimeSeriesPoint>> {
-        let pollution: AirPollutionResponse = serde_json::from_str(response_body)
-            .map_err(|e| CoreError::Source(format!("Failed to parse air pollution response: {}", e)))?;
+        let pollution: AirPollutionResponse = serde_json::from_str(response_body).map_err(|e| {
+            CoreError::Source(format!("Failed to parse air pollution response: {}", e))
+        })?;
 
         if pollution.list.is_empty() {
             return Err(CoreError::Source(
@@ -232,7 +233,10 @@ mod tests {
         assert_eq!(points.len(), 9);
 
         // Verify AQI
-        let aqi = points.iter().find(|p| p.tags.get("metric") == Some(&"aqi".to_string())).unwrap();
+        let aqi = points
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"aqi".to_string()))
+            .unwrap();
         assert_eq!(aqi.value, 2.0);
         assert_eq!(aqi.location_id, "test-location");
         assert_eq!(aqi.tags.get("unit"), Some(&"1-5_scale".to_string()));
@@ -296,7 +300,10 @@ mod tests {
         let points = parser.parse(json, "test-location", timestamp).unwrap();
 
         for point in points {
-            assert_eq!(point.tags.get("source"), Some(&"openweathermap".to_string()));
+            assert_eq!(
+                point.tags.get("source"),
+                Some(&"openweathermap".to_string())
+            );
             assert_eq!(point.tags.get("api"), Some(&"air_pollution".to_string()));
             assert!(point.tags.contains_key("unit"));
             assert!(point.tags.contains_key("metric"));

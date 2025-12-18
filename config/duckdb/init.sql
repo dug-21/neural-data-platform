@@ -38,7 +38,7 @@ SELECT 'Starting Silver layer view initialization...' as status,
 -- Indoor Air Quality View
 -- Source: /data/air-quality/*.parquet
 -- Quality: Range validation, NULL handling, rounding
-.read config/duckdb/views/silver_indoor_air.sql
+.read /config/duckdb/views/silver_indoor_air.sql
 
 SELECT 'Created view: silver_indoor_air' as status,
        current_timestamp as timestamp;
@@ -46,7 +46,7 @@ SELECT 'Created view: silver_indoor_air' as status,
 -- Outdoor Weather View
 -- Source: /data/outdoor-weather/*.parquet
 -- Quality: Range validation, NULL handling, rounding
-.read config/duckdb/views/silver_outdoor_weather.sql
+.read /config/duckdb/views/silver_outdoor_weather.sql
 
 SELECT 'Created view: silver_outdoor_weather' as status,
        current_timestamp as timestamp;
@@ -54,7 +54,7 @@ SELECT 'Created view: silver_outdoor_weather' as status,
 -- Outdoor Air Quality View
 -- Source: /data/outdoor-air-quality/*.parquet
 -- Quality: Range validation, NULL handling, rounding
-.read config/duckdb/views/silver_outdoor_air.sql
+.read /config/duckdb/views/silver_outdoor_air.sql
 
 SELECT 'Created view: silver_outdoor_air' as status,
        current_timestamp as timestamp;
@@ -66,7 +66,7 @@ SELECT 'Created view: silver_outdoor_air' as status,
 -- Cross-Stream Aligned View
 -- Sources: All three streams
 -- Alignment: 10-minute time buckets with FULL OUTER JOIN
-.read config/duckdb/views/cross_stream_aligned.sql
+.read /config/duckdb/views/cross_stream_aligned.sql
 
 SELECT 'Created view: cross_stream_aligned' as status,
        current_timestamp as timestamp;
@@ -74,7 +74,7 @@ SELECT 'Created view: cross_stream_aligned' as status,
 -- Hourly Aggregations View (for Grafana dashboards)
 -- Sources: All three streams
 -- Aggregation: Hourly rollups for fast dashboard queries
-.read config/duckdb/views/readings_hourly.sql
+.read /config/duckdb/views/readings_hourly.sql
 
 SELECT 'Created view: readings_hourly' as status,
        current_timestamp as timestamp;

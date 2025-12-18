@@ -13,8 +13,8 @@ pub mod parsers;
 
 pub use http_poll::{
     AuthMethod, EndpointConfig, ErrorClassification, GenericHttpPollingConfig,
-    GenericHttpPollingSource, HttpPollingConfig, HttpPollingSource, ParserRegistry,
-    PollingError, ResponseParser, RetryConfig, SensorConfig,
+    GenericHttpPollingSource, HttpPollingConfig, HttpPollingSource, ParserRegistry, PollingError,
+    ResponseParser, RetryConfig, SensorConfig,
 };
 pub use merge::{MergeConfig, ReadingMerger};
 pub use mqtt::{MqttConfig, MqttSource};

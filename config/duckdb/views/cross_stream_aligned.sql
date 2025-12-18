@@ -1,6 +1,6 @@
 -- Cross-Stream Aligned View
 -- Feature: DP-001
--- Sources: air-quality + outdoor-weather + outdoor-air-quality
+-- Sources: Silver layer views (indoor air + outdoor weather + outdoor air quality)
 -- Description: Time-aligned multi-stream data for correlation analysis
 --
 -- Alignment Strategy:
@@ -154,25 +154,8 @@ ORDER BY time_bucket DESC;
 -- ============================================================================
 -- View Metadata
 -- ============================================================================
+-- Source: Silver layer views (wide format after PIVOT)
 -- Expected row count: ~144 buckets/day
 -- Expected columns: 34 (time_bucket + 30 measurements + 3 flags)
 -- Join strategy: FULL OUTER JOIN (preserves all data)
--- Time alignment: 10-minute buckets
--- Aggregation: AVG() for indoor, FIRST() for outdoor
--- ============================================================================
-
--- ============================================================================
--- Query Performance Tips
--- ============================================================================
--- 1. Always filter by time_bucket range:
---    WHERE time_bucket >= '2025-12-11' AND time_bucket < '2025-12-18'
---
--- 2. Select only needed columns (avoid SELECT *):
---    SELECT time_bucket, indoor_pm25, outdoor_temp
---
--- 3. Use has_*_data flags to filter complete records:
---    WHERE has_indoor_data = 1 AND has_weather_data = 1
---
--- 4. For large date ranges, consider materializing results:
---    CREATE TABLE daily_summary AS SELECT ... FROM cross_stream_aligned
 -- ============================================================================

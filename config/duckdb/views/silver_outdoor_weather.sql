@@ -1,141 +1,145 @@
 -- Silver Layer View: Outdoor Weather
 -- Feature: DP-001
--- Source: /data/outdoor-weather/*.parquet
--- Description: OpenWeatherMap Current Weather API data with validation
+-- Source: /data/data/outdoor-weather/**/*.parquet (Bronze layer - long format)
+-- Description: OpenWeatherMap Current Weather API data PIVOTed to wide format
+--
+-- Bronze Schema: timestamp, location_id, metric, value
+-- Silver Schema: timestamp, location_id, temperature, feels_like, pressure, humidity,
+--                wind_speed, wind_deg, wind_gust, clouds, visibility, rain_1h, snow_1h
 --
 -- Quality Rules:
 --   - Range validation per OpenWeatherMap API specs
 --   - NULL handling for optional fields
 --   - Rounding to meteorological precision standards
---   - Timestamp validation (non-NULL required)
 --
 -- Performance: Optimized for 7-day queries (<5s target)
 
 CREATE OR REPLACE VIEW silver_outdoor_weather AS
-SELECT
-    -- Timestamp (required field)
-    timestamp,
+WITH bronze_data AS (
+    SELECT
+        -- Convert microseconds to timestamp
+        to_timestamp(timestamp / 1000000) as ts,
+        location_id,
+        metric,
+        value
+    FROM read_parquet(
+        '/data/data/outdoor-weather/**/*.parquet',
+        union_by_name = true,
+        filename = true,
+        hive_partitioning = true
+    )
+    WHERE timestamp IS NOT NULL
+),
 
-    -- Temperature
-    -- Range: -50 to 60°C (global extremes)
-    -- Precision: 1 decimal (standard meteorological)
+-- PIVOT from long format to wide format
+pivoted AS (
+    SELECT
+        ts as timestamp,
+        location_id,
+        MAX(CASE WHEN metric = 'temperature' THEN value END) as temperature_raw,
+        MAX(CASE WHEN metric = 'feels_like' THEN value END) as feels_like_raw,
+        MAX(CASE WHEN metric = 'pressure' THEN value END) as pressure_raw,
+        MAX(CASE WHEN metric = 'humidity' THEN value END) as humidity_raw,
+        MAX(CASE WHEN metric = 'wind_speed' THEN value END) as wind_speed_raw,
+        MAX(CASE WHEN metric = 'wind_deg' THEN value END) as wind_deg_raw,
+        MAX(CASE WHEN metric = 'wind_gust' THEN value END) as wind_gust_raw,
+        MAX(CASE WHEN metric = 'clouds' THEN value END) as clouds_raw,
+        MAX(CASE WHEN metric = 'visibility' THEN value END) as visibility_raw,
+        MAX(CASE WHEN metric = 'rain_1h' THEN value END) as rain_1h_raw,
+        MAX(CASE WHEN metric = 'snow_1h' THEN value END) as snow_1h_raw
+    FROM bronze_data
+    GROUP BY ts, location_id
+)
+
+-- Apply data quality validation
+SELECT
+    timestamp,
+    location_id,
+
+    -- Temperature: -50 to 60°C (global extremes), 1 decimal
     CASE
-        WHEN temperature >= -50 AND temperature <= 60
-        THEN ROUND(temperature, 1)
+        WHEN temperature_raw >= -50 AND temperature_raw <= 60
+        THEN ROUND(temperature_raw, 1)
         ELSE NULL
     END as temperature,
 
-    -- Feels Like Temperature (wind chill / heat index)
-    -- Range: -50 to 60°C (global extremes)
-    -- Precision: 1 decimal (standard meteorological)
+    -- Feels Like: -50 to 60°C, 1 decimal
     CASE
-        WHEN feels_like >= -50 AND feels_like <= 60
-        THEN ROUND(feels_like, 1)
+        WHEN feels_like_raw >= -50 AND feels_like_raw <= 60
+        THEN ROUND(feels_like_raw, 1)
         ELSE NULL
     END as feels_like,
 
-    -- Atmospheric Pressure
-    -- Range: 800-1200 hPa (typhoon low to record high)
-    -- Precision: 1 decimal (barometer accuracy)
+    -- Pressure: 800-1200 hPa, 1 decimal
     CASE
-        WHEN pressure >= 800 AND pressure <= 1200
-        THEN ROUND(pressure, 1)
+        WHEN pressure_raw >= 800 AND pressure_raw <= 1200
+        THEN ROUND(pressure_raw, 1)
         ELSE NULL
     END as pressure,
 
-    -- Relative Humidity
-    -- Range: 0-100% (physical limits)
-    -- Precision: 1 decimal (standard meteorological)
+    -- Humidity: 0-100%, 1 decimal
     CASE
-        WHEN humidity >= 0 AND humidity <= 100
-        THEN ROUND(humidity, 1)
+        WHEN humidity_raw >= 0 AND humidity_raw <= 100
+        THEN ROUND(humidity_raw, 1)
         ELSE NULL
     END as humidity,
 
-    -- Wind Speed
-    -- Range: 0-100 m/s (0 to hurricane force)
-    -- Precision: 2 decimals (anemometer precision)
+    -- Wind Speed: 0-100 m/s, 2 decimals
     CASE
-        WHEN wind_speed >= 0 AND wind_speed <= 100
-        THEN ROUND(wind_speed, 2)
+        WHEN wind_speed_raw >= 0 AND wind_speed_raw <= 100
+        THEN ROUND(wind_speed_raw, 2)
         ELSE NULL
     END as wind_speed,
 
-    -- Wind Direction
-    -- Range: 0-360 degrees (compass bearing)
-    -- Precision: 0 decimals (wind vane accuracy ±10°)
+    -- Wind Direction: 0-360 degrees, integer
     CASE
-        WHEN wind_deg >= 0 AND wind_deg <= 360
-        THEN ROUND(wind_deg, 0)
+        WHEN wind_deg_raw >= 0 AND wind_deg_raw <= 360
+        THEN ROUND(wind_deg_raw, 0)
         ELSE NULL
     END as wind_deg,
 
-    -- Wind Gust
-    -- Range: 0-150 m/s (0 to extreme event)
-    -- Precision: 2 decimals (anemometer precision)
+    -- Wind Gust: 0-150 m/s, 2 decimals
     CASE
-        WHEN wind_gust >= 0 AND wind_gust <= 150
-        THEN ROUND(wind_gust, 2)
+        WHEN wind_gust_raw >= 0 AND wind_gust_raw <= 150
+        THEN ROUND(wind_gust_raw, 2)
         ELSE NULL
     END as wind_gust,
 
-    -- Cloud Cover
-    -- Range: 0-100% (clear to overcast)
-    -- Precision: 0 decimals (oktas converted to percent)
+    -- Clouds: 0-100%, integer
     CASE
-        WHEN clouds >= 0 AND clouds <= 100
-        THEN ROUND(clouds, 0)
+        WHEN clouds_raw >= 0 AND clouds_raw <= 100
+        THEN ROUND(clouds_raw, 0)
         ELSE NULL
     END as clouds,
 
-    -- Visibility
-    -- Range: 0-50000 meters (fog to clear)
-    -- Precision: 0 decimals (observer accuracy ~100m)
+    -- Visibility: 0-50000 meters, integer
     CASE
-        WHEN visibility >= 0 AND visibility <= 50000
-        THEN ROUND(visibility, 0)
+        WHEN visibility_raw >= 0 AND visibility_raw <= 50000
+        THEN ROUND(visibility_raw, 0)
         ELSE NULL
     END as visibility,
 
-    -- Precipitation - Rain (1 hour)
-    -- Range: 0-500 mm (0 to extreme rainfall)
-    -- Precision: 2 decimals (rain gauge accuracy)
+    -- Rain 1h: 0-500 mm, 2 decimals
     CASE
-        WHEN rain_1h >= 0 AND rain_1h <= 500
-        THEN ROUND(rain_1h, 2)
+        WHEN rain_1h_raw >= 0 AND rain_1h_raw <= 500
+        THEN ROUND(rain_1h_raw, 2)
         ELSE NULL
     END as rain_1h,
 
-    -- Precipitation - Snow (1 hour)
-    -- Range: 0-500 mm (0 to extreme snowfall)
-    -- Precision: 2 decimals (snow gauge accuracy)
+    -- Snow 1h: 0-500 mm, 2 decimals
     CASE
-        WHEN snow_1h >= 0 AND snow_1h <= 500
-        THEN ROUND(snow_1h, 2)
+        WHEN snow_1h_raw >= 0 AND snow_1h_raw <= 500
+        THEN ROUND(snow_1h_raw, 2)
         ELSE NULL
     END as snow_1h
 
-FROM read_parquet(
-    '/data/outdoor-weather/**/*.parquet',
-    union_by_name = true,  -- Handle schema evolution
-    filename = true        -- Include file path for debugging
-)
-WHERE
-    -- Filter out records with invalid timestamps
-    timestamp IS NOT NULL
-
-    -- Optional: Filter to recent data only (improve query performance)
-    -- Uncomment for production if only recent data is needed:
-    -- AND timestamp >= current_timestamp - INTERVAL '90 days'
-
+FROM pivoted
 ORDER BY timestamp DESC;
 
 -- ============================================================================
 -- View Metadata
 -- ============================================================================
--- Expected row count: ~144 rows/day (1 reading/10 minutes)
--- Expected columns: 12 (timestamp + 11 measurements)
--- Nullable columns: feels_like, pressure, humidity, wind_speed, wind_deg,
---                   wind_gust, clouds, visibility, rain_1h, snow_1h
--- Required columns: timestamp, temperature
+-- Source: Bronze layer (long format with metric column)
+-- Transform: PIVOT to wide format with validation
+-- Expected columns: 13 (timestamp, location_id, + 11 measurements)
 -- ============================================================================
