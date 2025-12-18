@@ -144,7 +144,7 @@ status() {
     echo "  MQTT Broker: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:1883 2>/dev/null || echo 'N/A (TCP only)')"
     echo "  etcd:        $(docker exec etcd etcdctl endpoint health 2>/dev/null || echo 'Not running')"
     echo "  Air Quality: $(curl -s http://localhost:8080/health 2>/dev/null || echo 'Not running')"
-    echo "  DuckDB:      $(docker exec duckdb test -f /duckdb/grafana.db 2>/dev/null && echo 'Running (SQLite export OK)' || echo 'Not running')"
+    echo "  DuckDB:      $(docker exec duckdb test -f /var/duckdb/grafana.db 2>/dev/null && echo 'Running (SQLite export OK)' || echo 'Not running')"
     echo "  Grafana:     $(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health 2>/dev/null || echo 'Not running')"
     echo ""
 

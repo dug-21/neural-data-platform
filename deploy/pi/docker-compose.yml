@@ -108,23 +108,24 @@ services:
     container_name: duckdb
     volumes:
       - air-quality-data:/data:ro           # Read-only access to Bronze layer
-      - duckdb-data:/duckdb                 # Persistent DuckDB database files
+      - duckdb-data:/var/duckdb             # Persistent DuckDB database files
       - ../../config/duckdb:/config/duckdb:ro  # SQL view definitions
     restart: unless-stopped
     entrypoint: /bin/sh
     command: >
       -c "
+      mkdir -p /var/duckdb &&
       echo 'Initializing DuckDB Silver layer views...' &&
-      duckdb /duckdb/neural_platform.db < /config/duckdb/init.sql 2>&1 || echo 'Init warning (may be OK if no data yet)' &&
+      duckdb /var/duckdb/neural_platform.db < /config/duckdb/init.sql 2>&1 || echo 'Init warning (may be OK if no data yet)' &&
       echo 'Starting SQLite export loop (every 5 minutes)...' &&
       while true; do
         echo \"[$(date)] Exporting to SQLite for Grafana...\" &&
-        duckdb /duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning'
+        duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning'
         sleep 300
       done
       "
     healthcheck:
-      test: ["CMD", "test", "-f", "/duckdb/grafana.db"]
+      test: ["CMD", "test", "-f", "/var/duckdb/grafana.db"]
       interval: 60s
       timeout: 10s
       retries: 5
