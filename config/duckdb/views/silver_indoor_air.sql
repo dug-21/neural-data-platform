@@ -40,8 +40,11 @@ pivoted AS (
         location_id,
         -- pm02 in Bronze → pm25 in Silver (PM2.5 measurement)
         MAX(CASE WHEN metric = 'pm02' THEN value END) as pm25_raw,
-        -- pm10 stays pm10
-        MAX(CASE WHEN metric = 'pm10' THEN value END) as pm10_raw,
+        -- pm10 or pm10Standard → pm10
+        COALESCE(
+            MAX(CASE WHEN metric = 'pm10' THEN value END),
+            MAX(CASE WHEN metric = 'pm10Standard' THEN value END)
+        ) as pm10_raw,
         -- rco2 in Bronze → co2 in Silver (some parsers write as 'co2')
         COALESCE(
             MAX(CASE WHEN metric = 'rco2' THEN value END),
