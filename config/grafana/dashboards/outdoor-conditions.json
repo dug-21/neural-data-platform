@@ -28,7 +28,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_temperature AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-conditions'\nORDER BY bucket DESC\nLIMIT 1",
+          "rawSql": "SELECT\n    avg_temperature AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-weather'\nORDER BY bucket DESC\nLIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -73,7 +73,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_apparent_temperature AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-conditions'\nORDER BY bucket DESC\nLIMIT 1",
+          "rawSql": "SELECT\n    avg_apparent_temperature AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-weather'\nORDER BY bucket DESC\nLIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -118,7 +118,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_wind_speed AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-conditions'\nORDER BY bucket DESC\nLIMIT 1",
+          "rawSql": "SELECT\n    avg_wind_speed AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-weather'\nORDER BY bucket DESC\nLIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -166,7 +166,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_humidity AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-conditions'\nORDER BY bucket DESC\nLIMIT 1",
+          "rawSql": "SELECT\n    avg_humidity AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'outdoor-weather'\nORDER BY bucket DESC\nLIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -211,7 +211,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_temperature AS \"Temperature (°C)\",\n    avg_apparent_temperature AS \"Feels Like (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-conditions'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_temperature AS \"Temperature (°C)\",\n    avg_apparent_temperature AS \"Feels Like (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -272,7 +272,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_wind_speed AS \"Wind Speed (m/s)\",\n    avg_pressure AS \"Pressure (hPa)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-conditions'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_wind_speed AS \"Wind Speed (m/s)\",\n    avg_pressure AS \"Pressure (hPa)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -334,7 +334,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    bucket AS time,\n    avg_cloud_cover AS \"Cloud Cover (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-conditions'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_cloud_cover AS \"Cloud Cover (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }

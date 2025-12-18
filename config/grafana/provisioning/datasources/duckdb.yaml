@@ -1,11 +1,11 @@
 apiVersion: 1
 datasources:
   - name: DuckDB
-    type: frser-sqlite-datasource
+    type: motherduck-duckdb-datasource
     uid: duckdb-ndp
     access: proxy
-    url: file:/data/duckdb/grafana.db
     isDefault: true
     editable: false
     jsonData:
-      path: /data/duckdb/grafana.db
+      # Path to DuckDB database with Silver layer views
+      path: /data/duckdb/neural_platform.db

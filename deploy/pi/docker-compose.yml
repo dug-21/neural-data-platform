@@ -102,7 +102,7 @@ services:
           memory: 512M
 
   # DuckDB - Analytical Query Engine (DP-001 Silver Layer)
-  # Exports Parquet data to SQLite for Grafana consumption
+  # Grafana connects directly via DuckDB plugin (no SQLite export needed)
   duckdb:
     image: datacatering/duckdb:v1.1.3
     container_name: duckdb
@@ -117,15 +117,11 @@ services:
       mkdir -p /var/duckdb &&
       echo 'Initializing DuckDB Silver layer views...' &&
       /duckdb /var/duckdb/neural_platform.db < /config/duckdb/init.sql 2>&1 || echo 'Init warning (may be OK if no data yet)' &&
-      echo 'Starting SQLite export loop (every 5 minutes)...' &&
-      while true; do
-        echo \"[$(date)] Exporting to SQLite for Grafana...\" &&
-        /duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning'
-        sleep 300
-      done
+      echo 'DuckDB initialized. Keeping container alive for Grafana queries...' &&
+      tail -f /dev/null
       "
     healthcheck:
-      test: ["CMD", "test", "-f", "/var/duckdb/grafana.db"]
+      test: ["CMD", "test", "-f", "/var/duckdb/neural_platform.db"]
       interval: 60s
       timeout: 10s
       retries: 5
@@ -139,8 +135,9 @@ services:
         condition: service_healthy
 
   # Grafana - Data Visualization & Dashboards (DP-001)
+  # Uses Ubuntu image for DuckDB plugin compatibility (glibc required)
   grafana:
-    image: grafana/grafana-oss:latest
+    image: grafana/grafana-oss:11.4.0-ubuntu
     container_name: grafana
     ports:
       - "3000:3000"     # Grafana web UI
@@ -149,7 +146,8 @@ services:
       - ../../config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ../../config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ../../config/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - duckdb-data:/data/duckdb:ro           # Read-only access to DuckDB exports
+      - duckdb-data:/data/duckdb:ro           # Read-only access to DuckDB database
+      - air-quality-data:/data:ro             # Read-only access to Bronze Parquet files
     environment:
       # Security
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -160,9 +158,9 @@ services:
       # Server
       - GF_SERVER_ROOT_URL=http://localhost:3000
       - GF_LOG_LEVEL=info
-      # Plugins - Allow unsigned SQLite plugin for DuckDB integration
-      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=frser-sqlite-datasource
-      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
+      # Plugins - Allow unsigned DuckDB plugin
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=motherduck-duckdb-datasource
+      - GF_INSTALL_PLUGINS=https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v1.0.14/motherduck-duckdb-datasource-1.0.14.zip;motherduck-duckdb-datasource
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
