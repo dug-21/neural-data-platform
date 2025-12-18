@@ -7,6 +7,7 @@ use neural_core::{
     HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, SensorConfig, Source,
     SourceConfig, SourceType, StreamConfig, TimeSeriesPoint,
 };
+use neural_core::parsers::{ParserConfig, ParserType, create_parser_from_config};
 use neural_core::sources::{
     AuthMethod, EndpointConfig, GenericHttpPollingConfig, GenericHttpPollingSource,
     RetryConfig,
@@ -327,7 +328,19 @@ impl SourceManager {
     ) -> Result<(), SourceManagerError> {
         info!("Starting HTTP polling source for stream {}", stream_id);
 
-        let mut source = HttpPollingSource::new(config)
+        // Create parser from config (FlatJson for AirGradient sensors)
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: None,
+            skip_fields: vec!["serialno".to_string(), "wifi".to_string(), "boot".to_string(), "firmware".to_string(), "model".to_string(), "ledMode".to_string(), "bootCount".to_string()],
+            field_mappings: None,
+            default_tags: std::collections::HashMap::new(),
+        };
+        let parser = create_parser_from_config(parser_config)
+            .map_err(|e| SourceManagerError::SpawnError(format!("Failed to create parser: {}", e)))?;
+
+        let mut source = HttpPollingSource::new(config, parser)
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
@@ -568,7 +581,19 @@ impl SourceManager {
     ) -> Result<(), SourceManagerError> {
         info!("Starting MQTT source for stream {}", stream_id);
 
-        let mut source = MqttSource::new(config);
+        // Create parser from config (FlatJson for AirGradient MQTT messages)
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: None,
+            skip_fields: vec!["serialno".to_string(), "wifi".to_string(), "boot".to_string(), "firmware".to_string(), "model".to_string(), "ledMode".to_string(), "bootCount".to_string()],
+            field_mappings: None,
+            default_tags: std::collections::HashMap::new(),
+        };
+        let parser = create_parser_from_config(parser_config)
+            .map_err(|e| SourceManagerError::SpawnError(format!("Failed to create parser: {}", e)))?;
+
+        let mut source = MqttSource::new(config, parser);
         source.start().await
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 

@@ -7,6 +7,7 @@
 //! - Provides health checking for monitoring
 
 use neural_core::{CoreError, MqttConfig, MqttSource, TimeSeriesPoint};
+use neural_core::parsers::{ParserConfig, ParserType, create_parser_from_config};
 use neural_core::traits::{HealthStatus, Source};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
@@ -34,8 +35,20 @@ impl MqttHandler {
     ) -> Result<Self, CoreError> {
         info!("Initializing MQTT handler with broker: {}:{}", config.broker_url, config.port);
 
+        // Create parser from config (FlatJson for AirGradient MQTT messages)
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: None,
+            skip_fields: vec!["serialno".to_string(), "wifi".to_string(), "boot".to_string(), "firmware".to_string(), "model".to_string(), "ledMode".to_string(), "bootCount".to_string()],
+            field_mappings: None,
+            default_tags: std::collections::HashMap::new(),
+        };
+        let parser = create_parser_from_config(parser_config)
+            .map_err(|e| CoreError::Config(format!("Failed to create parser: {}", e)))?;
+
         // Start the MQTT source (connects and begins receiving messages)
-        let mut source = MqttSource::new(config);
+        let mut source = MqttSource::new(config, parser);
         source.start().await?;
 
         info!("MQTT handler started successfully");
