@@ -8,4 +8,4 @@ datasources:
     editable: false
     jsonData:
       # Path to DuckDB database with Silver layer views
-      path: /data/duckdb/neural_platform.db
+      path: /duckdb/neural_platform.db
