@@ -199,9 +199,6 @@ services:
       resources:
         limits:
           memory: 256M
-    depends_on:
-      duckdb:
-        condition: service_healthy
 
 volumes:
   mosquitto-data:
