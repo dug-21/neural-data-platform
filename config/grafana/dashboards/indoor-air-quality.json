@@ -1,0 +1,374 @@
+{
+  "uid": "ndp-indoor-air-quality",
+  "title": "Indoor Air Quality Monitoring",
+  "tags": ["ndp", "indoor", "air-quality"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Current PM2.5",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    avg_pm25 AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY bucket DESC\nLIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µg/m³",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 12},
+              {"color": "orange", "value": 35},
+              {"color": "red", "value": 55}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Current CO2",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    avg_co2 AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY bucket DESC\nLIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ppm",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1000},
+              {"color": "red", "value": 2000}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Current Temperature",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    avg_temperature AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY bucket DESC\nLIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Current Humidity",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    avg_humidity AS \"value\",\n    bucket AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY bucket DESC\nLIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "PM2.5 Trend",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm25 AS \"PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "µg/m³",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 12},
+              {"color": "orange", "value": 35},
+              {"color": "red", "value": 55}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "CO2 Levels",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "ppm",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1000},
+              {"color": "red", "value": 2000}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Temperature & Humidity",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_temperature AS \"Temperature (°C)\",\n    avg_humidity AS \"Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 5
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Temperature (°C)"},
+            "properties": [
+              {"id": "unit", "value": "celsius"},
+              {"id": "custom.axisPlacement", "value": "left"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Humidity (%)"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "custom.axisPlacement", "value": "right"}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,403 @@
+{
+  "uid": "ndp-comparison",
+  "title": "Indoor vs Outdoor Comparison",
+  "tags": ["ndp", "comparison"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Temperature Delta",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH indoor AS (\n    SELECT avg_temperature AS temp\n    FROM readings_hourly\n    WHERE stream_id = 'air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n),\noutdoor AS (\n    SELECT avg_temperature AS temp\n    FROM readings_hourly\n    WHERE stream_id = 'outdoor-conditions'\n    ORDER BY bucket DESC\n    LIMIT 1\n)\nSELECT (indoor.temp - outdoor.temp) AS \"value\"\nFROM indoor, outdoor",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "PM2.5 Delta",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH indoor AS (\n    SELECT avg_pm25 AS pm25\n    FROM readings_hourly\n    WHERE stream_id = 'air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n),\noutdoor AS (\n    SELECT avg_pm2_5 AS pm25\n    FROM readings_hourly\n    WHERE stream_id = 'outdoor-air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n)\nSELECT (indoor.pm25 - outdoor.pm25) AS \"value\"\nFROM indoor, outdoor",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µg/m³",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 10}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Humidity Delta",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH indoor AS (\n    SELECT avg_humidity AS humidity\n    FROM readings_hourly\n    WHERE stream_id = 'air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n),\noutdoor AS (\n    SELECT avg_humidity AS humidity\n    FROM readings_hourly\n    WHERE stream_id = 'outdoor-conditions'\n    ORDER BY bucket DESC\n    LIMIT 1\n)\nSELECT (indoor.humidity - outdoor.humidity) AS \"value\"\nFROM indoor, outdoor",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Temperature Comparison",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_temperature AS \"Indoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nUNION ALL\n\nSELECT\n    bucket AS time,\n    avg_temperature AS \"Outdoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-conditions'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "celsius"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Indoor Temperature (°C)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Outdoor Temperature (°C)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "PM2.5 Comparison",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_pm25 AS \"Indoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nUNION ALL\n\nSELECT\n    bucket AS time,\n    avg_pm2_5 AS \"Outdoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "µg/m³",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 12},
+              {"color": "orange", "value": 35},
+              {"color": "red", "value": 55}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Indoor PM2.5 (µg/m³)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Outdoor PM2.5 (µg/m³)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Humidity Comparison",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_humidity AS \"Indoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nUNION ALL\n\nSELECT\n    bucket AS time,\n    avg_humidity AS \"Outdoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-conditions'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Indoor Humidity (%)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Outdoor Humidity (%)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "CO2 Levels (Indoor Only)",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "SELECT\n    bucket AS time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "ppm",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1000},
+              {"color": "red", "value": 2000}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
