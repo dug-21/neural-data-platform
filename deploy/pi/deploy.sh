@@ -172,8 +172,20 @@ status() {
 update() {
     log "Updating deployment..."
 
-    # Pull latest code from repo root
-    git -C "$REPO_ROOT" pull origin main
+    # Fetch latest from origin
+    git -C "$REPO_ROOT" fetch origin
+
+    # Check for local uncommitted changes to tracked files
+    if ! git -C "$REPO_ROOT" diff --quiet HEAD 2>/dev/null; then
+        warn "Local changes detected in tracked files:"
+        git -C "$REPO_ROOT" diff --stat HEAD
+        warn "These will be overwritten. Ctrl+C to abort, or wait 5 seconds to continue..."
+        sleep 5
+    fi
+
+    # Reset to match origin exactly (safe: only affects tracked files, not data volumes)
+    log "Syncing to origin/main..."
+    git -C "$REPO_ROOT" reset --hard origin/main
 
     # Rebuild and restart
     build
