@@ -835,7 +835,10 @@ mod tests {
 
         // Verify wrong path does NOT exist
         let wrong_path = store.partition_path("d83bda1cd074", timestamp);
-        assert!(!wrong_path.exists(), "File should NOT exist in device MAC directory");
+        assert!(
+            !wrong_path.exists(),
+            "File should NOT exist in device MAC directory"
+        );
     }
 
     #[tokio::test]
@@ -887,7 +890,8 @@ mod tests {
         store.write(point).await.unwrap();
 
         // Verify file structure
-        let expected_path = temp_dir.path()
+        let expected_path = temp_dir
+            .path()
             .join("data")
             .join("air-quality") // Stream ID, NOT device MAC
             .join("year=2024")
@@ -895,10 +899,14 @@ mod tests {
             .join("day=15")
             .join("readings.parquet");
 
-        assert!(expected_path.exists(), "File should be in air-quality directory");
+        assert!(
+            expected_path.exists(),
+            "File should be in air-quality directory"
+        );
 
         // Verify wrong path does NOT exist
-        let wrong_path = temp_dir.path()
+        let wrong_path = temp_dir
+            .path()
             .join("data")
             .join("d83bda1cd074") // Device MAC directory should NOT exist
             .join("year=2024")
@@ -906,7 +914,10 @@ mod tests {
             .join("day=15")
             .join("readings.parquet");
 
-        assert!(!wrong_path.exists(), "File should NOT be in device MAC directory");
+        assert!(
+            !wrong_path.exists(),
+            "File should NOT be in device MAC directory"
+        );
     }
 
     #[tokio::test]

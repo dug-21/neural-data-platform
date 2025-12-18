@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rand;
 use reqwest::Client;
-use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,6 +20,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
+use crate::parsers::{FlatJsonParser, Parser, ParserConfig, ParserType};
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 
 /// Authentication method for HTTP endpoints
@@ -341,32 +342,10 @@ impl Default for HttpPollingConfig {
     }
 }
 
-/// AirGradient current measures response
-#[derive(Debug, Clone, Deserialize)]
-struct CurrentMeasures {
-    #[serde(rename = "serialno")]
-    serial_no: Option<String>,
-    pm02: Option<f64>,
-    #[serde(rename = "rco2")]
-    co2: Option<f64>,
-    #[serde(rename = "atmp")]
-    temperature: Option<f64>,
-    #[serde(rename = "rhum")]
-    humidity: Option<f64>,
-    #[serde(rename = "wifi")]
-    wifi_strength: Option<i32>,
-    // Extended fields not available in MQTT
-    pm10: Option<f64>,
-    pm01: Option<f64>,
-    #[serde(rename = "tvoc")]
-    tvoc: Option<f64>,
-    #[serde(rename = "nox")]
-    nox_index: Option<f64>,
-}
-
 /// HTTP polling data source
 pub struct HttpPollingSource {
     config: HttpPollingConfig,
+    parser: Arc<dyn Parser + Send + Sync>,
     client: Client,
     receiver: Arc<Mutex<mpsc::Receiver<TimeSeriesPoint>>>,
     sender: mpsc::Sender<TimeSeriesPoint>,
@@ -375,8 +354,11 @@ pub struct HttpPollingSource {
 }
 
 impl HttpPollingSource {
-    /// Create a new HTTP polling source
-    pub fn new(config: HttpPollingConfig) -> CoreResult<Self> {
+    /// Create a new HTTP polling source with injected parser
+    pub fn new_with_parser(
+        config: HttpPollingConfig,
+        parser: Box<dyn Parser + Send + Sync>,
+    ) -> CoreResult<Self> {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         let client = Client::builder()
@@ -386,12 +368,32 @@ impl HttpPollingSource {
 
         Ok(Self {
             config,
+            parser: Arc::from(parser),
             client,
             receiver: Arc::new(Mutex::new(receiver)),
             sender,
             is_running: Arc::new(Mutex::new(false)),
             last_successful_poll: Arc::new(Mutex::new(HashMap::new())),
         })
+    }
+
+    /// Create a new HTTP polling source with default FlatJsonParser
+    ///
+    /// This constructor provides backward compatibility by creating a default
+    /// FlatJsonParser configured for AirGradient sensors.
+    pub fn new(config: HttpPollingConfig) -> CoreResult<Self> {
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            skip_fields: vec!["serialno", "firmware", "model", "ledMode"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            default_tags: [("source".to_string(), "http".to_string())].into(),
+            ..Default::default()
+        };
+        let parser = Box::new(FlatJsonParser::from_config(parser_config)?);
+        Self::new_with_parser(config, parser)
     }
 
     /// Poll a single sensor
@@ -412,149 +414,16 @@ impl HttpPollingSource {
             )));
         }
 
-        let measures: CurrentMeasures = response
-            .json()
+        let body = response
+            .text()
             .await
-            .map_err(|e| CoreError::Source(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| CoreError::Source(format!("Failed to read response body: {}", e)))?;
 
-        self.parse_measures(measures, &sensor.serial_number)
-    }
+        let json: Value = serde_json::from_str(&body)
+            .map_err(|e| CoreError::Source(format!("Failed to parse JSON: {}", e)))?;
 
-    /// Parse current measures into time series points
-    fn parse_measures(
-        &self,
-        measures: CurrentMeasures,
-        serial_number: &str,
-    ) -> CoreResult<Vec<TimeSeriesPoint>> {
         let timestamp = Utc::now();
-        let mut points = Vec::new();
-
-        let location_id = measures
-            .serial_no
-            .as_ref()
-            .unwrap_or(&serial_number.to_string())
-            .clone();
-
-        // Standard metrics (available in both MQTT and HTTP)
-        if let Some(pm02) = measures.pm02 {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "pm02".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: pm02,
-                tags,
-            });
-        }
-
-        if let Some(co2) = measures.co2 {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "co2".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: co2,
-                tags,
-            });
-        }
-
-        if let Some(temp) = measures.temperature {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "temperature".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: temp,
-                tags,
-            });
-        }
-
-        if let Some(humidity) = measures.humidity {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "humidity".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: humidity,
-                tags,
-            });
-        }
-
-        if let Some(wifi) = measures.wifi_strength {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "wifi_strength".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: wifi as f64,
-                tags,
-            });
-        }
-
-        // Extended metrics (HTTP only)
-        if let Some(pm10) = measures.pm10 {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "pm10".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: pm10,
-                tags,
-            });
-        }
-
-        if let Some(pm01) = measures.pm01 {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "pm01".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: pm01,
-                tags,
-            });
-        }
-
-        if let Some(tvoc) = measures.tvoc {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "tvoc".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: tvoc,
-                tags,
-            });
-        }
-
-        if let Some(nox) = measures.nox_index {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "nox_index".to_string());
-            tags.insert("source".to_string(), "http".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: location_id.clone(),
-                value: nox,
-                tags,
-            });
-        }
-
-        Ok(points)
+        self.parser.parse(&json, timestamp)
     }
 
     /// Poll all sensors
@@ -699,6 +568,7 @@ impl HttpPollingSource {
         // Clone necessary data for background task
         let source_clone = Self {
             config: self.config.clone(),
+            parser: self.parser.clone(),
             client: self.client.clone(),
             receiver: self.receiver.clone(),
             sender: self.sender.clone(),
@@ -1003,8 +873,8 @@ impl GenericHttpPollingSource {
         // Clone for background task
         let source_clone = Self {
             config: self.config.clone(),
-            client: self.client.clone(),
             parser_registry: self.parser_registry.clone(),
+            client: self.client.clone(),
             receiver: self.receiver.clone(),
             sender: self.sender.clone(),
             is_running: self.is_running.clone(),
@@ -1128,83 +998,91 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_parse_measures_full_data() {
-        let config = HttpPollingConfig::default();
-        let source = HttpPollingSource::new(config).unwrap();
+    async fn test_parse_with_default_parser() {
+        use crate::parsers::{FlatJsonParser, Parser, ParserConfig, ParserType};
+        use chrono::Utc;
+        use serde_json::json;
 
-        let measures = CurrentMeasures {
-            serial_no: Some("ABC123".to_string()),
-            pm02: Some(12.5),
-            co2: Some(450.0),
-            temperature: Some(22.3),
-            humidity: Some(55.0),
-            wifi_strength: Some(-45),
-            pm10: Some(15.2),
-            pm01: Some(8.1),
-            tvoc: Some(120.0),
-            nox_index: Some(1.5),
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            skip_fields: vec!["serialno".to_string(), "firmware".to_string()],
+            default_tags: [("source".to_string(), "http".to_string())].into(),
+            ..Default::default()
         };
 
-        let points = source.parse_measures(measures, "ABC123").unwrap();
-        assert_eq!(points.len(), 9);
+        let parser = FlatJsonParser::from_config(parser_config).unwrap();
 
-        // Check standard metrics
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"pm02".to_string())));
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"co2".to_string())));
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"temperature".to_string())));
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"humidity".to_string())));
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"wifi_strength".to_string())));
+        let json = json!({
+            "serialno": "ABC123",
+            "firmware": "3.4.1",
+            "pm02": 12.5,
+            "rco2": 450.0,
+            "atmp": 22.3,
+            "rhum": 55.0,
+            "wifi": -45,
+            "pm10": 15.2,
+            "pm01": 8.1,
+            "tvocIndex": 42.0,
+            "noxIndex": 1.5,
+            "tvocRaw": 120.0,
+            "noxRaw": 25.0
+        });
 
-        // Check extended metrics (HTTP only)
-        assert!(points
+        let points = parser.parse(&json, Utc::now()).unwrap();
+
+        // Should extract 11 metrics (pm02, rco2, atmp, rhum, wifi, pm10, pm01, tvocIndex, noxIndex, tvocRaw, noxRaw)
+        assert_eq!(points.len(), 11);
+
+        // Check metrics with ORIGINAL field names
+        let metric_names: Vec<String> = points
             .iter()
-            .any(|p| p.tags.get("metric") == Some(&"pm10".to_string())));
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"pm01".to_string())));
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"tvoc".to_string())));
-        assert!(points
-            .iter()
-            .any(|p| p.tags.get("metric") == Some(&"nox_index".to_string())));
+            .map(|p| p.tags.get("metric").unwrap().clone())
+            .collect();
+
+        assert!(metric_names.contains(&"pm02".to_string()));
+        assert!(metric_names.contains(&"rco2".to_string())); // NOT "co2"
+        assert!(metric_names.contains(&"atmp".to_string())); // NOT "temperature"
+        assert!(metric_names.contains(&"rhum".to_string())); // NOT "humidity"
+        assert!(metric_names.contains(&"pm10".to_string()));
+        assert!(metric_names.contains(&"pm01".to_string()));
+        assert!(metric_names.contains(&"tvocIndex".to_string()));
+        assert!(metric_names.contains(&"noxIndex".to_string()));
+        assert!(metric_names.contains(&"tvocRaw".to_string()));
+        assert!(metric_names.contains(&"noxRaw".to_string()));
+
+        // Verify no renamed fields
+        assert!(!metric_names.contains(&"co2".to_string()));
+        assert!(!metric_names.contains(&"temperature".to_string()));
+        assert!(!metric_names.contains(&"humidity".to_string()));
 
         // Verify source ID
         assert!(points.iter().all(|p| p.location_id == "ABC123"));
+        assert!(points
+            .iter()
+            .all(|p| p.tags.get("source") == Some(&"http".to_string())));
     }
 
     #[tokio::test]
-    async fn test_parse_measures_partial_data() {
-        let config = HttpPollingConfig::default();
-        let source = HttpPollingSource::new(config).unwrap();
+    async fn test_new_with_parser() {
+        use crate::parsers::{FlatJsonParser, ParserConfig, ParserType};
 
-        let measures = CurrentMeasures {
-            serial_no: Some("ABC123".to_string()),
-            pm02: Some(12.5),
-            co2: None,
-            temperature: None,
-            humidity: None,
-            wifi_strength: None,
-            pm10: None,
-            pm01: None,
-            tvoc: None,
-            nox_index: None,
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            skip_fields: vec!["serialno".to_string()],
+            default_tags: [("source".to_string(), "custom".to_string())].into(),
+            ..Default::default()
         };
 
-        let points = source.parse_measures(measures, "ABC123").unwrap();
-        assert_eq!(points.len(), 1);
-        assert_eq!(points[0].tags.get("metric").unwrap(), "pm02");
-        assert_eq!(points[0].value, 12.5);
+        let parser = Box::new(FlatJsonParser::from_config(parser_config).unwrap());
+
+        let config = HttpPollingConfig::default();
+        let source = HttpPollingSource::new_with_parser(config, parser);
+
+        assert!(source.is_ok());
+        let source = source.unwrap();
+        assert_eq!(source.parser.name(), "flat_json");
     }
 
     #[tokio::test]
@@ -1219,7 +1097,7 @@ mod tests {
             "rhum": 50.0,
             "wifi": -50,
             "pm10": 12.0,
-            "tvoc": 100
+            "tvocIndex": 100
         }"#;
 
         Mock::given(method("GET"))
@@ -1241,13 +1119,22 @@ mod tests {
         let source = HttpPollingSource::new(config).unwrap();
         let points = source.poll_sensor(&sensor).await.unwrap();
 
-        assert!(points.len() >= 6);
+        // Should extract 7 numeric fields (pm02, rco2, atmp, rhum, wifi, pm10, tvocIndex)
+        assert_eq!(points.len(), 7);
+
+        // Check fields use ORIGINAL names
         assert!(points
             .iter()
             .any(|p| p.tags.get("metric") == Some(&"pm02".to_string()) && p.value == 10.5));
         assert!(points
             .iter()
-            .any(|p| p.tags.get("metric") == Some(&"co2".to_string()) && p.value == 400.0));
+            .any(|p| p.tags.get("metric") == Some(&"rco2".to_string()) && p.value == 400.0));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"atmp".to_string()) && p.value == 21.0));
+        assert!(points
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"rhum".to_string()) && p.value == 50.0));
     }
 
     #[tokio::test]

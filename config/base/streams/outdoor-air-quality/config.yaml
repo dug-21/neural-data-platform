@@ -68,6 +68,42 @@ sources:
         auth_type: query_param
         auth_key: appid
         auth_value: "${OPENWEATHERMAP_API_KEY}"
+    parser:
+      parser_type: json_path
+      location_id_field: coord
+      default_location_id: "${OWM_LOCATION_NAME}"
+      default_tags:
+        source: openweathermap
+        api: air_pollution
+        stream_id: outdoor-air-quality
+      field_mappings:
+        - path: list[0].main.aqi
+          metric_name: aqi
+          unit: 1-5_scale
+        - path: list[0].components.co
+          metric_name: co
+          unit: ug/m3
+        - path: list[0].components.no
+          metric_name: no
+          unit: ug/m3
+        - path: list[0].components.no2
+          metric_name: no2
+          unit: ug/m3
+        - path: list[0].components.o3
+          metric_name: o3
+          unit: ug/m3
+        - path: list[0].components.so2
+          metric_name: so2
+          unit: ug/m3
+        - path: list[0].components.pm2_5
+          metric_name: pm2_5
+          unit: ug/m3
+        - path: list[0].components.pm10
+          metric_name: pm10
+          unit: ug/m3
+        - path: list[0].components.nh3
+          metric_name: nh3
+          unit: ug/m3
 
 storage:
   batch_size: 50

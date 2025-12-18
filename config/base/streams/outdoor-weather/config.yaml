@@ -78,6 +78,42 @@ sources:
         auth_type: query_param
         auth_key: appid
         auth_value: "${OPENWEATHERMAP_API_KEY}"
+    parser:
+      parser_type: json_path
+      location_id_field: name
+      default_location_id: "${OWM_LOCATION_NAME}"
+      default_tags:
+        source: openweathermap
+        api: current_weather
+        stream_id: outdoor-weather
+      field_mappings:
+        - path: main.temp
+          metric_name: temperature
+          unit: celsius
+        - path: main.feels_like
+          metric_name: feels_like
+          unit: celsius
+        - path: main.pressure
+          metric_name: pressure
+          unit: hpa
+        - path: main.humidity
+          metric_name: humidity
+          unit: percent
+        - path: wind.speed
+          metric_name: wind_speed
+          unit: m/s
+        - path: wind.deg
+          metric_name: wind_deg
+          unit: degrees
+        - path: wind.gust
+          metric_name: wind_gust
+          unit: m/s
+        - path: clouds.all
+          metric_name: clouds
+          unit: percent
+        - path: visibility
+          metric_name: visibility
+          unit: meters
 
 storage:
   batch_size: 50

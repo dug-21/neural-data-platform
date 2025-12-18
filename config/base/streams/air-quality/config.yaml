@@ -60,6 +60,17 @@ sources:
       reconnect_delay_secs: 1
       max_reconnect_delay_secs: 30
       buffer_capacity: 1000
+    parser:
+      parser_type: flat_json
+      location_id_field: serialno
+      skip_fields:
+        - serialno
+        - firmware
+        - model
+        - ledMode
+      default_tags:
+        source: mqtt
+        stream_id: air-quality
 
 # Legacy MQTT configuration (kept for backward compatibility)
 mqtt:

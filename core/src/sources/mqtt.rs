@@ -8,7 +8,7 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
-use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,6 +17,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
+use crate::parsers::{FlatJsonParser, Parser, ParserConfig, ParserType};
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 
 /// Configuration for MQTT source
@@ -47,25 +48,10 @@ impl Default for MqttConfig {
     }
 }
 
-/// AirGradient sensor reading from MQTT
-#[derive(Debug, Clone, Deserialize)]
-struct AirGradientReading {
-    #[serde(rename = "serialno")]
-    serial_no: String,
-    pm02: Option<f64>,
-    #[serde(rename = "rco2")]
-    co2: Option<f64>,
-    #[serde(rename = "atmp")]
-    temperature: Option<f64>,
-    #[serde(rename = "rhum")]
-    humidity: Option<f64>,
-    #[serde(rename = "wifi")]
-    wifi_strength: Option<i32>,
-}
-
 /// MQTT data source
 pub struct MqttSource {
     config: MqttConfig,
+    parser: Arc<dyn Parser + Send + Sync>,
     client: Option<AsyncClient>,
     receiver: Arc<Mutex<mpsc::Receiver<TimeSeriesPoint>>>,
     sender: mpsc::Sender<TimeSeriesPoint>,
@@ -75,12 +61,13 @@ pub struct MqttSource {
 }
 
 impl MqttSource {
-    /// Create a new MQTT source
-    pub fn new(config: MqttConfig) -> Self {
+    /// Create a new MQTT source with injected parser
+    pub fn new_with_parser(config: MqttConfig, parser: Box<dyn Parser + Send + Sync>) -> Self {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         Self {
             config,
+            parser: Arc::from(parser),
             client: None,
             receiver: Arc::new(Mutex::new(receiver)),
             sender,
@@ -90,81 +77,41 @@ impl MqttSource {
         }
     }
 
-    /// Parse MQTT payload into time series points
+    /// Create a new MQTT source with default FlatJsonParser (backward compatible)
+    pub fn new(config: MqttConfig) -> Self {
+        // Create default parser config for backward compatibility
+        let parser_config = ParserConfig {
+            parser_type: ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: Some("unknown".to_string()),
+            skip_fields: vec![
+                "serialno".to_string(),
+                "firmware".to_string(),
+                "model".to_string(),
+                "ledMode".to_string(),
+            ],
+            field_mappings: None,
+            default_tags: {
+                let mut tags = HashMap::new();
+                tags.insert("source".to_string(), "mqtt".to_string());
+                tags
+            },
+        };
+
+        let parser = Box::new(
+            FlatJsonParser::from_config(parser_config).expect("Failed to create default parser"),
+        );
+
+        Self::new_with_parser(config, parser)
+    }
+
+    /// Parse MQTT payload into time series points using injected parser
     fn parse_payload(&self, payload: &[u8]) -> CoreResult<Vec<TimeSeriesPoint>> {
-        let reading: AirGradientReading = serde_json::from_slice(payload)
+        let json: Value = serde_json::from_slice(payload)
             .map_err(|e| CoreError::Source(format!("Failed to parse MQTT payload: {}", e)))?;
 
         let timestamp = Utc::now();
-        let mut points = Vec::new();
-
-        // Store each metric as a separate point with metric type in tags
-        if let Some(pm02) = reading.pm02 {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "pm02".to_string());
-            tags.insert("source".to_string(), "mqtt".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: reading.serial_no.clone(),
-                value: pm02,
-                tags,
-            });
-        }
-
-        if let Some(co2) = reading.co2 {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "co2".to_string());
-            tags.insert("source".to_string(), "mqtt".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: reading.serial_no.clone(),
-                value: co2,
-                tags,
-            });
-        }
-
-        if let Some(temp) = reading.temperature {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "temperature".to_string());
-            tags.insert("source".to_string(), "mqtt".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: reading.serial_no.clone(),
-                value: temp,
-                tags,
-            });
-        }
-
-        if let Some(humidity) = reading.humidity {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "humidity".to_string());
-            tags.insert("source".to_string(), "mqtt".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: reading.serial_no.clone(),
-                value: humidity,
-                tags,
-            });
-        }
-
-        if let Some(wifi) = reading.wifi_strength {
-            let mut tags = HashMap::new();
-            tags.insert("metric".to_string(), "wifi_strength".to_string());
-            tags.insert("source".to_string(), "mqtt".to_string());
-
-            points.push(TimeSeriesPoint {
-                timestamp,
-                location_id: reading.serial_no.clone(),
-                value: wifi as f64,
-                tags,
-            });
-        }
-
-        Ok(points)
+        self.parser.parse(&json, timestamp)
     }
 
     /// Create a new connection and return the event loop
@@ -179,6 +126,7 @@ impl MqttSource {
     /// Process MQTT events - runs in a spawned task
     async fn process_events(
         config: MqttConfig,
+        parser: Arc<dyn Parser + Send + Sync>,
         mut event_loop: EventLoop,
         client: AsyncClient,
         cached_points: Arc<Mutex<Vec<TimeSeriesPoint>>>,
@@ -201,84 +149,23 @@ impl MqttSource {
                     debug!("Received MQTT message on topic: {}", publish.topic);
                     reconnect_attempt = 0;
 
-                    // Parse payload inline since we can't call self.parse_payload
-                    match serde_json::from_slice::<AirGradientReading>(&publish.payload) {
-                        Ok(reading) => {
+                    // Parse payload using injected parser
+                    match serde_json::from_slice::<Value>(&publish.payload) {
+                        Ok(json) => {
                             let timestamp = Utc::now();
-                            let mut points = Vec::new();
-
-                            // Store each metric as a separate point with metric type in tags
-                            if let Some(pm02) = reading.pm02 {
-                                let mut tags = HashMap::new();
-                                tags.insert("metric".to_string(), "pm02".to_string());
-                                tags.insert("source".to_string(), "mqtt".to_string());
-
-                                points.push(TimeSeriesPoint {
-                                    timestamp,
-                                    location_id: reading.serial_no.clone(),
-                                    value: pm02,
-                                    tags,
-                                });
+                            match parser.parse(&json, timestamp) {
+                                Ok(points) => {
+                                    // Add to cache for fetch()
+                                    let mut cache = cached_points.lock().await;
+                                    cache.extend(points);
+                                }
+                                Err(e) => {
+                                    error!("Failed to parse MQTT payload: {}", e);
+                                }
                             }
-
-                            if let Some(co2) = reading.co2 {
-                                let mut tags = HashMap::new();
-                                tags.insert("metric".to_string(), "co2".to_string());
-                                tags.insert("source".to_string(), "mqtt".to_string());
-
-                                points.push(TimeSeriesPoint {
-                                    timestamp,
-                                    location_id: reading.serial_no.clone(),
-                                    value: co2,
-                                    tags,
-                                });
-                            }
-
-                            if let Some(temp) = reading.temperature {
-                                let mut tags = HashMap::new();
-                                tags.insert("metric".to_string(), "temperature".to_string());
-                                tags.insert("source".to_string(), "mqtt".to_string());
-
-                                points.push(TimeSeriesPoint {
-                                    timestamp,
-                                    location_id: reading.serial_no.clone(),
-                                    value: temp,
-                                    tags,
-                                });
-                            }
-
-                            if let Some(humidity) = reading.humidity {
-                                let mut tags = HashMap::new();
-                                tags.insert("metric".to_string(), "humidity".to_string());
-                                tags.insert("source".to_string(), "mqtt".to_string());
-
-                                points.push(TimeSeriesPoint {
-                                    timestamp,
-                                    location_id: reading.serial_no.clone(),
-                                    value: humidity,
-                                    tags,
-                                });
-                            }
-
-                            if let Some(wifi) = reading.wifi_strength {
-                                let mut tags = HashMap::new();
-                                tags.insert("metric".to_string(), "wifi_strength".to_string());
-                                tags.insert("source".to_string(), "mqtt".to_string());
-
-                                points.push(TimeSeriesPoint {
-                                    timestamp,
-                                    location_id: reading.serial_no.clone(),
-                                    value: wifi as f64,
-                                    tags,
-                                });
-                            }
-
-                            // Add to cache for fetch()
-                            let mut cache = cached_points.lock().await;
-                            cache.extend(points);
                         }
                         Err(e) => {
-                            error!("Failed to parse MQTT payload: {}", e);
+                            error!("Failed to parse JSON from MQTT payload: {}", e);
                         }
                     }
                 }
@@ -372,6 +259,7 @@ impl MqttSource {
 
         // Clone data for background task
         let config = self.config.clone();
+        let parser = self.parser.clone();
         let cached_points = self.cached_points.clone();
         let is_running = self.is_running.clone();
         let connection_healthy = self.connection_healthy.clone();
@@ -380,6 +268,7 @@ impl MqttSource {
         tokio::spawn(async move {
             if let Err(e) = Self::process_events(
                 config,
+                parser,
                 event_loop,
                 client,
                 cached_points,
@@ -480,9 +369,9 @@ mod tests {
         }"#;
 
         let points = source.parse_payload(payload.as_bytes()).unwrap();
-        assert_eq!(points.len(), 5);
+        assert_eq!(points.len(), 5); // wifi is now included (numeric field)
 
-        // Check PM2.5
+        // Check PM2.5 - should use ORIGINAL field name
         let pm_point = points
             .iter()
             .find(|p| p.tags.get("metric") == Some(&"pm02".to_string()))
@@ -490,12 +379,26 @@ mod tests {
         assert_eq!(pm_point.value, 12.5);
         assert_eq!(pm_point.location_id, "ABC123");
 
-        // Check CO2
+        // Check CO2 - should use ORIGINAL field name (rco2, not co2)
         let co2_point = points
             .iter()
-            .find(|p| p.tags.get("metric") == Some(&"co2".to_string()))
+            .find(|p| p.tags.get("metric") == Some(&"rco2".to_string()))
             .unwrap();
         assert_eq!(co2_point.value, 450.0);
+
+        // Check temperature - should use ORIGINAL field name (atmp, not temperature)
+        let temp_point = points
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"atmp".to_string()))
+            .unwrap();
+        assert_eq!(temp_point.value, 22.3);
+
+        // Check humidity - should use ORIGINAL field name (rhum, not humidity)
+        let hum_point = points
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"rhum".to_string()))
+            .unwrap();
+        assert_eq!(hum_point.value, 55.0);
     }
 
     #[tokio::test]
@@ -523,6 +426,57 @@ mod tests {
         assert_eq!(points.len(), 1);
         assert_eq!(points[0].tags.get("metric").unwrap(), "pm02");
         assert_eq!(points[0].value, 12.5);
+    }
+
+    #[tokio::test]
+    async fn test_parse_payload_all_fields() {
+        let config = MqttConfig::default();
+        let source = MqttSource::new(config);
+
+        // Real sensor payload with ALL fields
+        let payload = r#"{
+            "pm01": 0,
+            "pm02": 2.17,
+            "pm10": 2.33,
+            "atmp": 22.1,
+            "rhum": 65.13,
+            "rco2": 396,
+            "tvocIndex": 42,
+            "noxIndex": 2,
+            "tvocRaw": 123,
+            "noxRaw": 456,
+            "serialno": "d83bda1cd074"
+        }"#;
+
+        let points = source.parse_payload(payload.as_bytes()).unwrap();
+
+        // Should extract all 9 numeric metrics (pm01, pm02, pm10, atmp, rhum, rco2, tvocIndex, noxIndex, tvocRaw, noxRaw)
+        assert_eq!(points.len(), 10);
+
+        // Verify all fields are present with ORIGINAL names
+        let metric_names: Vec<String> = points
+            .iter()
+            .map(|p| p.tags.get("metric").unwrap().clone())
+            .collect();
+
+        assert!(metric_names.contains(&"pm01".to_string()));
+        assert!(metric_names.contains(&"pm02".to_string()));
+        assert!(metric_names.contains(&"pm10".to_string()));
+        assert!(metric_names.contains(&"atmp".to_string()));
+        assert!(metric_names.contains(&"rhum".to_string()));
+        assert!(metric_names.contains(&"rco2".to_string()));
+        assert!(metric_names.contains(&"tvocIndex".to_string()));
+        assert!(metric_names.contains(&"noxIndex".to_string()));
+        assert!(metric_names.contains(&"tvocRaw".to_string()));
+        assert!(metric_names.contains(&"noxRaw".to_string()));
+
+        // Verify no renamed fields (no "co2", "temperature", "humidity")
+        assert!(!metric_names.contains(&"co2".to_string()));
+        assert!(!metric_names.contains(&"temperature".to_string()));
+        assert!(!metric_names.contains(&"humidity".to_string()));
+
+        // All points should have same serial number
+        assert!(points.iter().all(|p| p.location_id == "d83bda1cd074"));
     }
 
     #[tokio::test]
@@ -576,5 +530,282 @@ mod tests {
         // Cache should be empty after fetch
         let cache = source.cached_points.lock().await;
         assert_eq!(cache.len(), 0);
+    }
+
+    // Additional comprehensive tests for dynamic field extraction
+
+    #[tokio::test]
+    async fn test_parse_payload_extracts_all_numeric_fields() {
+        let config = MqttConfig::default();
+        let source = MqttSource::new(config);
+
+        // Full AirGradient payload with ALL possible fields including compensated values
+        let payload = r#"{
+            "pm01": 1.0,
+            "pm02": 2.17,
+            "pm10": 2.33,
+            "pm02Compensated": 1.27,
+            "atmp": 22.1,
+            "atmpCompensated": 22.1,
+            "rhum": 65.13,
+            "rhumCompensated": 65.13,
+            "rco2": 396,
+            "tvocIndex": 42,
+            "tvocRaw": 31506.42,
+            "noxIndex": 2,
+            "noxRaw": 19013.92,
+            "boot": 1568,
+            "wifi": -29,
+            "serialno": "d83bda1cd074",
+            "firmware": "3.4.1",
+            "model": "I-9PSL"
+        }"#;
+
+        let points = source.parse_payload(payload.as_bytes()).unwrap();
+
+        // Should extract ALL 15 numeric fields, excluding string metadata
+        assert_eq!(
+            points.len(),
+            15,
+            "Expected 15 numeric fields to be extracted"
+        );
+
+        let metrics: Vec<&str> = points
+            .iter()
+            .map(|p| p.tags.get("metric").unwrap().as_str())
+            .collect();
+
+        // Verify ALL numeric fields present with ORIGINAL names
+        assert!(metrics.contains(&"pm01"), "pm01 should be extracted");
+        assert!(metrics.contains(&"pm02"), "pm02 should be extracted");
+        assert!(metrics.contains(&"pm10"), "pm10 should be extracted");
+        assert!(
+            metrics.contains(&"pm02Compensated"),
+            "pm02Compensated should be extracted"
+        );
+        assert!(
+            metrics.contains(&"atmp"),
+            "atmp should be extracted (NOT renamed to temperature)"
+        );
+        assert!(
+            metrics.contains(&"atmpCompensated"),
+            "atmpCompensated should be extracted"
+        );
+        assert!(
+            metrics.contains(&"rhum"),
+            "rhum should be extracted (NOT renamed to humidity)"
+        );
+        assert!(
+            metrics.contains(&"rhumCompensated"),
+            "rhumCompensated should be extracted"
+        );
+        assert!(
+            metrics.contains(&"rco2"),
+            "rco2 should be extracted (NOT renamed to co2)"
+        );
+        assert!(
+            metrics.contains(&"tvocIndex"),
+            "tvocIndex should be extracted"
+        );
+        assert!(metrics.contains(&"tvocRaw"), "tvocRaw should be extracted");
+        assert!(
+            metrics.contains(&"noxIndex"),
+            "noxIndex should be extracted"
+        );
+        assert!(metrics.contains(&"noxRaw"), "noxRaw should be extracted");
+        assert!(metrics.contains(&"boot"), "boot should be extracted");
+        assert!(metrics.contains(&"wifi"), "wifi should be extracted");
+
+        // Verify string metadata NOT extracted
+        assert!(
+            !metrics.contains(&"serialno"),
+            "serialno is metadata, should not be extracted"
+        );
+        assert!(
+            !metrics.contains(&"firmware"),
+            "firmware is metadata, should not be extracted"
+        );
+        assert!(
+            !metrics.contains(&"model"),
+            "model is metadata, should not be extracted"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_field_names_not_renamed_at_ingestion() {
+        let config = MqttConfig::default();
+        let source = MqttSource::new(config);
+
+        let payload = r#"{
+            "rco2": 400,
+            "atmp": 22.0,
+            "rhum": 50.0,
+            "tvocIndex": 100,
+            "noxIndex": 5,
+            "serialno": "test123"
+        }"#;
+
+        let points = source.parse_payload(payload.as_bytes()).unwrap();
+
+        let metrics: Vec<&str> = points
+            .iter()
+            .map(|p| p.tags.get("metric").unwrap().as_str())
+            .collect();
+
+        // These SHOULD exist (original names)
+        assert!(
+            metrics.contains(&"rco2"),
+            "rco2 MUST be preserved (not renamed to co2)"
+        );
+        assert!(
+            metrics.contains(&"atmp"),
+            "atmp MUST be preserved (not renamed to temperature)"
+        );
+        assert!(
+            metrics.contains(&"rhum"),
+            "rhum MUST be preserved (not renamed to humidity)"
+        );
+        assert!(
+            metrics.contains(&"tvocIndex"),
+            "tvocIndex MUST be preserved"
+        );
+        assert!(metrics.contains(&"noxIndex"), "noxIndex MUST be preserved");
+
+        // These should NOT exist (they're renamed versions)
+        assert!(
+            !metrics.contains(&"co2"),
+            "co2 should NOT exist - field should be named rco2"
+        );
+        assert!(
+            !metrics.contains(&"temperature"),
+            "temperature should NOT exist - field should be named atmp"
+        );
+        assert!(
+            !metrics.contains(&"humidity"),
+            "humidity should NOT exist - field should be named rhum"
+        );
+        assert!(
+            !metrics.contains(&"tvoc"),
+            "tvoc should NOT exist - field should be named tvocIndex"
+        );
+        assert!(
+            !metrics.contains(&"nox"),
+            "nox should NOT exist - field should be named noxIndex"
+        );
+
+        // Should have exactly 5 numeric fields
+        assert_eq!(points.len(), 5, "Should extract exactly 5 numeric fields");
+    }
+
+    #[tokio::test]
+    async fn test_non_metric_fields_excluded() {
+        let config = MqttConfig::default();
+        let source = MqttSource::new(config);
+
+        let payload = r#"{
+            "pm02": 2.0,
+            "serialno": "test123",
+            "firmware": "3.4.1",
+            "model": "I-9PSL",
+            "ledMode": "co2",
+            "wifi": -29,
+            "boot": 100
+        }"#;
+
+        let points = source.parse_payload(payload.as_bytes()).unwrap();
+
+        let metrics: Vec<&str> = points
+            .iter()
+            .map(|p| p.tags.get("metric").unwrap().as_str())
+            .collect();
+
+        // Only numeric fields should be extracted
+        assert!(
+            metrics.contains(&"pm02"),
+            "pm02 is numeric, should be extracted"
+        );
+        assert!(
+            metrics.contains(&"wifi"),
+            "wifi is numeric, should be extracted"
+        );
+        assert!(
+            metrics.contains(&"boot"),
+            "boot is numeric, should be extracted"
+        );
+
+        // String metadata should NOT be extracted
+        assert!(
+            !metrics.contains(&"serialno"),
+            "serialno is string, should not be extracted"
+        );
+        assert!(
+            !metrics.contains(&"firmware"),
+            "firmware is string, should not be extracted"
+        );
+        assert!(
+            !metrics.contains(&"model"),
+            "model is string, should not be extracted"
+        );
+        assert!(
+            !metrics.contains(&"ledMode"),
+            "ledMode is string, should not be extracted"
+        );
+
+        // Should have exactly 3 numeric metrics
+        assert_eq!(points.len(), 3, "Should extract exactly 3 numeric fields");
+    }
+
+    #[tokio::test]
+    async fn test_all_numeric_types_extracted() {
+        let config = MqttConfig::default();
+        let source = MqttSource::new(config);
+
+        // Test integer, float, negative values
+        let payload = r#"{
+            "intField": 100,
+            "floatField": 22.5,
+            "negativeInt": -29,
+            "negativeFloat": -3.14,
+            "zeroInt": 0,
+            "zeroFloat": 0.0,
+            "largeFloat": 31506.42,
+            "serialno": "test"
+        }"#;
+
+        let points = source.parse_payload(payload.as_bytes()).unwrap();
+
+        // Should extract ALL 7 numeric values regardless of type
+        assert_eq!(
+            points.len(),
+            7,
+            "Should extract all numeric types (int, float, negative, zero)"
+        );
+
+        let metrics: Vec<&str> = points
+            .iter()
+            .map(|p| p.tags.get("metric").unwrap().as_str())
+            .collect();
+
+        // Verify all numeric fields present
+        assert!(metrics.contains(&"intField"));
+        assert!(metrics.contains(&"floatField"));
+        assert!(metrics.contains(&"negativeInt"));
+        assert!(metrics.contains(&"negativeFloat"));
+        assert!(metrics.contains(&"zeroInt"));
+        assert!(metrics.contains(&"zeroFloat"));
+        assert!(metrics.contains(&"largeFloat"));
+
+        // Verify values are correctly parsed
+        let int_point = points
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"intField".to_string()))
+            .unwrap();
+        assert_eq!(int_point.value, 100.0);
+
+        let neg_point = points
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"negativeInt".to_string()))
+            .unwrap();
+        assert_eq!(neg_point.value, -29.0);
     }
 }

@@ -28,6 +28,9 @@ pub enum CoreError {
 
     #[error("Prediction error: {0}")]
     PredictionError(String),
+
+    #[error("Parser error: {0}")]
+    Parser(String),
 }
 
 impl From<polars::error::PolarsError> for CoreError {
