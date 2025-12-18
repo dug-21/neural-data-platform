@@ -1,6 +1,6 @@
 # Team Builder Guide
 
-How to create a specialized Claude agent team for any project.
+How to create a specialized Claude agent team for any project using Ruven Cohens [Claude-Flow](github.com/ruvnet/claude-flow).
 
 This document explains how we designed the NDP agent team and provides templates to create similar teams for other projects. Copy this file to another repository and ask Claude to create agents following this guide.
 
@@ -29,6 +29,7 @@ Generic agents (`coder`, `tester`, `architect`) don't know your project. They:
 - Create inconsistent code styles
 - Miss project-specific conventions
 - Don't know your architecture decisions
+- Hardcoded in Claude and may or may not pickup any Claude-flow adjustments
 
 **Project-specific agents** solve this by embedding:
 - Architecture knowledge (ADRs, design patterns)
@@ -38,7 +39,7 @@ Generic agents (`coder`, `tester`, `architect`) don't know your project. They:
 
 ### The Three-Skill Foundation
 
-Every project team needs these three skills:
+Every project team needs these three skills.  Feel free to add more, but name them in ways your agent will look for them:
 
 | Skill | Purpose |
 |-------|---------|
