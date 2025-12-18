@@ -160,7 +160,7 @@ services:
       - GF_LOG_LEVEL=info
       # Plugins - Allow unsigned DuckDB plugin
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=motherduck-duckdb-datasource
-      - GF_INSTALL_PLUGINS=https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v1.0.14/motherduck-duckdb-datasource-1.0.14.zip;motherduck-duckdb-datasource
+      - GF_INSTALL_PLUGINS=https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v0.4.0/motherduck-duckdb-datasource-0.4.0.zip;motherduck-duckdb-datasource
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
