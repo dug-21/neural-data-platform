@@ -1,71 +1,36 @@
 ---
 name: "ndp-github-workflow"
-description: "NDP-specific GitHub workflow conventions for branches, commits, PRs, and releases. Use this skill for ALL git operations in the Neural Data Platform project."
+description: "NDP-specific GitHub workflow using Trunk-Based Development (TBD). Commit directly to main with conventional commits. Use this skill for ALL git operations in the Neural Data Platform project."
 ---
 
 # NDP GitHub Workflow
 
 ## What This Skill Does
 
-Defines the **project-specific** GitHub conventions for the Neural Data Platform. This skill supersedes generic GitHub skills for NDP work.
+Defines **Trunk-Based Development (TBD)** conventions for the Neural Data Platform. Everyone commits directly to `main` with small, frequent commits.
 
 **Always use this skill for:**
-- Creating branches
 - Writing commit messages
-- Creating pull requests
+- Committing to main
 - Tagging releases
 
-## Branch Strategy
+## Trunk-Based Development
 
-### Branch Naming Convention
+### Core Principles
 
-```
-main                                    # Always deployable, protected
-└── feature/{feature-id}               # Feature development
-    └── feature/{feature-id}/bug-{nnn} # Bug fix during feature (optional)
-```
+1. **Commit directly to `main`** - No feature branches
+2. **Small, frequent commits** - Multiple times per day
+3. **Always deployable** - Every commit should build and pass tests
+4. **Feature tracking via commit scope** - Use `{type}(feature-id):` format
 
-### Rules
+### Why TBD for NDP?
 
-| Branch Type | Pattern | Example |
-|-------------|---------|---------|
-| Main | `main` | Protected, requires PR |
-| Feature | `feature/{feature-id}` | `feature/air-006` |
-| Feature Bug | `feature/{feature-id}/bug-{nnn}` | `feature/air-006/bug-001` |
-| Hotfix | `hotfix/{issue-id}` | `hotfix/config-sync-fix` |
-| Release | `release/v{major}.{minor}` | `release/v1.3` |
-
-### Creating a Feature Branch
-
-```bash
-# From main, create feature branch
-git checkout main
-git pull origin main
-git checkout -b feature/{feature-id}
-
-# Example
-git checkout -b feature/air-006
-```
-
-### Feature ID Format
-
-Feature IDs follow `{phase}-{NNN}` pattern:
-
-| Phase | Prefix | Example | Focus |
-|-------|--------|---------|-------|
-| Air Quality | `air` | `air-005` | Sensors, external data |
-| Data Platform | `dp` | `dp-001` | Silver layer, ETL |
-| Feature Engineering | `fe` | `fe-001` | ML features |
-| Dashboards | `db` | `db-001` | Grafana |
-| Predictions | `ml` | `ml-001` | ruv-FANN |
-| Alerts | `al` | `al-001` | Triggers |
-
-**Note**: The phase prefix changes as the project evolves. Check `product/features/` for current active phase.
-
-### Feature ID Sources
-
-- Match `product/features/{feature-id}/` directory
-- Examples: `air-005`, `dp-001`, `fe-001`
+| Problem with Feature Branches | TBD Solution |
+|------------------------------|--------------|
+| Merge conflicts | No branches = no conflicts |
+| PR overhead | Direct commits = instant integration |
+| Stale branches | Everything on main = always current |
+| Integration pain | Continuous integration by default |
 
 ---
 
@@ -92,6 +57,7 @@ Feature IDs follow `{phase}-{NNN}` pattern:
 | `test` | Adding or updating tests |
 | `chore` | Build, CI, dependencies, tooling |
 | `perf` | Performance improvement |
+| `wip` | Work in progress (incomplete but buildable) |
 
 ### Scope
 
@@ -99,7 +65,7 @@ The scope identifies **what** is affected:
 
 | Scope Type | Examples |
 |------------|----------|
-| Feature ID | `air-005`, `air-006` |
+| Feature ID | `dp-001`, `fe-001` |
 | Component | `storage`, `router`, `config` |
 | Layer | `deploy`, `docker`, `ci` |
 
@@ -110,17 +76,19 @@ The scope identifies **what** is affected:
 3. **Description is imperative mood** ("add" not "added")
 4. **Scope matches feature ID when working on a feature**
 5. **Max 72 characters for first line**
+6. **Every commit must build** - `cargo build` must pass
 
 ### Examples
 
 ```bash
-# Feature work (phase prefix varies by current phase)
-feat(dp-001): add timescaledb continuous aggregates
-fix(dp-001): correct timestamp parsing in etl pipeline
-test(dp-001): add integration tests for silver layer
+# Feature work - commit directly to main
+feat(dp-001): add duckdb silver layer views
+feat(dp-001): implement pivot from long to wide format
+fix(dp-001): correct timestamp conversion in bronze data
+test(dp-001): add partition key regression tests
 
-feat(air-005): implement http polling for weather api
-fix(fe-001): correct window aggregation logic
+# Work in progress (builds but incomplete)
+wip(dp-002): start timescaledb integration scaffold
 
 # Component work (not feature-specific)
 fix(storage): partition by stream_id instead of location_id
@@ -130,7 +98,6 @@ perf(parquet): reduce memory allocation in batch writes
 # Infrastructure
 chore(deploy): update docker-compose resource limits
 docs(architecture): add silver layer design doc
-chore(ci): add rust clippy check to workflow
 ```
 
 ### Multi-line Commits
@@ -138,71 +105,97 @@ chore(ci): add rust clippy check to workflow
 For complex changes, add a body:
 
 ```bash
-git commit -m "feat(air-006): implement config sync service
+git commit -m "feat(dp-001): route mqtt through ingestion router
 
-- Add ConfigSyncService to sync YAML to etcd on startup
-- Support environment variable expansion in configs
-- Add validation before sync
+- MQTT now goes through SourceManager like HTTP
+- IngestionRouter adds stream_id tag to points
+- ParquetStore uses stream_id for partition path
 
-Closes: BUG-001"
+Fixes indoor air data writing to device MAC instead of stream name"
 ```
 
 ---
 
-## Pull Request Convention
+## Feature Tracking
 
-### PR Title
+Features are tracked via **commit scope** and **product/features/** directories, not branches.
 
-Same format as commits:
-```
-{type}({scope}): {description}
-```
+### Feature ID Format
 
-### PR Template
+Feature IDs follow `{phase}-{NNN}` pattern:
 
-Use this structure for PR descriptions:
+| Phase | Prefix | Example | Focus |
+|-------|--------|---------|-------|
+| Air Quality | `air` | `air-005` | Sensors, external data |
+| Data Platform | `dp` | `dp-001` | Silver layer, ETL |
+| Feature Engineering | `fe` | `fe-001` | ML features |
+| Dashboards | `db` | `db-001` | Grafana |
+| Predictions | `ml` | `ml-001` | ruv-FANN |
+| Alerts | `al` | `al-001` | Triggers |
 
-```markdown
-## Feature
-{feature-id}: {feature title}
+### Starting a New Feature
 
-## Summary
-{1-3 sentence description of changes}
+```bash
+# 1. Create feature directory (for SPARC docs)
+mkdir -p product/features/dp-002/{specification,pseudocode,architecture,refinement,completion,bugs,reports}
 
-## Changes
-- {Change 1}
-- {Change 2}
-- {Change 3}
+# 2. Commit directly to main
+git add product/features/dp-002/
+git commit -m "chore(dp-002): initialize feature directory structure"
+git push
 
-## Checklist
-- [ ] SPARC documentation updated
-- [ ] Tests passing (`cargo test`)
-- [ ] Linting clean (`cargo clippy`)
-- [ ] Documentation updated
-- [ ] STATUS.md updated
+# 3. Continue working, committing frequently
+git commit -m "feat(dp-002): add timescaledb schema"
+git push
 
-## Testing
-{How to test these changes}
-
-## Related
-- Scope: `product/features/{id}/SCOPE.md`
-- Completion: `product/features/{id}/completion/COMPLETION.md`
-- Bug: `product/features/{id}/bugs/BUG-{nnn}-*.md` (if applicable)
+git commit -m "feat(dp-002): implement etl from parquet"
+git push
 ```
 
-### PR Size Guidelines
+### Feature Progress
 
-| Size | Lines Changed | Guidance |
-|------|---------------|----------|
-| Small | < 200 | Ideal, easy to review |
-| Medium | 200-500 | Acceptable for features |
-| Large | 500+ | Consider splitting |
+Track progress via:
+- **Commit history**: `git log --oneline --grep="dp-001"`
+- **STATUS.md**: `product/features/dp-001/STATUS.md`
+- **Commit frequency**: Multiple small commits per day
 
-### Merge Strategy
+---
 
-- **Squash merge** for feature branches → main
-- **Regular merge** for release branches
-- **Delete branch** after merge
+## Daily Workflow
+
+### Before Starting Work
+
+```bash
+git pull origin main
+cargo build
+cargo test
+```
+
+### During Work
+
+```bash
+# Make changes, then commit frequently
+git add .
+git commit -m "feat(dp-001): add silver layer view for indoor air"
+git push
+
+# More changes
+git add .
+git commit -m "fix(dp-001): correct column names in pivot"
+git push
+```
+
+### End of Day
+
+```bash
+# Ensure everything is pushed
+git status
+git push
+
+# If work is incomplete but builds
+git commit -m "wip(dp-001): partial grafana integration"
+git push
+```
 
 ---
 
@@ -215,142 +208,67 @@ v{major}.{minor}.{patch}
 ```
 
 - **Major**: Breaking changes, architectural shifts
-- **Minor**: New features, AIR-NNN completions
+- **Minor**: New features, phase completions
 - **Patch**: Bug fixes, small improvements
 
 ### Tagging Process
 
 ```bash
 # Ensure on main with latest
-git checkout main
 git pull origin main
 
+# Verify build
+cargo build
+cargo test
+
 # Create annotated tag
-git tag -a v1.3.0 -m "Release v1.3.0: AIR-005 External Data Integration
+git tag -a v1.3.0 -m "Release v1.3.0: DP-001 DuckDB Analytics Layer
 
 Features:
-- HTTP polling source for external APIs
-- OpenWeatherMap weather and air quality integration
-- ConfigSyncService for GitOps configuration
+- DuckDB Silver layer with PIVOT views
+- MQTT routing through IngestionRouter
+- Grafana integration with SQLite export
 
 Bug Fixes:
-- BUG-001: Stream registry config sync gap resolved"
+- Indoor air data now writes to air-quality directory"
 
 # Push tag
 git push origin v1.3.0
 ```
 
-### Tag Message Template
-
-```
-Release v{version}: {title}
-
-Features:
-- {feature 1}
-- {feature 2}
-
-Bug Fixes:
-- {fix 1}
-- {fix 2}
-
-Breaking Changes:
-- {breaking change, if any}
-```
-
 ---
 
-## Common Workflows
+## When to Use Branches (Exceptions)
 
-### Starting a New Feature
+PRs are **optional** and only for specific cases:
+
+| Situation | Use Branch? | Why |
+|-----------|-------------|-----|
+| Normal feature work | No | Commit to main |
+| Bug fixes | No | Commit to main |
+| Risky refactor | Maybe | If you want a rollback point |
+| External contributor | Yes | Review before merge |
+| Experimental spike | Maybe | If you might abandon it |
+
+### If You Do Use a Branch
 
 ```bash
-# 1. Determine phase prefix and next sequence number
-#    Check product/features/ for current phase (air, dp, fe, db, ml, al)
-#    Example: Starting first Data Platform feature → dp-001
+# Create short-lived branch
+git checkout -b experiment/try-new-approach
 
-# 2. Create feature directory
-mkdir -p product/features/dp-001/{specification,pseudocode,architecture,refinement,completion,bugs,reports}
+# Work on it
+git commit -m "wip: experimental approach"
 
-# 3. Create branch
+# Either merge quickly or abandon
 git checkout main
-git pull origin main
-git checkout -b feature/dp-001
-
-# 4. Initial commit
-git add product/features/dp-001/
-git commit -m "chore(dp-001): initialize feature directory structure"
-git push -u origin feature/dp-001
-```
-
-### Fixing a Bug During Feature Development
-
-```bash
-# Option 1: Fix in feature branch (simple fix)
-git add .
-git commit -m "fix(air-006): resolve config sync race condition
-
-Closes: BUG-002"
-
-# Option 2: Separate bug branch (complex fix)
-git checkout -b feature/air-006/bug-002
-# ... make fixes ...
-git commit -m "fix(air-006): resolve config sync race condition"
-git checkout feature/air-006
-git merge feature/air-006/bug-002
-git branch -d feature/air-006/bug-002
-```
-
-### Completing a Feature
-
-```bash
-# 1. Ensure all tests pass
-cargo test
-
-# 2. Update STATUS.md to "done"
-# 3. Create PR (example for dp-001: Silver Layer)
-gh pr create --title "feat(dp-001): implement silver layer with TimescaleDB" \
-  --body "## Feature
-dp-001: Silver Layer Implementation
-
-## Summary
-Adds TimescaleDB integration for queryable time-series data with continuous aggregates.
-
-## Changes
-- TimescaleDB schema with hypertables
-- ETL from Parquet to TimescaleDB
-- Continuous aggregates for dashboards
-- Grafana data source configuration
-
-## Checklist
-- [x] SPARC documentation updated
-- [x] Tests passing
-- [x] Documentation updated
-- [x] STATUS.md updated
-
-## Related
-- Scope: product/features/dp-001/SCOPE.md
-- Completion: product/features/dp-001/completion/COMPLETION.md"
+git merge experiment/try-new-approach  # or git branch -D to abandon
+git branch -d experiment/try-new-approach
+git push
 ```
 
 ---
 
 ## Quick Reference Card
-
-### Phase Prefixes
-```
-air = Air Quality (foundation)    dp = Data Platform (Silver layer)
-fe  = Feature Engineering         db = Dashboards
-ml  = Predictions (ruv-FANN)      al = Alerts
-```
-
-### Branch Names
-```
-feature/dp-001           # Data Platform feature 1
-feature/dp-001/bug-001   # Bug fix during dp-001
-feature/fe-001           # Feature Engineering feature 1
-hotfix/config-fix        # Hotfix (no phase)
-release/v1.3             # Release branch
-```
 
 ### Commit Prefixes
 ```
@@ -361,26 +279,55 @@ test(scope):     # Tests
 chore(scope):    # Maintenance
 refactor(scope): # Code improvement
 perf(scope):     # Performance
+wip(scope):      # Work in progress
 ```
 
-### Example Commits
+### Daily Commands
+```bash
+git pull                    # Start of day
+git add . && git commit     # After each logical change
+git push                    # After each commit
+git log --oneline -10       # Check recent history
 ```
-feat(dp-001): add timescaledb schema migrations
-fix(dp-001): correct continuous aggregate refresh policy
-docs(dp-001): update architecture with silver layer design
-test(fe-001): add feature extraction unit tests
-chore(deploy): add timescaledb to docker-compose
+
+### Feature Commands
+```bash
+git log --oneline --grep="dp-001"    # See feature commits
+git diff HEAD~5                       # Review recent changes
+git tag -a v1.x.x -m "..."           # Release
+```
+
+### Example Session
+```bash
+# Morning
+git pull origin main
+cargo build && cargo test
+
+# Work
+git commit -m "feat(dp-002): add timescaledb connection pool"
+git push
+
+git commit -m "feat(dp-002): implement hypertable creation"
+git push
+
+git commit -m "test(dp-002): add integration tests for etl"
+git push
+
+# End of day
+git commit -m "wip(dp-002): partial continuous aggregate setup"
+git push
 ```
 
 ---
 
 ## Enforcement
 
-All NDP agents MUST use these conventions. When performing git operations:
+All NDP agents MUST follow TBD:
 
-1. **Check branch name** matches pattern before creating
-2. **Validate commit message** format before committing
-3. **Use PR template** when creating pull requests
-4. **Reference feature docs** in PRs
+1. **Commit directly to main** - No feature branches unless explicitly requested
+2. **Use conventional commits** - `{type}({scope}): {description}`
+3. **Push frequently** - After each logical change
+4. **Ensure builds pass** - `cargo build` before commit
+5. **Track features via scope** - Use feature ID in commit scope
 
-If you see violations of these conventions, correct them or flag to the user.
+If you see branch creation for normal work, suggest committing to main instead.
