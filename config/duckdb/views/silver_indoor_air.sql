@@ -80,13 +80,16 @@ SELECT
     END as nox
 
 FROM read_parquet(
-    '/data/air-quality/**/*.parquet',
+    '/data/data/**/*.parquet',
     union_by_name = true,  -- Handle schema evolution
-    filename = true        -- Include file path for debugging
+    filename = true,       -- Include file path for debugging
+    hive_partitioning = true  -- Parse year/month/day from path
 )
 WHERE
     -- Filter out records with invalid timestamps
     timestamp IS NOT NULL
+    -- Exclude outdoor streams (only include indoor/device data)
+    AND filename NOT LIKE '%outdoor%'
 
     -- Optional: Filter to recent data only (improve query performance)
     -- Uncomment for production if only recent data is needed:

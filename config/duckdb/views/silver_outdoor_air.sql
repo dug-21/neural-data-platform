@@ -98,9 +98,10 @@ SELECT
     END as nh3
 
 FROM read_parquet(
-    '/data/outdoor-air-quality/**/*.parquet',
+    '/data/data/outdoor-air-quality/**/*.parquet',
     union_by_name = true,  -- Handle schema evolution
-    filename = true        -- Include file path for debugging
+    filename = true,       -- Include file path for debugging
+    hive_partitioning = true  -- Parse year/month/day from path
 )
 WHERE
     -- Filter out records with invalid timestamps

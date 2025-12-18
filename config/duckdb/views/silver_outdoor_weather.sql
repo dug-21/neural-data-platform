@@ -116,9 +116,10 @@ SELECT
     END as snow_1h
 
 FROM read_parquet(
-    '/data/outdoor-weather/**/*.parquet',
+    '/data/data/outdoor-weather/**/*.parquet',
     union_by_name = true,  -- Handle schema evolution
-    filename = true        -- Include file path for debugging
+    filename = true,       -- Include file path for debugging
+    hive_partitioning = true  -- Parse year/month/day from path
 )
 WHERE
     -- Filter out records with invalid timestamps
