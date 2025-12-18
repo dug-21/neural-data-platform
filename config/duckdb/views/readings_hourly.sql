@@ -73,10 +73,10 @@ GROUP BY time_bucket(INTERVAL '1 hour', timestamp)
 
 UNION ALL
 
--- Outdoor Weather Stream (outdoor-conditions)
+-- Outdoor Weather Stream (outdoor-weather)
 SELECT
     time_bucket(INTERVAL '1 hour', timestamp) as bucket,
-    'outdoor-conditions' as stream_id,
+    'outdoor-weather' as stream_id,
 
     -- Indoor air quality placeholders (NULL for outdoor weather stream)
     NULL as avg_pm25,
