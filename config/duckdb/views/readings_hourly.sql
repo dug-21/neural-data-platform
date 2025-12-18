@@ -13,19 +13,20 @@
 
 CREATE OR REPLACE VIEW readings_hourly AS
 -- Indoor Air Quality Stream (air-quality)
+-- Uses pm02 (PM2.5), pm10/pm10_standard, tvoc_index, nox_index from silver_indoor_air
 SELECT
     time_bucket(INTERVAL '1 hour', timestamp) as bucket,
     'air-quality' as stream_id,
 
-    -- PM2.5 aggregations
-    ROUND(AVG(pm25), 1) as avg_pm25,
-    ROUND(MAX(pm25), 1) as max_pm25,
-    ROUND(MIN(pm25), 1) as min_pm25,
+    -- PM2.5 aggregations (pm02 is AirGradient's PM2.5 sensor)
+    ROUND(AVG(pm02), 1) as avg_pm25,
+    ROUND(MAX(pm02), 1) as max_pm25,
+    ROUND(MIN(pm02), 1) as min_pm25,
 
-    -- PM10 aggregations
-    ROUND(AVG(pm10), 1) as avg_pm10,
-    ROUND(MAX(pm10), 1) as max_pm10,
-    ROUND(MIN(pm10), 1) as min_pm10,
+    -- PM10 aggregations (use pm10 or pm10_standard)
+    ROUND(AVG(COALESCE(pm10, pm10_standard)), 1) as avg_pm10,
+    ROUND(MAX(COALESCE(pm10, pm10_standard)), 1) as max_pm10,
+    ROUND(MIN(COALESCE(pm10, pm10_standard)), 1) as min_pm10,
 
     -- CO2 aggregations
     ROUND(AVG(co2), 0) as avg_co2,
@@ -42,15 +43,15 @@ SELECT
     ROUND(MAX(humidity), 1) as max_humidity,
     ROUND(MIN(humidity), 1) as min_humidity,
 
-    -- TVOC aggregations
-    ROUND(AVG(tvoc), 0) as avg_tvoc,
-    ROUND(MAX(tvoc), 0) as max_tvoc,
-    ROUND(MIN(tvoc), 0) as min_tvoc,
+    -- TVOC aggregations (tvoc_index from AirGradient)
+    ROUND(AVG(tvoc_index), 0) as avg_tvoc,
+    ROUND(MAX(tvoc_index), 0) as max_tvoc,
+    ROUND(MIN(tvoc_index), 0) as min_tvoc,
 
-    -- NOx aggregations
-    ROUND(AVG(nox), 0) as avg_nox,
-    ROUND(MAX(nox), 0) as max_nox,
-    ROUND(MIN(nox), 0) as min_nox,
+    -- NOx aggregations (nox_index from AirGradient)
+    ROUND(AVG(nox_index), 0) as avg_nox,
+    ROUND(MAX(nox_index), 0) as max_nox,
+    ROUND(MIN(nox_index), 0) as min_nox,
 
     -- Outdoor weather placeholders (NULL for indoor stream)
     NULL as avg_apparent_temperature,

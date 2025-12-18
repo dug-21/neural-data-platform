@@ -19,16 +19,17 @@
 CREATE OR REPLACE VIEW cross_stream_aligned AS
 WITH
     -- Indoor air quality aggregated to 10-minute buckets
+    -- Uses pm02 (PM2.5) and pm10 from silver_indoor_air
     indoor_bucketed AS (
         SELECT
             time_bucket(INTERVAL '10 minutes', timestamp) as time_bucket,
-            AVG(pm25) as indoor_pm25,
-            AVG(pm10) as indoor_pm10,
+            AVG(pm02) as indoor_pm25,
+            AVG(COALESCE(pm10, pm10_standard)) as indoor_pm10,
             AVG(co2) as indoor_co2,
             AVG(temperature) as indoor_temp,
             AVG(humidity) as indoor_humidity,
-            AVG(tvoc) as indoor_tvoc,
-            AVG(nox) as indoor_nox,
+            AVG(tvoc_index) as indoor_tvoc,
+            AVG(nox_index) as indoor_nox,
             COUNT(*) as indoor_sample_count
         FROM silver_indoor_air
         WHERE timestamp IS NOT NULL
