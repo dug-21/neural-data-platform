@@ -53,14 +53,22 @@ impl ReadingMerger {
 
     /// Create a cache key for deduplication
     fn cache_key(point: &TimeSeriesPoint) -> String {
-        let metric = point.tags.get("metric").map(|s| s.as_str()).unwrap_or("unknown");
+        let metric = point
+            .tags
+            .get("metric")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
         format!("{}:{}", point.location_id, metric)
     }
 
     /// Check if a reading should be deduplicated
     fn is_duplicate(&self, point: &TimeSeriesPoint) -> bool {
         let key = Self::cache_key(point);
-        let metric = point.tags.get("metric").map(|s| s.as_str()).unwrap_or("unknown");
+        let metric = point
+            .tags
+            .get("metric")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
 
         if let Some(metrics) = self.mqtt_cache.get(&point.location_id) {
             if let Some(last_seen) = metrics.get(metric) {
@@ -86,7 +94,11 @@ impl ReadingMerger {
 
     /// Update MQTT cache with new reading
     fn update_mqtt_cache(&mut self, point: &TimeSeriesPoint) {
-        let metric = point.tags.get("metric").map(|s| s.to_string()).unwrap_or_else(|| "unknown".to_string());
+        let metric = point
+            .tags
+            .get("metric")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
         self.mqtt_cache
             .entry(point.location_id.clone())
             .or_insert_with(HashMap::new)
@@ -128,7 +140,11 @@ impl ReadingMerger {
 
         // Add HTTP points if they're not duplicates
         for point in http_points {
-            let metric = point.tags.get("metric").map(|s| s.as_str()).unwrap_or("unknown");
+            let metric = point
+                .tags
+                .get("metric")
+                .map(|s| s.as_str())
+                .unwrap_or("unknown");
 
             // HTTP-only metrics always get through
             if self.config.http_only_metrics.contains(metric) {
@@ -318,10 +334,18 @@ mod tests {
         let result = merger.merge(mqtt_points, http_points);
 
         assert_eq!(result.len(), 4); // 1 MQTT + 3 HTTP-only
-        assert!(result.iter().any(|p| p.tags.get("metric") == Some(&"pm02".to_string())));
-        assert!(result.iter().any(|p| p.tags.get("metric") == Some(&"pm10".to_string())));
-        assert!(result.iter().any(|p| p.tags.get("metric") == Some(&"tvoc".to_string())));
-        assert!(result.iter().any(|p| p.tags.get("metric") == Some(&"nox_index".to_string())));
+        assert!(result
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"pm02".to_string())));
+        assert!(result
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"pm10".to_string())));
+        assert!(result
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"tvoc".to_string())));
+        assert!(result
+            .iter()
+            .any(|p| p.tags.get("metric") == Some(&"nox_index".to_string())));
     }
 
     #[test]
@@ -342,9 +366,15 @@ mod tests {
         let result = merger.merge(mqtt_points, http_points);
 
         assert_eq!(result.len(), 3); // 2 MQTT + 1 HTTP-only
-        assert!(result.iter().any(|p| p.location_id == "ABC123" && p.tags.get("metric") == Some(&"pm02".to_string())));
-        assert!(result.iter().any(|p| p.location_id == "DEF456" && p.tags.get("metric") == Some(&"pm02".to_string())));
-        assert!(result.iter().any(|p| p.location_id == "DEF456" && p.tags.get("metric") == Some(&"pm10".to_string())));
+        assert!(result.iter().any(
+            |p| p.location_id == "ABC123" && p.tags.get("metric") == Some(&"pm02".to_string())
+        ));
+        assert!(result.iter().any(
+            |p| p.location_id == "DEF456" && p.tags.get("metric") == Some(&"pm02".to_string())
+        ));
+        assert!(result.iter().any(
+            |p| p.location_id == "DEF456" && p.tags.get("metric") == Some(&"pm10".to_string())
+        ));
     }
 
     #[test]

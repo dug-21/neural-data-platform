@@ -138,7 +138,8 @@ impl SchemaField {
                 if self.display_precision.is_some() {
                     return Err(StreamConfigError::InvalidFieldType {
                         field: self.name.clone(),
-                        reason: "String, Bool, and Json types cannot have display_precision".to_string(),
+                        reason: "String, Bool, and Json types cannot have display_precision"
+                            .to_string(),
                     });
                 }
             }
@@ -331,7 +332,8 @@ fn is_valid_stream_id(id: &str) -> bool {
     }
 
     // Only lowercase letters, digits, and hyphens
-    id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    id.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// Validate field name format (snake_case, 1-64 chars)
@@ -342,12 +344,17 @@ fn is_valid_field_name(name: &str) -> bool {
     }
 
     // Must start with lowercase letter
-    if !name.chars().next().map_or(false, |c| c.is_ascii_lowercase()) {
+    if !name
+        .chars()
+        .next()
+        .map_or(false, |c| c.is_ascii_lowercase())
+    {
         return false;
     }
 
     // Only lowercase letters, digits, and underscores
-    name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    name.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 #[cfg(test)]
@@ -417,22 +424,27 @@ mod tests {
 
     #[test]
     fn test_field_validate_string_type_cannot_have_range() {
-        let field = SchemaField::new("event_type".to_string(), FieldType::String)
-            .with_range(0.0, 100.0);
+        let field =
+            SchemaField::new("event_type".to_string(), FieldType::String).with_range(0.0, 100.0);
 
         let result = field.validate();
         assert!(result.is_err());
-        assert!(matches!(result, Err(StreamConfigError::InvalidFieldType { .. })));
+        assert!(matches!(
+            result,
+            Err(StreamConfigError::InvalidFieldType { .. })
+        ));
     }
 
     #[test]
     fn test_field_validate_int_type_cannot_have_precision() {
-        let field = SchemaField::new("count".to_string(), FieldType::Int)
-            .with_precision(2);
+        let field = SchemaField::new("count".to_string(), FieldType::Int).with_precision(2);
 
         let result = field.validate();
         assert!(result.is_err());
-        assert!(matches!(result, Err(StreamConfigError::InvalidFieldType { .. })));
+        assert!(matches!(
+            result,
+            Err(StreamConfigError::InvalidFieldType { .. })
+        ));
     }
 
     #[test]
@@ -451,17 +463,22 @@ mod tests {
 
         let result = field.validate();
         assert!(result.is_err());
-        assert!(matches!(result, Err(StreamConfigError::InvalidRange { .. })));
+        assert!(matches!(
+            result,
+            Err(StreamConfigError::InvalidRange { .. })
+        ));
     }
 
     #[test]
     fn test_field_validate_range_min_must_be_less_than_max() {
-        let field = SchemaField::new("test".to_string(), FieldType::Float)
-            .with_range(100.0, 50.0); // min > max
+        let field = SchemaField::new("test".to_string(), FieldType::Float).with_range(100.0, 50.0); // min > max
 
         let result = field.validate();
         assert!(result.is_err());
-        assert!(matches!(result, Err(StreamConfigError::InvalidRange { .. })));
+        assert!(matches!(
+            result,
+            Err(StreamConfigError::InvalidRange { .. })
+        ));
     }
 
     #[test]
@@ -470,7 +487,10 @@ mod tests {
 
         let result = field.validate();
         assert!(result.is_err());
-        assert!(matches!(result, Err(StreamConfigError::InvalidFieldName(_))));
+        assert!(matches!(
+            result,
+            Err(StreamConfigError::InvalidFieldName(_))
+        ));
     }
 
     // ========== STREAM CONFIG VALIDATION TESTS ==========
@@ -487,10 +507,10 @@ mod tests {
     #[test]
     fn test_stream_id_validation_invalid_ids() {
         let invalid_ids = vec![
-            "AirQuality",    // uppercase
-            "air_quality",   // underscore
-            "ab",            // too short
-            "2stream",       // starts with digit
+            "AirQuality",  // uppercase
+            "air_quality", // underscore
+            "ab",          // too short
+            "2stream",     // starts with digit
             "stream-id-that-is-way-too-long-and-exceeds-the-maximum-allowed-length",
         ];
 

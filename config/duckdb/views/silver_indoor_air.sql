@@ -1,107 +1,112 @@
 -- Silver Layer View: Indoor Air Quality
 -- Feature: DP-001
--- Source: /data/air-quality/*.parquet
--- Description: AirGradient sensor readings with data quality validation
+-- Source: /data/data/air-quality/**/*.parquet (Bronze layer - long format)
+-- Description: AirGradient sensor readings PIVOTed to wide format with validation
+--
+-- Bronze Schema: timestamp, location_id, metric, value
+-- Silver Schema: timestamp, location_id, pm25, pm10, co2, temperature, humidity, tvoc, nox
 --
 -- Quality Rules:
 --   - Range validation for all numeric fields
---   - NULL handling for optional fields
+--   - NULL for out-of-range values
 --   - Rounding to appropriate precision
---   - Timestamp validation (non-NULL required)
 --
 -- Performance: Optimized for 7-day queries (<5s target)
 
 CREATE OR REPLACE VIEW silver_indoor_air AS
-SELECT
-    -- Timestamp (required field)
-    timestamp,
+WITH bronze_data AS (
+    SELECT
+        -- Convert microseconds to timestamp
+        to_timestamp(timestamp / 1000000) as ts,
+        location_id,
+        metric,
+        value
+    FROM read_parquet(
+        '/data/data/air-quality/**/*.parquet',
+        union_by_name = true,
+        filename = true,
+        hive_partitioning = true
+    )
+    WHERE timestamp IS NOT NULL
+),
 
-    -- Particulate Matter 2.5 µm (PM2.5)
-    -- Range: 0-500 µg/m³ (EPA AQI scale max)
-    -- Precision: 1 decimal (sensor accuracy ±10%)
+-- PIVOT from long format to wide format
+pivoted AS (
+    SELECT
+        ts as timestamp,
+        location_id,
+        MAX(CASE WHEN metric = 'pm25' THEN value END) as pm25_raw,
+        MAX(CASE WHEN metric = 'pm10' THEN value END) as pm10_raw,
+        MAX(CASE WHEN metric = 'co2' THEN value END) as co2_raw,
+        MAX(CASE WHEN metric = 'temperature' THEN value END) as temperature_raw,
+        MAX(CASE WHEN metric = 'humidity' THEN value END) as humidity_raw,
+        MAX(CASE WHEN metric = 'tvoc' THEN value END) as tvoc_raw,
+        MAX(CASE WHEN metric = 'nox' THEN value END) as nox_raw
+    FROM bronze_data
+    GROUP BY ts, location_id
+)
+
+-- Apply data quality validation
+SELECT
+    timestamp,
+    location_id,
+
+    -- PM2.5: 0-500 µg/m³ (EPA AQI scale max), 1 decimal precision
     CASE
-        WHEN pm25 >= 0 AND pm25 <= 500
-        THEN ROUND(pm25, 1)
+        WHEN pm25_raw >= 0 AND pm25_raw <= 500
+        THEN ROUND(pm25_raw, 1)
         ELSE NULL
     END as pm25,
 
-    -- Particulate Matter 10 µm (PM10)
-    -- Range: 0-1000 µg/m³ (typical max for indoor)
-    -- Precision: 1 decimal (sensor accuracy ±10%)
+    -- PM10: 0-1000 µg/m³, 1 decimal precision
     CASE
-        WHEN pm10 >= 0 AND pm10 <= 1000
-        THEN ROUND(pm10, 1)
+        WHEN pm10_raw >= 0 AND pm10_raw <= 1000
+        THEN ROUND(pm10_raw, 1)
         ELSE NULL
     END as pm10,
 
-    -- Carbon Dioxide (CO2)
-    -- Range: 400-5000 ppm (400 = outdoor, 5000 = OSHA limit)
-    -- Precision: 0 decimals (sensor reports integers)
+    -- CO2: 400-5000 ppm (400=outdoor, 5000=OSHA limit), integer
     CASE
-        WHEN co2 >= 400 AND co2 <= 5000
-        THEN ROUND(co2, 0)
+        WHEN co2_raw >= 400 AND co2_raw <= 5000
+        THEN ROUND(co2_raw, 0)
         ELSE NULL
     END as co2,
 
-    -- Temperature
-    -- Range: -10 to 50°C (realistic indoor range)
-    -- Precision: 1 decimal (sensor accuracy ±0.5°C)
+    -- Temperature: -10 to 50°C (indoor range), 1 decimal
     CASE
-        WHEN temperature >= -10 AND temperature <= 50
-        THEN ROUND(temperature, 1)
+        WHEN temperature_raw >= -10 AND temperature_raw <= 50
+        THEN ROUND(temperature_raw, 1)
         ELSE NULL
     END as temperature,
 
-    -- Relative Humidity
-    -- Range: 0-100% (physical limits)
-    -- Precision: 1 decimal (sensor accuracy ±2%)
+    -- Humidity: 0-100%, 1 decimal
     CASE
-        WHEN humidity >= 0 AND humidity <= 100
-        THEN ROUND(humidity, 1)
+        WHEN humidity_raw >= 0 AND humidity_raw <= 100
+        THEN ROUND(humidity_raw, 1)
         ELSE NULL
     END as humidity,
 
-    -- Total Volatile Organic Compounds (TVOC)
-    -- Range: 0-60000 ppb (sensor max)
-    -- Precision: 0 decimals (sensor reports integers)
+    -- TVOC: 0-60000 ppb (sensor max), integer
     CASE
-        WHEN tvoc >= 0 AND tvoc <= 60000
-        THEN ROUND(tvoc, 0)
+        WHEN tvoc_raw >= 0 AND tvoc_raw <= 60000
+        THEN ROUND(tvoc_raw, 0)
         ELSE NULL
     END as tvoc,
 
-    -- Nitrogen Oxides (NOx)
-    -- Range: 0-1000 ppb (typical indoor max)
-    -- Precision: 0 decimals (sensor reports integers)
+    -- NOx: 0-1000 ppb, integer
     CASE
-        WHEN nox >= 0 AND nox <= 1000
-        THEN ROUND(nox, 0)
+        WHEN nox_raw >= 0 AND nox_raw <= 1000
+        THEN ROUND(nox_raw, 0)
         ELSE NULL
     END as nox
 
-FROM read_parquet(
-    '/data/data/**/*.parquet',
-    union_by_name = true,  -- Handle schema evolution
-    filename = true,       -- Include file path for debugging
-    hive_partitioning = true  -- Parse year/month/day from path
-)
-WHERE
-    -- Filter out records with invalid timestamps
-    timestamp IS NOT NULL
-    -- Exclude outdoor streams (only include indoor/device data)
-    AND filename NOT LIKE '%outdoor%'
-
-    -- Optional: Filter to recent data only (improve query performance)
-    -- Uncomment for production if only recent data is needed:
-    -- AND timestamp >= current_timestamp - INTERVAL '90 days'
-
+FROM pivoted
 ORDER BY timestamp DESC;
 
 -- ============================================================================
 -- View Metadata
 -- ============================================================================
--- Expected row count: ~1440 rows/day (1 reading/minute)
--- Expected columns: 8 (timestamp + 7 measurements)
--- Nullable columns: pm10, co2, temperature, humidity, tvoc, nox
--- Required columns: timestamp, pm25
+-- Source: Bronze layer (long format with metric column)
+-- Transform: PIVOT to wide format with validation
+-- Expected columns: 9 (timestamp, location_id, + 7 measurements)
 -- ============================================================================

@@ -169,11 +169,7 @@ impl MqttSource {
 
     /// Create a new connection and return the event loop
     fn create_connection(config: &MqttConfig) -> CoreResult<(AsyncClient, EventLoop)> {
-        let mut mqtt_options = MqttOptions::new(
-            &config.client_id,
-            &config.broker_url,
-            config.port,
-        );
+        let mut mqtt_options = MqttOptions::new(&config.client_id, &config.broker_url, config.port);
         mqtt_options.set_keep_alive(Duration::from_secs(30));
 
         let (client, event_loop) = AsyncClient::new(mqtt_options, config.buffer_capacity);
@@ -537,15 +533,7 @@ mod tests {
             ..Default::default()
         };
 
-        let delays = vec![
-            (0, 1),
-            (1, 2),
-            (2, 4),
-            (3, 8),
-            (4, 16),
-            (5, 30),
-            (6, 30),
-        ];
+        let delays = vec![(0, 1), (1, 2), (2, 4), (3, 8), (4, 16), (5, 30), (6, 30)];
 
         for (attempt, expected) in delays {
             let delay = std::cmp::min(

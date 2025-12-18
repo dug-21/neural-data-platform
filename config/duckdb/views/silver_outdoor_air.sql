@@ -1,123 +1,128 @@
 -- Silver Layer View: Outdoor Air Quality
 -- Feature: DP-001
--- Source: /data/outdoor-air-quality/*.parquet
--- Description: OpenWeatherMap Air Pollution API data with validation
+-- Source: /data/data/outdoor-air-quality/**/*.parquet (Bronze layer - long format)
+-- Description: OpenWeatherMap Air Pollution API data PIVOTed to wide format
+--
+-- Bronze Schema: timestamp, location_id, metric, value
+-- Silver Schema: timestamp, location_id, aqi, co, no, no2, o3, so2, pm2_5, pm10, nh3
 --
 -- Quality Rules:
 --   - Range validation per OpenWeatherMap API specs
 --   - NULL handling for optional fields
 --   - Rounding to air quality monitoring precision
---   - Timestamp validation (non-NULL required)
 --
 -- Performance: Optimized for 7-day queries (<5s target)
 
 CREATE OR REPLACE VIEW silver_outdoor_air AS
-SELECT
-    -- Timestamp (required field)
-    timestamp,
+WITH bronze_data AS (
+    SELECT
+        -- Convert microseconds to timestamp
+        to_timestamp(timestamp / 1000000) as ts,
+        location_id,
+        metric,
+        value
+    FROM read_parquet(
+        '/data/data/outdoor-air-quality/**/*.parquet',
+        union_by_name = true,
+        filename = true,
+        hive_partitioning = true
+    )
+    WHERE timestamp IS NOT NULL
+),
 
-    -- Air Quality Index
-    -- Range: 1-5 (OpenWeatherMap scale: 1=Good, 5=Very Poor)
-    -- Precision: 0 decimals (discrete scale)
+-- PIVOT from long format to wide format
+pivoted AS (
+    SELECT
+        ts as timestamp,
+        location_id,
+        MAX(CASE WHEN metric = 'aqi' THEN value END) as aqi_raw,
+        MAX(CASE WHEN metric = 'co' THEN value END) as co_raw,
+        MAX(CASE WHEN metric = 'no' THEN value END) as no_raw,
+        MAX(CASE WHEN metric = 'no2' THEN value END) as no2_raw,
+        MAX(CASE WHEN metric = 'o3' THEN value END) as o3_raw,
+        MAX(CASE WHEN metric = 'so2' THEN value END) as so2_raw,
+        MAX(CASE WHEN metric = 'pm2_5' THEN value END) as pm2_5_raw,
+        MAX(CASE WHEN metric = 'pm10' THEN value END) as pm10_raw,
+        MAX(CASE WHEN metric = 'nh3' THEN value END) as nh3_raw
+    FROM bronze_data
+    GROUP BY ts, location_id
+)
+
+-- Apply data quality validation
+SELECT
+    timestamp,
+    location_id,
+
+    -- AQI: 1-5 (OpenWeatherMap scale), integer
     CASE
-        WHEN aqi >= 1 AND aqi <= 5
-        THEN ROUND(aqi, 0)
+        WHEN aqi_raw >= 1 AND aqi_raw <= 5
+        THEN ROUND(aqi_raw, 0)
         ELSE NULL
     END as aqi,
 
-    -- Carbon Monoxide (CO)
-    -- Range: 0-50000 µg/m³ (0 to extreme pollution)
-    -- Precision: 1 decimal (monitoring equipment accuracy)
+    -- CO: 0-50000 µg/m³, 1 decimal
     CASE
-        WHEN co >= 0 AND co <= 50000
-        THEN ROUND(co, 1)
+        WHEN co_raw >= 0 AND co_raw <= 50000
+        THEN ROUND(co_raw, 1)
         ELSE NULL
     END as co,
 
-    -- Nitric Oxide (NO)
-    -- Range: 0-1000 µg/m³ (0 to extreme pollution)
-    -- Precision: 2 decimals (monitoring equipment accuracy)
+    -- NO: 0-1000 µg/m³, 2 decimals
     CASE
-        WHEN no >= 0 AND no <= 1000
-        THEN ROUND(no, 2)
+        WHEN no_raw >= 0 AND no_raw <= 1000
+        THEN ROUND(no_raw, 2)
         ELSE NULL
     END as no,
 
-    -- Nitrogen Dioxide (NO2)
-    -- Range: 0-1000 µg/m³ (0 to extreme pollution)
-    -- Precision: 2 decimals (monitoring equipment accuracy)
+    -- NO2: 0-1000 µg/m³, 2 decimals
     CASE
-        WHEN no2 >= 0 AND no2 <= 1000
-        THEN ROUND(no2, 2)
+        WHEN no2_raw >= 0 AND no2_raw <= 1000
+        THEN ROUND(no2_raw, 2)
         ELSE NULL
     END as no2,
 
-    -- Ozone (O3)
-    -- Range: 0-1000 µg/m³ (0 to extreme pollution)
-    -- Precision: 2 decimals (monitoring equipment accuracy)
+    -- O3: 0-1000 µg/m³, 2 decimals
     CASE
-        WHEN o3 >= 0 AND o3 <= 1000
-        THEN ROUND(o3, 2)
+        WHEN o3_raw >= 0 AND o3_raw <= 1000
+        THEN ROUND(o3_raw, 2)
         ELSE NULL
     END as o3,
 
-    -- Sulfur Dioxide (SO2)
-    -- Range: 0-1000 µg/m³ (0 to extreme pollution)
-    -- Precision: 2 decimals (monitoring equipment accuracy)
+    -- SO2: 0-1000 µg/m³, 2 decimals
     CASE
-        WHEN so2 >= 0 AND so2 <= 1000
-        THEN ROUND(so2, 2)
+        WHEN so2_raw >= 0 AND so2_raw <= 1000
+        THEN ROUND(so2_raw, 2)
         ELSE NULL
     END as so2,
 
-    -- Particulate Matter 2.5 µm (PM2.5)
-    -- Range: 0-1000 µg/m³ (0 to extreme pollution)
-    -- Precision: 1 decimal (monitoring equipment accuracy)
+    -- PM2.5: 0-1000 µg/m³, 1 decimal
     CASE
-        WHEN pm2_5 >= 0 AND pm2_5 <= 1000
-        THEN ROUND(pm2_5, 1)
+        WHEN pm2_5_raw >= 0 AND pm2_5_raw <= 1000
+        THEN ROUND(pm2_5_raw, 1)
         ELSE NULL
     END as pm2_5,
 
-    -- Particulate Matter 10 µm (PM10)
-    -- Range: 0-1000 µg/m³ (0 to extreme pollution)
-    -- Precision: 1 decimal (monitoring equipment accuracy)
+    -- PM10: 0-1000 µg/m³, 1 decimal
     CASE
-        WHEN pm10 >= 0 AND pm10 <= 1000
-        THEN ROUND(pm10, 1)
+        WHEN pm10_raw >= 0 AND pm10_raw <= 1000
+        THEN ROUND(pm10_raw, 1)
         ELSE NULL
     END as pm10,
 
-    -- Ammonia (NH3)
-    -- Range: 0-200 µg/m³ (0 to extreme pollution)
-    -- Precision: 2 decimals (monitoring equipment accuracy)
+    -- NH3: 0-200 µg/m³, 2 decimals
     CASE
-        WHEN nh3 >= 0 AND nh3 <= 200
-        THEN ROUND(nh3, 2)
+        WHEN nh3_raw >= 0 AND nh3_raw <= 200
+        THEN ROUND(nh3_raw, 2)
         ELSE NULL
     END as nh3
 
-FROM read_parquet(
-    '/data/data/outdoor-air-quality/**/*.parquet',
-    union_by_name = true,  -- Handle schema evolution
-    filename = true,       -- Include file path for debugging
-    hive_partitioning = true  -- Parse year/month/day from path
-)
-WHERE
-    -- Filter out records with invalid timestamps
-    timestamp IS NOT NULL
-
-    -- Optional: Filter to recent data only (improve query performance)
-    -- Uncomment for production if only recent data is needed:
-    -- AND timestamp >= current_timestamp - INTERVAL '90 days'
-
+FROM pivoted
 ORDER BY timestamp DESC;
 
 -- ============================================================================
 -- View Metadata
 -- ============================================================================
--- Expected row count: ~144 rows/day (1 reading/10 minutes)
--- Expected columns: 10 (timestamp + 9 measurements)
--- Nullable columns: co, no, no2, o3, so2, pm10, nh3
--- Required columns: timestamp, aqi, pm2_5
+-- Source: Bronze layer (long format with metric column)
+-- Transform: PIVOT to wide format with validation
+-- Expected columns: 11 (timestamp, location_id, + 9 measurements)
 -- ============================================================================

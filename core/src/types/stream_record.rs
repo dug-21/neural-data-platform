@@ -284,8 +284,14 @@ mod tests {
 
         let record = StreamRecord::new("air-quality".to_string(), point.clone());
 
-        assert_eq!(record.point.tags.get("sensor_type"), Some(&"PM2.5".to_string()));
-        assert_eq!(record.point.tags.get("location"), Some(&"living-room".to_string()));
+        assert_eq!(
+            record.point.tags.get("sensor_type"),
+            Some(&"PM2.5".to_string())
+        );
+        assert_eq!(
+            record.point.tags.get("location"),
+            Some(&"living-room".to_string())
+        );
     }
 
     #[test]

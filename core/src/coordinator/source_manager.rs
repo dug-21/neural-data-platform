@@ -49,38 +49,37 @@ impl SourceManager {
     }
 
     /// Spawn a source based on configuration
-    pub async fn spawn_source(
-        &self,
-        source_id: String,
-        config: SourceConfig,
-    ) -> CoreResult<()> {
+    pub async fn spawn_source(&self, source_id: String, config: SourceConfig) -> CoreResult<()> {
         if !config.enabled {
             debug!("Skipping disabled source: {}", source_id);
             return Ok(());
         }
 
-        info!("Spawning source: {} (type: {:?})", source_id, config.source_type);
+        info!(
+            "Spawning source: {} (type: {:?})",
+            source_id, config.source_type
+        );
 
         match config.source_type {
             SourceType::Mqtt => self.spawn_mqtt_source(source_id, config).await,
             SourceType::HttpPoll => self.spawn_http_poll_source(source_id, config).await,
             SourceType::Webhook => {
                 warn!("Webhook sources not yet implemented: {}", source_id);
-                Err(CoreError::Source("Webhook sources not implemented".to_string()))
+                Err(CoreError::Source(
+                    "Webhook sources not implemented".to_string(),
+                ))
             }
             SourceType::FileWatch => {
                 warn!("FileWatch sources not yet implemented: {}", source_id);
-                Err(CoreError::Source("FileWatch sources not implemented".to_string()))
+                Err(CoreError::Source(
+                    "FileWatch sources not implemented".to_string(),
+                ))
             }
         }
     }
 
     /// Spawn an MQTT source
-    async fn spawn_mqtt_source(
-        &self,
-        source_id: String,
-        config: SourceConfig,
-    ) -> CoreResult<()> {
+    async fn spawn_mqtt_source(&self, source_id: String, config: SourceConfig) -> CoreResult<()> {
         let params = &config.params;
 
         // Extract MQTT configuration from params
@@ -90,10 +89,7 @@ impl SourceManager {
             .ok_or_else(|| CoreError::Config("Missing broker_url for MQTT source".to_string()))?
             .to_string();
 
-        let port = params
-            .get("port")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1883) as u16;
+        let port = params.get("port").and_then(|v| v.as_u64()).unwrap_or(1883) as u16;
 
         let client_id = params
             .get("client_id")
@@ -221,9 +217,9 @@ impl SourceManager {
             .unwrap_or(1000) as usize;
 
         // Extract sensor configurations
-        let sensors_json = params
-            .get("sensors")
-            .ok_or_else(|| CoreError::Config("Missing sensors for HTTP polling source".to_string()))?;
+        let sensors_json = params.get("sensors").ok_or_else(|| {
+            CoreError::Config("Missing sensors for HTTP polling source".to_string())
+        })?;
 
         let sensors_array = sensors_json
             .as_array()
@@ -317,7 +313,10 @@ impl SourceManager {
             handle.stop().await?;
             Ok(())
         } else {
-            Err(CoreError::Source(format!("Source not found: {}", source_id)))
+            Err(CoreError::Source(format!(
+                "Source not found: {}",
+                source_id
+            )))
         }
     }
 
@@ -346,7 +345,10 @@ impl SourceManager {
                 message: format!("{:?} source running", handle.source_type),
                 details: [
                     ("source_id".to_string(), source_id.clone()),
-                    ("source_type".to_string(), format!("{:?}", handle.source_type)),
+                    (
+                        "source_type".to_string(),
+                        format!("{:?}", handle.source_type),
+                    ),
                 ]
                 .iter()
                 .cloned()
@@ -387,7 +389,9 @@ mod tests {
             params: HashMap::new(),
         };
 
-        let result = manager.spawn_source("test-source".to_string(), config).await;
+        let result = manager
+            .spawn_source("test-source".to_string(), config)
+            .await;
         assert!(result.is_ok());
         assert_eq!(manager.active_source_count().await, 0);
     }
@@ -433,7 +437,9 @@ mod tests {
             params: HashMap::new(),
         };
 
-        let result = manager.spawn_source("test-webhook".to_string(), config).await;
+        let result = manager
+            .spawn_source("test-webhook".to_string(), config)
+            .await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CoreError::Source(_)));
     }
