@@ -135,9 +135,10 @@ services:
         condition: service_healthy
 
   # Grafana - Data Visualization & Dashboards (DP-001)
-  # Uses Ubuntu image for DuckDB plugin compatibility (glibc required)
+  # Uses Ubuntu image for DuckDB plugin compatibility (glibc 2.38+ required)
+  # Grafana 12.x uses Ubuntu 24.04 base with glibc 2.39
   grafana:
-    image: grafana/grafana-oss:11.4.0-ubuntu
+    image: grafana/grafana-oss:12.3.1-ubuntu
     container_name: grafana
     ports:
       - "3000:3000"     # Grafana web UI

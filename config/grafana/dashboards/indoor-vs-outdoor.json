@@ -26,7 +26,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
           "rawSql": "WITH indoor AS (\n    SELECT avg_temperature AS temp\n    FROM readings_hourly\n    WHERE stream_id = 'air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n),\noutdoor AS (\n    SELECT avg_temperature AS temp\n    FROM readings_hourly\n    WHERE stream_id = 'outdoor-weather'\n    ORDER BY bucket DESC\n    LIMIT 1\n)\nSELECT (indoor.temp - outdoor.temp) AS \"value\"\nFROM indoor, outdoor",
@@ -71,7 +71,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
           "rawSql": "WITH indoor AS (\n    SELECT avg_pm25 AS pm25\n    FROM readings_hourly\n    WHERE stream_id = 'air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n),\noutdoor AS (\n    SELECT avg_pm2_5 AS pm25\n    FROM readings_hourly\n    WHERE stream_id = 'outdoor-air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n)\nSELECT (indoor.pm25 - outdoor.pm25) AS \"value\"\nFROM indoor, outdoor",
@@ -118,7 +118,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
           "rawSql": "WITH indoor AS (\n    SELECT avg_humidity AS humidity\n    FROM readings_hourly\n    WHERE stream_id = 'air-quality'\n    ORDER BY bucket DESC\n    LIMIT 1\n),\noutdoor AS (\n    SELECT avg_humidity AS humidity\n    FROM readings_hourly\n    WHERE stream_id = 'outdoor-weather'\n    ORDER BY bucket DESC\n    LIMIT 1\n)\nSELECT (indoor.humidity - outdoor.humidity) AS \"value\"\nFROM indoor, outdoor",
@@ -163,7 +163,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT\n    bucket AS time,\n    avg_temperature AS \"Indoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nUNION ALL\n\nSELECT\n    bucket AS time,\n    avg_temperature AS \"Outdoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nORDER BY time",
@@ -224,7 +224,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT\n    bucket AS time,\n    avg_pm25 AS \"Indoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nUNION ALL\n\nSELECT\n    bucket AS time,\n    avg_pm2_5 AS \"Outdoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nORDER BY time",
@@ -294,7 +294,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT\n    bucket AS time,\n    avg_humidity AS \"Indoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nUNION ALL\n\nSELECT\n    bucket AS time,\n    avg_humidity AS \"Outdoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\n\nORDER BY time",
@@ -357,7 +357,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT\n    bucket AS time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND bucket >= $__timeFrom()\n    AND bucket <= $__timeTo()\nORDER BY bucket",
