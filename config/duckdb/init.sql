@@ -144,7 +144,7 @@ WHERE bucket >= current_timestamp - INTERVAL '7 days';
 -- Benchmark 7-day query on indoor air
 SELECT 'Benchmarking silver_indoor_air (7 days)...' as status;
 .timer on
-SELECT COUNT(*), AVG(pm25), AVG(temperature)
+SELECT COUNT(*), AVG(pm02), AVG(temperature)
 FROM silver_indoor_air
 WHERE timestamp >= current_timestamp - INTERVAL '7 days';
 .timer off

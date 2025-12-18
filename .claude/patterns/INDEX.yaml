@@ -190,6 +190,21 @@ architecture:
       - "parquet schema"
       - "config driven data"
 
+  bronze-silver-dashboard-layers:
+    key: "architecture:bronze-silver-dashboard-layers"
+    files:
+      - "config/base/streams/"
+      - "core/src/storage/parquet.rs"
+      - "config/duckdb/views/"
+    summary: "Layer responsibilities: Bronze collects as-source, Silver exposes all with DQ, Dashboards select columns"
+    queries:
+      - "layer responsibilities"
+      - "bronze silver dashboard"
+      - "collect everything expose everything"
+      - "data layer ownership"
+      - "who transforms data"
+      - "where does aggregation happen"
+
 development:
   add-stream-procedure:
     key: "development:add-stream-procedure"
@@ -453,7 +468,7 @@ streams:
       - "air pollution api"
       - "openweathermap air"
 
-# Memory Pattern Keys Quick Reference (18 patterns)
+# Memory Pattern Keys Quick Reference (19 patterns)
 #
 # architecture:channel-ownership-adr-001
 # architecture:source-factory-pattern-adr-002
@@ -465,6 +480,7 @@ streams:
 # architecture:domain-adapter-pattern
 # architecture:configuration-hierarchy
 # architecture:stream-config-schema
+# architecture:bronze-silver-dashboard-layers  (NEW - DP-001)
 # deployment:gitops-config-sync
 # deployment:gitops-config-layers  (NEW - DP-001)
 # deployment:docker-minimal-changes
