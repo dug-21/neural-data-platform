@@ -116,11 +116,11 @@ services:
       -c "
       mkdir -p /var/duckdb &&
       echo 'Initializing DuckDB Silver layer views...' &&
-      duckdb /var/duckdb/neural_platform.db < /config/duckdb/init.sql 2>&1 || echo 'Init warning (may be OK if no data yet)' &&
+      /duckdb /var/duckdb/neural_platform.db < /config/duckdb/init.sql 2>&1 || echo 'Init warning (may be OK if no data yet)' &&
       echo 'Starting SQLite export loop (every 5 minutes)...' &&
       while true; do
         echo \"[$(date)] Exporting to SQLite for Grafana...\" &&
-        duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning'
+        /duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning'
         sleep 300
       done
       "
