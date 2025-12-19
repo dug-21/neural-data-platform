@@ -166,7 +166,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    time,\n    avg_temperature AS \"Indoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom * 1000\n    AND time <= $__timeTo * 1000\n\nUNION ALL\n\nSELECT\n    time,\n    avg_temperature AS \"Outdoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND time >= $__timeFrom * 1000\n    AND time <= $__timeTo * 1000\n\nORDER BY time",
+          "rawSql": "SELECT\n    time,\n    avg_temperature AS \"Indoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom\n    AND time <= $__timeTo\n\nUNION ALL\n\nSELECT\n    time,\n    avg_temperature AS \"Outdoor Temperature (°C)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND time >= $__timeFrom\n    AND time <= $__timeTo\n\nORDER BY time",
           "format": "time_series",
           "refId": "A"
         }
@@ -227,7 +227,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    time,\n    avg_pm25 AS \"Indoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom * 1000\n    AND time <= $__timeTo * 1000\n\nUNION ALL\n\nSELECT\n    time,\n    avg_pm2_5 AS \"Outdoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND time >= $__timeFrom * 1000\n    AND time <= $__timeTo * 1000\n\nORDER BY time",
+          "rawSql": "SELECT\n    time,\n    avg_pm25 AS \"Indoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom\n    AND time <= $__timeTo\n\nUNION ALL\n\nSELECT\n    time,\n    avg_pm2_5 AS \"Outdoor PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-air-quality'\n    AND time >= $__timeFrom\n    AND time <= $__timeTo\n\nORDER BY time",
           "format": "time_series",
           "refId": "A"
         }
@@ -297,7 +297,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    time,\n    avg_humidity AS \"Indoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom * 1000\n    AND time <= $__timeTo * 1000\n\nUNION ALL\n\nSELECT\n    time,\n    avg_humidity AS \"Outdoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND time >= $__timeFrom * 1000\n    AND time <= $__timeTo * 1000\n\nORDER BY time",
+          "rawSql": "SELECT\n    time,\n    avg_humidity AS \"Indoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom\n    AND time <= $__timeTo\n\nUNION ALL\n\nSELECT\n    time,\n    avg_humidity AS \"Outdoor Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'outdoor-weather'\n    AND time >= $__timeFrom\n    AND time <= $__timeTo\n\nORDER BY time",
           "format": "time_series",
           "refId": "A"
         }
@@ -360,7 +360,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom * 1000\n    AND time <= $__timeTo * 1000\nORDER BY time",
+          "rawSql": "SELECT\n    time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom\n    AND time <= $__timeTo\nORDER BY time",
           "format": "time_series",
           "refId": "A"
         }
