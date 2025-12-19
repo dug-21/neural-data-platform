@@ -16,32 +16,18 @@
       "id": 1,
       "type": "stat",
       "title": "Current PM2.5",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
-          "datasource": {
-            "type": "motherduck-duckdb-datasource",
-            "uid": "duckdb-ndp"
-          },
-          "rawSql": "SELECT avg_pm25 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT avg_pm25 AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "refId": "A"
         }
       ],
       "options": {
-        "graphMode": "area",
+        "graphMode": "none",
         "colorMode": "background",
-        "justifyMode": "auto",
-        "textMode": "value_and_name",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"]
-        }
+        "reduceOptions": {"calcs": ["lastNotNull"]}
       },
       "fieldConfig": {
         "defaults": {
@@ -63,32 +49,18 @@
       "id": 2,
       "type": "stat",
       "title": "Current CO2",
-      "gridPos": {
-        "x": 6,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
-          "datasource": {
-            "type": "motherduck-duckdb-datasource",
-            "uid": "duckdb-ndp"
-          },
-          "rawSql": "SELECT avg_co2 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT avg_co2 AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "refId": "A"
         }
       ],
       "options": {
-        "graphMode": "area",
+        "graphMode": "none",
         "colorMode": "background",
-        "justifyMode": "auto",
-        "textMode": "value_and_name",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"]
-        }
+        "reduceOptions": {"calcs": ["lastNotNull"]}
       },
       "fieldConfig": {
         "defaults": {
@@ -109,43 +81,23 @@
       "id": 3,
       "type": "stat",
       "title": "Current Temperature",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
-          "datasource": {
-            "type": "motherduck-duckdb-datasource",
-            "uid": "duckdb-ndp"
-          },
-          "rawSql": "SELECT avg_temperature AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT avg_temperature AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "refId": "A"
         }
       ],
       "options": {
-        "graphMode": "area",
+        "graphMode": "none",
         "colorMode": "none",
-        "justifyMode": "auto",
-        "textMode": "value_and_name",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"]
-        }
+        "reduceOptions": {"calcs": ["lastNotNull"]}
       },
       "fieldConfig": {
         "defaults": {
           "unit": "celsius",
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "blue", "value": null}
-            ]
-          }
+          "decimals": 1
         }
       }
     },
@@ -153,43 +105,23 @@
       "id": 4,
       "type": "stat",
       "title": "Current Humidity",
-      "gridPos": {
-        "x": 18,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
-          "datasource": {
-            "type": "motherduck-duckdb-datasource",
-            "uid": "duckdb-ndp"
-          },
-          "rawSql": "SELECT avg_humidity AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT avg_humidity AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "refId": "A"
         }
       ],
       "options": {
-        "graphMode": "area",
+        "graphMode": "none",
         "colorMode": "none",
-        "justifyMode": "auto",
-        "textMode": "value_and_name",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"]
-        }
+        "reduceOptions": {"calcs": ["lastNotNull"]}
       },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "blue", "value": null}
-            ]
-          }
+          "decimals": 0
         }
       }
     },
@@ -197,45 +129,21 @@
       "id": 5,
       "type": "timeseries",
       "title": "PM2.5 Trend",
-      "gridPos": {
-        "x": 0,
-        "y": 4,
-        "w": 24,
-        "h": 8
-      },
+      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
       "targets": [
         {
-          "datasource": {
-            "type": "motherduck-duckdb-datasource",
-            "uid": "duckdb-ndp"
-          },
-          "rawSql": "SELECT epoch(bucket) AS time, avg_pm25 AS \"PM2.5\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT epoch_ms(bucket) AS time, avg_pm25 AS \"PM2.5\" FROM readings_hourly WHERE stream_id = 'air-quality' AND $__timeFilter(bucket) ORDER BY bucket",
           "refId": "A"
         }
       ],
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "lastNotNull", "max"]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 20,
-            "showPoints": "auto",
-            "pointSize": 5
-          },
           "unit": "conc",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -252,45 +160,21 @@
       "id": 6,
       "type": "timeseries",
       "title": "CO2 Levels",
-      "gridPos": {
-        "x": 0,
-        "y": 12,
-        "w": 24,
-        "h": 8
-      },
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
       "targets": [
         {
-          "datasource": {
-            "type": "motherduck-duckdb-datasource",
-            "uid": "duckdb-ndp"
-          },
-          "rawSql": "SELECT epoch(bucket) AS time, avg_co2 AS \"CO2 (ppm)\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT epoch_ms(bucket) AS time, avg_co2 AS \"CO2 (ppm)\" FROM readings_hourly WHERE stream_id = 'air-quality' AND $__timeFilter(bucket) ORDER BY bucket",
           "refId": "A"
         }
       ],
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "lastNotNull", "max"]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5
-          },
           "unit": "ppm",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10},
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -306,44 +190,20 @@
       "id": 7,
       "type": "timeseries",
       "title": "Temperature & Humidity",
-      "gridPos": {
-        "x": 0,
-        "y": 20,
-        "w": 24,
-        "h": 8
-      },
+      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 8},
       "targets": [
         {
-          "datasource": {
-            "type": "motherduck-duckdb-datasource",
-            "uid": "duckdb-ndp"
-          },
-          "rawSql": "SELECT epoch(bucket) AS time, avg_temperature AS \"Temperature\", avg_humidity AS \"Humidity\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT epoch_ms(bucket) AS time, avg_temperature AS \"Temperature\", avg_humidity AS \"Humidity\" FROM readings_hourly WHERE stream_id = 'air-quality' AND $__timeFilter(bucket) ORDER BY bucket",
           "refId": "A"
         }
       ],
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "lastNotNull"]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "auto",
-            "pointSize": 5
-          }
+          "custom": {"drawStyle": "line", "lineWidth": 2}
         },
         "overrides": [
           {

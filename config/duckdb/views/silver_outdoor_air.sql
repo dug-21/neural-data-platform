@@ -1,6 +1,6 @@
 -- Silver Layer View: Outdoor Air Quality
 -- Feature: DP-001
--- Source: /data/data/outdoor-air-quality/**/*.parquet (Bronze layer - long format)
+-- Source: /data/outdoor-air-quality/**/*.parquet (Bronze layer - long format)
 -- Description: OpenWeatherMap Air Pollution API data PIVOTed to wide format
 --
 -- Bronze Schema: timestamp, location_id, metric, value
@@ -22,7 +22,7 @@ WITH bronze_data AS (
         metric,
         value
     FROM read_parquet(
-        '/data/data/outdoor-air-quality/**/*.parquet',
+        '/data/outdoor-air-quality/**/*.parquet',
         union_by_name = true,
         filename = true,
         hive_partitioning = true

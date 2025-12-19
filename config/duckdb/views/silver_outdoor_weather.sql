@@ -1,6 +1,6 @@
 -- Silver Layer View: Outdoor Weather
 -- Feature: DP-001
--- Source: /data/data/outdoor-weather/**/*.parquet (Bronze layer - long format)
+-- Source: /data/outdoor-weather/**/*.parquet (Bronze layer - long format)
 -- Description: OpenWeatherMap Current Weather API data PIVOTed to wide format
 --
 -- Bronze Schema: timestamp, location_id, metric, value
@@ -23,7 +23,7 @@ WITH bronze_data AS (
         metric,
         value
     FROM read_parquet(
-        '/data/data/outdoor-weather/**/*.parquet',
+        '/data/outdoor-weather/**/*.parquet',
         union_by_name = true,
         filename = true,
         hive_partitioning = true
