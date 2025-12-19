@@ -22,12 +22,12 @@ ATTACH '/var/duckdb/grafana.db' AS grafana_db (TYPE SQLITE);
 -- Drop and recreate readings_hourly table in SQLite
 DROP TABLE IF EXISTS grafana_db.readings_hourly;
 
--- Export data with epoch milliseconds for Grafana time series
--- Grafana's SQLite plugin requires numeric timestamps (epoch ms)
+-- Export data with epoch seconds for Grafana time series
+-- Grafana's SQLite plugin expects unix timestamps in SECONDS (not milliseconds)
 CREATE TABLE grafana_db.readings_hourly AS
 SELECT
-    -- Convert timestamp to epoch milliseconds for Grafana
-    epoch_ms(bucket) as time,
+    -- Convert timestamp to epoch seconds for Grafana
+    epoch(bucket) as time,
     stream_id,
     avg_pm25, max_pm25, min_pm25,
     avg_pm10, max_pm10, min_pm10,
@@ -57,8 +57,8 @@ ORDER BY bucket DESC, stream_id;
 SELECT
     'Export completed successfully' as status,
     COUNT(*) as total_rows_exported,
-    MIN(time) as earliest_data_epoch_ms,
-    MAX(time) as latest_data_epoch_ms,
+    MIN(time) as earliest_data_epoch_sec,
+    MAX(time) as latest_data_epoch_sec,
     current_timestamp as export_time
 FROM grafana_db.readings_hourly;
 
