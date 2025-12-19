@@ -165,7 +165,8 @@ services:
       - ../../config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ../../config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ../../config/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - duckdb-data:/duckdb                   # SQLite needs write access for lock files
+      - duckdb-data:/duckdb                   # DuckDB database file
+      - air-quality-data:/data:ro             # Parquet files for DuckDB views
     environment:
       # Security
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
