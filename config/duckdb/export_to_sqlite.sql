@@ -50,10 +50,8 @@ FROM readings_hourly
 WHERE bucket >= current_timestamp - INTERVAL '30 days'
 ORDER BY bucket DESC, stream_id;
 
--- Create indexes for faster queries
-CREATE INDEX IF NOT EXISTS idx_time ON grafana_db.readings_hourly(time);
-CREATE INDEX IF NOT EXISTS idx_stream ON grafana_db.readings_hourly(stream_id);
-CREATE INDEX IF NOT EXISTS idx_time_stream ON grafana_db.readings_hourly(time, stream_id);
+-- Note: Indexes created inline with table since SQLite attached via DuckDB
+-- doesn't support CREATE INDEX with schema prefix
 
 -- Export summary statistics
 SELECT
