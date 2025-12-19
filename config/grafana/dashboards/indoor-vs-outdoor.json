@@ -30,8 +30,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "WITH indoor AS (SELECT avg_temperature AS temp FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1), outdoor AS (SELECT avg_temperature AS temp FROM readings_hourly WHERE stream_id = 'outdoor-weather' ORDER BY bucket DESC LIMIT 1) SELECT (indoor.temp - outdoor.temp) AS \"value\" FROM indoor, outdoor",
-          "format": "time_series",
-          "refId": "A"
+          refId: "A"
         }
       ],
       "options": {
@@ -75,8 +74,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "WITH indoor AS (SELECT avg_pm25 AS pm25 FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1), outdoor AS (SELECT avg_pm2_5 AS pm25 FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' ORDER BY bucket DESC LIMIT 1) SELECT (indoor.pm25 - outdoor.pm25) AS \"value\" FROM indoor, outdoor",
-          "format": "time_series",
-          "refId": "A"
+          refId: "A"
         }
       ],
       "options": {
@@ -122,8 +120,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "WITH indoor AS (SELECT avg_humidity AS humidity FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1), outdoor AS (SELECT avg_humidity AS humidity FROM readings_hourly WHERE stream_id = 'outdoor-weather' ORDER BY bucket DESC LIMIT 1) SELECT (indoor.humidity - outdoor.humidity) AS \"value\" FROM indoor, outdoor",
-          "format": "time_series",
-          "refId": "A"
+          refId: "A"
         }
       ],
       "options": {
@@ -167,8 +164,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT epoch(bucket) AS time, avg_temperature AS \"Indoor Temperature\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) UNION ALL SELECT epoch(bucket) AS time, avg_temperature AS \"Outdoor Temperature\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY time",
-          "format": "time_series",
-          "refId": "A"
+          refId: "A"
         }
       ],
       "options": {
@@ -228,8 +224,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT epoch(bucket) AS time, avg_pm25 AS \"Indoor PM2.5\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) UNION ALL SELECT epoch(bucket) AS time, avg_pm2_5 AS \"Outdoor PM2.5\" FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY time",
-          "format": "time_series",
-          "refId": "A"
+          refId: "A"
         }
       ],
       "options": {
@@ -298,8 +293,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT epoch(bucket) AS time, avg_humidity AS \"Indoor Humidity\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) UNION ALL SELECT epoch(bucket) AS time, avg_humidity AS \"Outdoor Humidity\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY time",
-          "format": "time_series",
-          "refId": "A"
+          refId: "A"
         }
       ],
       "options": {
@@ -361,8 +355,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT epoch(bucket) AS time, avg_co2 AS \"CO2 (ppm)\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
-          "format": "time_series",
-          "refId": "A"
+          refId: "A"
         }
       ],
       "options": {
