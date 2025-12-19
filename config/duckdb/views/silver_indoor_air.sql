@@ -1,6 +1,6 @@
 -- Silver Layer View: Indoor Air Quality
 -- Feature: DP-001
--- Source: /data/air-quality/**/*.parquet (Bronze layer - long format)
+-- Source: /data/data/air-quality/**/*.parquet (Bronze layer - long format)
 -- Description: AirGradient sensor readings PIVOTed to wide format with ALL metrics exposed
 --
 -- Bronze Schema: timestamp, location_id, metric, value
@@ -23,7 +23,7 @@ WITH bronze_data AS (
         metric,
         value
     FROM read_parquet(
-        '/data/air-quality/**/*.parquet',
+        '/data/data/air-quality/**/*.parquet',
         union_by_name = true,
         filename = true,
         hive_partitioning = true
