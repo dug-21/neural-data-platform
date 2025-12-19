@@ -175,8 +175,8 @@ services:
       # Server
       - GF_SERVER_ROOT_URL=http://localhost:3000
       - GF_LOG_LEVEL=info
-      # Plugins - Install DuckDB datasource (requires glibc 2.35+, Ubuntu image provides this)
-      - GF_PLUGINS_PREINSTALL=motherduck-duckdb-datasource
+      # Plugins - Install DuckDB datasource from GitHub (not in registry)
+      - GF_INSTALL_PLUGINS=https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v0.4.0/motherduck-duckdb-datasource-0.4.0.zip;motherduck-duckdb-datasource
     restart: unless-stopped
     depends_on:
       duckdb:
