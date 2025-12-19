@@ -102,7 +102,7 @@ services:
           memory: 512M
 
   # DuckDB - Analytical Query Engine (DP-001 Silver Layer)
-  # Exports to SQLite for Grafana compatibility (DuckDB plugin has ARM64 glibc issues)
+  # Grafana DuckDB plugin connects directly to neural_platform.db
   duckdb:
     image: datacatering/duckdb:v1.1.3
     container_name: duckdb
@@ -131,15 +131,16 @@ services:
           sleep 30
         done
 
-        echo 'Starting SQLite export loop for Grafana...'
+        # Make DB files world-writable for Grafana DuckDB plugin (needs write for locking)
+        chmod 666 /var/duckdb/*.db 2>/dev/null || true
+        echo 'DuckDB initialized. Keeping container alive...'
+
         while true; do
-          echo "[$(date)] Exporting readings_hourly to SQLite..."
-          /duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning (may be OK if no views yet)'
-          echo "[$(date)] Export complete. Sleeping 5 minutes..."
+          chmod 666 /var/duckdb/*.db 2>/dev/null || true
           sleep 300
         done
     healthcheck:
-      test: ["CMD", "test", "-f", "/var/duckdb/grafana.db"]
+      test: ["CMD", "test", "-f", "/var/duckdb/neural_platform.db"]
       interval: 60s
       timeout: 10s
       retries: 10
@@ -153,9 +154,9 @@ services:
         condition: service_healthy
 
   # Grafana - Data Visualization & Dashboards (DP-001)
-  # Uses SQLite datasource (DuckDB plugin has ARM64 glibc compatibility issues)
+  # Uses DuckDB plugin v0.2.1 (glibc 2.35 compatible) connecting directly to DuckDB
   grafana:
-    image: grafana/grafana:latest-ubuntu
+    image: grafana/grafana:12.3.1-ubuntu
     container_name: grafana
     ports:
       - "3000:3000"     # Grafana web UI
