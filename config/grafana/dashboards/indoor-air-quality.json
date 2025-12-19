@@ -25,10 +25,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_pm25 AS \"value\",\n    time AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY time DESC\nLIMIT 1",
+          "rawSql": "SELECT avg_pm25 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -46,7 +46,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "µg/m³",
+          "unit": "conc",
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
@@ -73,10 +73,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_co2 AS \"value\",\n    time AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY time DESC\nLIMIT 1",
+          "rawSql": "SELECT avg_co2 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -120,10 +120,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_temperature AS \"value\",\n    time AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY time DESC\nLIMIT 1",
+          "rawSql": "SELECT avg_temperature AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -165,10 +165,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    avg_humidity AS \"value\",\n    time AS \"time\"\nFROM readings_hourly\nWHERE stream_id = 'air-quality'\nORDER BY time DESC\nLIMIT 1",
+          "rawSql": "SELECT avg_humidity AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -210,10 +210,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    time,\n    avg_pm25 AS \"PM2.5 (µg/m³)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom / 1000\n    AND time <= $__timeTo / 1000\nORDER BY time",
+          "rawSql": "SELECT epoch(bucket) AS time, avg_pm25 AS \"PM2.5\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -240,7 +240,7 @@
             "showPoints": "auto",
             "pointSize": 5
           },
-          "unit": "µg/m³",
+          "unit": "conc",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -266,10 +266,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    time,\n    avg_co2 AS \"CO2 (ppm)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom / 1000\n    AND time <= $__timeTo / 1000\nORDER BY time",
+          "rawSql": "SELECT epoch(bucket) AS time, avg_co2 AS \"CO2 (ppm)\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -321,10 +321,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "frser-sqlite-datasource",
+            "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT\n    time,\n    avg_temperature AS \"Temperature (°C)\",\n    avg_humidity AS \"Humidity (%)\"\nFROM readings_hourly\nWHERE\n    stream_id = 'air-quality'\n    AND time >= $__timeFrom / 1000\n    AND time <= $__timeTo / 1000\nORDER BY time",
+          "rawSql": "SELECT epoch(bucket) AS time, avg_temperature AS \"Temperature\", avg_humidity AS \"Humidity\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
           "format": "time_series",
           "refId": "A"
         }
@@ -354,14 +354,14 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "Temperature (°C)"},
+            "matcher": {"id": "byName", "options": "Temperature"},
             "properties": [
               {"id": "unit", "value": "celsius"},
               {"id": "custom.axisPlacement", "value": "left"}
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "Humidity (%)"},
+            "matcher": {"id": "byName", "options": "Humidity"},
             "properties": [
               {"id": "unit", "value": "percent"},
               {"id": "custom.axisPlacement", "value": "right"}

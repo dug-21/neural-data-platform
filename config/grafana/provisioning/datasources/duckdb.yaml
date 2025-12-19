@@ -1,11 +1,11 @@
 apiVersion: 1
 datasources:
-  - name: NDP-SQLite
-    type: frser-sqlite-datasource
+  - name: NDP-DuckDB
+    type: motherduck-duckdb-datasource
     uid: duckdb-ndp
     access: proxy
     isDefault: true
     editable: false
     jsonData:
-      # Path to SQLite database exported from DuckDB
-      path: /duckdb/grafana.db
+      # Path to DuckDB database file
+      path: /duckdb/neural_platform.db
