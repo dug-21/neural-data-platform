@@ -22,28 +22,45 @@ ATTACH '/var/duckdb/grafana.db' AS grafana_db (TYPE SQLITE);
 -- Drop and recreate readings_hourly table in SQLite
 DROP TABLE IF EXISTS grafana_db.readings_hourly;
 
--- Create table structure
+-- Export data with epoch milliseconds for Grafana time series
+-- Grafana's SQLite plugin requires numeric timestamps (epoch ms)
 CREATE TABLE grafana_db.readings_hourly AS
-SELECT * FROM readings_hourly
-LIMIT 0;  -- Create empty table with correct schema
-
--- Insert recent data (last 30 days for dashboard queries)
-INSERT INTO grafana_db.readings_hourly
-SELECT * FROM readings_hourly
+SELECT
+    -- Convert timestamp to epoch milliseconds for Grafana
+    epoch_ms(bucket) as time,
+    stream_id,
+    avg_pm25, max_pm25, min_pm25,
+    avg_pm10, max_pm10, min_pm10,
+    avg_co2, max_co2, min_co2,
+    avg_temperature, max_temperature, min_temperature,
+    avg_humidity, max_humidity, min_humidity,
+    avg_tvoc, max_tvoc, min_tvoc,
+    avg_nox, max_nox, min_nox,
+    avg_apparent_temperature,
+    avg_wind_speed,
+    avg_pressure,
+    avg_cloud_cover,
+    avg_pm2_5,
+    avg_us_aqi,
+    avg_no2,
+    avg_o3,
+    avg_so2,
+    avg_co
+FROM readings_hourly
 WHERE bucket >= current_timestamp - INTERVAL '30 days'
 ORDER BY bucket DESC, stream_id;
 
 -- Create indexes for faster queries
-CREATE INDEX IF NOT EXISTS idx_bucket ON grafana_db.readings_hourly(bucket);
+CREATE INDEX IF NOT EXISTS idx_time ON grafana_db.readings_hourly(time);
 CREATE INDEX IF NOT EXISTS idx_stream ON grafana_db.readings_hourly(stream_id);
-CREATE INDEX IF NOT EXISTS idx_bucket_stream ON grafana_db.readings_hourly(bucket, stream_id);
+CREATE INDEX IF NOT EXISTS idx_time_stream ON grafana_db.readings_hourly(time, stream_id);
 
 -- Export summary statistics
 SELECT
     'Export completed successfully' as status,
     COUNT(*) as total_rows_exported,
-    MIN(bucket) as earliest_data,
-    MAX(bucket) as latest_data,
+    MIN(time) as earliest_data_epoch_ms,
+    MAX(time) as latest_data_epoch_ms,
     current_timestamp as export_time
 FROM grafana_db.readings_hourly;
 
