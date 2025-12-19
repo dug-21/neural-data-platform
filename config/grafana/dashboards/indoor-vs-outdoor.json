@@ -29,7 +29,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH indoor AS (SELECT AVG(CASE WHEN metric IN ('atmp', 'temperature') THEN value END) as temp FROM read_parquet('/data/data/air-quality/**/*.parquet') ORDER BY timestamp DESC LIMIT 100), outdoor AS (SELECT AVG(CASE WHEN metric = 'temperature' THEN value END) as temp FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') ORDER BY timestamp DESC LIMIT 100) SELECT (indoor.temp - outdoor.temp) AS \"value\" FROM indoor, outdoor",
+          "rawSql": "WITH indoor AS (SELECT AVG(value) as temp FROM (SELECT value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE metric IN ('atmp', 'temperature') ORDER BY timestamp DESC LIMIT 100)), outdoor AS (SELECT AVG(value) as temp FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'temperature' ORDER BY timestamp DESC LIMIT 100)) SELECT (indoor.temp - outdoor.temp) AS \"value\" FROM indoor, outdoor",
           "refId": "A"
         }
       ],
@@ -73,7 +73,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH indoor AS (SELECT AVG(CASE WHEN metric = 'pm02' THEN value END) as pm25 FROM read_parquet('/data/data/air-quality/**/*.parquet') ORDER BY timestamp DESC LIMIT 100), outdoor AS (SELECT AVG(CASE WHEN metric = 'pm2_5' THEN value END) as pm25 FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') ORDER BY timestamp DESC LIMIT 100) SELECT (indoor.pm25 - outdoor.pm25) AS \"value\" FROM indoor, outdoor",
+          "rawSql": "WITH indoor AS (SELECT AVG(value) as pm25 FROM (SELECT value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE metric = 'pm02' ORDER BY timestamp DESC LIMIT 100)), outdoor AS (SELECT AVG(value) as pm25 FROM (SELECT value FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE metric = 'pm2_5' ORDER BY timestamp DESC LIMIT 100)) SELECT (indoor.pm25 - outdoor.pm25) AS \"value\" FROM indoor, outdoor",
           "refId": "A"
         }
       ],
@@ -119,7 +119,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH indoor AS (SELECT AVG(CASE WHEN metric IN ('rhum', 'humidity') THEN value END) as humidity FROM read_parquet('/data/data/air-quality/**/*.parquet') ORDER BY timestamp DESC LIMIT 100), outdoor AS (SELECT AVG(CASE WHEN metric = 'humidity' THEN value END) as humidity FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') ORDER BY timestamp DESC LIMIT 100) SELECT (indoor.humidity - outdoor.humidity) AS \"value\" FROM indoor, outdoor",
+          "rawSql": "WITH indoor AS (SELECT AVG(value) as humidity FROM (SELECT value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE metric IN ('rhum', 'humidity') ORDER BY timestamp DESC LIMIT 100)), outdoor AS (SELECT AVG(value) as humidity FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'humidity' ORDER BY timestamp DESC LIMIT 100)) SELECT (indoor.humidity - outdoor.humidity) AS \"value\" FROM indoor, outdoor",
           "refId": "A"
         }
       ],
@@ -163,7 +163,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH indoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric IN ('atmp', 'temperature') THEN value END) as temp FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) BETWEEN to_timestamp($__timeFrom / 1000) AND to_timestamp($__timeTo / 1000) GROUP BY 1), outdoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'temperature' THEN value END) as temp FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE to_timestamp(timestamp/1000000) BETWEEN to_timestamp($__timeFrom / 1000) AND to_timestamp($__timeTo / 1000) GROUP BY 1) SELECT epoch_ms(COALESCE(i.bucket, o.bucket)) as time, i.temp as \"Indoor Temperature\", o.temp as \"Outdoor Temperature\" FROM indoor i FULL OUTER JOIN outdoor o ON i.bucket = o.bucket ORDER BY time",
+          "rawSql": "WITH indoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric IN ('atmp', 'temperature') THEN value END) as temp FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) >= $__timeFrom() AND to_timestamp(timestamp/1000000) <= $__timeTo() GROUP BY 1), outdoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'temperature' THEN value END) as temp FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE to_timestamp(timestamp/1000000) >= $__timeFrom() AND to_timestamp(timestamp/1000000) <= $__timeTo() GROUP BY 1) SELECT epoch_ms(COALESCE(i.bucket, o.bucket)) as time, i.temp as \"Indoor Temperature\", o.temp as \"Outdoor Temperature\" FROM indoor i FULL OUTER JOIN outdoor o ON i.bucket = o.bucket ORDER BY time",
           "refId": "A"
         }
       ],
@@ -223,7 +223,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH indoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'pm02' THEN value END) as pm25 FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) BETWEEN to_timestamp($__timeFrom / 1000) AND to_timestamp($__timeTo / 1000) GROUP BY 1), outdoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'pm2_5' THEN value END) as pm25 FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) BETWEEN to_timestamp($__timeFrom / 1000) AND to_timestamp($__timeTo / 1000) GROUP BY 1) SELECT epoch_ms(COALESCE(i.bucket, o.bucket)) as time, i.pm25 as \"Indoor PM2.5\", o.pm25 as \"Outdoor PM2.5\" FROM indoor i FULL OUTER JOIN outdoor o ON i.bucket = o.bucket ORDER BY time",
+          "rawSql": "WITH indoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'pm02' THEN value END) as pm25 FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) >= $__timeFrom() AND to_timestamp(timestamp/1000000) <= $__timeTo() GROUP BY 1), outdoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'pm2_5' THEN value END) as pm25 FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) >= $__timeFrom() AND to_timestamp(timestamp/1000000) <= $__timeTo() GROUP BY 1) SELECT epoch_ms(COALESCE(i.bucket, o.bucket)) as time, i.pm25 as \"Indoor PM2.5\", o.pm25 as \"Outdoor PM2.5\" FROM indoor i FULL OUTER JOIN outdoor o ON i.bucket = o.bucket ORDER BY time",
           "refId": "A"
         }
       ],
@@ -292,7 +292,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH indoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric IN ('rhum', 'humidity') THEN value END) as humidity FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) BETWEEN to_timestamp($__timeFrom / 1000) AND to_timestamp($__timeTo / 1000) GROUP BY 1), outdoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'humidity' THEN value END) as humidity FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE to_timestamp(timestamp/1000000) BETWEEN to_timestamp($__timeFrom / 1000) AND to_timestamp($__timeTo / 1000) GROUP BY 1) SELECT epoch_ms(COALESCE(i.bucket, o.bucket)) as time, i.humidity as \"Indoor Humidity\", o.humidity as \"Outdoor Humidity\" FROM indoor i FULL OUTER JOIN outdoor o ON i.bucket = o.bucket ORDER BY time",
+          "rawSql": "WITH indoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric IN ('rhum', 'humidity') THEN value END) as humidity FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) >= $__timeFrom() AND to_timestamp(timestamp/1000000) <= $__timeTo() GROUP BY 1), outdoor AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'humidity' THEN value END) as humidity FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE to_timestamp(timestamp/1000000) >= $__timeFrom() AND to_timestamp(timestamp/1000000) <= $__timeTo() GROUP BY 1) SELECT epoch_ms(COALESCE(i.bucket, o.bucket)) as time, i.humidity as \"Indoor Humidity\", o.humidity as \"Outdoor Humidity\" FROM indoor i FULL OUTER JOIN outdoor o ON i.bucket = o.bucket ORDER BY time",
           "refId": "A"
         }
       ],
@@ -354,7 +354,7 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "SELECT epoch_ms(time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000))) as time, AVG(CASE WHEN metric = 'rco2' THEN value END) as \"CO2 (ppm)\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) BETWEEN to_timestamp($__timeFrom / 1000) AND to_timestamp($__timeTo / 1000) GROUP BY time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) ORDER BY 1",
+          "rawSql": "SELECT epoch_ms(time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000))) as time, AVG(CASE WHEN metric = 'rco2' THEN value END) as \"CO2 (ppm)\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE to_timestamp(timestamp/1000000) >= $__timeFrom() AND to_timestamp(timestamp/1000000) <= $__timeTo() GROUP BY time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) ORDER BY 1",
           "refId": "A"
         }
       ],
