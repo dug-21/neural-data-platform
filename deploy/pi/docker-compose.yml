@@ -112,32 +112,32 @@ services:
       - ../../config/duckdb:/config/duckdb:ro  # SQL view definitions
     restart: unless-stopped
     entrypoint: /bin/sh
-    command: >
-      -c "
-      mkdir -p /var/duckdb &&
-      echo 'Initializing DuckDB Silver layer...' &&
+    command:
+      - -c
+      - |
+        mkdir -p /var/duckdb
+        echo 'Initializing DuckDB Silver layer...'
 
-      # Initialize views (retry until successful or max attempts)
-      MAX_ATTEMPTS=10 &&
-      ATTEMPT=0 &&
-      until /duckdb /var/duckdb/neural_platform.db < /config/duckdb/init.sql 2>&1; do
-        ATTEMPT=\$((ATTEMPT + 1)) &&
-        if [ \$ATTEMPT -ge \$MAX_ATTEMPTS ]; then
-          echo 'Init failed after max attempts, continuing anyway...' &&
-          break
-        fi &&
-        echo \"Init attempt \$ATTEMPT failed, retrying in 30s...\" &&
-        sleep 30
-      done &&
+        # Initialize views (retry until successful or max attempts)
+        MAX_ATTEMPTS=10
+        ATTEMPT=0
+        until /duckdb /var/duckdb/neural_platform.db < /config/duckdb/init.sql 2>&1; do
+          ATTEMPT=$((ATTEMPT + 1))
+          if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+            echo 'Init failed after max attempts, continuing anyway...'
+            break
+          fi
+          echo "Init attempt $ATTEMPT failed, retrying in 30s..."
+          sleep 30
+        done
 
-      echo 'Starting SQLite export loop for Grafana...' &&
-      while true; do
-        echo \"[$(date)] Exporting readings_hourly to SQLite...\" &&
-        /duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning (may be OK if no views yet)' &&
-        echo \"[$(date)] Export complete. Sleeping 5 minutes...\" &&
-        sleep 300
-      done
-      "
+        echo 'Starting SQLite export loop for Grafana...'
+        while true; do
+          echo "[$(date)] Exporting readings_hourly to SQLite..."
+          /duckdb /var/duckdb/neural_platform.db < /config/duckdb/export_to_sqlite.sql 2>&1 || echo 'Export warning (may be OK if no views yet)'
+          echo "[$(date)] Export complete. Sleeping 5 minutes..."
+          sleep 300
+        done
     healthcheck:
       test: ["CMD", "test", "-f", "/var/duckdb/grafana.db"]
       interval: 60s
