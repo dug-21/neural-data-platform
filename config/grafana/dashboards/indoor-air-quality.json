@@ -29,7 +29,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT avg_pm25 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
-          refId: "A"
+          "refId": "A"
         }
       ],
       "options": {
@@ -76,7 +76,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT avg_co2 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
-          refId: "A"
+          "refId": "A"
         }
       ],
       "options": {
@@ -122,7 +122,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT avg_temperature AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
-          refId: "A"
+          "refId": "A"
         }
       ],
       "options": {
@@ -166,7 +166,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT avg_humidity AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
-          refId: "A"
+          "refId": "A"
         }
       ],
       "options": {
@@ -210,7 +210,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT epoch(bucket) AS time, avg_pm25 AS \"PM2.5\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
-          refId: "A"
+          "refId": "A"
         }
       ],
       "options": {
@@ -265,7 +265,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT epoch(bucket) AS time, avg_co2 AS \"CO2 (ppm)\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
-          refId: "A"
+          "refId": "A"
         }
       ],
       "options": {
@@ -319,7 +319,7 @@
             "uid": "duckdb-ndp"
           },
           "rawSql": "SELECT epoch(bucket) AS time, avg_temperature AS \"Temperature\", avg_humidity AS \"Humidity\" FROM readings_hourly WHERE stream_id = 'air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
-          refId: "A"
+          "refId": "A"
         }
       ],
       "options": {
