@@ -20,7 +20,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_pm25 AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE metric = 'pm02' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -53,7 +53,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_co2 AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE metric = 'rco2' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -85,7 +85,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_temperature AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE metric IN ('atmp', 'temperature') ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -109,7 +109,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_humidity AS value FROM readings_hourly WHERE stream_id = 'air-quality' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE metric IN ('rhum', 'humidity') ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -133,7 +133,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch_ms(bucket) AS time, avg_pm25 AS \"PM2.5\" FROM readings_hourly WHERE stream_id = 'air-quality' AND $__timeFilter(bucket) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'pm02' THEN value END) as \"PM2.5\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -164,7 +164,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch_ms(bucket) AS time, avg_co2 AS \"CO2 (ppm)\" FROM readings_hourly WHERE stream_id = 'air-quality' AND $__timeFilter(bucket) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'rco2' THEN value END) as \"CO2 (ppm)\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -194,7 +194,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch_ms(bucket) AS time, avg_temperature AS \"Temperature\", avg_humidity AS \"Humidity\" FROM readings_hourly WHERE stream_id = 'air-quality' AND $__timeFilter(bucket) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric IN ('atmp', 'temperature') THEN value END) as \"Temperature\", AVG(CASE WHEN metric IN ('rhum', 'humidity') THEN value END) as \"Humidity\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],

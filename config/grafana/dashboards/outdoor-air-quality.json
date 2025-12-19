@@ -9,7 +9,7 @@
     "to": "now"
   },
   "schemaVersion": 36,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "panels": [
     {
@@ -20,7 +20,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_us_aqi AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE metric = 'aqi' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -35,7 +35,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_pm2_5 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE metric = 'pm2_5' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -50,7 +50,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_pm10 AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE metric = 'pm10' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -65,7 +65,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch(bucket) AS time, avg_us_aqi AS \"US AQI\" FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(value) as \"US AQI\" FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE metric = 'aqi' AND timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -80,7 +80,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch(bucket) AS time, avg_pm2_5 AS \"Outdoor PM2.5\" FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(value) as \"Outdoor PM2.5\" FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE metric = 'pm2_5' AND timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -95,7 +95,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch(bucket) AS time, avg_pm2_5 AS \"PM2.5\", avg_pm10 AS \"PM10\", avg_no2 AS \"NO2\", avg_o3 AS \"O3\", avg_co AS \"CO\", avg_so2 AS \"SO2\" FROM readings_hourly WHERE stream_id = 'outdoor-air-quality' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'pm2_5' THEN value END) as \"PM2.5\", AVG(CASE WHEN metric = 'pm10' THEN value END) as \"PM10\", AVG(CASE WHEN metric = 'no2' THEN value END) as \"NO2\", AVG(CASE WHEN metric = 'o3' THEN value END) as \"O3\", AVG(CASE WHEN metric = 'co' THEN value END) as \"CO\", AVG(CASE WHEN metric = 'so2' THEN value END) as \"SO2\" FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],

@@ -9,7 +9,7 @@
     "to": "now"
   },
   "schemaVersion": 36,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "panels": [
     {
@@ -20,7 +20,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_temperature AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'temperature' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -35,7 +35,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_apparent_temperature AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'feels_like' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -50,7 +50,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_wind_speed AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'wind_speed' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -65,7 +65,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT avg_humidity AS \"value\", epoch(bucket) AS \"time\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' ORDER BY bucket DESC LIMIT 1",
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'humidity' ORDER BY timestamp DESC LIMIT 100)",
           "refId": "A"
         }
       ],
@@ -80,7 +80,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch(bucket) AS time, avg_temperature AS \"Temperature\", avg_apparent_temperature AS \"Feels Like\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'temperature' THEN value END) as \"Temperature\", AVG(CASE WHEN metric = 'feels_like' THEN value END) as \"Feels Like\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -95,7 +95,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch(bucket) AS time, avg_wind_speed AS \"Wind Speed\", avg_pressure AS \"Pressure\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wind_speed' THEN value END) as \"Wind Speed\", AVG(CASE WHEN metric = 'pressure' THEN value END) as \"Pressure\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -110,7 +110,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT epoch(bucket) AS time, avg_cloud_cover AS \"Cloud Cover\" FROM readings_hourly WHERE stream_id = 'outdoor-weather' AND bucket >= to_timestamp($__timeFrom / 1000) AND bucket <= to_timestamp($__timeTo / 1000) ORDER BY bucket",
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'clouds' THEN value END) as \"Cloud Cover\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
