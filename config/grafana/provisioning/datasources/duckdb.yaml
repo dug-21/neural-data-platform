@@ -1,11 +1,19 @@
 apiVersion: 1
+
+# Delete any existing datasource with this UID first
+deleteDatasources:
+  - name: NDP-DuckDB
+    orgId: 1
+  - name: NDP-SQLite
+    orgId: 1
+
 datasources:
   - name: NDP-DuckDB
     type: motherduck-duckdb-datasource
     uid: duckdb-ndp
+    orgId: 1
     access: proxy
     isDefault: true
-    editable: false
+    editable: true
     jsonData:
-      # Path to DuckDB database file
       path: /duckdb/neural_platform.db
