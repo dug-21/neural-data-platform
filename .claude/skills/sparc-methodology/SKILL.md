@@ -484,7 +484,7 @@ mcp__claude-flow__swarm_monitor {
 npx claude-flow sparc run <mode> "task description"
 
 # Use alpha features
-claude-flow sparc run <mode> "task description"
+npx claude-flow@alpha sparc run <mode> "task description"
 
 # List all available modes
 npx claude-flow sparc modes
@@ -729,13 +729,13 @@ Message 3: TodoWrite { todos: [...] }
 
 ```bash
 # Before work
-claude-flow hooks pre-task --description "implement auth"
+npx claude-flow@alpha hooks pre-task --description "implement auth"
 
 # During work
-claude-flow hooks post-edit --file "auth.js"
+npx claude-flow@alpha hooks post-edit --file "auth.js"
 
 # After work
-claude-flow hooks post-task --task-id "task-123"
+npx claude-flow@alpha hooks post-task --task-id "task-123"
 ```
 
 ### 4. Test Coverage

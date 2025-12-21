@@ -21,7 +21,7 @@ This skill provides a comprehensive verification and quality assurance system th
 
 ## Prerequisites
 
-- Claude Flow installed (`claude-flow`)
+- Claude Flow installed (`npx claude-flow@alpha`)
 - Git repository (for rollback features)
 - Node.js 18+ (for dashboard features)
 
@@ -29,16 +29,16 @@ This skill provides a comprehensive verification and quality assurance system th
 
 ```bash
 # View current truth scores
-claude-flow truth
+npx claude-flow@alpha truth
 
 # Run verification check
-claude-flow verify check
+npx claude-flow@alpha verify check
 
 # Verify specific file with custom threshold
-claude-flow verify check --file src/app.js --threshold 0.98
+npx claude-flow@alpha verify check --file src/app.js --threshold 0.98
 
 # Rollback last failed verification
-claude-flow verify rollback --last-good
+npx claude-flow@alpha verify rollback --last-good
 ```
 
 ---
@@ -54,40 +54,40 @@ Display comprehensive quality and reliability metrics for your codebase and agen
 **Basic Usage:**
 ```bash
 # View current truth scores (default: table format)
-claude-flow truth
+npx claude-flow@alpha truth
 
 # View scores for specific time period
-claude-flow truth --period 7d
+npx claude-flow@alpha truth --period 7d
 
 # View scores for specific agent
-claude-flow truth --agent coder --period 24h
+npx claude-flow@alpha truth --agent coder --period 24h
 
 # Find files/tasks below threshold
-claude-flow truth --threshold 0.8
+npx claude-flow@alpha truth --threshold 0.8
 ```
 
 **Output Formats:**
 ```bash
 # Table format (default)
-claude-flow truth --format table
+npx claude-flow@alpha truth --format table
 
 # JSON for programmatic access
-claude-flow truth --format json
+npx claude-flow@alpha truth --format json
 
 # CSV for spreadsheet analysis
-claude-flow truth --format csv
+npx claude-flow@alpha truth --format csv
 
 # HTML report with visualizations
-claude-flow truth --format html --export report.html
+npx claude-flow@alpha truth --format html --export report.html
 ```
 
 **Real-time Monitoring:**
 ```bash
 # Watch mode with live updates
-claude-flow truth --watch
+npx claude-flow@alpha truth --watch
 
 # Export metrics automatically
-claude-flow truth --export .claude-flow/metrics/truth-$(date +%Y%m%d).json
+npx claude-flow@alpha truth --export .claude-flow/metrics/truth-$(date +%Y%m%d).json
 ```
 
 #### Truth Score Dashboard
@@ -143,40 +143,40 @@ Execute comprehensive verification checks on code, tasks, or agent outputs.
 **File Verification:**
 ```bash
 # Verify single file
-claude-flow verify check --file src/app.js
+npx claude-flow@alpha verify check --file src/app.js
 
 # Verify directory recursively
-claude-flow verify check --directory src/
+npx claude-flow@alpha verify check --directory src/
 
 # Verify with auto-fix enabled
-claude-flow verify check --file src/utils.js --auto-fix
+npx claude-flow@alpha verify check --file src/utils.js --auto-fix
 
 # Verify current working directory
-claude-flow verify check
+npx claude-flow@alpha verify check
 ```
 
 **Task Verification:**
 ```bash
 # Verify specific task output
-claude-flow verify check --task task-123
+npx claude-flow@alpha verify check --task task-123
 
 # Verify with custom threshold
-claude-flow verify check --task task-456 --threshold 0.99
+npx claude-flow@alpha verify check --task task-456 --threshold 0.99
 
 # Verbose output for debugging
-claude-flow verify check --task task-789 --verbose
+npx claude-flow@alpha verify check --task task-789 --verbose
 ```
 
 **Batch Verification:**
 ```bash
 # Verify multiple files in parallel
-claude-flow verify batch --files "*.js" --parallel
+npx claude-flow@alpha verify batch --files "*.js" --parallel
 
 # Verify with pattern matching
-claude-flow verify batch --pattern "src/**/*.ts"
+npx claude-flow@alpha verify batch --pattern "src/**/*.ts"
 
 # Integration test suite
-claude-flow verify integration --test-suite full
+npx claude-flow@alpha verify integration --test-suite full
 ```
 
 #### Verification Criteria
@@ -217,7 +217,7 @@ The verification system evaluates:
 
 ```bash
 # Get structured JSON output
-claude-flow verify check --json > verification.json
+npx claude-flow@alpha verify check --json > verification.json
 
 # Example JSON structure:
 {
@@ -249,25 +249,25 @@ Automatically revert changes that fail verification checks.
 **Basic Rollback:**
 ```bash
 # Rollback to last known good state
-claude-flow verify rollback --last-good
+npx claude-flow@alpha verify rollback --last-good
 
 # Rollback to specific commit
-claude-flow verify rollback --to-commit abc123
+npx claude-flow@alpha verify rollback --to-commit abc123
 
 # Interactive rollback with preview
-claude-flow verify rollback --interactive
+npx claude-flow@alpha verify rollback --interactive
 ```
 
 **Smart Rollback:**
 ```bash
 # Rollback only failed files (preserve good changes)
-claude-flow verify rollback --selective
+npx claude-flow@alpha verify rollback --selective
 
 # Rollback with automatic backup
-claude-flow verify rollback --backup-first
+npx claude-flow@alpha verify rollback --backup-first
 
 # Dry-run mode (preview without executing)
-claude-flow verify rollback --dry-run
+npx claude-flow@alpha verify rollback --dry-run
 ```
 
 **Rollback Performance:**
@@ -284,31 +284,31 @@ Create detailed verification reports with metrics and visualizations.
 **Report Formats:**
 ```bash
 # JSON report
-claude-flow verify report --format json
+npx claude-flow@alpha verify report --format json
 
 # HTML report with charts
-claude-flow verify report --export metrics.html --format html
+npx claude-flow@alpha verify report --export metrics.html --format html
 
 # CSV for data analysis
-claude-flow verify report --format csv --export metrics.csv
+npx claude-flow@alpha verify report --format csv --export metrics.csv
 
 # Markdown summary
-claude-flow verify report --format markdown
+npx claude-flow@alpha verify report --format markdown
 ```
 
 **Time-based Reports:**
 ```bash
 # Last 24 hours
-claude-flow verify report --period 24h
+npx claude-flow@alpha verify report --period 24h
 
 # Last 7 days
-claude-flow verify report --period 7d
+npx claude-flow@alpha verify report --period 7d
 
 # Last 30 days with trends
-claude-flow verify report --period 30d --include-trends
+npx claude-flow@alpha verify report --period 30d --include-trends
 
 # Custom date range
-claude-flow verify report --from 2025-01-01 --to 2025-01-31
+npx claude-flow@alpha verify report --from 2025-01-01 --to 2025-01-31
 ```
 
 **Report Content:**
@@ -328,16 +328,16 @@ Run interactive web-based verification dashboard with real-time updates.
 
 ```bash
 # Launch dashboard on default port (3000)
-claude-flow verify dashboard
+npx claude-flow@alpha verify dashboard
 
 # Custom port
-claude-flow verify dashboard --port 8080
+npx claude-flow@alpha verify dashboard --port 8080
 
 # Export dashboard data
-claude-flow verify dashboard --export
+npx claude-flow@alpha verify dashboard --export
 
 # Dashboard with auto-refresh
-claude-flow verify dashboard --refresh 5s
+npx claude-flow@alpha verify dashboard --refresh 5s
 ```
 
 **Dashboard Features:**
@@ -392,13 +392,13 @@ Set verification preferences in `.claude-flow/config.json`:
 **Adjust verification strictness:**
 ```bash
 # Strict mode (99% accuracy required)
-claude-flow verify check --threshold 0.99
+npx claude-flow@alpha verify check --threshold 0.99
 
 # Lenient mode (90% acceptable)
-claude-flow verify check --threshold 0.90
+npx claude-flow@alpha verify check --threshold 0.90
 
 # Set default threshold
-claude-flow config set verification.threshold 0.98
+npx claude-flow@alpha config set verification.threshold 0.98
 ```
 
 **Per-environment thresholds:**
@@ -435,7 +435,7 @@ jobs:
 
       - name: Run Verification
         run: |
-          claude-flow verify check --json > verification.json
+          npx claude-flow@alpha verify check --json > verification.json
 
       - name: Check Truth Score
         run: |
@@ -457,7 +457,7 @@ jobs:
 verify:
   stage: test
   script:
-    - claude-flow verify check --threshold 0.95 --json > verification.json
+    - npx claude-flow@alpha verify check --threshold 0.95 --json > verification.json
     - |
       score=$(jq '.overallScore' verification.json)
       if [ $(echo "$score < 0.95" | bc) -eq 1 ]; then
@@ -477,13 +477,13 @@ Run verification automatically during swarm operations:
 
 ```bash
 # Swarm with verification enabled
-claude-flow swarm --verify --threshold 0.98
+npx claude-flow@alpha swarm --verify --threshold 0.98
 
 # Hive Mind with auto-rollback
-claude-flow hive-mind --verify --rollback-on-fail
+npx claude-flow@alpha hive-mind --verify --rollback-on-fail
 
 # Training pipeline with verification
-claude-flow train --verify --threshold 0.99
+npx claude-flow@alpha train --verify --threshold 0.99
 ```
 
 #### Pair Programming Integration
@@ -492,10 +492,10 @@ Enable real-time verification during collaborative development:
 
 ```bash
 # Pair with verification
-claude-flow pair --verify --real-time
+npx claude-flow@alpha pair --verify --real-time
 
 # Pair with custom threshold
-claude-flow pair --verify --threshold 0.97 --auto-fix
+npx claude-flow@alpha pair --verify --threshold 0.97 --auto-fix
 ```
 
 ### Advanced Workflows
@@ -506,13 +506,13 @@ Monitor codebase continuously during development:
 
 ```bash
 # Watch directory for changes
-claude-flow verify watch --directory src/
+npx claude-flow@alpha verify watch --directory src/
 
 # Watch with auto-fix
-claude-flow verify watch --directory src/ --auto-fix
+npx claude-flow@alpha verify watch --directory src/ --auto-fix
 
 # Watch with notifications
-claude-flow verify watch --notify --threshold 0.95
+npx claude-flow@alpha verify watch --notify --threshold 0.95
 ```
 
 #### Monitoring Integration
@@ -521,18 +521,18 @@ Send metrics to external monitoring systems:
 
 ```bash
 # Export to Prometheus
-claude-flow truth --format json | \
+npx claude-flow@alpha truth --format json | \
   curl -X POST https://pushgateway.example.com/metrics/job/claude-flow \
   -d @-
 
 # Send to DataDog
-claude-flow verify report --format json | \
+npx claude-flow@alpha verify report --format json | \
   curl -X POST "https://api.datadoghq.com/api/v1/series?api_key=${DD_API_KEY}" \
   -H "Content-Type: application/json" \
   -d @-
 
 # Custom webhook
-claude-flow truth --format json | \
+npx claude-flow@alpha truth --format json | \
   curl -X POST https://metrics.example.com/api/truth \
   -H "Content-Type: application/json" \
   -d @-
@@ -544,16 +544,16 @@ Automatically verify before commits:
 
 ```bash
 # Install pre-commit hook
-claude-flow verify install-hook --pre-commit
+npx claude-flow@alpha verify install-hook --pre-commit
 
 # .git/hooks/pre-commit example:
 #!/bin/bash
-claude-flow verify check --threshold 0.95 --json > /tmp/verify.json
+npx claude-flow@alpha verify check --threshold 0.95 --json > /tmp/verify.json
 
 score=$(jq '.overallScore' /tmp/verify.json)
 if (( $(echo "$score < 0.95" | bc -l) )); then
   echo "❌ Verification failed with score: $score"
-  echo "Run 'claude-flow verify check --verbose' for details"
+  echo "Run 'npx claude-flow@alpha verify check --verbose' for details"
   exit 1
 fi
 
@@ -585,13 +585,13 @@ echo "✅ Verification passed with score: $score"
 **Low Truth Scores:**
 ```bash
 # Get detailed breakdown
-claude-flow truth --verbose --threshold 0.0
+npx claude-flow@alpha truth --verbose --threshold 0.0
 
 # Check specific criteria
-claude-flow verify check --verbose
+npx claude-flow@alpha verify check --verbose
 
 # View agent-specific issues
-claude-flow truth --agent <agent-name> --format json
+npx claude-flow@alpha truth --agent <agent-name> --format json
 ```
 
 **Rollback Failures:**
@@ -600,7 +600,7 @@ claude-flow truth --agent <agent-name> --format json
 git status
 
 # View rollback history
-claude-flow verify rollback --history
+npx claude-flow@alpha verify rollback --history
 
 # Manual rollback
 git reset --hard HEAD~1
@@ -609,10 +609,10 @@ git reset --hard HEAD~1
 **Verification Timeouts:**
 ```bash
 # Increase timeout
-claude-flow verify check --timeout 60s
+npx claude-flow@alpha verify check --timeout 60s
 
 # Verify in batches
-claude-flow verify batch --batch-size 10
+npx claude-flow@alpha verify batch --batch-size 10
 ```
 
 ### Exit Codes
@@ -625,10 +625,10 @@ Verification commands return standard exit codes:
 
 ### Related Commands
 
-- `claude-flow pair` - Collaborative development with verification
-- `claude-flow train` - Training with verification feedback
-- `claude-flow swarm` - Multi-agent coordination with quality checks
-- `claude-flow report` - Generate comprehensive project reports
+- `npx claude-flow@alpha pair` - Collaborative development with verification
+- `npx claude-flow@alpha train` - Training with verification feedback
+- `npx claude-flow@alpha swarm` - Multi-agent coordination with quality checks
+- `npx claude-flow@alpha report` - Generate comprehensive project reports
 
 ### Best Practices
 

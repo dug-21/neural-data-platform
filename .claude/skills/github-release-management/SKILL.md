@@ -730,7 +730,7 @@ jobs:
             --jq '.commits[].commit.message')
 
           # Initialize swarm coordination
-          claude-flow swarm init --topology hierarchical
+          npx claude-flow@alpha swarm init --topology hierarchical
 
           # Store release context
           echo "$PRS" > /tmp/release-prs.json
@@ -739,7 +739,7 @@ jobs:
       - name: Generate Release Changelog
         run: |
           # Generate intelligent changelog
-          CHANGELOG=$(claude-flow github changelog \
+          CHANGELOG=$(npx claude-flow@alpha github changelog \
             --prs "$(cat /tmp/release-prs.json)" \
             --commits "$(cat /tmp/release-commits.txt)" \
             --from $PREV_TAG \
@@ -762,7 +762,7 @@ jobs:
           npm run build
 
           # Build platform-specific binaries
-          claude-flow github release-build \
+          npx claude-flow@alpha github release-build \
             --platforms "linux,macos,windows" \
             --architectures "x64,arm64" \
             --parallel
@@ -772,7 +772,7 @@ jobs:
           # Run security validation
           npm audit --audit-level=moderate
 
-          claude-flow github release-security \
+          npx claude-flow@alpha github release-security \
             --scan-dependencies \
             --check-secrets \
             --sign-artifacts
@@ -805,7 +805,7 @@ jobs:
           npm run test:smoke
 
           # Validate deployment
-          claude-flow github release-validate \
+          npx claude-flow@alpha github release-validate \
             --version ${{ github.ref_name }} \
             --smoke-tests \
             --health-checks
@@ -828,7 +828,7 @@ jobs:
       - name: Monitor Release
         run: |
           # Start release monitoring
-          claude-flow github release-monitor \
+          npx claude-flow@alpha github release-monitor \
             --version ${{ github.ref_name }} \
             --duration 1h \
             --alert-on-errors &
@@ -863,7 +863,7 @@ jobs:
 
       - name: Emergency Release
         run: |
-          claude-flow github emergency-release \
+          npx claude-flow@alpha github emergency-release \
             --issue ${{ github.event.issue.number }} \
             --severity critical \
             --fast-track \
@@ -941,7 +941,7 @@ jobs:
 ### Issue: Failed Release Build
 ```bash
 # Debug build failures
-claude-flow diagnostic-run \
+npx claude-flow@alpha diagnostic-run \
   --component build \
   --verbose
 
@@ -959,7 +959,7 @@ npm run test -- --verbose --coverage
 npm run test:ci
 
 # Compare local vs CI environment
-claude-flow github compat-test \
+npx claude-flow@alpha github compat-test \
   --environments "local,ci" \
   --compare
 ```
@@ -967,14 +967,14 @@ claude-flow github compat-test \
 ### Issue: Deployment Rollback Needed
 ```bash
 # Immediate rollback to previous version
-claude-flow github rollback \
+npx claude-flow@alpha github rollback \
   --to-version v1.9.9 \
   --reason "Critical bug in v2.0.0" \
   --preserve-data \
   --notify-users
 
 # Investigate rollback cause
-claude-flow github release-analytics \
+npx claude-flow@alpha github release-analytics \
   --version v2.0.0 \
   --identify-issues
 ```
@@ -982,12 +982,12 @@ claude-flow github release-analytics \
 ### Issue: Version Conflicts
 ```bash
 # Check and resolve version conflicts
-claude-flow github release-validate \
+npx claude-flow@alpha github release-validate \
   --checks version-conflicts \
   --auto-resolve
 
 # Align multi-package versions
-claude-flow github version-sync \
+npx claude-flow@alpha github version-sync \
   --packages "package-a,package-b" \
   --strategy semantic
 ```
