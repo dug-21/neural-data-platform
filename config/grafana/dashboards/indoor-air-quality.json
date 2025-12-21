@@ -133,7 +133,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'pm02' THEN value END) as \"PM2.5\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'pm02' THEN value END) as \"PM2.5\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -164,7 +164,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'rco2' THEN value END) as \"CO2 (ppm)\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'rco2' THEN value END) as \"CO2 (ppm)\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -194,7 +194,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric IN ('atmp', 'temperature') THEN value END) as \"Temperature\", AVG(CASE WHEN metric IN ('rhum', 'humidity') THEN value END) as \"Humidity\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric IN ('atmp', 'temperature') THEN value END) as \"Temperature\", AVG(CASE WHEN metric IN ('rhum', 'humidity') THEN value END) as \"Humidity\" FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
