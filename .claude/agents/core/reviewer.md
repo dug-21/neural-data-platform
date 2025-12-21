@@ -323,4 +323,21 @@ mcp__claude-flow__github_repo_analyze {
 }
 ```
 
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting any review work:**
+1. Use `get-pattern` skill to retrieve relevant review patterns
+2. Review similar past code reviews
+
+**DURING review, IDENTIFY patterns that need attention:**
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER review:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches
+
 Remember: The goal of code review is to improve code quality and share knowledge, not to find fault. Be thorough but kind, specific but constructive. Always coordinate findings through memory.

@@ -187,4 +187,21 @@ mcp__claude-flow__agent_metrics {
 5. **Iterate**: Refine research based on new discoveries
 6. **Share Early**: Update memory frequently for real-time coordination
 
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting any research work:**
+1. Use `get-pattern` skill to retrieve relevant research patterns
+2. Review similar past approaches
+
+**DURING research, IDENTIFY patterns that need attention:**
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER research:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches
+
 Remember: Good research is the foundation of successful implementation. Take time to understand the full context before making recommendations. Always coordinate through memory.

@@ -1,17 +1,19 @@
 ---
 name: "save-pattern"
-description: "Manage project patterns: create, update, deprecate, or delete patterns in the knowledge base. Use after discovering reusable approaches or when patterns become stale."
+description: "Store, update, or deprecate project patterns in AgentDB. Use after discovering reusable approaches or when patterns become outdated."
 ---
 
 # Save Pattern
 
 ## What This Skill Does
 
-Manages the full lifecycle of project patterns in memory:
-- **Store** - Create new patterns
-- **Update** - Replace existing patterns with new content
-- **Deprecate** - Mark patterns as outdated with migration guidance
+Manages the full lifecycle of project patterns in AgentDB:
+- **Store** - Create new patterns with semantic embeddings
+- **Update** - Replace patterns (AgentDB tracks versions)
+- **Deprecate** - Mark patterns as outdated with replacement guidance
 - **Delete** - Remove patterns entirely
+
+Patterns are stored with success tracking, enabling the system to learn which patterns are actually helpful over time.
 
 ## When to Use
 
@@ -24,280 +26,231 @@ Manages the full lifecycle of project patterns in memory:
 | Pattern replaced by better approach | Deprecate |
 | Pattern is wrong/dangerous/obsolete | Delete |
 
-## Pattern Hierarchy (ndp-patterns namespace)
-
-```
-ndp-patterns
-├── architecture/      # ADRs, design patterns, schemas, component relationships
-├── data-flow/         # Pipeline patterns, channel patterns, storage flow
-├── development/       # How to add streams, sources, parsers
-├── deployment/        # Docker, Pi deployment, config sync
-├── troubleshooting/   # Checklists, common issues and fixes
-├── conventions/       # Naming rules, error handling, organization
-├── procedures/        # Common requests requiring changes across comopnents (ex: How to add a stream)
-└── streams/           # Documentation of active data streams
-```
-
-## Pattern Categories
-
-| Category | Use For |
-|----------|---------|
-| `architecture` | System design decisions, ADRs, traits, schemas |
-| `data-flow` | Pipeline patterns, data transformation approaches |
-| `development` | Implementation procedures, coding patterns |
-| `deployment` | Operational procedures, infrastructure patterns |
-| `troubleshooting` | Checklists, common issues and solutions |
-| `conventions` | Naming rules, style guides, organization |
-| `procedures` | Common requests requiring changes across comopnents (ex: How to add a stream) |
-| `streams` | Documentation of active data streams |
-
 ---
 
-## Operations
+## Quick Usage
 
-### 1. Store (Create New Pattern)
-
-Use when you've discovered or implemented something reusable.
-
-#### CLI Method:
-
-```bash
-claude-flow memory store "<category>:<pattern-name>" "<pattern-content>" --namespace ndp-patterns
-```
-
-#### MCP Method (Preferred for Agents):
+### Store New Pattern
 
 ```javascript
-mcp__claude-flow__memory_usage({
-  action: "store",
-  key: "<category>:<pattern-name>",
-  value: "<pattern-content>",
-  namespace: "ndp-patterns",
-  ttl: 0  // permanent (0 = no expiration)
+mcp__agentdb__agentdb_pattern_store({
+  taskType: "development",
+  approach: "# Add New Data Stream\n\n## Prerequisites\n- Access to config/streams directory\n- etcd running\n\n## Steps\n1. Create config/streams/{stream-id}/config.yaml\n2. Define schema with fields (snake_case names)\n3. Add sources configuration\n4. Run ./deploy.sh sync\n5. Verify: docker exec etcd etcdctl get /streams/{id}/config\n\n## Example\nSee: config/streams/outdoor-weather/config.yaml",
+  successRate: 0.9,
+  tags: ["stream", "procedure", "config", "etcd"],
+  metadata: {
+    pattern_name: "add-stream",
+    created_by: "agent",
+    version: "1.0",
+    related_files: ["docs/procedures/HOW_TO_ADD_NEW_STREAM.md"],
+    last_verified: "2025-12-21"
+  }
 })
 ```
 
-#### Pattern Content Structure:
+### Pattern Content Structure
 
-```
+Use this template for pattern content:
+
+```markdown
 # Pattern Name
 
 ## Context
 When/why you would use this pattern.
 
-## Problem
-What problem does this solve?
+## Prerequisites
+What must be in place before starting.
 
-## Solution
-The actual pattern/procedure.
+## Steps
+1. First step
+2. Second step
+3. ...
 
 ## Example
-Concrete usage example.
+Concrete usage example or file reference.
+
+## Verification
+How to confirm it worked.
 
 ## Related
 - Related patterns or files
 ```
 
-#### Example - Store a new pattern:
+---
 
-```bash
-claude-flow memory store "development:api-retry-pattern" "# API Retry Pattern
+## Pattern Categories
 
-## Context
-When calling external APIs that may be unreliable.
-
-## Problem
-External APIs can fail transiently (rate limits, timeouts, network issues).
-
-## Solution
-Exponential backoff with jitter:
-- Initial delay: 1 second
-- Max delay: 60 seconds
-- Max retries: 5
-- Jitter: 0-500ms random
-
-## Example
-See: core/src/sources/http_poll.rs
-
-## Related
-- development:add-source
-- data-flow:pipeline" --namespace ndp-patterns
-```
+| Category | Use For | Example Tags |
+|----------|---------|--------------|
+| `architecture` | System design, ADRs, schemas | `adr`, `design`, `schema` |
+| `data-flow` | Pipeline patterns, transformations | `pipeline`, `etl`, `channel` |
+| `development` | Implementation procedures | `procedure`, `howto`, `coding` |
+| `deployment` | Operational procedures | `docker`, `deploy`, `infrastructure` |
+| `troubleshooting` | Common issues and solutions | `debug`, `fix`, `checklist` |
+| `conventions` | Naming rules, style guides | `naming`, `style`, `organization` |
+| `procedures` | Multi-component changes | `stream`, `source`, `parser` |
+| `streams` | Active stream documentation | `mqtt`, `http`, `sensor` |
 
 ---
 
-### 2. Update (Replace Existing Pattern)
+## Update Existing Pattern
 
-Use when a pattern's content has changed but it's still the right pattern.
-
-Same command as Store - memory overwrites existing keys:
-
-```bash
-claude-flow memory store "development:add-stream" "<updated-content>" --namespace ndp-patterns
-```
-
-Or via MCP:
+Store with the same pattern_name - AgentDB handles versioning:
 
 ```javascript
-mcp__claude-flow__memory_usage({
-  action: "store",
-  key: "development:add-stream",
-  value: "<updated-content>",
-  namespace: "ndp-patterns"
-})
-```
-
-**When to Update vs Deprecate:**
-- **Update**: Same pattern, new/corrected content (e.g., fixed a step, added detail)
-- **Deprecate**: Pattern itself is being replaced by a different approach
-
----
-
-### 3. Deprecate (Soft Delete with Migration)
-
-Use when a pattern is being replaced by a better approach. Preserves history and guides users to the new pattern.
-
-Store a deprecation notice over the old pattern:
-
-```bash
-claude-flow memory store "<category>:<old-pattern-name>" "# DEPRECATED: <Old Pattern Name>
-
-## Status
-DEPRECATED as of <date>
-
-## Replacement
-Use <category>:<new-pattern-name> instead.
-
-## Migration
-<Steps to migrate from old to new approach>
-
-## Reason
-<Why this pattern was deprecated>
-
-## Original Pattern (for reference)
-<Original content, summarized>" --namespace ndp-patterns
-```
-
-#### Example - Deprecate a pattern:
-
-```bash
-claude-flow memory store "deployment:manual-config-sync" "# DEPRECATED: Manual Config Sync
-
-## Status
-DEPRECATED as of 2025-12-17
-
-## Replacement
-Use deployment:config-sync instead (automated via deploy.sh sync).
-
-## Migration
-1. Stop using manual etcdctl put commands
-2. Edit YAML files in config/streams/
-3. Run: ./deploy.sh sync
-
-## Reason
-Manual sync was error-prone and didn't validate YAML structure.
-Automated sync includes validation and atomic updates." --namespace ndp-patterns
-```
-
----
-
-### 4. Delete (Hard Remove)
-
-Use when a pattern is:
-- Completely wrong or dangerous
-- Superseded AND no longer useful for reference
-- Created by mistake
-
-#### CLI Method:
-
-```bash
-# Clear entire namespace (use with caution!)
-claude-flow memory clear --namespace ndp-patterns
-
-# For single key deletion, store empty or use MCP
-```
-
-#### MCP Method:
-
-```javascript
-mcp__claude-flow__memory_usage({
-  action: "delete",
-  key: "<category>:<pattern-name>",
-  namespace: "ndp-patterns"
-})
-```
-
-**Prefer Deprecation over Deletion** unless the pattern is actively harmful. Deprecated patterns serve as historical reference and prevent others from re-discovering "bad" approaches.
-
----
-
-## Updating the Pattern Index
-
-After modifying patterns, update `.claude/patterns/INDEX.yaml` to keep it in sync:
-
-**For new patterns:** Add entry under appropriate category
-
-**For deprecated patterns:** Add `deprecated: true` flag:
-```yaml
-development:
-  old-pattern:
-    key: "development:old-pattern"
-    deprecated: true
-    replacement: "development:new-pattern"
-    summary: "DEPRECATED - use new-pattern instead"
-```
-
-**For deleted patterns:** Remove from INDEX.yaml entirely
-
----
-
-## Batch Operations
-
-### Export All Patterns (Backup)
-
-```bash
-claude-flow memory export ndp-patterns-backup.json --namespace ndp-patterns
-```
-
-### Import Patterns (Restore)
-
-```bash
-claude-flow memory import ndp-patterns-backup.json --namespace ndp-patterns
-```
-
-### List All Patterns
-
-```bash
-claude-flow memory list --namespace ndp-patterns
-```
-
-Or via MCP:
-
-```javascript
-mcp__claude-flow__memory_usage({
-  action: "list",
-  namespace: "ndp-patterns"
+mcp__agentdb__agentdb_pattern_store({
+  taskType: "development",
+  approach: "# Add New Data Stream (Updated)\n\n## Prerequisites\n...\n\n## Steps\n1. Create config...\n2. NEW: Add retention field (required since v2.0)\n3. ...",
+  successRate: 0.85,
+  tags: ["stream", "procedure", "config", "etcd"],
+  metadata: {
+    pattern_name: "add-stream",
+    created_by: "agent",
+    version: "2.0",
+    related_files: ["docs/procedures/HOW_TO_ADD_NEW_STREAM.md"],
+    last_verified: "2025-12-21",
+    changelog: "Added required retention field"
+  }
 })
 ```
 
 ---
 
-## Verification
+## Deprecate Pattern
 
-After any operation, verify the result:
-
-```bash
-# Check pattern exists/content
-claude-flow memory query "<category>:<pattern-name>" --namespace ndp-patterns
-```
-
-Or via MCP:
+When a pattern is replaced by a better approach:
 
 ```javascript
-mcp__claude-flow__memory_usage({
-  action: "retrieve",
-  key: "<category>:<pattern-name>",
-  namespace: "ndp-patterns"
+mcp__agentdb__agentdb_pattern_store({
+  taskType: "deployment",
+  approach: "# DEPRECATED: Manual Config Sync\n\n## Status\nDEPRECATED as of 2025-12-21\n\n## Replacement\nUse `deployment:automated-config-sync` instead.\n\n## Migration\n1. Stop using manual etcdctl put commands\n2. Edit YAML files in config/streams/\n3. Run: ./deploy.sh sync\n\n## Reason\nManual sync was error-prone and didn't validate YAML structure. Automated sync includes validation and atomic updates.",
+  successRate: 0.0,
+  tags: ["deprecated", "deployment", "config"],
+  metadata: {
+    pattern_name: "manual-config-sync",
+    status: "deprecated",
+    replacement: "automated-config-sync",
+    deprecation_date: "2025-12-21",
+    created_by: "agent"
+  }
+})
+```
+
+---
+
+## Delete Pattern
+
+For patterns that are actively harmful or completely wrong:
+
+```javascript
+mcp__agentdb__agentdb_delete({
+  filters: {
+    session_id: "ndp-patterns"
+  }
+  // Note: Prefer deprecation over deletion to preserve history
+})
+```
+
+**Prefer Deprecation over Deletion** - deprecated patterns serve as historical reference and prevent others from re-discovering bad approaches.
+
+---
+
+## Check Pattern Health
+
+See overall pattern statistics:
+
+```javascript
+mcp__agentdb__agentdb_pattern_stats({})
+```
+
+Returns:
+- Total patterns
+- Average success rates by category
+- Top task types
+- Patterns with low success rates (need review)
+
+---
+
+## Record Pattern Outcomes
+
+When you or another agent uses a pattern, record the outcome to improve future recommendations:
+
+### Success
+```javascript
+mcp__agentdb__reflexion_store({
+  session_id: "ndp-patterns",
+  task: "Used add-stream pattern to create weather stream",
+  input: "Add weather monitoring stream",
+  output: "Successfully created and synced weather stream config",
+  reward: 1.0,
+  success: true,
+  critique: "Pattern was complete and accurate"
+})
+```
+
+### Partial Success (Pattern Needed Adjustment)
+```javascript
+mcp__agentdb__reflexion_store({
+  session_id: "ndp-patterns",
+  task: "Used add-stream pattern but needed adjustment",
+  input: "Add new data stream",
+  output: "Completed after adding missing retention field",
+  reward: 0.6,
+  success: true,
+  critique: "Pattern missing retention field - should be updated"
+})
+```
+
+### Failure
+```javascript
+mcp__agentdb__reflexion_store({
+  session_id: "ndp-patterns",
+  task: "add-stream pattern failed",
+  input: "Add new data stream",
+  output: "Could not sync - schema completely changed",
+  reward: 0.1,
+  success: false,
+  critique: "Pattern is obsolete - etcd schema changed in refactor"
+})
+```
+
+---
+
+## Auto-Discover Patterns
+
+Let AgentDB find patterns from successful experiences:
+
+```javascript
+mcp__agentdb__learner_discover({
+  min_attempts: 3,
+  min_success_rate: 0.7,
+  min_confidence: 0.8,
+  dry_run: false
+})
+```
+
+This analyzes past experiences and automatically creates patterns from recurring successful approaches.
+
+---
+
+## Alternative: Store with Full Control
+
+For more control over the stored data:
+
+```javascript
+mcp__agentdb__agentdb_insert({
+  text: "# Add New Stream\n\nComplete procedure for adding a new data stream to the Neural Data Platform...",
+  session_id: "ndp-patterns",
+  tags: ["development", "procedure", "streams"],
+  metadata: {
+    category: "development",
+    pattern_name: "add-stream",
+    status: "active",
+    version: "1.0",
+    created_by: "agent",
+    related_files: ["docs/procedures/HOW_TO_ADD_NEW_STREAM.md"],
+    last_verified: "2025-12-21"
+  }
 })
 ```
 
@@ -308,14 +261,18 @@ mcp__claude-flow__memory_usage({
 1. **Be Specific** - Include concrete examples, not just theory
 2. **Include Context** - Explain when/why to use the pattern
 3. **Reference Files** - Link to actual code that implements the pattern
-4. **Use Consistent Keys** - `category:pattern-name` format (kebab-case)
+4. **Use Consistent Tags** - Category + descriptive tags (kebab-case)
 5. **Deprecate Don't Delete** - Preserve knowledge unless harmful
-6. **Update INDEX.yaml** - Keep the index in sync with memory
-7. **Date Deprecations** - Include when pattern was deprecated
+6. **Record Outcomes** - Always log success/failure after using patterns
+7. **Set Realistic Success Rates** - Start at 0.8, let usage adjust it
+8. **Include Verification Steps** - How to confirm the pattern worked
 
 ---
 
 ## Related Skills
 
 - `get-pattern` - Retrieve stored patterns
-- `sparc-methodology` - Development workflow that generates patterns
+- `reflexion` - Record whether patterns worked (use before saving new patterns)
+- `agentdb-memory-patterns` - Advanced memory management
+- `agentdb-learning` - Reinforcement learning capabilities
+- `reasoningbank-agentdb` - Adaptive learning integration

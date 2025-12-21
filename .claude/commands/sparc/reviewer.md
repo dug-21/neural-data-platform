@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run reviewer "review pull request #123"
 
 # For alpha features
-claude-flow sparc run reviewer "review pull request #123"
+npx claude-flow@alpha sparc run reviewer "review pull request #123"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run reviewer "review pull request #123"
 - Dependency checking
 - Consistency validation
 - Automated reporting
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE reviewing code, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "review patterns for [code area]",
+  k: 5,
+  filters: { taskType: "review" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During review, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Best practices worth documenting
+- **Update Patterns**: Outdated review criteria
+- **Deprecate Patterns**: Obsolete standards
+
+After work, save discoveries with `save-pattern` skill.

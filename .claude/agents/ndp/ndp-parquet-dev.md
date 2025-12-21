@@ -28,20 +28,7 @@ You are the Bronze layer specialist for the Neural Data Platform. You work with 
 
 ### 1. Get Storage Patterns
 
-```bash
-# Get storage-related patterns
-claude-flow memory query "storage parquet" --namespace ndp-patterns
-claude-flow memory query "data-flow" --namespace ndp-patterns
-```
-
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "storage",
-  namespace: "ndp-patterns",
-  limit: 5
-})
-```
+Use the `get-pattern` skill to retrieve storage and data-flow patterns for NDP.
 
 ### 2. Read Key Files
 
@@ -247,13 +234,7 @@ fn validate_point(point: &TimeSeriesPoint) -> Result<(), CoreError> {
 
 ## After Implementation
 
-### Save New Patterns
-
-If you developed a reusable storage pattern:
-
-```bash
-claude-flow memory store "data-flow:<pattern-name>" "<description>" --namespace ndp-patterns
-```
+If you developed a reusable storage pattern, use the `save-pattern` skill to store it.
 
 ## Related Agents
 
@@ -267,3 +248,21 @@ claude-flow memory store "data-flow:<pattern-name>" "<description>" --namespace 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting implementation:**
+1. Use `get-pattern` skill to retrieve storage patterns
+2. Review similar past approaches
+
+**DURING implementation:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable storage approaches

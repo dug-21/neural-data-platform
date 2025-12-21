@@ -184,3 +184,21 @@ Add entries to `.claude/patterns/INDEX.yaml` for discoverability.
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting architecture work:**
+1. Use `get-pattern` skill to retrieve existing architecture patterns
+2. Review any similar past decisions
+
+**DURING architecture work:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER architecture work:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches

@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run optimizer "optimize application performance"
 
 # For alpha features
-claude-flow sparc run optimizer "optimize application performance"
+npx claude-flow@alpha sparc run optimizer "optimize application performance"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run optimizer "optimize application performance"
 3. Optimization implementation
 4. Impact verification
 5. Continuous monitoring
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE optimizing, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "optimization patterns for [target area]",
+  k: 5,
+  filters: { taskType: "optimization" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During optimization, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Optimization techniques discovered
+- **Update Patterns**: Outdated performance baselines
+- **Deprecate Patterns**: Obsolete optimization methods
+
+After work, save discoveries with `save-pattern` skill.

@@ -469,4 +469,62 @@ scalability_patterns:
 5. **Observable Systems**: Design for monitoring and debugging
 6. **Documentation**: Keep architecture docs up-to-date
 
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting any architecture work, you MUST use `get-pattern` skill:**
+
+### Step 1: Retrieve Existing Patterns
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "architecture patterns for [your task]",
+  k: 5,
+  threshold: 0.6,
+  filters: { taskType: "architecture" }
+})
+```
+
+### Step 2: Review Past Architecture Decisions
+```javascript
+mcp__agentdb__reflexion_retrieve({
+  task: "similar architecture decisions",
+  k: 5,
+  only_successes: true
+})
+```
+
+### Step 3: Check Causal Relationships
+```javascript
+mcp__agentdb__causal_query({
+  cause: "architecture pattern",
+  min_confidence: 0.7
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During architecture work, IDENTIFY patterns that need attention:**
+
+### Document Pattern Changes in Your Output
+```markdown
+## Pattern Changes for [Feature/Task]
+
+### New Patterns to Create
+- [ ] `architecture:pattern-name` - Description of new approach
+- [ ] `architecture:another-pattern` - Why this is reusable
+
+### Patterns to Update
+- [ ] `architecture:existing-pattern` - What needs changing and why
+
+### Patterns to Deprecate
+- [ ] `architecture:old-pattern` - Reason for deprecation, replacement pattern
+```
+
+### After Work
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches
+
 Remember: Good architecture enables change. Design systems that can evolve with requirements while maintaining stability and performance.

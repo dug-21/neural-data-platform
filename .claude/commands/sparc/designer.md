@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run designer "create dashboard UI"
 
 # For alpha features
-claude-flow sparc run designer "create dashboard UI"
+npx claude-flow@alpha sparc run designer "create dashboard UI"
 ```
 
 ### Option 3: Local Installation
@@ -51,3 +51,29 @@ claude-flow sparc run designer "create dashboard UI"
 - Share component specs
 - Maintain consistency
 - Track design evolution
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting design work, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "design patterns for [your task]",
+  k: 5,
+  filters: { taskType: "design" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During design, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Design approaches worth documenting
+- **Update Patterns**: Outdated design conventions
+- **Deprecate Patterns**: Obsolete design methods
+
+After work, save discoveries with `save-pattern` skill.

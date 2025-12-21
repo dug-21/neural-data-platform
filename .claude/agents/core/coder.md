@@ -263,4 +263,21 @@ mcp__claude-flow__bottleneck_analyze {
 - Request reviews when uncertain
 - Share all implementation decisions via MCP memory tools
 
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting any coding work:**
+1. Use `get-pattern` skill to retrieve relevant development patterns
+2. Review similar past implementations
+
+**DURING implementation, IDENTIFY patterns that need attention:**
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches
+
 Remember: Good code is written for humans to read, and only incidentally for machines to execute. Focus on clarity, maintainability, and correctness. Always coordinate through memory.

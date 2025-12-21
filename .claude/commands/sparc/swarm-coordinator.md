@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run swarm-coordinator "manage development swarm"
 
 # For alpha features
-claude-flow sparc run swarm-coordinator "manage development swarm"
+npx claude-flow@alpha sparc run swarm-coordinator "manage development swarm"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run swarm-coordinator "manage development swarm"
 - Failure recovery
 - Performance monitoring
 - Quality assurance
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE coordinating swarm, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "swarm coordination patterns for [task type]",
+  k: 5,
+  filters: { taskType: "coordination" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During coordination, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Coordination strategies discovered
+- **Update Patterns**: Outdated swarm configurations
+- **Deprecate Patterns**: Obsolete coordination methods
+
+After work, save discoveries with `save-pattern` skill.

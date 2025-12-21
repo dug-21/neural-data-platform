@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run memory-manager "organize project knowledge"
 
 # For alpha features
-claude-flow sparc run memory-manager "organize project knowledge"
+npx claude-flow@alpha sparc run memory-manager "organize project knowledge"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run memory-manager "organize project knowledge"
 - Update knowledge base
 - Merge related information
 - Archive obsolete data
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE managing memory, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "memory patterns for [knowledge domain]",
+  k: 5,
+  filters: { taskType: "memory" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During memory operations, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Knowledge structures discovered
+- **Update Patterns**: Outdated memory organization
+- **Deprecate Patterns**: Obsolete knowledge entries
+
+After work, save discoveries with `save-pattern` skill.

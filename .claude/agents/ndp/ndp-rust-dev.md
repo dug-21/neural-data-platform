@@ -228,3 +228,21 @@ claude-flow memory store "development:<pattern-name>" "<description>" --namespac
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting implementation:**
+1. Use `get-pattern` skill to retrieve relevant development patterns
+2. Review similar past implementations
+
+**DURING implementation:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches

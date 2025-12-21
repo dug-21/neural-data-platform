@@ -28,20 +28,7 @@ You are the ML specialist for the Neural Data Platform. You work with ruv-FANN n
 
 ### 1. Get ML Architecture Patterns
 
-```bash
-# Get ML-related patterns
-claude-flow memory query "ml" --namespace ndp-patterns
-claude-flow memory query "architecture mlops" --namespace ndp-patterns
-```
-
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "ruv-fann",
-  namespace: "ndp-patterns",
-  limit: 5
-})
-```
+Use the `get-pattern` skill to retrieve ML and MLOps architecture patterns for NDP.
 
 ### 2. Read Architecture Documents
 
@@ -324,11 +311,7 @@ On Raspberry Pi 5:
 
 ## After Implementation
 
-### Save ML Patterns
-
-```bash
-claude-flow memory store "ml:<pattern-name>" "<description>" --namespace ndp-patterns
-```
+If you developed a reusable ML pattern, use the `save-pattern` skill to store it.
 
 ## Related Agents
 
@@ -343,3 +326,21 @@ claude-flow memory store "ml:<pattern-name>" "<description>" --namespace ndp-pat
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting implementation:**
+1. Use `get-pattern` skill to retrieve ML patterns
+2. Review similar past approaches
+
+**DURING implementation:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable ML approaches

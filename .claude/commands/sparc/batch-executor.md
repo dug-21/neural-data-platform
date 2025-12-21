@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run batch-executor "process multiple files"
 
 # For alpha features
-claude-flow sparc run batch-executor "process multiple files"
+npx claude-flow@alpha sparc run batch-executor "process multiple files"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run batch-executor "process multiple files"
 - Progress monitoring
 - Error recovery
 - Result aggregation
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE batch execution, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "batch execution patterns for [operation type]",
+  k: 5,
+  filters: { taskType: "batch" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During execution, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Batch strategies discovered
+- **Update Patterns**: Outdated batch configurations
+- **Deprecate Patterns**: Obsolete execution methods
+
+After work, save discoveries with `save-pattern` skill.

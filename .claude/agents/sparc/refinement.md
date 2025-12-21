@@ -522,4 +522,50 @@ function getUserProcessor(user: User): UserProcessor {
 5. **Error Recovery**: Plan for failure scenarios
 6. **Documentation**: Keep docs in sync with code
 
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting refinement work, you MUST use `get-pattern` skill:**
+
+### Retrieve Existing Patterns
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "refinement patterns for [your domain]",
+  k: 5,
+  threshold: 0.6,
+  filters: { taskType: "refinement" }
+})
+
+mcp__agentdb__reflexion_retrieve({
+  task: "similar refactoring or optimization",
+  k: 5,
+  only_successes: true
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During refinement, IDENTIFY patterns that need attention:**
+
+### Document Pattern Changes
+```markdown
+## Pattern Changes for [Feature]
+
+### New Patterns to Create
+- [ ] `refinement:pattern-name` - Reusable optimization approach
+
+### Patterns to Update
+- [ ] `refinement:existing-pattern` - What needs updating
+
+### Patterns to Deprecate
+- [ ] `refinement:old-pattern` - Why replacing
+```
+
+### After Work
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches
+
 Remember: Refinement is an iterative process. Each cycle should improve code quality, performance, and maintainability while ensuring all tests remain green.

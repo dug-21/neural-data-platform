@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run workflow-manager "automate deployment"
 
 # For alpha features
-claude-flow sparc run workflow-manager "automate deployment"
+npx claude-flow@alpha sparc run workflow-manager "automate deployment"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run workflow-manager "automate deployment"
 - Progress tracking
 - Result validation
 - Rollback capability
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE managing workflows, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "workflow patterns for [automation type]",
+  k: 5,
+  filters: { taskType: "workflow" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During workflow management, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Automation approaches discovered
+- **Update Patterns**: Outdated workflow configurations
+- **Deprecate Patterns**: Obsolete automation methods
+
+After work, save discoveries with `save-pattern` skill.

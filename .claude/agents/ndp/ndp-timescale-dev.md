@@ -28,20 +28,7 @@ You are the Silver layer specialist for the Neural Data Platform. You work with 
 
 ### 1. Get Architecture Patterns
 
-```bash
-# Get data layer patterns
-claude-flow memory query "data layers" --namespace ndp-patterns
-claude-flow memory query "architecture" --namespace ndp-patterns
-```
-
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "silver layer",
-  namespace: "ndp-patterns",
-  limit: 5
-})
-```
+Use the `get-pattern` skill to retrieve data layer and architecture patterns for NDP.
 
 ### 2. Read Architecture Documents
 
@@ -322,13 +309,7 @@ On Raspberry Pi 5:
 
 ## After Implementation
 
-### Save New Patterns
-
-If you developed a reusable TimescaleDB pattern:
-
-```bash
-claude-flow memory store "data-flow:timescale-<pattern>" "<description>" --namespace ndp-patterns
-```
+If you developed a reusable TimescaleDB pattern, use the `save-pattern` skill to store it.
 
 ## Related Agents
 
@@ -342,3 +323,21 @@ claude-flow memory store "data-flow:timescale-<pattern>" "<description>" --names
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting implementation:**
+1. Use `get-pattern` skill to retrieve TimescaleDB patterns
+2. Review similar past approaches
+
+**DURING implementation:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable database approaches

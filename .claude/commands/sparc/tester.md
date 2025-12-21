@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run tester "full regression suite"
 
 # For alpha features
-claude-flow sparc run tester "full regression suite"
+npx claude-flow@alpha sparc run tester "full regression suite"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run tester "full regression suite"
 - Load testing
 - Cross-browser testing
 - Multi-environment validation
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE testing, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "testing patterns for [test scope]",
+  k: 5,
+  filters: { taskType: "testing" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During testing, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Test strategies worth documenting
+- **Update Patterns**: Outdated test approaches
+- **Deprecate Patterns**: Obsolete testing methods
+
+After work, save discoveries with `save-pattern` skill.

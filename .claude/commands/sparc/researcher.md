@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run researcher "research AI trends 2024"
 
 # For alpha features
-claude-flow sparc run researcher "research AI trends 2024"
+npx claude-flow@alpha sparc run researcher "research AI trends 2024"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run researcher "research AI trends 2024"
 - Track information sources
 - Cross-reference insights
 - Maintain research history
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting research, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "research patterns for [your topic]",
+  k: 5,
+  filters: { taskType: "research" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During research, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Research findings worth documenting
+- **Update Patterns**: Outdated information discovered
+- **Deprecate Patterns**: Obsolete research conclusions
+
+After work, save discoveries with `save-pattern` skill.

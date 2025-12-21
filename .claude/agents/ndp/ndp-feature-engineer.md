@@ -28,20 +28,7 @@ You are the feature engineering specialist for the Neural Data Platform. You tra
 
 ### 1. Get Relevant Patterns
 
-```bash
-# Get ML and architecture patterns
-claude-flow memory query "feature" --namespace ndp-patterns
-claude-flow memory query "data layers" --namespace ndp-patterns
-```
-
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "feature",
-  namespace: "ndp-patterns",
-  limit: 5
-})
-```
+Use the `get-pattern` skill to retrieve feature engineering and data layer patterns for NDP.
 
 ### 2. Read Architecture Documents
 
@@ -362,11 +349,7 @@ pub fn validate_feature(name: &str, value: f64) -> Result<f64, FeatureError> {
 
 ## After Implementation
 
-### Save Feature Engineering Patterns
-
-```bash
-claude-flow memory store "feature:<pattern-name>" "<description>" --namespace ndp-patterns
-```
+If you developed a reusable feature engineering pattern, use the `save-pattern` skill to store it.
 
 ## Related Agents
 
@@ -380,3 +363,21 @@ claude-flow memory store "feature:<pattern-name>" "<description>" --namespace nd
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting implementation:**
+1. Use `get-pattern` skill to retrieve feature engineering patterns
+2. Review similar past approaches
+
+**DURING implementation:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable feature approaches

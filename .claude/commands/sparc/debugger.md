@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run debugger "fix authentication issues"
 
 # For alpha features
-claude-flow sparc run debugger "fix authentication issues"
+npx claude-flow@alpha sparc run debugger "fix authentication issues"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run debugger "fix authentication issues"
 - Variable inspection
 - Call stack tracing
 - Memory profiling
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE debugging, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "debugging patterns for [issue type]",
+  k: 5,
+  filters: { taskType: "troubleshooting" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During debugging, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Troubleshooting approaches discovered
+- **Update Patterns**: Outdated debugging procedures
+- **Deprecate Patterns**: Obsolete error handling
+
+After work, save discoveries with `save-pattern` skill.

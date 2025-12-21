@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run tdd "shopping cart feature"
 
 # For alpha features
-claude-flow sparc run tdd "shopping cart feature"
+npx claude-flow@alpha sparc run tdd "shopping cart feature"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run tdd "shopping cart feature"
 - End-to-end testing
 - Performance testing
 - Security testing
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE writing tests, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "testing patterns for [your feature]",
+  k: 5,
+  filters: { taskType: "testing" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During TDD, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Testing approaches worth documenting
+- **Update Patterns**: Outdated test conventions
+- **Deprecate Patterns**: Obsolete testing methods
+
+After work, save discoveries with `save-pattern` skill.

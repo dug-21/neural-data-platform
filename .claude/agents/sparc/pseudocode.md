@@ -315,4 +315,50 @@ CLASS: EventEmitter
 4. **Pattern Identification**: Design patterns to be used
 5. **Optimization Notes**: Potential performance improvements
 
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting pseudocode work, you MUST use `get-pattern` skill:**
+
+### Retrieve Existing Patterns
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "algorithm patterns for [your domain]",
+  k: 5,
+  threshold: 0.6,
+  filters: { taskType: "pseudocode" }
+})
+
+mcp__agentdb__reflexion_retrieve({
+  task: "similar algorithm design",
+  k: 5,
+  only_successes: true
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During pseudocode design, IDENTIFY patterns that need attention:**
+
+### Document Pattern Changes
+```markdown
+## Pattern Changes for [Feature]
+
+### New Patterns to Create
+- [ ] `algorithm:pattern-name` - Reusable algorithm approach
+
+### Patterns to Update
+- [ ] `algorithm:existing-pattern` - What needs updating
+
+### Patterns to Deprecate
+- [ ] `algorithm:old-pattern` - Why replacing
+```
+
+### After Work
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches
+
 Remember: Good pseudocode is the blueprint for efficient implementation. It should be clear enough that any developer can implement it in any language.

@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run innovator "innovative solutions for scaling"
 
 # For alpha features
-claude-flow sparc run innovator "innovative solutions for scaling"
+npx claude-flow@alpha sparc run innovator "innovative solutions for scaling"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run innovator "innovative solutions for scaling"
 - Cross-domain insights
 - Pattern recognition
 - Analogical reasoning
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE innovating, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "innovation patterns for [your domain]",
+  k: 5,
+  filters: { taskType: "innovation" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During innovation, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Novel approaches worth documenting
+- **Update Patterns**: Existing patterns to evolve
+- **Deprecate Patterns**: Old approaches being replaced
+
+After work, save discoveries with `save-pattern` skill.

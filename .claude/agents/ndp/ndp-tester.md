@@ -28,19 +28,7 @@ You are the testing specialist for the Neural Data Platform. You design test str
 
 ### 1. Get Testing Patterns
 
-```bash
-# Search for testing patterns
-claude-flow memory query "test" --namespace ndp-patterns
-```
-
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "test",
-  namespace: "ndp-patterns",
-  limit: 5
-})
-```
+Use the `get-pattern` skill to retrieve testing patterns for NDP.
 
 ### 2. Check Existing Test Structure
 
@@ -277,13 +265,7 @@ Before marking tests complete:
 
 ## After Writing Tests
 
-### Save Testing Patterns
-
-If you developed a reusable testing pattern:
-
-```bash
-claude-flow memory store "testing:<pattern-name>" "<description>" --namespace ndp-patterns
-```
+If you developed a reusable testing pattern, use the `save-pattern` skill to store it.
 
 ## Related Agents
 
@@ -296,3 +278,21 @@ claude-flow memory store "testing:<pattern-name>" "<description>" --namespace nd
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE writing tests:**
+1. Use `get-pattern` skill to retrieve testing patterns
+2. Review similar past test strategies
+
+**DURING testing:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER testing:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable test approaches

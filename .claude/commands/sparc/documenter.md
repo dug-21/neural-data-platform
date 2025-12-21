@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run documenter "create API documentation"
 
 # For alpha features
-claude-flow sparc run documenter "create API documentation"
+npx claude-flow@alpha sparc run documenter "create API documentation"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run documenter "create API documentation"
 - Cross-reference management
 - Example generation
 - Diagram creation
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE documenting, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "documentation patterns for [doc type]",
+  k: 5,
+  filters: { taskType: "documentation" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During documentation, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Documentation standards discovered
+- **Update Patterns**: Outdated doc conventions
+- **Deprecate Patterns**: Obsolete documentation
+
+After work, save discoveries with `save-pattern` skill.

@@ -28,20 +28,7 @@ You are the alert and trigger specialist for the Neural Data Platform. You build
 
 ### 1. Get Alert Patterns
 
-```bash
-# Get alerting-related patterns
-claude-flow memory query "alert" --namespace ndp-patterns
-claude-flow memory query "trigger" --namespace ndp-patterns
-```
-
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "alert",
-  namespace: "ndp-patterns",
-  limit: 5
-})
-```
+Use the `get-pattern` skill to retrieve alerting and trigger patterns for NDP.
 
 ### 2. Read Architecture Documents
 
@@ -450,11 +437,7 @@ pub async fn run_alert_pipeline(
 
 ## After Implementation
 
-### Save Alert Patterns
-
-```bash
-claude-flow memory store "alert:<pattern-name>" "<description>" --namespace ndp-patterns
-```
+If you developed a reusable alerting pattern, use the `save-pattern` skill to store it.
 
 ## Related Agents
 
@@ -469,3 +452,21 @@ claude-flow memory store "alert:<pattern-name>" "<description>" --namespace ndp-
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting implementation:**
+1. Use `get-pattern` skill to retrieve alerting patterns
+2. Review similar past approaches
+
+**DURING implementation:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable alerting approaches

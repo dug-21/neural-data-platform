@@ -273,4 +273,50 @@ Before completing specification:
 5. **Version Control**: Track specification changes
 6. **Get Feedback**: Validate with stakeholders early
 
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting specification work, you MUST use `get-pattern` skill:**
+
+### Retrieve Existing Patterns
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "specification patterns for [your domain]",
+  k: 5,
+  threshold: 0.6,
+  filters: { taskType: "specification" }
+})
+
+mcp__agentdb__reflexion_retrieve({
+  task: "similar specification work",
+  k: 5,
+  only_successes: true
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During specification, IDENTIFY patterns that need attention:**
+
+### Document Pattern Changes
+```markdown
+## Pattern Changes for [Feature]
+
+### New Patterns to Create
+- [ ] `specification:pattern-name` - Reusable spec approach
+
+### Patterns to Update
+- [ ] `specification:existing-pattern` - What needs updating
+
+### Patterns to Deprecate
+- [ ] `specification:old-pattern` - Why replacing
+```
+
+### After Work
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable approaches
+
 Remember: A good specification prevents misunderstandings and rework. Time spent here saves time in implementation.

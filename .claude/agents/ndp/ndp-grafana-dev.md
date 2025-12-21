@@ -28,20 +28,7 @@ You are the Grafana specialist for the Neural Data Platform. You build dashboard
 
 ### 1. Get Dashboard Patterns
 
-```bash
-# Get visualization-related patterns
-claude-flow memory query "dashboard" --namespace ndp-patterns
-claude-flow memory query "grafana" --namespace ndp-patterns
-```
-
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "dashboard",
-  namespace: "ndp-patterns",
-  limit: 5
-})
-```
+Use the `get-pattern` skill to retrieve dashboard and visualization patterns for NDP.
 
 ### 2. Understand Data Sources
 
@@ -359,11 +346,7 @@ services:
 
 ## After Implementation
 
-### Save Dashboard Patterns
-
-```bash
-claude-flow memory store "dashboard:<pattern-name>" "<description>" --namespace ndp-patterns
-```
+If you developed a reusable dashboard pattern, use the `save-pattern` skill to store it.
 
 ## Related Agents
 
@@ -377,3 +360,21 @@ claude-flow memory store "dashboard:<pattern-name>" "<description>" --namespace 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
 - `get-pattern` - Retrieve project patterns
 - `save-pattern` - Store new patterns
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting implementation:**
+1. Use `get-pattern` skill to retrieve dashboard patterns
+2. Review similar past approaches
+
+**DURING implementation:**
+Document patterns that need attention:
+- New patterns to create
+- Existing patterns to update
+- Outdated patterns to deprecate
+
+**AFTER implementation:**
+1. Use `reflexion` skill to record whether patterns worked
+2. Use `save-pattern` skill to store new reusable visualization approaches

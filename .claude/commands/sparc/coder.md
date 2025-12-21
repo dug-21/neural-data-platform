@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run coder "implement user authentication"
 
 # For alpha features
-claude-flow sparc run coder "implement user authentication"
+npx claude-flow@alpha sparc run coder "implement user authentication"
 ```
 
 ### Option 3: Local Installation
@@ -52,3 +52,29 @@ claude-flow sparc run coder "implement user authentication"
 - Comprehensive error handling
 - Performance optimization
 - Security best practices
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE writing code, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "coding patterns for [your task]",
+  k: 5,
+  filters: { taskType: "development" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During implementation, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Reusable code approaches discovered
+- **Update Patterns**: Outdated coding conventions
+- **Deprecate Patterns**: Obsolete implementations
+
+After work, save discoveries with `save-pattern` skill.

@@ -23,7 +23,7 @@ mcp__claude-flow__sparc_mode {
 npx claude-flow sparc run analyzer "analyze codebase performance"
 
 # For alpha features
-claude-flow sparc run analyzer "analyze codebase performance"
+npx claude-flow@alpha sparc run analyzer "analyze codebase performance"
 ```
 
 ### Option 3: Local Installation
@@ -50,3 +50,29 @@ claude-flow sparc run analyzer "analyze codebase performance"
 - Performance metrics
 - Improvement recommendations
 - Visualizations when applicable
+
+---
+
+## Pattern Integration (REQUIRED)
+
+**BEFORE starting analysis, ALWAYS use `get-pattern` skill:**
+
+```javascript
+mcp__agentdb__agentdb_pattern_search({
+  task: "analysis patterns for [your task]",
+  k: 5,
+  filters: { taskType: "analysis" }
+})
+```
+
+---
+
+## Pattern Management (REQUIRED)
+
+**During analysis, IDENTIFY patterns that need attention:**
+
+- **New Patterns**: Analysis approaches worth documenting
+- **Update Patterns**: Outdated metrics or thresholds
+- **Deprecate Patterns**: Obsolete analysis methods
+
+After work, save discoveries with `save-pattern` skill.
