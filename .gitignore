@@ -291,6 +291,16 @@ setup-report.txt
 test_*.rs
 check_*.rs
 
+
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt
+deploy/pi/.env
+test_exports
+
+
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt
+
 # Claude Flow generated files
 .claude/settings.local.json
 .mcp.json
@@ -317,5 +327,3 @@ coordination/orchestration/*
 claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
-deploy/pi/.env
-test_exports
