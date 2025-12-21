@@ -80,7 +80,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'temperature' THEN value END) as \"Temperature\", AVG(CASE WHEN metric = 'feels_like' THEN value END) as \"Feels Like\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'temperature' THEN value END) as \"Temperature\", AVG(CASE WHEN metric = 'feels_like' THEN value END) as \"Feels Like\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -95,7 +95,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wind_speed' THEN value END) as \"Wind Speed\", AVG(CASE WHEN metric = 'pressure' THEN value END) as \"Pressure\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wind_speed' THEN value END) as \"Wind Speed\", AVG(CASE WHEN metric = 'pressure' THEN value END) as \"Pressure\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
@@ -110,7 +110,7 @@
       "targets": [
         {
           "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
-          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'clouds' THEN value END) as \"Cloud Cover\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'clouds' THEN value END) as \"Cloud Cover\" FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ],
