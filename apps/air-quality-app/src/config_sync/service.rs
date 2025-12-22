@@ -99,27 +99,31 @@ pub struct ConfigSyncService {
 impl ConfigSyncService {
     /// Create a new ConfigSyncService with the specified config directory
     pub fn new(config_dir: impl AsRef<Path>) -> Self {
-        info!("Initializing ConfigSyncService with config_dir: {:?}", config_dir.as_ref());
+        info!(
+            "Initializing ConfigSyncService with config_dir: {:?}",
+            config_dir.as_ref()
+        );
         Self {
             config_dir: config_dir.as_ref().to_path_buf(),
         }
     }
 
     /// Load a single stream config from a YAML file
-    pub async fn load_yaml_config(&self, yaml_path: impl AsRef<Path>) -> Result<StreamConfig, ConfigSyncError> {
+    pub async fn load_yaml_config(
+        &self,
+        yaml_path: impl AsRef<Path>,
+    ) -> Result<StreamConfig, ConfigSyncError> {
         let yaml_path = yaml_path.as_ref();
         debug!("Loading YAML config from: {:?}", yaml_path);
 
         // Read file content
-        let content = tokio::fs::read_to_string(yaml_path)
-            .await
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    ConfigSyncError::YamlReadError(format!("File not found: {:?}", yaml_path))
-                } else {
-                    ConfigSyncError::IoError(e)
-                }
-            })?;
+        let content = tokio::fs::read_to_string(yaml_path).await.map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                ConfigSyncError::YamlReadError(format!("File not found: {:?}", yaml_path))
+            } else {
+                ConfigSyncError::IoError(e)
+            }
+        })?;
 
         // Parse YAML
         let yaml_config: StreamConfigYaml = serde_yaml::from_str(&content)?;
@@ -130,7 +134,10 @@ impl ConfigSyncService {
         // Validate
         config.validate()?;
 
-        debug!("Successfully loaded config for stream: {}", config.stream_id);
+        debug!(
+            "Successfully loaded config for stream: {}",
+            config.stream_id
+        );
         Ok(config)
     }
 
@@ -140,22 +147,29 @@ impl ConfigSyncService {
 
         // Check if directory exists
         if !tokio::fs::try_exists(&self.config_dir).await? {
-            return Err(ConfigSyncError::DirectoryNotFound(
-                format!("Directory not found: {:?}", self.config_dir)
-            ));
+            return Err(ConfigSyncError::DirectoryNotFound(format!(
+                "Directory not found: {:?}",
+                self.config_dir
+            )));
         }
 
         let mut configs = Vec::new();
 
         // Walk through subdirectories recursively
-        self.discover_configs_recursive(&self.config_dir, &mut configs).await?;
+        self.discover_configs_recursive(&self.config_dir, &mut configs)
+            .await?;
 
         info!("Discovered {} config files", configs.len());
         Ok(configs)
     }
 
     /// Recursively discover config.yaml files
-    fn discover_configs_recursive<'a>(&'a self, dir: &'a Path, configs: &'a mut Vec<PathBuf>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ConfigSyncError>> + 'a>> {
+    fn discover_configs_recursive<'a>(
+        &'a self,
+        dir: &'a Path,
+        configs: &'a mut Vec<PathBuf>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ConfigSyncError>> + 'a>>
+    {
         Box::pin(async move {
             let mut read_dir = tokio::fs::read_dir(dir).await?;
 
@@ -366,12 +380,11 @@ impl StreamConfigYaml {
             let source_type = parse_source_type(&source_yaml.source_type)?;
 
             // Convert YAML params to JSON params, filtering out 'enabled' to avoid duplicate field
-            let params: std::collections::HashMap<String, serde_json::Value> = source_yaml.params
+            let params: std::collections::HashMap<String, serde_json::Value> = source_yaml
+                .params
                 .iter()
                 .filter(|(k, _)| k.as_str() != "enabled") // Filter out enabled - handled by explicit field
-                .filter_map(|(k, v)| {
-                    yaml_to_json(v).ok().map(|json_v| (k.clone(), json_v))
-                })
+                .filter_map(|(k, v)| yaml_to_json(v).ok().map(|json_v| (k.clone(), json_v)))
                 .collect();
 
             sources.push(SourceConfig {
@@ -505,8 +518,8 @@ fn parse_source_type(s: &str) -> Result<neural_core::SourceType, ConfigSyncError
 
 /// Convert YAML Value to JSON Value
 fn yaml_to_json(yaml: &serde_yaml::Value) -> Result<serde_json::Value, ConfigSyncError> {
-    use serde_yaml::Value as Y;
     use serde_json::Value as J;
+    use serde_yaml::Value as Y;
 
     let json = match yaml {
         Y::Null => J::Null,
@@ -557,7 +570,14 @@ mod tests {
         // Arrange: Create service pointing to actual config directory
         // Use absolute path from workspace root
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|p| std::path::PathBuf::from(p).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|p| {
+                std::path::PathBuf::from(p)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
         let config_dir = workspace_root.join("config/base/streams");
         let config_path = config_dir.join("outdoor-weather/config.yaml");
@@ -568,13 +588,20 @@ mod tests {
         let result = service.load_yaml_config(config_path).await;
 
         // Assert: Verify config was parsed successfully
-        assert!(result.is_ok(), "Failed to parse outdoor-weather config: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse outdoor-weather config: {:?}",
+            result.err()
+        );
 
         let config = result.unwrap();
 
         // Verify stream metadata
         assert_eq!(config.stream_id, "outdoor-weather");
-        assert_eq!(config.description, "Outdoor weather data from OpenWeatherMap Current Weather API");
+        assert_eq!(
+            config.description,
+            "Outdoor weather data from OpenWeatherMap Current Weather API"
+        );
         assert_eq!(config.version, "1.0.0");
         assert!(config.enabled);
         assert_eq!(config.retention_days, 90);
@@ -615,7 +642,14 @@ mod tests {
     async fn test_load_yaml_config_parses_sources_array() {
         // Arrange: Create service and path to air quality config
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|p| std::path::PathBuf::from(p).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|p| {
+                std::path::PathBuf::from(p)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
         let config_dir = workspace_root.join("config/base/streams");
         let config_path = config_dir.join("outdoor-air-quality/config.yaml");
@@ -626,7 +660,11 @@ mod tests {
         let result = service.load_yaml_config(config_path).await;
 
         // Assert: Verify sources were parsed
-        assert!(result.is_ok(), "Failed to parse air-quality config: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse air-quality config: {:?}",
+            result.err()
+        );
 
         let config = result.unwrap();
 
@@ -664,7 +702,14 @@ mod tests {
     async fn test_load_yaml_config_parses_endpoints() {
         // Arrange: Create service
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|p| std::path::PathBuf::from(p).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|p| {
+                std::path::PathBuf::from(p)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
         let config_dir = workspace_root.join("config/base/streams");
         let config_path = config_dir.join("outdoor-weather/config.yaml");
@@ -698,11 +743,15 @@ mod tests {
                 assert!(endpoint_obj.contains_key("auth_value"));
 
                 // Verify specific values
-                if let Some(serde_json::Value::String(endpoint_id)) = endpoint_obj.get("endpoint_id") {
+                if let Some(serde_json::Value::String(endpoint_id)) =
+                    endpoint_obj.get("endpoint_id")
+                {
                     assert_eq!(endpoint_id, "openweathermap_weather");
                 }
 
-                if let Some(serde_json::Value::String(location_id)) = endpoint_obj.get("location_id") {
+                if let Some(serde_json::Value::String(location_id)) =
+                    endpoint_obj.get("location_id")
+                {
                     assert_eq!(location_id, "home");
                 }
 
@@ -723,7 +772,14 @@ mod tests {
     async fn test_discover_stream_configs_finds_all_yaml_files() {
         // Arrange: Create service pointing to config directory
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|p| std::path::PathBuf::from(p).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|p| {
+                std::path::PathBuf::from(p)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
         let config_dir = workspace_root.join("config/base/streams");
 
@@ -733,27 +789,42 @@ mod tests {
         let result = service.discover_stream_configs().await;
 
         // Assert: Verify discovery succeeded
-        assert!(result.is_ok(), "Failed to discover configs: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to discover configs: {:?}",
+            result.err()
+        );
 
         let configs = result.unwrap();
 
         // Should find at least outdoor-weather and outdoor-air-quality
-        assert!(configs.len() >= 2, "Expected at least 2 config files, found {}", configs.len());
+        assert!(
+            configs.len() >= 2,
+            "Expected at least 2 config files, found {}",
+            configs.len()
+        );
 
         // Verify both expected configs are found
-        let has_weather = configs.iter().any(|p| {
-            p.to_string_lossy().contains("outdoor-weather") && p.ends_with("config.yaml")
-        });
+        let has_weather = configs
+            .iter()
+            .any(|p| p.to_string_lossy().contains("outdoor-weather") && p.ends_with("config.yaml"));
         let has_air_quality = configs.iter().any(|p| {
             p.to_string_lossy().contains("outdoor-air-quality") && p.ends_with("config.yaml")
         });
 
         assert!(has_weather, "Should find outdoor-weather/config.yaml");
-        assert!(has_air_quality, "Should find outdoor-air-quality/config.yaml");
+        assert!(
+            has_air_quality,
+            "Should find outdoor-air-quality/config.yaml"
+        );
 
         // Verify all discovered paths end with config.yaml
         for path in &configs {
-            assert!(path.ends_with("config.yaml"), "All discovered paths should end with config.yaml: {:?}", path);
+            assert!(
+                path.ends_with("config.yaml"),
+                "All discovered paths should end with config.yaml: {:?}",
+                path
+            );
         }
     }
 
@@ -769,7 +840,10 @@ mod tests {
 
         // Assert: Verify appropriate error is returned
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ConfigSyncError::DirectoryNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            ConfigSyncError::DirectoryNotFound(_)
+        ));
     }
 
     /// Test that SyncReport correctly tracks success, failures, and skips
@@ -782,7 +856,9 @@ mod tests {
         // Act: Add various outcomes
         report.synced.push("stream-1".to_string());
         report.synced.push("stream-2".to_string());
-        report.failed.push(("stream-3".to_string(), "Parse error".to_string()));
+        report
+            .failed
+            .push(("stream-3".to_string(), "Parse error".to_string()));
         report.skipped.push("stream-4".to_string());
 
         // Assert: Verify tracking methods
@@ -823,7 +899,14 @@ mod tests {
     async fn test_load_yaml_config_file_not_found() {
         // Arrange: Create service
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|p| std::path::PathBuf::from(p).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|p| {
+                std::path::PathBuf::from(p)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
         let config_dir = workspace_root.join("config/base/streams");
         let nonexistent_path = config_dir.join("nonexistent/config.yaml");
@@ -835,7 +918,10 @@ mod tests {
 
         // Assert: Verify appropriate error
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ConfigSyncError::YamlReadError(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            ConfigSyncError::YamlReadError(_)
+        ));
     }
 
     /// Test that load_yaml_config validates the config after parsing
@@ -865,7 +951,10 @@ sources: []
         let result = service.load_yaml_config(&temp_file).await;
 
         // Assert: Verify validation error
-        assert!(result.is_err(), "Should reject config with no fields or sources");
+        assert!(
+            result.is_err(),
+            "Should reject config with no fields or sources"
+        );
 
         // Cleanup
         std::fs::remove_file(temp_file).ok();
@@ -903,7 +992,10 @@ sources: []
         // Test invalid type
         let result = parse_field_type("invalid_type");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ConfigSyncError::InvalidConfig(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            ConfigSyncError::InvalidConfig(_)
+        ));
     }
 
     /// Test that source types are correctly parsed from YAML strings
@@ -912,19 +1004,34 @@ sources: []
     fn test_parse_source_type_all_types() {
         // Arrange & Act & Assert: Test all valid source types
         assert_eq!(parse_source_type("mqtt").unwrap(), SourceType::Mqtt);
-        assert_eq!(parse_source_type("http_poll").unwrap(), SourceType::HttpPoll);
+        assert_eq!(
+            parse_source_type("http_poll").unwrap(),
+            SourceType::HttpPoll
+        );
         assert_eq!(parse_source_type("httppoll").unwrap(), SourceType::HttpPoll);
         assert_eq!(parse_source_type("webhook").unwrap(), SourceType::Webhook);
-        assert_eq!(parse_source_type("file_watch").unwrap(), SourceType::FileWatch);
-        assert_eq!(parse_source_type("filewatch").unwrap(), SourceType::FileWatch);
+        assert_eq!(
+            parse_source_type("file_watch").unwrap(),
+            SourceType::FileWatch
+        );
+        assert_eq!(
+            parse_source_type("filewatch").unwrap(),
+            SourceType::FileWatch
+        );
 
         // Test case-insensitivity
-        assert_eq!(parse_source_type("HTTP_POLL").unwrap(), SourceType::HttpPoll);
+        assert_eq!(
+            parse_source_type("HTTP_POLL").unwrap(),
+            SourceType::HttpPoll
+        );
 
         // Test invalid type
         let result = parse_source_type("invalid_source");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ConfigSyncError::InvalidConfig(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            ConfigSyncError::InvalidConfig(_)
+        ));
     }
 
     /// Test that outdoor-air-quality config parses correctly with all fields
@@ -933,7 +1040,14 @@ sources: []
     async fn test_load_yaml_config_parses_air_quality_fields() {
         // Arrange: Create service
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|p| std::path::PathBuf::from(p).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|p| {
+                std::path::PathBuf::from(p)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
         let config_dir = workspace_root.join("config/base/streams");
         let config_path = config_dir.join("outdoor-air-quality/config.yaml");
@@ -944,13 +1058,20 @@ sources: []
         let result = service.load_yaml_config(config_path).await;
 
         // Assert: Verify parsing succeeded
-        assert!(result.is_ok(), "Failed to parse air-quality config: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse air-quality config: {:?}",
+            result.err()
+        );
 
         let config = result.unwrap();
 
         // Verify stream metadata
         assert_eq!(config.stream_id, "outdoor-air-quality");
-        assert_eq!(config.description, "Outdoor air quality data from OpenWeatherMap Air Pollution API");
+        assert_eq!(
+            config.description,
+            "Outdoor air quality data from OpenWeatherMap Air Pollution API"
+        );
 
         // Verify fields count (should have 9 pollutant fields)
         assert_eq!(config.fields.len(), 9, "Expected 9 air quality fields");

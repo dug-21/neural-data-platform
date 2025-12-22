@@ -62,13 +62,27 @@ impl Default for RedisConfig {
 }
 
 // Default value functions
-fn default_connection_timeout() -> u64 { 30 }
-fn default_idle_timeout() -> u64 { 600 }
-fn default_max_query_time() -> u64 { 30 }
-fn default_redis_connection_timeout_ms() -> u64 { 5000 }
-fn default_false() -> bool { false }
-fn default_redis_pool_max_idle() -> u32 { 8 }
-fn default_redis_pool_timeout_seconds() -> u64 { 30 }
+fn default_connection_timeout() -> u64 {
+    30
+}
+fn default_idle_timeout() -> u64 {
+    600
+}
+fn default_max_query_time() -> u64 {
+    30
+}
+fn default_redis_connection_timeout_ms() -> u64 {
+    5000
+}
+fn default_false() -> bool {
+    false
+}
+fn default_redis_pool_max_idle() -> u32 {
+    8
+}
+fn default_redis_pool_timeout_seconds() -> u64 {
+    30
+}
 
 /// Backup configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,8 +111,18 @@ impl Default for BackupConfig {
     }
 }
 
-fn default_backup_enabled() -> bool { true }
-fn default_backup_interval_hours() -> u64 { 24 }
-fn default_backup_retention_days() -> u32 { 30 }
-fn default_backup_path() -> String { "./backups".to_string() }
-fn default_backup_compression() -> bool { true }
+fn default_backup_enabled() -> bool {
+    true
+}
+fn default_backup_interval_hours() -> u64 {
+    24
+}
+fn default_backup_retention_days() -> u32 {
+    30
+}
+fn default_backup_path() -> String {
+    "./backups".to_string()
+}
+fn default_backup_compression() -> bool {
+    true
+}

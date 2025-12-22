@@ -62,7 +62,12 @@ pub async fn latest_readings_handler(
     let latest = points
         .into_iter()
         .max_by_key(|p| p.timestamp)
-        .ok_or_else(|| ApiError::NotFound(format!("No readings found for location {}", query.location_id)))?;
+        .ok_or_else(|| {
+            ApiError::NotFound(format!(
+                "No readings found for location {}",
+                query.location_id
+            ))
+        })?;
 
     Ok(Json(ApiResponse::success(Reading::from(latest))))
 }
@@ -139,8 +144,8 @@ fn parse_aggregation(agg: &str) -> Option<AggregationType> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neural_core::CoreError;
     use mockall::mock;
+    use neural_core::CoreError;
 
     mock! {
         pub TestStore {}
@@ -173,22 +178,23 @@ mod tests {
         let mut mock = MockTestStore::new();
         let now = chrono::Utc::now();
 
-        mock.expect_query().returning(move |_loc, _start, _end, _filters| {
-            Ok(vec![
-                TimeSeriesPoint {
-                    timestamp: now - chrono::Duration::minutes(10),
-                    location_id: "test-loc".to_string(),
-                    value: 10.0,
-                    tags: HashMap::new(),
-                },
-                TimeSeriesPoint {
-                    timestamp: now - chrono::Duration::minutes(5),
-                    location_id: "test-loc".to_string(),
-                    value: 20.0,
-                    tags: HashMap::new(),
-                },
-            ])
-        });
+        mock.expect_query()
+            .returning(move |_loc, _start, _end, _filters| {
+                Ok(vec![
+                    TimeSeriesPoint {
+                        timestamp: now - chrono::Duration::minutes(10),
+                        location_id: "test-loc".to_string(),
+                        value: 10.0,
+                        tags: HashMap::new(),
+                    },
+                    TimeSeriesPoint {
+                        timestamp: now - chrono::Duration::minutes(5),
+                        location_id: "test-loc".to_string(),
+                        value: 20.0,
+                        tags: HashMap::new(),
+                    },
+                ])
+            });
 
         let query = LatestQuery {
             location_id: "test-loc".to_string(),
@@ -227,14 +233,15 @@ mod tests {
         let mut mock = MockTestStore::new();
         let now = chrono::Utc::now();
 
-        mock.expect_query().returning(move |_loc, _start, _end, _filters| {
-            Ok(vec![TimeSeriesPoint {
-                timestamp: now,
-                location_id: "test-loc".to_string(),
-                value: 15.0,
-                tags: HashMap::new(),
-            }])
-        });
+        mock.expect_query()
+            .returning(move |_loc, _start, _end, _filters| {
+                Ok(vec![TimeSeriesPoint {
+                    timestamp: now,
+                    location_id: "test-loc".to_string(),
+                    value: 15.0,
+                    tags: HashMap::new(),
+                }])
+            });
 
         let query = ReadingsQuery {
             location_id: "test-loc".to_string(),
@@ -274,15 +281,16 @@ mod tests {
         let mut mock = MockTestStore::new();
         let now = chrono::Utc::now();
 
-        mock.expect_aggregate().returning(move |_loc, _start, _end, agg, _interval| {
-            assert_eq!(agg, AggregationType::Mean);
-            Ok(vec![AggregatedPoint {
-                timestamp: now,
-                location_id: "test-loc".to_string(),
-                value: 25.0,
-                aggregation_type: AggregationType::Mean,
-            }])
-        });
+        mock.expect_aggregate()
+            .returning(move |_loc, _start, _end, agg, _interval| {
+                assert_eq!(agg, AggregationType::Mean);
+                Ok(vec![AggregatedPoint {
+                    timestamp: now,
+                    location_id: "test-loc".to_string(),
+                    value: 25.0,
+                    aggregation_type: AggregationType::Mean,
+                }])
+            });
 
         let query = AggregateQuery {
             location_id: "test-loc".to_string(),
@@ -305,15 +313,16 @@ mod tests {
         let mut mock = MockTestStore::new();
         let now = chrono::Utc::now();
 
-        mock.expect_aggregate().returning(move |_loc, _start, _end, agg, _interval| {
-            assert_eq!(agg, AggregationType::Percentile(95.0));
-            Ok(vec![AggregatedPoint {
-                timestamp: now,
-                location_id: "test-loc".to_string(),
-                value: 95.0,
-                aggregation_type: AggregationType::Percentile(95.0),
-            }])
-        });
+        mock.expect_aggregate()
+            .returning(move |_loc, _start, _end, agg, _interval| {
+                assert_eq!(agg, AggregationType::Percentile(95.0));
+                Ok(vec![AggregatedPoint {
+                    timestamp: now,
+                    location_id: "test-loc".to_string(),
+                    value: 95.0,
+                    aggregation_type: AggregationType::Percentile(95.0),
+                }])
+            });
 
         let query = AggregateQuery {
             location_id: "test-loc".to_string(),
@@ -386,8 +395,14 @@ mod tests {
         assert_eq!(parse_aggregation("mean"), Some(AggregationType::Mean));
         assert_eq!(parse_aggregation("min"), Some(AggregationType::Min));
         assert_eq!(parse_aggregation("max"), Some(AggregationType::Max));
-        assert_eq!(parse_aggregation("p50"), Some(AggregationType::Percentile(50.0)));
-        assert_eq!(parse_aggregation("p95"), Some(AggregationType::Percentile(95.0)));
+        assert_eq!(
+            parse_aggregation("p50"),
+            Some(AggregationType::Percentile(50.0))
+        );
+        assert_eq!(
+            parse_aggregation("p95"),
+            Some(AggregationType::Percentile(95.0))
+        );
         assert_eq!(parse_aggregation("invalid"), None);
     }
 }

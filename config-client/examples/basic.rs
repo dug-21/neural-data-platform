@@ -10,10 +10,7 @@ struct AppConfig {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to etcd
-    let client = ConfigClient::with_prefix(
-        &["http://localhost:2379"],
-        "/air-quality"
-    ).await?;
+    let client = ConfigClient::with_prefix(&["http://localhost:2379"], "/air-quality").await?;
 
     // Set a config
     let config = AppConfig {
@@ -28,9 +25,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Got config: {:?}", loaded);
 
     // Watch for changes
-    let handle = client.watch("/", |key, value| {
-        println!("Config changed: {} = {:?}", key, value);
-    }).await?;
+    let handle = client
+        .watch("/", |key, value| {
+            println!("Config changed: {} = {:?}", key, value);
+        })
+        .await?;
 
     println!("Watching for changes... Press Ctrl+C to exit");
     tokio::signal::ctrl_c().await?;

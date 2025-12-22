@@ -6,8 +6,8 @@
 //! - Flushes batches on timeout (default 5 seconds) or when batch is full
 //! - Writes to ParquetStore for persistent storage
 
-use neural_core::{CoreError, ParquetStore, TimeSeriesPoint};
 use neural_core::traits::Store;
+use neural_core::{CoreError, ParquetStore, TimeSeriesPoint};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -161,12 +161,7 @@ mod tests {
         let store = Arc::new(ParquetStore::new(temp_dir.path()).unwrap());
         let (_sender, receiver) = mpsc::channel(100);
 
-        let writer = StorageWriter::new(
-            store,
-            receiver,
-            Some(50),
-            Some(Duration::from_secs(10)),
-        );
+        let writer = StorageWriter::new(store, receiver, Some(50), Some(Duration::from_secs(10)));
 
         assert_eq!(writer.batch_size, 50);
         assert_eq!(writer.batch_timeout, Duration::from_secs(10));
@@ -199,13 +194,14 @@ mod tests {
         );
 
         // Spawn writer task
-        let writer_task = tokio::spawn(async move {
-            writer.run().await
-        });
+        let writer_task = tokio::spawn(async move { writer.run().await });
 
         // Send 3 points (should trigger flush)
         for i in 0..3 {
-            sender.send(create_test_point("sensor-001", i as f64)).await.unwrap();
+            sender
+                .send(create_test_point("sensor-001", i as f64))
+                .await
+                .unwrap();
         }
 
         // Give it time to process
@@ -244,7 +240,10 @@ mod tests {
 
         // Send a few points
         for i in 0..5 {
-            sender.send(create_test_point("sensor-002", i as f64)).await.unwrap();
+            sender
+                .send(create_test_point("sensor-002", i as f64))
+                .await
+                .unwrap();
         }
 
         // Close channel - should trigger flush and shutdown
@@ -282,14 +281,18 @@ mod tests {
         );
 
         // Spawn writer task
-        let writer_task = tokio::spawn(async move {
-            writer.run().await
-        });
+        let writer_task = tokio::spawn(async move { writer.run().await });
 
         // Send points for multiple locations
         for i in 0..5 {
-            sender.send(create_test_point("sensor-001", i as f64)).await.unwrap();
-            sender.send(create_test_point("sensor-002", (i + 10) as f64)).await.unwrap();
+            sender
+                .send(create_test_point("sensor-001", i as f64))
+                .await
+                .unwrap();
+            sender
+                .send(create_test_point("sensor-002", (i + 10) as f64))
+                .await
+                .unwrap();
         }
 
         // Give it time to process

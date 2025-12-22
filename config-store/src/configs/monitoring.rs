@@ -171,23 +171,63 @@ impl Default for PerformanceConfig {
 }
 
 // Default value functions
-fn default_prometheus_port() -> Option<u16> { Some(9092) }
-fn default_prometheus_path() -> String { "/metrics".to_string() }
-fn default_true() -> bool { true }
-fn default_false() -> bool { false }
-fn default_cpu_usage_threshold() -> f64 { 80.0 }
-fn default_memory_usage_threshold() -> f64 { 85.0 }
-fn default_error_rate_threshold() -> f64 { 5.0 }
-fn default_log_level() -> String { "info".to_string() }
-fn default_log_format() -> String { "json".to_string() }
-fn default_trace_sample_rate() -> f64 { 0.1 }
-fn default_log_file_path() -> String { "logs/neural-trader.log".to_string() }
-fn default_log_rotation_size() -> u64 { 100 }
-fn default_log_rotation_count() -> u32 { 10 }
-fn default_alert_interval_seconds() -> u64 { 300 }
-fn default_critical_threshold() -> f64 { 95.0 }
-fn default_warning_threshold() -> f64 { 80.0 }
-fn default_max_memory_usage_mb() -> u64 { 2048 }
-fn default_max_cpu_usage_percent() -> f64 { 80.0 }
-fn default_gc_interval_seconds() -> u64 { 300 }
-fn default_performance_sample_rate() -> f64 { 0.01 }
+fn default_prometheus_port() -> Option<u16> {
+    Some(9092)
+}
+fn default_prometheus_path() -> String {
+    "/metrics".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_false() -> bool {
+    false
+}
+fn default_cpu_usage_threshold() -> f64 {
+    80.0
+}
+fn default_memory_usage_threshold() -> f64 {
+    85.0
+}
+fn default_error_rate_threshold() -> f64 {
+    5.0
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_log_format() -> String {
+    "json".to_string()
+}
+fn default_trace_sample_rate() -> f64 {
+    0.1
+}
+fn default_log_file_path() -> String {
+    "logs/neural-trader.log".to_string()
+}
+fn default_log_rotation_size() -> u64 {
+    100
+}
+fn default_log_rotation_count() -> u32 {
+    10
+}
+fn default_alert_interval_seconds() -> u64 {
+    300
+}
+fn default_critical_threshold() -> f64 {
+    95.0
+}
+fn default_warning_threshold() -> f64 {
+    80.0
+}
+fn default_max_memory_usage_mb() -> u64 {
+    2048
+}
+fn default_max_cpu_usage_percent() -> f64 {
+    80.0
+}
+fn default_gc_interval_seconds() -> u64 {
+    300
+}
+fn default_performance_sample_rate() -> f64 {
+    0.01
+}

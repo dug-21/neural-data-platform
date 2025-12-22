@@ -37,7 +37,8 @@ impl RateLimiter {
         let mut buckets = self.buckets.lock().unwrap();
         let now = Instant::now();
 
-        let bucket = buckets.entry(client_id.to_string())
+        let bucket = buckets
+            .entry(client_id.to_string())
             .or_insert_with(|| TokenBucket {
                 tokens: self.max_tokens,
                 last_refill: now,
@@ -47,7 +48,7 @@ impl RateLimiter {
         let elapsed = now.duration_since(bucket.last_refill);
         let refill_rate = self.max_tokens / self.refill_duration.as_secs_f64();
         let tokens_to_add = elapsed.as_secs_f64() * refill_rate;
-        
+
         // Refill tokens
         bucket.tokens = (bucket.tokens + tokens_to_add).min(self.max_tokens);
         bucket.last_refill = now;

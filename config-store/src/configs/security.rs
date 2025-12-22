@@ -141,23 +141,63 @@ impl Default for EncryptionConfig {
 }
 
 // Default value functions
-fn default_enable_tls() -> bool { false }
-fn default_tls_cert_path() -> String { "certs/server.crt".to_string() }
-fn default_tls_key_path() -> String { "certs/server.key".to_string() }
-fn default_api_key_required() -> bool { false }
-fn default_rate_limit_per_minute() -> u32 { 100 }
-fn default_max_request_size_mb() -> u64 { 10 }
-fn default_enable_cors() -> bool { true }
-fn default_allowed_origins() -> Vec<String> { vec!["*".to_string()] }
-fn default_failure_threshold() -> u32 { 5 }
-fn default_recovery_timeout_seconds() -> u64 { 60 }
-fn default_half_open_max_calls() -> u32 { 3 }
-fn default_shutdown_timeout_seconds() -> u64 { 30 }
-fn default_jwt_secret() -> String { "your-secret-key".to_string() }
-fn default_jwt_expiry_hours() -> u64 { 24 }
-fn default_enable_basic_auth() -> bool { false }
-fn default_enable_oauth() -> bool { false }
-fn default_encryption_algorithm() -> String { "AES-256-GCM".to_string() }
-fn default_key_size_bits() -> u32 { 256 }
-fn default_enable_at_rest_encryption() -> bool { false }
-fn default_enable_in_transit_encryption() -> bool { true }
+fn default_enable_tls() -> bool {
+    false
+}
+fn default_tls_cert_path() -> String {
+    "certs/server.crt".to_string()
+}
+fn default_tls_key_path() -> String {
+    "certs/server.key".to_string()
+}
+fn default_api_key_required() -> bool {
+    false
+}
+fn default_rate_limit_per_minute() -> u32 {
+    100
+}
+fn default_max_request_size_mb() -> u64 {
+    10
+}
+fn default_enable_cors() -> bool {
+    true
+}
+fn default_allowed_origins() -> Vec<String> {
+    vec!["*".to_string()]
+}
+fn default_failure_threshold() -> u32 {
+    5
+}
+fn default_recovery_timeout_seconds() -> u64 {
+    60
+}
+fn default_half_open_max_calls() -> u32 {
+    3
+}
+fn default_shutdown_timeout_seconds() -> u64 {
+    30
+}
+fn default_jwt_secret() -> String {
+    "your-secret-key".to_string()
+}
+fn default_jwt_expiry_hours() -> u64 {
+    24
+}
+fn default_enable_basic_auth() -> bool {
+    false
+}
+fn default_enable_oauth() -> bool {
+    false
+}
+fn default_encryption_algorithm() -> String {
+    "AES-256-GCM".to_string()
+}
+fn default_key_size_bits() -> u32 {
+    256
+}
+fn default_enable_at_rest_encryption() -> bool {
+    false
+}
+fn default_enable_in_transit_encryption() -> bool {
+    true
+}

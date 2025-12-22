@@ -99,17 +99,35 @@ mod tests {
     #[test]
     fn test_error_codes() {
         assert_eq!(ApiError::NotFound("test".to_string()).code(), "NOT_FOUND");
-        assert_eq!(ApiError::BadRequest("test".to_string()).code(), "BAD_REQUEST");
-        assert_eq!(ApiError::InternalError("test".to_string()).code(), "INTERNAL_ERROR");
-        assert_eq!(ApiError::ServiceUnavailable("test".to_string()).code(), "SERVICE_UNAVAILABLE");
+        assert_eq!(
+            ApiError::BadRequest("test".to_string()).code(),
+            "BAD_REQUEST"
+        );
+        assert_eq!(
+            ApiError::InternalError("test".to_string()).code(),
+            "INTERNAL_ERROR"
+        );
+        assert_eq!(
+            ApiError::ServiceUnavailable("test".to_string()).code(),
+            "SERVICE_UNAVAILABLE"
+        );
         assert_eq!(ApiError::Timeout("test".to_string()).code(), "TIMEOUT");
     }
 
     #[test]
     fn test_status_codes() {
-        assert_eq!(ApiError::NotFound("test".to_string()).status_code(), StatusCode::NOT_FOUND);
-        assert_eq!(ApiError::BadRequest("test".to_string()).status_code(), StatusCode::BAD_REQUEST);
-        assert_eq!(ApiError::InternalError("test".to_string()).status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            ApiError::NotFound("test".to_string()).status_code(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            ApiError::BadRequest("test".to_string()).status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ApiError::InternalError("test".to_string()).status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]

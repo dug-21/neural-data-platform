@@ -3,9 +3,9 @@ use async_trait::async_trait;
 use clap::{Arg, Command};
 use config_store::stores::InMemoryConfigStore;
 use config_store::traits::ConfigStore;
-use config_store::types::{ConfigValue as InternalConfigValue, ConfigError, ConfigNode};
+use config_store::types::{ConfigError, ConfigNode, ConfigValue as InternalConfigValue};
 use prost_types;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::pin::Pin;
 use std::process;
@@ -27,15 +27,15 @@ pub mod neural_platform {
 }
 
 // Re-export for easier access
-use neural_platform::config::{ValueType, ChangeType};
-pub use neural_platform::config::config_store_service_server::{
-    ConfigStoreService, ConfigStoreServiceServer,
-};
 pub use neural_platform::config::config_management_service_server::{
     ConfigManagementService, ConfigManagementServiceServer,
 };
 pub use neural_platform::config::config_store_service_client::ConfigStoreServiceClient;
+pub use neural_platform::config::config_store_service_server::{
+    ConfigStoreService, ConfigStoreServiceServer,
+};
 pub use neural_platform::config::*;
+use neural_platform::config::{ChangeType, ValueType};
 
 type ConfigChangeStream = Pin<Box<dyn Stream<Item = Result<ConfigChangeEvent, Status>> + Send>>;
 
@@ -51,7 +51,7 @@ impl ConfigStoreServiceImpl {
         let (change_tx, _) = broadcast::channel(1000);
 
         info!("Initialized ConfigStoreServiceImpl with in-memory store");
-        
+
         Ok(Self { store, change_tx })
     }
 
@@ -60,11 +60,9 @@ impl ConfigStoreServiceImpl {
         match value {
             InternalConfigValue::Null => ConfigValue {
                 r#type: ValueType::Json as i32,
-                value: Some(config_value::Value::JsonValue(
-                    prost_types::Struct {
-                        fields: BTreeMap::new(),
-                    }
-                )),
+                value: Some(config_value::Value::JsonValue(prost_types::Struct {
+                    fields: BTreeMap::new(),
+                })),
             },
             InternalConfigValue::Boolean(b) => ConfigValue {
                 r#type: ValueType::Bool as i32,
@@ -171,7 +169,7 @@ impl ConfigStoreService for ConfigStoreServiceImpl {
         match self.store.get(&path).await {
             Ok(value) => {
                 let grpc_value = self.to_grpc_config_value(&value);
-                
+
                 let metadata = if req.include_metadata {
                     match self.store.get_node(&path).await {
                         Ok(node) => Some(self.to_grpc_metadata(&node)),
@@ -216,15 +214,18 @@ impl ConfigStoreService for ConfigStoreServiceImpl {
         let mut metadata_map = HashMap::new();
         let mut missing_keys = Vec::new();
 
-        info!("Getting bulk configuration for namespace: {}, keys: {:?}", req.namespace_path, req.keys);
+        info!(
+            "Getting bulk configuration for namespace: {}, keys: {:?}",
+            req.namespace_path, req.keys
+        );
 
         for key in req.keys {
             let path = format!("{}/{}", req.namespace_path, key);
-            
+
             match self.store.get(&path).await {
                 Ok(value) => {
                     values.insert(key.clone(), self.to_grpc_config_value(&value));
-                    
+
                     if req.include_metadata {
                         if let Ok(node) = self.store.get_node(&path).await {
                             metadata_map.insert(key, self.to_grpc_metadata(&node));
@@ -246,7 +247,11 @@ impl ConfigStoreService for ConfigStoreServiceImpl {
             namespace_path: req.namespace_path,
             version: "1".to_string(),
             values,
-            metadata: if req.include_metadata { metadata_map } else { HashMap::new() },
+            metadata: if req.include_metadata {
+                metadata_map
+            } else {
+                HashMap::new()
+            },
             missing_keys,
             error_message: String::new(),
         }))
@@ -291,7 +296,7 @@ impl ConfigStoreService for ConfigStoreServiceImpl {
                     changed_by: "system".to_string(),
                     version: "1".to_string(),
                 };
-                
+
                 self.broadcast_change(change_event);
 
                 Ok(Response::new(SetConfigResponse {
@@ -318,12 +323,15 @@ impl ConfigStoreService for ConfigStoreServiceImpl {
     ) -> Result<Response<Self::WatchConfigStream>, Status> {
         let req = request.into_inner();
         let rx = self.change_tx.subscribe();
-        
-        info!("Starting configuration watch for namespace: {}, keys: {:?}", req.namespace_path, req.keys);
+
+        info!(
+            "Starting configuration watch for namespace: {}, keys: {:?}",
+            req.namespace_path, req.keys
+        );
 
         let namespace_path = req.namespace_path.clone();
         let keys = req.keys.clone();
-        
+
         let broadcast_stream = BroadcastStream::new(rx);
         let stream: ConfigChangeStream = Box::pin(async_stream::stream! {
             let mut stream = broadcast_stream;
@@ -353,7 +361,7 @@ impl ConfigStoreService for ConfigStoreServiceImpl {
         request: Request<GetSchemaRequest>,
     ) -> Result<Response<GetSchemaResponse>, Status> {
         let req = request.into_inner();
-        
+
         info!("Getting schema for namespace: {}", req.namespace_path);
 
         Ok(Response::new(GetSchemaResponse {
@@ -366,12 +374,9 @@ impl ConfigStoreService for ConfigStoreServiceImpl {
         }))
     }
 
-    async fn health_check(
-        &self,
-        _request: Request<()>,
-    ) -> Result<Response<HealthStatus>, Status> {
+    async fn health_check(&self, _request: Request<()>) -> Result<Response<HealthStatus>, Status> {
         info!("Health check requested");
-        
+
         Ok(Response::new(HealthStatus {
             healthy: true,
             status: "SERVING".to_string(),
@@ -392,26 +397,30 @@ impl ConfigManagementService for ConfigStoreServiceImpl {
         request: Request<ListNamespacesRequest>,
     ) -> Result<Response<ListNamespacesResponse>, Status> {
         let req = request.into_inner();
-        
+
         info!("Listing namespaces with prefix: {}", req.prefix);
 
         match self.store.list_keys("/").await {
             Ok(keys) => {
                 let mut namespaces = HashMap::new();
-                
+
                 for key in keys {
                     if key.starts_with(&req.prefix) {
                         let parts: Vec<&str> = key.split('/').filter(|s| !s.is_empty()).collect();
                         if let Some(namespace) = parts.get(0) {
                             let namespace_path = format!("/{}", namespace);
-                            namespaces.entry(namespace_path.clone()).or_insert(NamespaceInfo {
-                                path: namespace_path,
-                                description: String::new(),
-                                key_count: 0,
-                                last_modified: Some(system_time_to_timestamp(&SystemTime::now())),
-                                tags: vec![],
-                                schema_version: "1.0.0".to_string(),
-                            });
+                            namespaces
+                                .entry(namespace_path.clone())
+                                .or_insert(NamespaceInfo {
+                                    path: namespace_path,
+                                    description: String::new(),
+                                    key_count: 0,
+                                    last_modified: Some(system_time_to_timestamp(
+                                        &SystemTime::now(),
+                                    )),
+                                    tags: vec![],
+                                    schema_version: "1.0.0".to_string(),
+                                });
                         }
                     }
                 }
@@ -436,7 +445,7 @@ impl ConfigManagementService for ConfigStoreServiceImpl {
         request: Request<GetNamespaceInfoRequest>,
     ) -> Result<Response<GetNamespaceInfoResponse>, Status> {
         let req = request.into_inner();
-        
+
         info!("Getting namespace info for: {}", req.namespace_path);
 
         match self.store.list_keys(&req.namespace_path).await {
@@ -471,13 +480,20 @@ impl ConfigManagementService for ConfigStoreServiceImpl {
         request: Request<ValidateConfigRequest>,
     ) -> Result<Response<ValidateConfigResponse>, Status> {
         let req = request.into_inner();
-        
-        info!("Validating configuration for namespace: {}, key: {}", req.namespace_path, req.key);
+
+        info!(
+            "Validating configuration for namespace: {}, key: {}",
+            req.namespace_path, req.key
+        );
 
         Ok(Response::new(ValidateConfigResponse {
             valid: true,
             errors: vec![],
-            schema_version: if req.schema_version.is_empty() { "1.0.0".to_string() } else { req.schema_version },
+            schema_version: if req.schema_version.is_empty() {
+                "1.0.0".to_string()
+            } else {
+                req.schema_version
+            },
         }))
     }
 
@@ -486,8 +502,11 @@ impl ConfigManagementService for ConfigStoreServiceImpl {
         request: Request<GetAuditTrailRequest>,
     ) -> Result<Response<GetAuditTrailResponse>, Status> {
         let req = request.into_inner();
-        
-        info!("Getting audit trail for namespace: {}, key: {:?}", req.namespace_path, req.key);
+
+        info!(
+            "Getting audit trail for namespace: {}, key: {:?}",
+            req.namespace_path, req.key
+        );
 
         Ok(Response::new(GetAuditTrailResponse {
             success: true,
@@ -502,12 +521,18 @@ impl ConfigManagementService for ConfigStoreServiceImpl {
         request: Request<BackupNamespaceRequest>,
     ) -> Result<Response<BackupNamespaceResponse>, Status> {
         let req = request.into_inner();
-        
+
         info!("Backing up namespace: {}", req.namespace_path);
 
         Ok(Response::new(BackupNamespaceResponse {
             success: true,
-            backup_id: format!("backup_{}", SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()),
+            backup_id: format!(
+                "backup_{}",
+                SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            ),
             created_at: Some(system_time_to_timestamp(&SystemTime::now())),
             config_count: 0,
             error_message: String::new(),
@@ -519,7 +544,7 @@ impl ConfigManagementService for ConfigStoreServiceImpl {
         request: Request<RestoreNamespaceRequest>,
     ) -> Result<Response<RestoreNamespaceResponse>, Status> {
         let req = request.into_inner();
-        
+
         info!("Restoring namespace from backup: {}", req.backup_id);
 
         Ok(Response::new(RestoreNamespaceResponse {
@@ -575,7 +600,7 @@ fn json_value_to_prost_value(json: &serde_json::Value) -> prost_types::Value {
         }
         serde_json::Value::Object(_) => prost_types::value::Kind::StructValue(json_to_struct(json)),
     };
-    
+
     prost_types::Value { kind: Some(kind) }
 }
 
@@ -585,7 +610,7 @@ fn struct_to_json(struct_val: &prost_types::Struct) -> serde_json::Value {
         .iter()
         .map(|(k, v)| (k.clone(), prost_value_to_json(v)))
         .collect();
-    
+
     serde_json::Value::Object(map)
 }
 
@@ -593,14 +618,13 @@ fn prost_value_to_json(value: &prost_types::Value) -> serde_json::Value {
     match &value.kind {
         Some(prost_types::value::Kind::NullValue(_)) => serde_json::Value::Null,
         Some(prost_types::value::Kind::BoolValue(b)) => serde_json::Value::Bool(*b),
-        Some(prost_types::value::Kind::NumberValue(n)) => {
-            serde_json::Number::from_f64(*n)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null)
-        }
+        Some(prost_types::value::Kind::NumberValue(n)) => serde_json::Number::from_f64(*n)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
         Some(prost_types::value::Kind::StringValue(s)) => serde_json::Value::String(s.clone()),
         Some(prost_types::value::Kind::ListValue(list)) => {
-            let values: Vec<serde_json::Value> = list.values.iter().map(prost_value_to_json).collect();
+            let values: Vec<serde_json::Value> =
+                list.values.iter().map(prost_value_to_json).collect();
             serde_json::Value::Array(values)
         }
         Some(prost_types::value::Kind::StructValue(struct_val)) => struct_to_json(struct_val),
@@ -628,10 +652,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Host to bind to")
                 .default_value("0.0.0.0"),
         )
-        .subcommand(
-            Command::new("health")
-                .about("Check server health")
-        )
+        .subcommand(Command::new("health").about("Check server health"))
         .get_matches();
 
     // Handle health check command
@@ -651,7 +672,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let port = matches.get_one::<String>("port").unwrap().parse::<u16>()?;
     let host = matches.get_one::<String>("host").unwrap();
     let addr = format!("{}:{}", host, port);
-    
+
     info!("Starting Config Store gRPC server on {}", addr);
 
     // Create the service implementation
@@ -696,7 +717,7 @@ async fn handle_health_check() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(client) => {
             let mut client = ConfigStoreServiceClient::new(client);
-            
+
             match client.health_check(tonic::Request::new(())).await {
                 Ok(response) => {
                     let health = response.into_inner();

@@ -63,10 +63,14 @@ impl AlertStore {
     pub fn get_alerts(&self, location_id: &str, time_range: &str) -> Vec<Alert> {
         let now = chrono::Utc::now();
         let filter_time = match time_range {
-            "active" => return self.alerts.iter()
-                .filter(|a| a.location_id == location_id && a.status == AlertStatus::Active)
-                .cloned()
-                .collect(),
+            "active" => {
+                return self
+                    .alerts
+                    .iter()
+                    .filter(|a| a.location_id == location_id && a.status == AlertStatus::Active)
+                    .cloned()
+                    .collect()
+            }
             "last_24h" => now - chrono::Duration::hours(24),
             "last_7d" => now - chrono::Duration::days(7),
             _ => return Vec::new(),
@@ -154,7 +158,10 @@ mod tests {
         assert!(result.is_ok());
         let response = result.unwrap().0;
         assert_eq!(response.data.len(), 2);
-        assert!(response.data.iter().all(|a| a.status == AlertStatus::Active));
+        assert!(response
+            .data
+            .iter()
+            .all(|a| a.status == AlertStatus::Active));
     }
 
     #[tokio::test]

@@ -72,8 +72,8 @@ pub async fn forecast_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neural_core::{CoreError, ModelMetrics, TimeSeriesPoint};
     use mockall::mock;
+    use neural_core::{CoreError, ModelMetrics, TimeSeriesPoint};
 
     mock! {
         pub TestForecast {}
@@ -92,7 +92,10 @@ mod tests {
         let now = chrono::Utc::now();
 
         mock.expect_predict()
-            .with(mockall::predicate::eq("test-loc"), mockall::predicate::eq(6))
+            .with(
+                mockall::predicate::eq("test-loc"),
+                mockall::predicate::eq(6),
+            )
             .returning(move |_loc, horizon| {
                 let mut predictions = Vec::new();
                 for i in 0..horizon {

@@ -46,7 +46,10 @@ pub async fn load_from_stream_config(
     // Server config comes from environment variables (not stream-specific)
     let server_config = load_server_config();
 
-    info!("Successfully loaded stream configuration for '{}'", stream_id);
+    info!(
+        "Successfully loaded stream configuration for '{}'",
+        stream_id
+    );
 
     Ok(AppConfig {
         server: server_config,
@@ -60,9 +63,10 @@ async fn load_mqtt_config(client: &ConfigClient) -> Result<MqttConfig, ConfigErr
     debug!("Loading MQTT configuration from etcd");
 
     // broker_url is required
-    let broker_url: String = client.get("/mqtt/broker_url").await.map_err(|_| {
-        ConfigError::NotFound("Missing required key: mqtt/broker_url".to_string())
-    })?;
+    let broker_url: String = client
+        .get("/mqtt/broker_url")
+        .await
+        .map_err(|_| ConfigError::NotFound("Missing required key: mqtt/broker_url".to_string()))?;
 
     // Other MQTT settings with defaults
     let port: u16 = client.get("/mqtt/port").await.unwrap_or(1883);
@@ -134,8 +138,7 @@ async fn load_storage_config(client: &ConfigClient) -> StorageConfig {
 
 /// Load server configuration from environment variables
 fn load_server_config() -> ServerConfig {
-    let host = std::env::var("AIR_QUALITY_SERVER_HOST")
-        .unwrap_or_else(|_| "0.0.0.0".to_string());
+    let host = std::env::var("AIR_QUALITY_SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = std::env::var("AIR_QUALITY_SERVER_PORT")
         .ok()
         .and_then(|p| p.parse().ok())

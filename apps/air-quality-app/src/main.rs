@@ -23,8 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Load configuration with priority: StreamRegistry > etcd > config.yaml > defaults
-    let etcd_endpoint = std::env::var("ETCD_ENDPOINT")
-        .unwrap_or_else(|_| "http://localhost:2379".to_string());
+    let etcd_endpoint =
+        std::env::var("ETCD_ENDPOINT").unwrap_or_else(|_| "http://localhost:2379".to_string());
 
     let config = match load_from_stream_config(&[&etcd_endpoint], "air-quality").await {
         Ok(stream_config) => {
@@ -32,7 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             stream_config
         }
         Err(e) => {
-            tracing::warn!("Failed to load stream config: {}. Trying legacy /air-quality...", e);
+            tracing::warn!(
+                "Failed to load stream config: {}. Trying legacy /air-quality...",
+                e
+            );
 
             // Fallback to legacy etcd
             match air_quality_app::load_from_etcd().await {
@@ -63,14 +66,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to load config from etcd: {}. Trying config.yaml...", e);
+                    tracing::warn!(
+                        "Failed to load config from etcd: {}. Trying config.yaml...",
+                        e
+                    );
                     match AppConfig::from_yaml("config.yaml") {
                         Ok(cfg) => {
                             tracing::info!("Loaded configuration from config.yaml");
                             cfg
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to load config.yaml: {}, using defaults with env overrides", e);
+                            tracing::warn!(
+                                "Failed to load config.yaml: {}, using defaults with env overrides",
+                                e
+                            );
                             AppConfig::default_config()
                         }
                     }
@@ -112,40 +121,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Create a temporary registry for syncing
         match config_client::StreamRegistry::new(&[&etcd_endpoint]).await {
-            Ok(registry) => {
-                match sync_service.sync_all(&registry).await {
-                    Ok(count) => {
-                        tracing::info!("Synced {} stream configs to etcd (AIR-005 config sync)", count);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Config sync failed: {}. Using existing etcd configs.", e);
-                    }
+            Ok(registry) => match sync_service.sync_all(&registry).await {
+                Ok(count) => {
+                    tracing::info!(
+                        "Synced {} stream configs to etcd (AIR-005 config sync)",
+                        count
+                    );
                 }
-            }
+                Err(e) => {
+                    tracing::warn!("Config sync failed: {}. Using existing etcd configs.", e);
+                }
+            },
             Err(e) => {
                 tracing::warn!("Failed to connect to registry for config sync: {}", e);
             }
         }
     } else {
-        tracing::warn!("Stream config directory not found: {}. Skipping config sync.", config_dir);
+        tracing::warn!(
+            "Stream config directory not found: {}. Skipping config sync.",
+            config_dir
+        );
     }
 
     // ========== AIR-005: Multi-Stream Coordinator - ALL SOURCES (MQTT + HTTP) ==========
     // Initialize the multi-stream ingestion coordinator for all data sources
     // MQTT now routes through IngestionRouter for proper stream_id tagging
-    let coordinator_task = match initialize_multi_stream_coordinator(&etcd_endpoint, store.clone()).await {
-        Ok((_coordinator, task)) => {
-            tracing::info!("Multi-stream coordinator initialized - managing all sources (MQTT + HTTP)");
-            Some(task)
-        }
-        Err(e) => {
-            tracing::warn!(
-                "Multi-stream coordinator not available: {}. All data sources disabled.",
-                e
-            );
-            None
-        }
-    };
+    let coordinator_task =
+        match initialize_multi_stream_coordinator(&etcd_endpoint, store.clone()).await {
+            Ok((_coordinator, task)) => {
+                tracing::info!(
+                    "Multi-stream coordinator initialized - managing all sources (MQTT + HTTP)"
+                );
+                Some(task)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Multi-stream coordinator not available: {}. All data sources disabled.",
+                    e
+                );
+                None
+            }
+        };
 
     // Create mock source and forecast (these will be replaced in future tasks)
     let services = create_services_with_real_store(store.clone());
@@ -202,19 +218,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn initialize_multi_stream_coordinator(
     etcd_endpoint: &str,
     store: Arc<ParquetStore>,
-) -> Result<(Arc<IngestionCoordinator>, tokio::task::JoinHandle<()>), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    (Arc<IngestionCoordinator>, tokio::task::JoinHandle<()>),
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     // Initialize StreamRegistry for loading stream configurations
     let registry = Arc::new(
         StreamRegistry::new(&[etcd_endpoint])
             .await
-            .map_err(|e| format!("Failed to create StreamRegistry: {}", e))?
+            .map_err(|e| format!("Failed to create StreamRegistry: {}", e))?,
     );
 
     // Check if we have any HTTP polling streams configured
     let streams = registry.list_streams().await.unwrap_or_default();
-    let has_http_streams = streams.iter().any(|s| {
-        s.contains("weather") || s.contains("air-quality")
-    });
+    let has_http_streams = streams
+        .iter()
+        .any(|s| s.contains("weather") || s.contains("air-quality"));
 
     if !has_http_streams && streams.is_empty() {
         return Err("No streams configured in registry".into());
@@ -223,7 +242,8 @@ async fn initialize_multi_stream_coordinator(
     tracing::info!("Found {} stream configurations", streams.len());
 
     // Create dead letter channel for invalid points
-    let (dead_letter_tx, mut dead_letter_rx) = mpsc::channel::<air_quality_app::coordinator::DeadLetterItem>(100);
+    let (dead_letter_tx, mut dead_letter_rx) =
+        mpsc::channel::<air_quality_app::coordinator::DeadLetterItem>(100);
 
     // Spawn dead letter handler
     tokio::spawn(async move {
@@ -245,7 +265,9 @@ async fn initialize_multi_stream_coordinator(
 
     // Register storage channels for known streams (both indoor MQTT and outdoor HTTP)
     for stream_id in &["air-quality", "outdoor-weather", "outdoor-air-quality"] {
-        router.register_storage_channel(stream_id.to_string(), storage_tx.clone()).await;
+        router
+            .register_storage_channel(stream_id.to_string(), storage_tx.clone())
+            .await;
     }
 
     // Spawn storage writer for all data (MQTT + HTTP)
@@ -296,7 +318,9 @@ async fn initialize_multi_stream_coordinator(
     ));
 
     // Start coordinator
-    coordinator.start().await
+    coordinator
+        .start()
+        .await
         .map_err(|e| format!("Failed to start coordinator: {}", e))?;
 
     tracing::info!("Multi-stream coordinator started successfully");

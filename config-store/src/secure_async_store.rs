@@ -1,9 +1,9 @@
-use crate::{ConfigValue, ConfigError};
-use crate::security::{SecretBlocker, InputValidator, RateLimiter, ErrorSanitizer};
+use crate::security::{ErrorSanitizer, InputValidator, RateLimiter, SecretBlocker};
+use crate::{ConfigError, ConfigValue};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
 use std::time::Duration;
+use tokio::sync::{Mutex, RwLock};
 
 /// Thread-safe async configuration store with security features
 pub struct AsyncConfigStore {
@@ -49,13 +49,16 @@ impl AsyncConfigStore {
 
     pub async fn set(&self, key: &str, value: ConfigValue) -> Result<(), ConfigError> {
         // Check for secrets
-        self.secret_blocker.check_value(key, &value)
+        self.secret_blocker
+            .check_value(key, &value)
             .map_err(|e| self.error_sanitizer.sanitize(e))?;
 
         // Validate input
-        self.validator.validate_key(key)
+        self.validator
+            .validate_key(key)
             .map_err(|e| self.error_sanitizer.sanitize(e))?;
-        self.validator.validate_value(&value)
+        self.validator
+            .validate_value(&value)
             .map_err(|e| self.error_sanitizer.sanitize(e))?;
 
         // Write lock for exclusive write
@@ -68,20 +71,31 @@ impl AsyncConfigStore {
         Ok(())
     }
 
-    pub async fn set_with_client(&self, client_id: &str, key: &str, value: ConfigValue) -> Result<(), ConfigError> {
+    pub async fn set_with_client(
+        &self,
+        client_id: &str,
+        key: &str,
+        value: ConfigValue,
+    ) -> Result<(), ConfigError> {
         // Check rate limit if enabled
         if let Some(ref limiter) = self.rate_limiter {
-            limiter.check(client_id)
+            limiter
+                .check(client_id)
                 .map_err(|e| self.error_sanitizer.sanitize(e))?;
         }
 
         self.set(key, value).await
     }
 
-    pub async fn get_with_client(&self, client_id: &str, key: &str) -> Result<Option<ConfigValue>, ConfigError> {
+    pub async fn get_with_client(
+        &self,
+        client_id: &str,
+        key: &str,
+    ) -> Result<Option<ConfigValue>, ConfigError> {
         // Check rate limit if enabled
         if let Some(ref limiter) = self.rate_limiter {
-            limiter.check(client_id)
+            limiter
+                .check(client_id)
                 .map_err(|e| self.error_sanitizer.sanitize(e))?;
         }
 
@@ -90,12 +104,13 @@ impl AsyncConfigStore {
 
     pub async fn delete(&self, key: &str) -> Result<(), ConfigError> {
         // Validate key
-        self.validator.validate_key(key)
+        self.validator
+            .validate_key(key)
             .map_err(|e| self.error_sanitizer.sanitize(e))?;
 
         let _guard = self.write_lock.lock().await;
         let mut data = self.data.write().await;
-        
+
         data.remove(key)
             .ok_or_else(|| ConfigError::NotFound(key.to_string()))
             .map(|_| ())
@@ -114,9 +129,11 @@ impl AsyncConfigStore {
         let new_value = updater(current)?;
 
         // Validate new value
-        self.secret_blocker.check_value(key, &new_value)
+        self.secret_blocker
+            .check_value(key, &new_value)
             .map_err(|e| self.error_sanitizer.sanitize(e))?;
-        self.validator.validate_value(&new_value)
+        self.validator
+            .validate_value(&new_value)
             .map_err(|e| self.error_sanitizer.sanitize(e))?;
 
         data.insert(key.to_string(), new_value);

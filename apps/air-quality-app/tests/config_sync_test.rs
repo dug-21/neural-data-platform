@@ -75,7 +75,10 @@ async fn test_config_sync_service_loads_real_yaml_files() {
             .expect(&format!("Failed to load config from {:?}", path));
 
         // Verify basic fields
-        assert!(!config.stream_id.is_empty(), "stream_id should not be empty");
+        assert!(
+            !config.stream_id.is_empty(),
+            "stream_id should not be empty"
+        );
         assert!(
             !config.description.is_empty(),
             "description should not be empty"
@@ -103,10 +106,7 @@ async fn test_config_sync_service_loads_real_yaml_files() {
     }
 
     // Verify we found both expected configs
-    assert!(
-        found_weather,
-        "outdoor-weather config should be discovered"
-    );
+    assert!(found_weather, "outdoor-weather config should be discovered");
     assert!(
         found_air_quality,
         "outdoor-air-quality config should be discovered"
@@ -297,9 +297,7 @@ async fn test_sync_all_to_mock_registry() {
 
     // Verify specific configs were saved
     assert!(
-        mock_registry
-            .get_saved_stream("outdoor-weather")
-            .is_some(),
+        mock_registry.get_saved_stream("outdoor-weather").is_some(),
         "outdoor-weather should be saved"
     );
     assert!(
@@ -336,7 +334,8 @@ async fn test_full_sync_to_etcd() {
     let service = ConfigSyncService::new(config_dir);
 
     // Connect to real etcd
-    let etcd_url = std::env::var("ETCD_URL").unwrap_or_else(|_| "http://localhost:2379".to_string());
+    let etcd_url =
+        std::env::var("ETCD_URL").unwrap_or_else(|_| "http://localhost:2379".to_string());
     let registry = StreamRegistry::new(&[etcd_url.as_str()])
         .await
         .expect("Failed to connect to etcd");
@@ -499,10 +498,7 @@ async fn test_outdoor_air_quality_config_details() {
 
     // Verify parser_name
     assert_eq!(
-        source
-            .params
-            .get("parser_name")
-            .and_then(|v| v.as_str()),
+        source.params.get("parser_name").and_then(|v| v.as_str()),
         Some("openweathermap_air_pollution")
     );
 }

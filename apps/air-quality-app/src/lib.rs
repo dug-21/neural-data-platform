@@ -13,6 +13,6 @@ pub mod stream_integration;
 pub mod mcp;
 
 pub use config::AppConfig;
-pub use config_etcd::{EtcdAppConfig, load_from_etcd};
+pub use config_etcd::{load_from_etcd, EtcdAppConfig};
 pub use error::{ApiError, ApiResult};
 pub use response::{ApiResponse, Meta};

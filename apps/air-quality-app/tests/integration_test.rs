@@ -6,8 +6,8 @@
 //! from source to storage, ensuring components work together correctly.
 
 use chrono::{Duration, Utc};
-use neural_core::{ParquetStore, TimeSeriesPoint, HealthStatus};
-use neural_core::traits::{Store, AggregationType};
+use neural_core::traits::{AggregationType, Store};
+use neural_core::{HealthStatus, ParquetStore, TimeSeriesPoint};
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -39,12 +39,15 @@ async fn test_parquet_write_and_query() {
     store.write_batch(points).await.unwrap();
 
     // Query and verify
-    let results = store.query(
-        "sensor-001",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        None,
-    ).await.unwrap();
+    let results = store
+        .query(
+            "sensor-001",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            None,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(results.len(), 2);
     assert!(results.iter().any(|p| (p.value - 25.5).abs() < 0.001));
@@ -75,12 +78,15 @@ async fn test_data_persistence_after_restart() {
         // Replay WAL if exists
         let _ = store.replay_wal().await;
 
-        let results = store.query(
-            "persistence-test",
-            now - Duration::hours(1),
-            now + Duration::hours(1),
-            None,
-        ).await.unwrap();
+        let results = store
+            .query(
+                "persistence-test",
+                now - Duration::hours(1),
+                now + Duration::hours(1),
+                None,
+            )
+            .await
+            .unwrap();
 
         assert!(!results.is_empty(), "Data should persist after restart");
         assert_eq!(results[0].value, 100.0);
@@ -95,7 +101,10 @@ async fn test_storage_health_check() {
 
     let health = store.health_check().await.unwrap();
     assert!(health.healthy, "Storage should be healthy");
-    assert_eq!(health.details.get("storage_type"), Some(&"parquet".to_string()));
+    assert_eq!(
+        health.details.get("storage_type"),
+        Some(&"parquet".to_string())
+    );
 }
 
 /// Test multiple locations are partitioned correctly
@@ -118,14 +127,22 @@ async fn test_multi_location_partitioning() {
 
     // Query each location separately
     for i in 0..3 {
-        let results = store.query(
-            &format!("location-{}", i),
-            now - Duration::hours(1),
-            now + Duration::hours(1),
-            None,
-        ).await.unwrap();
+        let results = store
+            .query(
+                &format!("location-{}", i),
+                now - Duration::hours(1),
+                now + Duration::hours(1),
+                None,
+            )
+            .await
+            .unwrap();
 
-        assert_eq!(results.len(), 1, "Should have exactly one point for location-{}", i);
+        assert_eq!(
+            results.len(),
+            1,
+            "Should have exactly one point for location-{}",
+            i
+        );
         assert_eq!(results[0].value, i as f64 * 10.0);
     }
 }
@@ -152,15 +169,22 @@ async fn test_batch_write_performance() {
     let elapsed = start.elapsed();
 
     // Should complete within reasonable time (adjust threshold as needed)
-    assert!(elapsed.as_secs() < 5, "Batch write took too long: {:?}", elapsed);
+    assert!(
+        elapsed.as_secs() < 5,
+        "Batch write took too long: {:?}",
+        elapsed
+    );
 
     // Verify all points stored
-    let results = store.query(
-        "batch-test",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        None,
-    ).await.unwrap();
+    let results = store
+        .query(
+            "batch-test",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            None,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(results.len(), 1000, "All points should be stored");
 }
@@ -198,12 +222,15 @@ async fn test_wal_replay_correctness() {
         let store = ParquetStore::new(temp_dir.path()).unwrap();
         store.replay_wal().await.unwrap();
 
-        let results = store.query(
-            "wal-test",
-            now - Duration::hours(1),
-            now + Duration::hours(1),
-            None,
-        ).await.unwrap();
+        let results = store
+            .query(
+                "wal-test",
+                now - Duration::hours(1),
+                now + Duration::hours(1),
+                None,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 2, "Both WAL entries should be replayed");
         assert!(results.iter().any(|p| (p.value - 123.45).abs() < 0.001));
@@ -247,13 +274,16 @@ async fn test_aggregation_mean() {
     store.write_batch(points).await.unwrap();
 
     // Query with mean aggregation
-    let results = store.aggregate(
-        "agg-test",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        AggregationType::Mean,
-        Duration::hours(1),
-    ).await.unwrap();
+    let results = store
+        .aggregate(
+            "agg-test",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            AggregationType::Mean,
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
 
     assert!(!results.is_empty(), "Should have aggregated results");
     assert_eq!(results[0].value, 30.0, "Mean should be 30.0");
@@ -280,13 +310,16 @@ async fn test_aggregation_sum() {
 
     store.write_batch(points).await.unwrap();
 
-    let results = store.aggregate(
-        "sum-test",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        AggregationType::Sum,
-        Duration::hours(1),
-    ).await.unwrap();
+    let results = store
+        .aggregate(
+            "sum-test",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            AggregationType::Sum,
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(results[0].value, 15.0, "Sum should be 15.0");
 }
@@ -312,13 +345,16 @@ async fn test_aggregation_max() {
 
     store.write_batch(points).await.unwrap();
 
-    let results = store.aggregate(
-        "max-test",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        AggregationType::Max,
-        Duration::hours(1),
-    ).await.unwrap();
+    let results = store
+        .aggregate(
+            "max-test",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            AggregationType::Max,
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(results[0].value, 50.0, "Max should be 50.0");
 }
@@ -344,13 +380,16 @@ async fn test_aggregation_min() {
 
     store.write_batch(points).await.unwrap();
 
-    let results = store.aggregate(
-        "min-test",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        AggregationType::Min,
-        Duration::hours(1),
-    ).await.unwrap();
+    let results = store
+        .aggregate(
+            "min-test",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            AggregationType::Min,
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(results[0].value, 5.0, "Min should be 5.0");
 }
@@ -383,12 +422,17 @@ async fn test_time_range_exact_boundaries() {
     let results = store.query("time-test", start, end, None).await.unwrap();
 
     // Should get points at minutes 3, 4, 5, 6, 7
-    assert!(results.len() >= 4 && results.len() <= 5,
-        "Should get 4-5 points in range, got {}", results.len());
+    assert!(
+        results.len() >= 4 && results.len() <= 5,
+        "Should get 4-5 points in range, got {}",
+        results.len()
+    );
 
     for point in results {
-        assert!(point.timestamp >= start && point.timestamp <= end,
-            "Point timestamp should be within range");
+        assert!(
+            point.timestamp >= start && point.timestamp <= end,
+            "Point timestamp should be within range"
+        );
     }
 }
 
@@ -414,7 +458,11 @@ async fn test_time_range_no_data() {
 
     let results = store.query("empty-test", start, end, None).await.unwrap();
 
-    assert_eq!(results.len(), 0, "Should return empty results for future time range");
+    assert_eq!(
+        results.len(),
+        0,
+        "Should return empty results for future time range"
+    );
 }
 
 /// Test time range filtering - cross-day boundaries
@@ -440,9 +488,16 @@ async fn test_time_range_cross_day_boundaries() {
     let start = base_time - Duration::hours(1);
     let end = base_time + Duration::days(3);
 
-    let results = store.query("multiday-test", start, end, None).await.unwrap();
+    let results = store
+        .query("multiday-test", start, end, None)
+        .await
+        .unwrap();
 
-    assert_eq!(results.len(), 3, "Should retrieve all points across multiple days");
+    assert_eq!(
+        results.len(),
+        3,
+        "Should retrieve all points across multiple days"
+    );
 }
 
 // ========== INVALID INPUT HANDLING TESTS ==========
@@ -526,7 +581,11 @@ async fn test_invalid_reversed_time_range() {
     let results = store.query("reverse-test", start, end, None).await.unwrap();
 
     // Should return empty results or handle gracefully
-    assert_eq!(results.len(), 0, "Reversed time range should return no results");
+    assert_eq!(
+        results.len(),
+        0,
+        "Reversed time range should return no results"
+    );
 }
 
 /// Test handling of empty batch write
@@ -573,12 +632,15 @@ async fn test_concurrent_writes_different_locations() {
 
     // Verify all data was written
     for i in 0..5 {
-        let results = store.query(
-            &format!("concurrent-{}", i),
-            now - Duration::hours(1),
-            now + Duration::hours(1),
-            None,
-        ).await.unwrap();
+        let results = store
+            .query(
+                &format!("concurrent-{}", i),
+                now - Duration::hours(1),
+                now + Duration::hours(1),
+                None,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 1, "Each location should have one point");
     }
@@ -606,12 +668,14 @@ async fn test_concurrent_reads_same_location() {
     for _ in 0..10 {
         let store_clone = store.clone();
         let handle = tokio::spawn(async move {
-            store_clone.query(
-                "read-test",
-                now - Duration::hours(1),
-                now + Duration::hours(1),
-                None,
-            ).await
+            store_clone
+                .query(
+                    "read-test",
+                    now - Duration::hours(1),
+                    now + Duration::hours(1),
+                    None,
+                )
+                .await
         });
         handles.push(handle);
     }
@@ -648,14 +712,20 @@ async fn test_air002_batch_size() {
     let elapsed = start.elapsed();
 
     // Should complete within 5 seconds (AIR-002 timeout)
-    assert!(elapsed.as_secs() < 5, "Batch should complete within timeout");
+    assert!(
+        elapsed.as_secs() < 5,
+        "Batch should complete within timeout"
+    );
 
-    let results = store.query(
-        "air002-test",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        None,
-    ).await.unwrap();
+    let results = store
+        .query(
+            "air002-test",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            None,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(results.len(), 100, "Should have all 100 points");
 }
@@ -681,14 +751,21 @@ async fn test_multiple_sequential_batches() {
         store.write_batch(points).await.unwrap();
     }
 
-    let results = store.query(
-        "sequential-test",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        None,
-    ).await.unwrap();
+    let results = store
+        .query(
+            "sequential-test",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            None,
+        )
+        .await
+        .unwrap();
 
-    assert_eq!(results.len(), 1000, "Should have all 1000 points from 10 batches");
+    assert_eq!(
+        results.len(),
+        1000,
+        "Should have all 1000 points from 10 batches"
+    );
 }
 
 // ========== EDGE CASE TESTS ==========
@@ -700,14 +777,21 @@ async fn test_query_nonexistent_location() {
     let store = ParquetStore::new(temp_dir.path()).unwrap();
     let now = Utc::now();
 
-    let results = store.query(
-        "does-not-exist",
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        None,
-    ).await.unwrap();
+    let results = store
+        .query(
+            "does-not-exist",
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            None,
+        )
+        .await
+        .unwrap();
 
-    assert_eq!(results.len(), 0, "Non-existent location should return empty results");
+    assert_eq!(
+        results.len(),
+        0,
+        "Non-existent location should return empty results"
+    );
 }
 
 /// Test very long location IDs
@@ -728,12 +812,15 @@ async fn test_long_location_id() {
     let result = store.write_batch(vec![point]).await;
     assert!(result.is_ok(), "Should handle long location IDs");
 
-    let results = store.query(
-        &long_id,
-        now - Duration::hours(1),
-        now + Duration::hours(1),
-        None,
-    ).await.unwrap();
+    let results = store
+        .query(
+            &long_id,
+            now - Duration::hours(1),
+            now + Duration::hours(1),
+            None,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(results.len(), 1);
 }
@@ -761,7 +848,11 @@ async fn test_special_characters_in_location_id() {
         };
 
         let result = store.write_batch(vec![point]).await;
-        assert!(result.is_ok(), "Should handle special characters in ID: {}", id);
+        assert!(
+            result.is_ok(),
+            "Should handle special characters in ID: {}",
+            id
+        );
     }
 }
 

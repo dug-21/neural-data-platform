@@ -1,10 +1,9 @@
 /// Core types for the configuration store system
-/// 
+///
 /// This module defines the fundamental data structures used throughout
 /// the configuration management system, including values, errors, and metadata.
-
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::time::SystemTime;
 use thiserror::Error;
 
@@ -33,32 +32,32 @@ impl ConfigValue {
     pub fn new() -> Self {
         ConfigValue::Null
     }
-    
+
     /// Check if this value is a string
     pub fn is_string(&self) -> bool {
         matches!(self, ConfigValue::String(_))
     }
-    
+
     /// Check if this value is an integer
     pub fn is_integer(&self) -> bool {
         matches!(self, ConfigValue::Integer(_))
     }
-    
+
     /// Check if this value is a boolean
     pub fn is_boolean(&self) -> bool {
         matches!(self, ConfigValue::Boolean(_))
     }
-    
+
     /// Check if this value is an array
     pub fn is_array(&self) -> bool {
         matches!(self, ConfigValue::Array(_))
     }
-    
+
     /// Check if this value is an object
     pub fn is_object(&self) -> bool {
         matches!(self, ConfigValue::Object(_))
     }
-    
+
     /// Get string value if this is a string
     pub fn as_string(&self) -> Option<&str> {
         if let ConfigValue::String(s) = self {
@@ -67,7 +66,7 @@ impl ConfigValue {
             None
         }
     }
-    
+
     /// Get integer value if this is an integer
     pub fn as_integer(&self) -> Option<i64> {
         if let ConfigValue::Integer(i) = self {
@@ -76,7 +75,7 @@ impl ConfigValue {
             None
         }
     }
-    
+
     /// Get boolean value if this is a boolean
     pub fn as_boolean(&self) -> Option<bool> {
         if let ConfigValue::Boolean(b) = self {
@@ -85,7 +84,7 @@ impl ConfigValue {
             None
         }
     }
-    
+
     /// Get array value if this is an array
     pub fn as_array(&self) -> Option<&Vec<ConfigValue>> {
         if let ConfigValue::Array(arr) = self {
@@ -94,7 +93,7 @@ impl ConfigValue {
             None
         }
     }
-    
+
     /// Get object value if this is an object
     pub fn as_object(&self) -> Option<&HashMap<String, ConfigValue>> {
         if let ConfigValue::Object(obj) = self {
@@ -103,7 +102,7 @@ impl ConfigValue {
             None
         }
     }
-    
+
     /// Get mutable object value if this is an object
     pub fn as_object_mut(&mut self) -> Option<&mut HashMap<String, ConfigValue>> {
         if let ConfigValue::Object(obj) = self {
@@ -112,14 +111,14 @@ impl ConfigValue {
             None
         }
     }
-    
+
     /// Merge this value with another value (other takes precedence)
     pub fn merge_with(&self, other: &ConfigValue) -> Result<ConfigValue, ConfigError> {
         match (self, other) {
             // If both are objects, merge recursively
             (ConfigValue::Object(base), ConfigValue::Object(override_vals)) => {
                 let mut result = base.clone();
-                
+
                 for (key, value) in override_vals {
                     if let Some(existing) = base.get(key) {
                         // Recursively merge if both are objects
@@ -134,7 +133,7 @@ impl ConfigValue {
                         result.insert(key.clone(), value.clone());
                     }
                 }
-                
+
                 Ok(ConfigValue::Object(result))
             }
             // For non-object types, other takes precedence
@@ -155,55 +154,55 @@ pub enum ConfigError {
     /// Configuration key not found
     #[error("Configuration not found: {0}")]
     NotFound(String),
-    
+
     /// Validation failed with multiple errors
     #[error("Validation failed: {}", .0.join(", "))]
     ValidationFailed(Vec<String>),
-    
+
     /// Serialization/deserialization error
     #[error("Serialization error: {0}")]
     SerializationError(String),
-    
+
     /// Invalid path format
     #[error("Invalid path: {0}")]
     InvalidPath(String),
-    
+
     /// Connection error (for remote stores)
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
-    
+
     /// Operation failed
     #[error("Operation failed: {0}")]
     OperationFailed(String),
-    
+
     /// Version not found
     #[error("Version {1} not found for path {0}")]
     VersionNotFound(String, u32),
-    
+
     /// Inheritance cycle detected
     #[error("Inheritance cycle detected: {0}")]
     InheritanceCycle(String),
-    
+
     /// I/O error
     #[error("I/O error: {0}")]
     Io(String),
-    
+
     /// Custom error
     #[error("{0}")]
     Custom(String),
-    
+
     /// Parse error
     #[error("Parse error: {0}")]
     Parse(String),
-    
+
     /// Type mismatch error
     #[error("Type mismatch: expected {expected}, got {actual}")]
     TypeMismatch { expected: String, actual: String },
-    
+
     /// Rate limit exceeded
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
-    
+
     /// Security violation
     #[error("Security violation: {0}")]
     SecurityViolation(String),
@@ -220,25 +219,25 @@ impl From<std::io::Error> for ConfigError {
 pub struct ConfigMetadata {
     /// Human-readable description
     pub description: Option<String>,
-    
+
     /// Owner/creator of this configuration
     pub owner: Option<String>,
-    
+
     /// Whether this configuration contains sensitive data
     pub sensitive: bool,
-    
+
     /// Whether this configuration can be modified at runtime
     pub runtime_modifiable: bool,
-    
+
     /// When this configuration was created
     pub created_at: SystemTime,
-    
+
     /// When this configuration was last updated
     pub updated_at: SystemTime,
-    
+
     /// Who last updated this configuration
     pub updated_by: Option<String>,
-    
+
     /// Tags for organization
     pub tags: Vec<String>,
 }
@@ -258,7 +257,7 @@ impl ConfigMetadata {
             tags: Vec::new(),
         }
     }
-    
+
     /// Update the modification timestamp and user
     pub fn touch(&mut self, updated_by: String) {
         self.updated_at = SystemTime::now();
@@ -271,19 +270,19 @@ impl ConfigMetadata {
 pub struct ConfigNode {
     /// Hierarchical path for this configuration
     pub path: String,
-    
+
     /// The configuration value
     pub value: ConfigValue,
-    
+
     /// Version number (starts at 1)
     pub version: u32,
-    
+
     /// Metadata about this configuration
     pub metadata: Option<ConfigMetadata>,
-    
+
     /// Paths from which this configuration inherits
     pub inheritance: Option<Vec<String>>,
-    
+
     /// Optional JSON schema for validation
     pub schema: Option<String>,
 }
@@ -294,7 +293,7 @@ impl ConfigNode {
         if !Self::validate_path(&path) {
             panic!("Invalid path format: {}", path);
         }
-        
+
         Self {
             path,
             value,
@@ -304,40 +303,40 @@ impl ConfigNode {
             schema: None,
         }
     }
-    
+
     /// Validate configuration path format
     pub fn validate_path(path: &str) -> bool {
         // Must start with /
         if !path.starts_with('/') {
             return false;
         }
-        
+
         // Cannot be just root
         if path == "/" {
             return false;
         }
-        
+
         // Cannot have double slashes
         if path.contains("//") {
             return false;
         }
-        
+
         // Check depth (max 6 levels: /a/b/c/d/e/f)
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         if parts.len() > 6 {
             return false;
         }
-        
+
         // Each part should be valid (no empty parts, no special chars)
         for part in parts {
             if part.is_empty() || part.contains(' ') {
                 return false;
             }
         }
-        
+
         true
     }
-    
+
     /// Create a new version of this node with updated value
     pub fn new_version(&self, value: ConfigValue, updated_by: String) -> Self {
         let mut node = self.clone();
@@ -348,7 +347,7 @@ impl ConfigNode {
         }
         node
     }
-    
+
     /// Check if this node has inheritance relationships
     pub fn has_inheritance(&self) -> bool {
         self.inheritance.is_some() && !self.inheritance.as_ref().unwrap().is_empty()
@@ -360,13 +359,13 @@ impl ConfigNode {
 pub struct ConfigVersion {
     /// Version number
     pub version: u32,
-    
+
     /// Configuration value at this version
     pub value: ConfigValue,
-    
+
     /// When this version was created
     pub timestamp: SystemTime,
-    
+
     /// Optional metadata for this version
     pub metadata: Option<ConfigMetadata>,
 }
@@ -381,7 +380,7 @@ impl ConfigVersion {
             metadata: None,
         }
     }
-    
+
     /// Create a new version entry with metadata
     pub fn with_metadata(version: u32, value: ConfigValue, metadata: ConfigMetadata) -> Self {
         Self {

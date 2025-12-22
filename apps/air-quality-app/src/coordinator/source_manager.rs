@@ -3,14 +3,13 @@
 //! Manages lifecycle of multiple data sources (MQTT, HTTP, Webhook)
 
 use config_client::StreamRegistry;
+use neural_core::parsers::{create_parser_from_config, ParserConfig, ParserType};
+use neural_core::sources::{
+    AuthMethod, EndpointConfig, GenericHttpPollingConfig, GenericHttpPollingSource, RetryConfig,
+};
 use neural_core::{
     HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, SensorConfig, Source,
     SourceConfig, SourceType, StreamConfig, TimeSeriesPoint,
-};
-use neural_core::parsers::{ParserConfig, ParserType, create_parser_from_config};
-use neural_core::sources::{
-    AuthMethod, EndpointConfig, GenericHttpPollingConfig, GenericHttpPollingSource,
-    RetryConfig,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -74,7 +73,10 @@ impl SourceManager {
     }
 
     /// Set the ingestion sender (must be called before starting sources)
-    pub fn set_ingestion_sender(&mut self, sender: mpsc::Sender<(String, String, TimeSeriesPoint)>) {
+    pub fn set_ingestion_sender(
+        &mut self,
+        sender: mpsc::Sender<(String, String, TimeSeriesPoint)>,
+    ) {
         self.ingestion_sender = Some(sender);
     }
 
@@ -144,15 +146,21 @@ impl SourceManager {
         let task_handle = match source_config.source_type {
             SourceType::HttpPoll => {
                 // Get ingestion sender (required for HttpPoll)
-                let ingestion_sender = self.ingestion_sender.as_ref()
-                    .ok_or_else(|| SourceManagerError::ConfigError(
-                        "Ingestion sender not set. Call set_ingestion_sender() first.".to_string()
-                    ))?
+                let ingestion_sender = self
+                    .ingestion_sender
+                    .as_ref()
+                    .ok_or_else(|| {
+                        SourceManagerError::ConfigError(
+                            "Ingestion sender not set. Call set_ingestion_sender() first."
+                                .to_string(),
+                        )
+                    })?
                     .clone();
 
                 // Check if this is a parser-based config (GenericHttpPollingSource)
                 // or an AirGradient-style config (HttpPollingSource)
-                let has_parser = source_config.params
+                let has_parser = source_config
+                    .params
                     .get("parser_name")
                     .and_then(|v| v.as_str())
                     .is_some();
@@ -163,7 +171,8 @@ impl SourceManager {
 
                 if has_parser {
                     // Parse GenericHttpPollingConfig for external APIs (OpenWeatherMap, etc.)
-                    let config = self.parse_generic_http_polling_config(stream_id, source_config)?;
+                    let config =
+                        self.parse_generic_http_polling_config(stream_id, source_config)?;
 
                     Some(tokio::spawn(async move {
                         if let Err(e) = Self::run_generic_http_polling_source(
@@ -172,7 +181,9 @@ impl SourceManager {
                             config,
                             ingestion_sender,
                             cancel_clone,
-                        ).await {
+                        )
+                        .await
+                        {
                             error!("Generic HTTP polling source failed: {}", e);
                         }
                     }))
@@ -187,7 +198,9 @@ impl SourceManager {
                             config,
                             ingestion_sender,
                             cancel_clone,
-                        ).await {
+                        )
+                        .await
+                        {
                             error!("HTTP polling source failed: {}", e);
                         }
                     }))
@@ -195,10 +208,15 @@ impl SourceManager {
             }
             SourceType::Mqtt => {
                 // Get ingestion sender (required for MQTT routing through ingestion channel)
-                let ingestion_sender = self.ingestion_sender.as_ref()
-                    .ok_or_else(|| SourceManagerError::ConfigError(
-                        "Ingestion sender not set. Call set_ingestion_sender() first.".to_string()
-                    ))?
+                let ingestion_sender = self
+                    .ingestion_sender
+                    .as_ref()
+                    .ok_or_else(|| {
+                        SourceManagerError::ConfigError(
+                            "Ingestion sender not set. Call set_ingestion_sender() first."
+                                .to_string(),
+                        )
+                    })?
                     .clone();
 
                 let stream_id_clone = stream_id.to_string();
@@ -215,7 +233,9 @@ impl SourceManager {
                         config,
                         ingestion_sender,
                         cancel_clone,
-                    ).await {
+                    )
+                    .await
+                    {
                         error!("MQTT source failed: {}", e);
                     }
                 }))
@@ -238,7 +258,11 @@ impl SourceManager {
             stream_id: stream_id.to_string(),
             source_type: source_config.source_type.clone(),
             enabled: source_config.enabled,
-            health: if task_handle.is_some() { SourceHealth::Healthy } else { SourceHealth::Unknown },
+            health: if task_handle.is_some() {
+                SourceHealth::Healthy
+            } else {
+                SourceHealth::Unknown
+            },
             cancel_token,
             task_handle,
         };
@@ -258,23 +282,27 @@ impl SourceManager {
         source_config: &SourceConfig,
     ) -> Result<HttpPollingConfig, SourceManagerError> {
         // Extract configuration parameters
-        let base_url_template = source_config.params
+        let base_url_template = source_config
+            .params
             .get("base_url_template")
             .and_then(|v| v.as_str())
             .unwrap_or("http://airgradient_{SERIAL}.local/measures/current")
             .to_string();
 
-        let poll_interval_secs = source_config.params
+        let poll_interval_secs = source_config
+            .params
             .get("poll_interval_secs")
             .and_then(|v| v.as_u64())
             .unwrap_or(60);
 
-        let timeout_secs = source_config.params
+        let timeout_secs = source_config
+            .params
             .get("timeout_secs")
             .and_then(|v| v.as_u64())
             .unwrap_or(10);
 
-        let buffer_capacity = source_config.params
+        let buffer_capacity = source_config
+            .params
             .get("buffer_capacity")
             .and_then(|v| v.as_u64())
             .unwrap_or(1000) as usize;
@@ -285,7 +313,8 @@ impl SourceManager {
                 arr.iter()
                     .filter_map(|v| {
                         let serial = v.get("serial")?.as_str()?;
-                        let url = v.get("url")
+                        let url = v
+                            .get("url")
                             .and_then(|u| u.as_str())
                             .map(|s| s.to_string())
                             .or_else(|| Some(base_url_template.replace("{SERIAL}", serial)))?;
@@ -304,9 +333,10 @@ impl SourceManager {
         };
 
         if sensors.is_empty() {
-            return Err(SourceManagerError::ConfigError(
-                format!("No endpoints configured for HTTP polling source in stream {}", stream_id)
-            ));
+            return Err(SourceManagerError::ConfigError(format!(
+                "No endpoints configured for HTTP polling source in stream {}",
+                stream_id
+            )));
         }
 
         Ok(HttpPollingConfig {
@@ -333,18 +363,29 @@ impl SourceManager {
             parser_type: ParserType::FlatJson,
             location_id_field: "serialno".to_string(),
             default_location_id: None,
-            skip_fields: vec!["serialno".to_string(), "wifi".to_string(), "boot".to_string(), "firmware".to_string(), "model".to_string(), "ledMode".to_string(), "bootCount".to_string()],
+            skip_fields: vec![
+                "serialno".to_string(),
+                "wifi".to_string(),
+                "boot".to_string(),
+                "firmware".to_string(),
+                "model".to_string(),
+                "ledMode".to_string(),
+                "bootCount".to_string(),
+            ],
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
         };
-        let parser = create_parser_from_config(parser_config)
-            .map_err(|e| SourceManagerError::SpawnError(format!("Failed to create parser: {}", e)))?;
+        let parser = create_parser_from_config(parser_config).map_err(|e| {
+            SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
+        })?;
 
         let mut source = HttpPollingSource::new(config, parser)
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
-        source.start().await
+        source
+            .start()
+            .await
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Poll loop - fetch data and send to ingestion channel
@@ -389,25 +430,32 @@ impl SourceManager {
         stream_id: &str,
         source_config: &SourceConfig,
     ) -> Result<GenericHttpPollingConfig, SourceManagerError> {
-        let parser_name = source_config.params
+        let parser_name = source_config
+            .params
             .get("parser_name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| SourceManagerError::ConfigError(
-                format!("Missing parser_name for generic HTTP polling source in stream {}", stream_id)
-            ))?
+            .ok_or_else(|| {
+                SourceManagerError::ConfigError(format!(
+                    "Missing parser_name for generic HTTP polling source in stream {}",
+                    stream_id
+                ))
+            })?
             .to_string();
 
-        let poll_interval_secs = source_config.params
+        let poll_interval_secs = source_config
+            .params
             .get("poll_interval_secs")
             .and_then(|v| v.as_u64())
             .unwrap_or(600); // Default 10 minutes for API rate limits
 
-        let timeout_secs = source_config.params
+        let timeout_secs = source_config
+            .params
             .get("timeout_secs")
             .and_then(|v| v.as_u64())
             .unwrap_or(30);
 
-        let buffer_capacity = source_config.params
+        let buffer_capacity = source_config
+            .params
             .get("buffer_capacity")
             .and_then(|v| v.as_u64())
             .unwrap_or(1000) as usize;
@@ -419,52 +467,59 @@ impl SourceManager {
                     .filter_map(|v| {
                         let endpoint_id = v.get("endpoint_id")?.as_str()?;
                         let url = v.get("url")?.as_str()?;
-                        let location_id = v.get("location_id")
+                        let location_id = v
+                            .get("location_id")
                             .and_then(|v| v.as_str())
                             .unwrap_or(stream_id);
 
                         // Parse authentication
-                        let auth = if let Some(auth_type) = v.get("auth_type").and_then(|v| v.as_str()) {
-                            match auth_type {
-                                "query_param" => {
-                                    let key = v.get("auth_key")?.as_str()?;
-                                    let value = v.get("auth_value")?.as_str()?;
-                                    // Expand environment variables in auth value
-                                    let expanded_value = Self::expand_env_vars(value);
-                                    AuthMethod::QueryParam {
-                                        key: key.to_string(),
-                                        value: expanded_value,
+                        let auth =
+                            if let Some(auth_type) = v.get("auth_type").and_then(|v| v.as_str()) {
+                                match auth_type {
+                                    "query_param" => {
+                                        let key = v.get("auth_key")?.as_str()?;
+                                        let value = v.get("auth_value")?.as_str()?;
+                                        // Expand environment variables in auth value
+                                        let expanded_value = Self::expand_env_vars(value);
+                                        AuthMethod::QueryParam {
+                                            key: key.to_string(),
+                                            value: expanded_value,
+                                        }
                                     }
-                                }
-                                "header" => {
-                                    let name = v.get("auth_key")?.as_str()?;
-                                    let value = v.get("auth_value")?.as_str()?;
-                                    let expanded_value = Self::expand_env_vars(value);
-                                    AuthMethod::Header {
-                                        name: name.to_string(),
-                                        value: expanded_value,
+                                    "header" => {
+                                        let name = v.get("auth_key")?.as_str()?;
+                                        let value = v.get("auth_value")?.as_str()?;
+                                        let expanded_value = Self::expand_env_vars(value);
+                                        AuthMethod::Header {
+                                            name: name.to_string(),
+                                            value: expanded_value,
+                                        }
                                     }
+                                    "bearer" => {
+                                        let token = v.get("auth_value")?.as_str()?;
+                                        let expanded_token = Self::expand_env_vars(token);
+                                        AuthMethod::Bearer {
+                                            token: expanded_token,
+                                        }
+                                    }
+                                    _ => AuthMethod::None,
                                 }
-                                "bearer" => {
-                                    let token = v.get("auth_value")?.as_str()?;
-                                    let expanded_token = Self::expand_env_vars(token);
-                                    AuthMethod::Bearer { token: expanded_token }
-                                }
-                                _ => AuthMethod::None,
-                            }
-                        } else {
-                            AuthMethod::None
-                        };
+                            } else {
+                                AuthMethod::None
+                            };
 
                         // Expand environment variables in URL
                         let expanded_url = Self::expand_env_vars(url);
 
-                        Some(EndpointConfig::new(
-                            endpoint_id,
-                            expanded_url,
-                            location_id,
-                            &parser_name,
-                        ).with_auth(auth))
+                        Some(
+                            EndpointConfig::new(
+                                endpoint_id,
+                                expanded_url,
+                                location_id,
+                                &parser_name,
+                            )
+                            .with_auth(auth),
+                        )
                     })
                     .collect()
             } else {
@@ -475,9 +530,10 @@ impl SourceManager {
         };
 
         if endpoints.is_empty() {
-            return Err(SourceManagerError::ConfigError(
-                format!("No endpoints configured for generic HTTP polling source in stream {}", stream_id)
-            ));
+            return Err(SourceManagerError::ConfigError(format!(
+                "No endpoints configured for generic HTTP polling source in stream {}",
+                stream_id
+            )));
         }
 
         Ok(GenericHttpPollingConfig {
@@ -510,35 +566,43 @@ impl SourceManager {
         stream_id: &str,
         source_config: &SourceConfig,
     ) -> Result<MqttConfig, SourceManagerError> {
-        let broker_url = source_config.params
+        let broker_url = source_config
+            .params
             .get("broker_url")
             .and_then(|v| v.as_str())
             .map(|s| Self::expand_env_vars(s))
-            .unwrap_or_else(|| std::env::var("MQTT_BROKER_URL").unwrap_or_else(|_| "localhost".to_string()));
+            .unwrap_or_else(|| {
+                std::env::var("MQTT_BROKER_URL").unwrap_or_else(|_| "localhost".to_string())
+            });
 
-        let port = source_config.params
+        let port = source_config
+            .params
             .get("port")
             .and_then(|v| v.as_u64())
             .unwrap_or(1883) as u16;
 
-        let topic_pattern = source_config.params
+        let topic_pattern = source_config
+            .params
             .get("topic_pattern")
             .and_then(|v| v.as_str())
             .unwrap_or("airgradient/readings/+")
             .to_string();
 
-        let client_id = source_config.params
+        let client_id = source_config
+            .params
             .get("client_id")
             .and_then(|v| v.as_str())
             .unwrap_or(&format!("ndp-{}", stream_id))
             .to_string();
 
-        let buffer_capacity = source_config.params
+        let buffer_capacity = source_config
+            .params
             .get("buffer_capacity")
             .and_then(|v| v.as_u64())
             .unwrap_or(1000) as usize;
 
-        let qos = match source_config.params
+        let qos = match source_config
+            .params
             .get("qos")
             .and_then(|v| v.as_u64())
             .unwrap_or(1)
@@ -549,12 +613,14 @@ impl SourceManager {
             _ => rumqttc::QoS::AtLeastOnce,
         };
 
-        let reconnect_delay_secs = source_config.params
+        let reconnect_delay_secs = source_config
+            .params
             .get("reconnect_delay_secs")
             .and_then(|v| v.as_u64())
             .unwrap_or(1);
 
-        let max_reconnect_delay_secs = source_config.params
+        let max_reconnect_delay_secs = source_config
+            .params
             .get("max_reconnect_delay_secs")
             .and_then(|v| v.as_u64())
             .unwrap_or(30);
@@ -586,15 +652,26 @@ impl SourceManager {
             parser_type: ParserType::FlatJson,
             location_id_field: "serialno".to_string(),
             default_location_id: None,
-            skip_fields: vec!["serialno".to_string(), "wifi".to_string(), "boot".to_string(), "firmware".to_string(), "model".to_string(), "ledMode".to_string(), "bootCount".to_string()],
+            skip_fields: vec![
+                "serialno".to_string(),
+                "wifi".to_string(),
+                "boot".to_string(),
+                "firmware".to_string(),
+                "model".to_string(),
+                "ledMode".to_string(),
+                "bootCount".to_string(),
+            ],
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
         };
-        let parser = create_parser_from_config(parser_config)
-            .map_err(|e| SourceManagerError::SpawnError(format!("Failed to create parser: {}", e)))?;
+        let parser = create_parser_from_config(parser_config).map_err(|e| {
+            SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
+        })?;
 
         let mut source = MqttSource::new(config, parser);
-        source.start().await
+        source
+            .start()
+            .await
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Poll loop - fetch data and send to ingestion channel (same pattern as HTTP)
@@ -641,13 +718,18 @@ impl SourceManager {
         ingestion_sender: mpsc::Sender<(String, String, TimeSeriesPoint)>,
         cancel_token: CancellationToken,
     ) -> Result<(), SourceManagerError> {
-        info!("Starting generic HTTP polling source for stream {}", stream_id);
+        info!(
+            "Starting generic HTTP polling source for stream {}",
+            stream_id
+        );
 
         let mut source = GenericHttpPollingSource::with_default_parsers(config)
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
-        source.start().await
+        source
+            .start()
+            .await
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Poll loop - fetch data and send to ingestion channel
@@ -705,10 +787,7 @@ impl SourceManager {
             if let Some(handle) = info.task_handle {
                 drop(sources); // Release lock before awaiting
 
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(5),
-                    handle
-                ).await {
+                match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
                     Ok(Ok(())) => {
                         debug!("Source {} stopped gracefully", source_id);
                     }
@@ -725,7 +804,10 @@ impl SourceManager {
         } else {
             drop(sources);
             // Idempotent: if source not found, it's already stopped - return Ok
-            debug!("Source {} not found (already stopped?), returning Ok", source_id);
+            debug!(
+                "Source {} not found (already stopped?), returning Ok",
+                source_id
+            );
             Ok(())
         }
     }
@@ -956,7 +1038,7 @@ mod tests {
             serde_json::json!([{
                 "serial": "test123",
                 "url": "http://localhost:8080/test"
-            }])
+            }]),
         );
 
         let source_config = SourceConfig {
@@ -1249,7 +1331,7 @@ mod tests {
                     serde_json::json!([{
                         "serial": "test123",
                         "url": "http://localhost:8080/test"
-                    }])
+                    }]),
                 );
             }
 
@@ -1401,7 +1483,7 @@ mod tests {
                     serde_json::json!([{
                         "serial": "test123",
                         "url": "http://localhost:8080/test"
-                    }])
+                    }]),
                 );
             }
 
@@ -1419,7 +1501,10 @@ mod tests {
         // Verify all types are tracked
         assert_eq!(manager.get_sources_by_type(SourceType::Mqtt).await.len(), 1);
         assert_eq!(
-            manager.get_sources_by_type(SourceType::HttpPoll).await.len(),
+            manager
+                .get_sources_by_type(SourceType::HttpPoll)
+                .await
+                .len(),
             1
         );
         assert_eq!(
@@ -1485,7 +1570,10 @@ mod tests {
 
         // MQTT config
         let mut params = HashMap::new();
-        params.insert("broker_url".to_string(), serde_json::json!("mqtt://localhost"));
+        params.insert(
+            "broker_url".to_string(),
+            serde_json::json!("mqtt://localhost"),
+        );
         params.insert("port".to_string(), serde_json::json!(1883));
         params.insert("topic_pattern".to_string(), serde_json::json!("sensors/#"));
 
@@ -1524,10 +1612,19 @@ mod tests {
 
         // MQTT config with environment variable expansion
         let mut params = HashMap::new();
-        params.insert("broker_url".to_string(), serde_json::json!("${MQTT_BROKER_URL}"));
+        params.insert(
+            "broker_url".to_string(),
+            serde_json::json!("${MQTT_BROKER_URL}"),
+        );
         params.insert("port".to_string(), serde_json::json!(1883));
-        params.insert("topic_pattern".to_string(), serde_json::json!("sensors/+/data"));
-        params.insert("client_id".to_string(), serde_json::json!("ndp-air-quality"));
+        params.insert(
+            "topic_pattern".to_string(),
+            serde_json::json!("sensors/+/data"),
+        );
+        params.insert(
+            "client_id".to_string(),
+            serde_json::json!("ndp-air-quality"),
+        );
         params.insert("buffer_capacity".to_string(), serde_json::json!(500));
 
         let source_config = SourceConfig {
@@ -1560,7 +1657,10 @@ mod tests {
         manager.set_ingestion_sender(tx);
 
         let mut params = HashMap::new();
-        params.insert("broker_url".to_string(), serde_json::json!("mqtt://localhost"));
+        params.insert(
+            "broker_url".to_string(),
+            serde_json::json!("mqtt://localhost"),
+        );
         params.insert("topic_pattern".to_string(), serde_json::json!("sensors/#"));
 
         let source_config = SourceConfig {

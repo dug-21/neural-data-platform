@@ -27,9 +27,17 @@ fn create_mqtt_point(device_mac: &str, value: f64) -> TimeSeriesPoint {
 }
 
 /// Test helper to simulate router enrichment
-fn enrich_with_stream_id(mut point: TimeSeriesPoint, stream_id: &str, source_id: &str) -> TimeSeriesPoint {
-    point.tags.insert("stream_id".to_string(), stream_id.to_string());
-    point.tags.insert("source_id".to_string(), source_id.to_string());
+fn enrich_with_stream_id(
+    mut point: TimeSeriesPoint,
+    stream_id: &str,
+    source_id: &str,
+) -> TimeSeriesPoint {
+    point
+        .tags
+        .insert("stream_id".to_string(), stream_id.to_string());
+    point
+        .tags
+        .insert("source_id".to_string(), source_id.to_string());
     point
 }
 
@@ -71,7 +79,10 @@ fn test_mqtt_point_structure_before_routing() {
 
     assert_eq!(point.location_id, "d83bda1cd074");
     assert_eq!(point.value, 25.5);
-    assert_eq!(point.tags.get("device_mac"), Some(&"d83bda1cd074".to_string()));
+    assert_eq!(
+        point.tags.get("device_mac"),
+        Some(&"d83bda1cd074".to_string())
+    );
     assert_eq!(point.tags.get("metric"), Some(&"pm25".to_string()));
 
     // Critical: stream_id should NOT be present yet
@@ -87,27 +98,41 @@ fn test_mqtt_point_structure_after_routing() {
     // Original fields preserved
     assert_eq!(enriched.location_id, "d83bda1cd074");
     assert_eq!(enriched.value, 25.5);
-    assert_eq!(enriched.tags.get("device_mac"), Some(&"d83bda1cd074".to_string()));
+    assert_eq!(
+        enriched.tags.get("device_mac"),
+        Some(&"d83bda1cd074".to_string())
+    );
 
     // Router adds stream_id and source_id
-    assert_eq!(enriched.tags.get("stream_id"), Some(&"air-quality".to_string()));
-    assert_eq!(enriched.tags.get("source_id"), Some(&"air-quality-Mqtt".to_string()));
+    assert_eq!(
+        enriched.tags.get("stream_id"),
+        Some(&"air-quality".to_string())
+    );
+    assert_eq!(
+        enriched.tags.get("source_id"),
+        Some(&"air-quality-Mqtt".to_string())
+    );
 }
 
 #[test]
 fn test_partition_key_logic() {
     // Verify partition key selection logic
     let point_before = create_mqtt_point("d83bda1cd074", 25.5);
-    let point_after = enrich_with_stream_id(point_before.clone(), "air-quality", "air-quality-Mqtt");
+    let point_after =
+        enrich_with_stream_id(point_before.clone(), "air-quality", "air-quality-Mqtt");
 
     // Before enrichment: would use location_id (device MAC)
-    let key_before = point_before.tags.get("stream_id")
+    let key_before = point_before
+        .tags
+        .get("stream_id")
         .cloned()
         .unwrap_or_else(|| point_before.location_id.clone());
     assert_eq!(key_before, "d83bda1cd074");
 
     // After enrichment: should use stream_id
-    let key_after = point_after.tags.get("stream_id")
+    let key_after = point_after
+        .tags
+        .get("stream_id")
         .cloned()
         .unwrap_or_else(|| point_after.location_id.clone());
     assert_eq!(key_after, "air-quality");
@@ -126,9 +151,15 @@ fn test_consistency_http_vs_mqtt_after_enrichment() {
         value: 25.5,
         tags: HashMap::new(),
     };
-    http_point.tags.insert("metric".to_string(), "pm25".to_string());
-    http_point.tags.insert("stream_id".to_string(), "air-quality".to_string());
-    http_point.tags.insert("source_id".to_string(), "air-quality-HttpPoll".to_string());
+    http_point
+        .tags
+        .insert("metric".to_string(), "pm25".to_string());
+    http_point
+        .tags
+        .insert("stream_id".to_string(), "air-quality".to_string());
+    http_point
+        .tags
+        .insert("source_id".to_string(), "air-quality-HttpPoll".to_string());
 
     // Both should use "air-quality" as partition key
     let mqtt_key = enriched_mqtt.tags.get("stream_id").unwrap();
@@ -146,8 +177,14 @@ fn test_multiple_mqtt_devices_same_stream() {
     let enriched2 = enrich_with_stream_id(device2, "air-quality", "air-quality-Mqtt");
 
     // Both should have same stream_id tag
-    assert_eq!(enriched1.tags.get("stream_id"), enriched2.tags.get("stream_id"));
-    assert_eq!(enriched1.tags.get("stream_id"), Some(&"air-quality".to_string()));
+    assert_eq!(
+        enriched1.tags.get("stream_id"),
+        enriched2.tags.get("stream_id")
+    );
+    assert_eq!(
+        enriched1.tags.get("stream_id"),
+        Some(&"air-quality".to_string())
+    );
 
     // Both would write to same directory: /data/air-quality/
     // NOT /data/d83bda1cd074/ and /data/e94cdb2de185/

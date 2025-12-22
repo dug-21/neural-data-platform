@@ -6,9 +6,7 @@ use tracing_subscriber;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     // Create and start MCP server
     let server = McpServer::new().await?;
@@ -16,6 +14,6 @@ async fn main() -> anyhow::Result<()> {
 
     // Keep server running
     tokio::signal::ctrl_c().await?;
-    
+
     Ok(())
 }

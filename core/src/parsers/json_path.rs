@@ -188,6 +188,7 @@ mod tests {
             default_location_id: Some("test_location".to_string()),
             skip_fields: vec![],
             field_mappings: Some(mappings),
+            array_config: None,
             default_tags,
         }
     }

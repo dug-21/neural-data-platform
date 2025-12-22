@@ -11,15 +11,14 @@ pub mod neural_enhanced;
 pub mod security;
 
 // Re-export commonly used types for convenience
-pub use database::{DatabaseConfig, RedisConfig, BackupConfig};
+pub use database::{BackupConfig, DatabaseConfig, RedisConfig};
 pub use feature_flags::FeatureFlags;
 pub use monitoring::{
-    MonitoringConfig, ObservabilityConfig, LoggingConfig, 
-    AlertsConfig, PerformanceConfig
+    AlertsConfig, LoggingConfig, MonitoringConfig, ObservabilityConfig, PerformanceConfig,
 };
-pub use neural_base::{NeuralConfig, TrainingConfig, EnsembleConfig};
+pub use neural_base::{EnsembleConfig, NeuralConfig, TrainingConfig};
 pub use neural_enhanced::EnhancedNeuralConfig;
 pub use security::{
-    SecurityConfig, CircuitBreakerConfig, GracefulShutdownConfig,
-    AuthConfig, EncryptionConfig, OAuthProvider
+    AuthConfig, CircuitBreakerConfig, EncryptionConfig, GracefulShutdownConfig, OAuthProvider,
+    SecurityConfig,
 };

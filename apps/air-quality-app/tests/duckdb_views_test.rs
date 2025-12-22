@@ -493,7 +493,10 @@ fn test_join_indoor_outdoor_exact_timestamp() {
         .unwrap();
 
     // Assert: Should have one matching row
-    assert_eq!(count, 1, "Should have exactly one row with matching timestamp");
+    assert_eq!(
+        count, 1,
+        "Should have exactly one row with matching timestamp"
+    );
 }
 
 #[test]
@@ -532,7 +535,10 @@ fn test_join_with_time_window() {
         .unwrap();
 
     // Assert: Should have multiple matches due to time window
-    assert!(count >= 2, "Should have at least 2 rows with time window JOIN");
+    assert!(
+        count >= 2,
+        "Should have at least 2 rows with time window JOIN"
+    );
 }
 
 #[test]
@@ -682,10 +688,11 @@ fn test_timestamp_column_required() {
     create_mock_parquet_tables(&conn).unwrap();
 
     // Try to insert row without timestamp (should fail at table level)
-    let result = conn.execute_batch(
-        "INSERT INTO mock_indoor_air (pm25) VALUES (25.5)",
-    );
+    let result = conn.execute_batch("INSERT INTO mock_indoor_air (pm25) VALUES (25.5)");
 
     // Assert: Timestamp is required
-    assert!(result.is_err(), "Timestamp column should be required (NOT NULL)");
+    assert!(
+        result.is_err(),
+        "Timestamp column should be required (NOT NULL)"
+    );
 }

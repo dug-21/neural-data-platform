@@ -1,11 +1,11 @@
 //! Enhanced Neural Configuration for Phase 6
-//! 
+//!
 //! Provides comprehensive configuration management for the enhanced neural prediction system
 //! with support for dynamic updates, validation, and environment-specific settings.
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use anyhow::{Result, Context};
 
 /// Main configuration structure for enhanced neural predictions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -298,40 +298,49 @@ impl Default for EnhancedNeuralConfig {
 impl Default for BaseNeuralConfig {
     fn default() -> Self {
         let mut model_configs = HashMap::new();
-        
+
         // DeepAR configuration
-        model_configs.insert("DeepAR".to_string(), ModelSpecificConfig {
-            learning_rate: 0.0003,
-            max_epochs: 2500,
-            hidden_layers: vec![100, 50, 25],
-            input_window: 60,
-            output_horizon: 8,
-            use_cascade: true,
-            ensemble_weight: 1.5,
-        });
-        
+        model_configs.insert(
+            "DeepAR".to_string(),
+            ModelSpecificConfig {
+                learning_rate: 0.0003,
+                max_epochs: 2500,
+                hidden_layers: vec![100, 50, 25],
+                input_window: 60,
+                output_horizon: 8,
+                use_cascade: true,
+                ensemble_weight: 1.5,
+            },
+        );
+
         // LSTM configuration
-        model_configs.insert("LSTM".to_string(), ModelSpecificConfig {
-            learning_rate: 0.0002,
-            max_epochs: 2000,
-            hidden_layers: vec![128, 64, 64, 32],
-            input_window: 100,
-            output_horizon: 10,
-            use_cascade: true,
-            ensemble_weight: 1.4,
-        });
-        
+        model_configs.insert(
+            "LSTM".to_string(),
+            ModelSpecificConfig {
+                learning_rate: 0.0002,
+                max_epochs: 2000,
+                hidden_layers: vec![128, 64, 64, 32],
+                input_window: 100,
+                output_horizon: 10,
+                use_cascade: true,
+                ensemble_weight: 1.4,
+            },
+        );
+
         // Transformer configuration
-        model_configs.insert("Transformer".to_string(), ModelSpecificConfig {
-            learning_rate: 0.0001,
-            max_epochs: 3000,
-            hidden_layers: vec![256, 128, 64, 32],
-            input_window: 80,
-            output_horizon: 12,
-            use_cascade: true,
-            ensemble_weight: 1.3,
-        });
-        
+        model_configs.insert(
+            "Transformer".to_string(),
+            ModelSpecificConfig {
+                learning_rate: 0.0001,
+                max_epochs: 3000,
+                hidden_layers: vec![256, 128, 64, 32],
+                input_window: 80,
+                output_horizon: 12,
+                use_cascade: true,
+                ensemble_weight: 1.3,
+            },
+        );
+
         Self {
             memory_gb: 2.0,
             models: vec![
@@ -360,7 +369,7 @@ impl Default for ConfidenceConfig {
         regime_adjustments.insert("sideways".to_string(), 0.08);
         regime_adjustments.insert("high_volatility".to_string(), -0.05);
         regime_adjustments.insert("low_volatility".to_string(), 0.05);
-        
+
         Self {
             ensemble_agreement_weight: 0.6,
             historical_accuracy_weight: 0.4,
@@ -427,8 +436,8 @@ impl Default for PerformanceConfig {
 impl Default for AlertThresholds {
     fn default() -> Self {
         Self {
-            accuracy_drop_threshold: 0.1, // 10% accuracy drop
-            latency_threshold_ms: 5000,    // 5 second latency
+            accuracy_drop_threshold: 0.1,         // 10% accuracy drop
+            latency_threshold_ms: 5000,           // 5 second latency
             memory_usage_threshold_percent: 85.0, // 85% memory usage
             error_rate_threshold_percent: 5.0,    // 5% error rate
         }
@@ -442,7 +451,7 @@ impl Default for EnsembleConfig {
         regime_weight_adjustments.insert("low_volatility".to_string(), 1.1);
         regime_weight_adjustments.insert("bullish".to_string(), 1.05);
         regime_weight_adjustments.insert("bearish".to_string(), 1.03);
-        
+
         Self {
             weight_update_frequency: 10,
             performance_threshold: 0.6,
@@ -458,17 +467,17 @@ impl Default for VolatilityAdaptationConfig {
         let mut volatility_model_preferences = HashMap::new();
         volatility_model_preferences.insert(
             "high".to_string(),
-            vec!["DeepAR".to_string(), "LSTM".to_string()]
+            vec!["DeepAR".to_string(), "LSTM".to_string()],
         );
         volatility_model_preferences.insert(
             "low".to_string(),
-            vec!["TCN".to_string(), "Transformer".to_string()]
+            vec!["TCN".to_string(), "Transformer".to_string()],
         );
         volatility_model_preferences.insert(
             "medium".to_string(),
-            vec!["GRU".to_string(), "NHITS".to_string()]
+            vec!["GRU".to_string(), "NHITS".to_string()],
         );
-        
+
         Self {
             enabled: true,
             high_volatility_threshold: 0.03,
@@ -484,7 +493,7 @@ impl Default for CacheConfig {
             prediction_cache_size: 10000,
             model_state_cache_size: 1000,
             metrics_cache_ttl: 300,
-            regime_cache_ttl: 1800, // 30 minutes
+            regime_cache_ttl: 1800,         // 30 minutes
             cleanup_interval_seconds: 3600, // 1 hour
             enable_compression: true,
         }
@@ -559,72 +568,85 @@ impl EnhancedNeuralConfig {
     pub fn from_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path))?;
-        
+
         let config: Self = toml::from_str(&content)
             .with_context(|| format!("Failed to parse config file: {}", path))?;
-        
+
         config.validate()?;
         Ok(config)
     }
-    
+
     /// Save configuration to TOML file
     pub fn to_file(&self, path: &str) -> Result<()> {
         self.validate()?;
-        
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize configuration")?;
-        
+
+        let content = toml::to_string_pretty(self).context("Failed to serialize configuration")?;
+
         std::fs::write(path, content)
             .with_context(|| format!("Failed to write config file: {}", path))?;
-        
+
         Ok(())
     }
-    
+
     /// Validate configuration parameters
     pub fn validate(&self) -> Result<()> {
         // Validate base neural config
         if self.base_neural.memory_gb <= 0.0 {
             return Err(anyhow::anyhow!("Neural memory allocation must be positive"));
         }
-        
+
         if self.base_neural.models.is_empty() {
             return Err(anyhow::anyhow!("At least one model must be specified"));
         }
-        
+
         if self.base_neural.accuracy_threshold < 0.0 || self.base_neural.accuracy_threshold > 1.0 {
-            return Err(anyhow::anyhow!("Accuracy threshold must be between 0.0 and 1.0"));
+            return Err(anyhow::anyhow!(
+                "Accuracy threshold must be between 0.0 and 1.0"
+            ));
         }
-        
+
         // Validate confidence config
-        if self.confidence.min_confidence_threshold < 0.0 || self.confidence.min_confidence_threshold > 1.0 {
-            return Err(anyhow::anyhow!("Minimum confidence threshold must be between 0.0 and 1.0"));
+        if self.confidence.min_confidence_threshold < 0.0
+            || self.confidence.min_confidence_threshold > 1.0
+        {
+            return Err(anyhow::anyhow!(
+                "Minimum confidence threshold must be between 0.0 and 1.0"
+            ));
         }
-        
+
         // Validate retraining config
         if self.retraining.accuracy_threshold < 0.0 || self.retraining.accuracy_threshold > 1.0 {
-            return Err(anyhow::anyhow!("Retraining accuracy threshold must be between 0.0 and 1.0"));
+            return Err(anyhow::anyhow!(
+                "Retraining accuracy threshold must be between 0.0 and 1.0"
+            ));
         }
-        
+
         if self.retraining.hours_threshold <= 0 {
-            return Err(anyhow::anyhow!("Retraining hours threshold must be positive"));
+            return Err(anyhow::anyhow!(
+                "Retraining hours threshold must be positive"
+            ));
         }
-        
+
         if self.retraining.sample_threshold == 0 {
-            return Err(anyhow::anyhow!("Retraining sample threshold must be positive"));
+            return Err(anyhow::anyhow!(
+                "Retraining sample threshold must be positive"
+            ));
         }
-        
+
         // Validate performance config
         if self.performance.decay_factor <= 0.0 || self.performance.decay_factor > 1.0 {
-            return Err(anyhow::anyhow!("Performance decay factor must be between 0.0 and 1.0"));
+            return Err(anyhow::anyhow!(
+                "Performance decay factor must be between 0.0 and 1.0"
+            ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Create a development configuration with relaxed settings
     pub fn development() -> Self {
         let mut config = Self::default();
-        
+
         // Reduce resource requirements for development
         config.base_neural.memory_gb = 1.0;
         config.base_neural.models = vec!["MLP".to_string(), "NHITS".to_string()];
@@ -633,14 +655,14 @@ impl EnhancedNeuralConfig {
         config.cache.prediction_cache_size = 1000;
         config.security.secure_storage.encrypt_at_rest = false;
         config.security.access_control.require_auth_for_updates = false;
-        
+
         config
     }
-    
+
     /// Create a production configuration with optimized settings
     pub fn production() -> Self {
         let mut config = Self::default();
-        
+
         // Optimize for production workload
         config.base_neural.memory_gb = 8.0;
         config.base_neural.max_concurrent_predictions = 100;
@@ -649,40 +671,42 @@ impl EnhancedNeuralConfig {
         config.security.secure_storage.encrypt_at_rest = true;
         config.security.access_control.require_auth_for_updates = true;
         config.performance.enable_detailed_logging = true;
-        
+
         // Enable GPU acceleration in production if available
         config.retraining.parallel_training.gpu_acceleration.enabled = true;
         config.retraining.parallel_training.max_parallel_models = 6;
-        
+
         config
     }
-    
+
     /// Get model-specific configuration
     pub fn get_model_config(&self, model_name: &str) -> Option<&ModelSpecificConfig> {
         self.base_neural.model_configs.get(model_name)
     }
-    
+
     /// Update model-specific configuration
     pub fn update_model_config(&mut self, model_name: String, config: ModelSpecificConfig) {
         self.base_neural.model_configs.insert(model_name, config);
     }
-    
+
     /// Get ensemble weight for a model
     pub fn get_ensemble_weight(&self, model_name: &str) -> f64 {
-        self.base_neural.model_configs
+        self.base_neural
+            .model_configs
             .get(model_name)
             .map(|config| config.ensemble_weight)
             .unwrap_or(1.0)
     }
-    
+
     /// Check if autonomous retraining is enabled
     pub fn is_autonomous_retraining_enabled(&self) -> bool {
         self.retraining.enable_autonomous_retraining
     }
-    
+
     /// Get volatility model preferences for current regime
     pub fn get_volatility_model_preferences(&self, volatility_level: &str) -> Vec<String> {
-        self.ensemble.volatility_adaptation
+        self.ensemble
+            .volatility_adaptation
             .volatility_model_preferences
             .get(volatility_level)
             .cloned()
@@ -701,33 +725,37 @@ impl ConfigBuilder {
             config: EnhancedNeuralConfig::default(),
         }
     }
-    
+
     pub fn models(mut self, models: Vec<String>) -> Self {
         self.config.base_neural.models = models;
         self
     }
-    
+
     pub fn memory_gb(mut self, memory_gb: f64) -> Self {
         self.config.base_neural.memory_gb = memory_gb;
         self
     }
-    
+
     pub fn accuracy_threshold(mut self, threshold: f64) -> Self {
         self.config.base_neural.accuracy_threshold = threshold;
         self.config.retraining.accuracy_threshold = threshold - 0.05; // Set retraining threshold slightly lower
         self
     }
-    
+
     pub fn enable_gpu(mut self, enabled: bool) -> Self {
-        self.config.retraining.parallel_training.gpu_acceleration.enabled = enabled;
+        self.config
+            .retraining
+            .parallel_training
+            .gpu_acceleration
+            .enabled = enabled;
         self
     }
-    
+
     pub fn cache_size(mut self, size: usize) -> Self {
         self.config.cache.prediction_cache_size = size;
         self
     }
-    
+
     pub fn build(self) -> Result<EnhancedNeuralConfig> {
         self.config.validate()?;
         Ok(self.config)
@@ -744,13 +772,13 @@ impl Default for ConfigBuilder {
 mod tests {
     use super::*;
     use tempfile::NamedTempFile;
-    
+
     #[test]
     fn test_default_config_validation() {
         let config = EnhancedNeuralConfig::default();
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_development_config() {
         let config = EnhancedNeuralConfig::development();
@@ -758,7 +786,7 @@ mod tests {
         assert_eq!(config.base_neural.memory_gb, 1.0);
         assert_eq!(config.base_neural.models.len(), 2);
     }
-    
+
     #[test]
     fn test_production_config() {
         let config = EnhancedNeuralConfig::production();
@@ -766,7 +794,7 @@ mod tests {
         assert_eq!(config.base_neural.memory_gb, 8.0);
         assert!(config.security.secure_storage.encrypt_at_rest);
     }
-    
+
     #[test]
     fn test_config_builder() {
         let config = ConfigBuilder::new()
@@ -776,57 +804,60 @@ mod tests {
             .enable_gpu(true)
             .build()
             .unwrap();
-        
+
         assert_eq!(config.base_neural.models.len(), 2);
         assert_eq!(config.base_neural.memory_gb, 4.0);
         assert_eq!(config.base_neural.accuracy_threshold, 0.8);
         assert!(config.retraining.parallel_training.gpu_acceleration.enabled);
     }
-    
+
     #[test]
     fn test_config_file_serialization() {
         let config = EnhancedNeuralConfig::development();
         let temp_file = NamedTempFile::new().unwrap();
         let file_path = temp_file.path().to_str().unwrap();
-        
+
         // Save to file
         config.to_file(file_path).unwrap();
-        
+
         // Load from file
         let loaded_config = EnhancedNeuralConfig::from_file(file_path).unwrap();
-        
+
         // Compare key values
-        assert_eq!(config.base_neural.memory_gb, loaded_config.base_neural.memory_gb);
+        assert_eq!(
+            config.base_neural.memory_gb,
+            loaded_config.base_neural.memory_gb
+        );
         assert_eq!(config.base_neural.models, loaded_config.base_neural.models);
     }
-    
+
     #[test]
     fn test_validation_errors() {
         let mut config = EnhancedNeuralConfig::default();
-        
+
         // Test invalid memory allocation
         config.base_neural.memory_gb = -1.0;
         assert!(config.validate().is_err());
-        
+
         // Reset and test empty models
         config = EnhancedNeuralConfig::default();
         config.base_neural.models.clear();
         assert!(config.validate().is_err());
-        
+
         // Reset and test invalid accuracy threshold
         config = EnhancedNeuralConfig::default();
         config.base_neural.accuracy_threshold = 1.5;
         assert!(config.validate().is_err());
     }
-    
+
     #[test]
     fn test_model_config_operations() {
         let mut config = EnhancedNeuralConfig::default();
-        
+
         // Test getting existing model config
         let lstm_config = config.get_model_config("LSTM").unwrap();
         assert_eq!(lstm_config.ensemble_weight, 1.4);
-        
+
         // Test updating model config
         let new_config = ModelSpecificConfig {
             learning_rate: 0.001,
@@ -837,7 +868,7 @@ mod tests {
             use_cascade: false,
             ensemble_weight: 2.0,
         };
-        
+
         config.update_model_config("TestModel".to_string(), new_config);
         assert_eq!(config.get_ensemble_weight("TestModel"), 2.0);
     }

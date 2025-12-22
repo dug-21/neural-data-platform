@@ -9,7 +9,7 @@ use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
 use super::router::IngestionRouter;
-use super::source_manager::{SourceManager, SourceHealth};
+use super::source_manager::{SourceHealth, SourceManager};
 
 /// Ingestion coordinator error
 #[derive(Debug, thiserror::Error)]

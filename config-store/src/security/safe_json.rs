@@ -1,4 +1,4 @@
-use crate::{ConfigValue, ConfigError};
+use crate::{ConfigError, ConfigValue};
 use serde_json::Value;
 
 pub struct SafeJsonParser {
@@ -10,7 +10,7 @@ pub struct SafeJsonParser {
 impl SafeJsonParser {
     pub fn new() -> Self {
         Self {
-            max_size: 10_485_760,  // 10MB
+            max_size: 10_485_760, // 10MB
             max_depth: 128,
             max_keys: 10_000,
         }
@@ -19,17 +19,19 @@ impl SafeJsonParser {
     pub fn parse(&self, json_str: &str) -> Result<ConfigValue, ConfigError> {
         // Size check
         if json_str.len() > self.max_size {
-            return Err(ConfigError::Parse(
-                format!("JSON exceeds maximum size of {} bytes", self.max_size)
-            ));
+            return Err(ConfigError::Parse(format!(
+                "JSON exceeds maximum size of {} bytes",
+                self.max_size
+            )));
         }
 
         // Depth check
         let depth = self.calculate_depth(json_str)?;
         if depth > self.max_depth {
-            return Err(ConfigError::Parse(
-                format!("JSON nesting exceeds maximum depth of {}", self.max_depth)
-            ));
+            return Err(ConfigError::Parse(format!(
+                "JSON nesting exceeds maximum depth of {}",
+                self.max_depth
+            )));
         }
 
         // Parse to Value first for validation
@@ -39,9 +41,10 @@ impl SafeJsonParser {
         // Check key count
         let key_count = self.count_keys(&value);
         if key_count > self.max_keys {
-            return Err(ConfigError::Parse(
-                format!("JSON has too many keys ({}), maximum is {}", key_count, self.max_keys)
-            ));
+            return Err(ConfigError::Parse(format!(
+                "JSON has too many keys ({}), maximum is {}",
+                key_count, self.max_keys
+            )));
         }
 
         // Convert to ConfigValue
@@ -74,20 +77,24 @@ impl SafeJsonParser {
                     '{' | '[' => {
                         current_depth += 1;
                         max_depth = max_depth.max(current_depth);
-                    },
+                    }
                     '}' | ']' => {
                         if current_depth == 0 {
-                            return Err(ConfigError::Parse("Unbalanced brackets in JSON".to_string()));
+                            return Err(ConfigError::Parse(
+                                "Unbalanced brackets in JSON".to_string(),
+                            ));
                         }
                         current_depth -= 1;
-                    },
+                    }
                     _ => {}
                 }
             }
         }
 
         if current_depth != 0 {
-            return Err(ConfigError::Parse("Unbalanced brackets in JSON".to_string()));
+            return Err(ConfigError::Parse(
+                "Unbalanced brackets in JSON".to_string(),
+            ));
         }
 
         Ok(max_depth)
@@ -101,11 +108,9 @@ impl SafeJsonParser {
                     count += self.count_keys(v);
                 }
                 count
-            },
-            Value::Array(arr) => {
-                arr.iter().map(|v| self.count_keys(v)).sum()
-            },
-            _ => 0
+            }
+            Value::Array(arr) => arr.iter().map(|v| self.count_keys(v)).sum(),
+            _ => 0,
         }
     }
 
@@ -120,19 +125,22 @@ impl SafeJsonParser {
                     if f.is_finite() {
                         Ok(ConfigValue::Float(f))
                     } else {
-                        Err(ConfigError::Parse("Invalid number: infinite or NaN".to_string()))
+                        Err(ConfigError::Parse(
+                            "Invalid number: infinite or NaN".to_string(),
+                        ))
                     }
                 } else {
                     Err(ConfigError::Parse("Invalid number format".to_string()))
                 }
-            },
+            }
             Value::String(s) => Ok(ConfigValue::String(s)),
             Value::Array(arr) => {
-                let config_arr = arr.into_iter()
+                let config_arr = arr
+                    .into_iter()
                     .map(|v| self.value_to_config(v))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(ConfigValue::Array(config_arr))
-            },
+            }
             Value::Object(map) => {
                 let mut config_map = HashMap::new();
                 for (k, v) in map {

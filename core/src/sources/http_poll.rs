@@ -609,7 +609,7 @@ impl Default for GenericHttpPollingConfig {
 pub struct GenericHttpPollingSource {
     config: GenericHttpPollingConfig,
     client: Client,
-    parser_registry: Arc<ParserRegistry>,
+    parser: Arc<dyn Parser + Send + Sync>,
     receiver: Arc<Mutex<mpsc::Receiver<TimeSeriesPoint>>>,
     sender: mpsc::Sender<TimeSeriesPoint>,
     is_running: Arc<Mutex<bool>>,
@@ -618,10 +618,10 @@ pub struct GenericHttpPollingSource {
 }
 
 impl GenericHttpPollingSource {
-    /// Create a new generic HTTP polling source
+    /// Create a new generic HTTP polling source with injected parser
     pub fn new(
         config: GenericHttpPollingConfig,
-        parser_registry: ParserRegistry,
+        parser: Box<dyn Parser + Send + Sync>,
     ) -> CoreResult<Self> {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
@@ -633,7 +633,7 @@ impl GenericHttpPollingSource {
         Ok(Self {
             config,
             client,
-            parser_registry: Arc::new(parser_registry),
+            parser: Arc::from(parser),
             receiver: Arc::new(Mutex::new(receiver)),
             sender,
             is_running: Arc::new(Mutex::new(false)),
@@ -642,9 +642,22 @@ impl GenericHttpPollingSource {
         })
     }
 
-    /// Create with default parser registry
+    /// Create with default parser registry (DEPRECATED - use new() with parser injection)
+    #[deprecated(since = "0.1.0", note = "Use new() with parser injection instead")]
     pub fn with_default_parsers(config: GenericHttpPollingConfig) -> CoreResult<Self> {
-        Self::new(config, ParserRegistry::default())
+        // Provide backward compatibility with default FlatJson parser
+        let parser_config = crate::parsers::ParserConfig {
+            parser_type: crate::parsers::ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: Some("unknown".to_string()),
+            skip_fields: vec!["serialno".to_string(), "firmware".to_string()],
+            field_mappings: None,
+            array_config: None,
+            default_tags: [("source".to_string(), "http".to_string())].into(),
+        };
+        let parser = crate::parsers::FlatJsonParser::from_config(parser_config)
+            .map_err(|e| CoreError::Config(format!("Failed to create default parser: {}", e)))?;
+        Self::new(config, Box::new(parser))
     }
 
     /// Build the request with authentication
@@ -686,16 +699,6 @@ impl GenericHttpPollingSource {
         &self,
         endpoint: &EndpointConfig,
     ) -> Result<Vec<TimeSeriesPoint>, PollingError> {
-        let parser = self
-            .parser_registry
-            .get(&endpoint.parser_name)
-            .ok_or_else(|| {
-                PollingError::permanent(
-                    &endpoint.endpoint_id,
-                    format!("Parser not found: {}", endpoint.parser_name),
-                )
-            })?;
-
         let mut retry_count = 0;
 
         loop {
@@ -724,15 +727,23 @@ impl GenericHttpPollingSource {
                             )
                         })?;
 
+                        // Parse JSON response
+                        let json: Value = serde_json::from_str(&body).map_err(|e| {
+                            PollingError::permanent(
+                                &endpoint.endpoint_id,
+                                format!("Failed to parse JSON: {}", e),
+                            )
+                        })?;
+
                         let timestamp = Utc::now();
-                        let points = parser
-                            .parse(&body, &endpoint.location_id, timestamp)
-                            .map_err(|e| {
-                                PollingError::permanent(
-                                    &endpoint.endpoint_id,
-                                    format!("Failed to parse response: {}", e),
-                                )
-                            })?;
+
+                        // Use injected parser (Parser trait)
+                        let points = self.parser.parse(&json, timestamp).map_err(|e| {
+                            PollingError::permanent(
+                                &endpoint.endpoint_id,
+                                format!("Failed to parse response: {}", e),
+                            )
+                        })?;
 
                         // Update successful poll time
                         let mut last_poll = self.last_successful_poll.lock().await;
@@ -854,7 +865,7 @@ impl GenericHttpPollingSource {
         // Clone for background task
         let source_clone = Self {
             config: self.config.clone(),
-            parser_registry: self.parser_registry.clone(),
+            parser: self.parser.clone(),
             client: self.client.clone(),
             receiver: self.receiver.clone(),
             sender: self.sender.clone(),
@@ -1817,13 +1828,14 @@ mod tests {
     #[tokio::test]
     async fn test_generic_http_source_creation() {
         let config = GenericHttpPollingConfig::default();
-        let registry = ParserRegistry::new();
-        let source = GenericHttpPollingSource::new(config, registry);
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser);
 
         assert!(source.is_ok());
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_generic_http_source_with_default_parsers() {
         let config = GenericHttpPollingConfig::default();
         let source = GenericHttpPollingSource::with_default_parsers(config);
@@ -1831,25 +1843,21 @@ mod tests {
         assert!(source.is_ok());
         let source = source.unwrap();
 
-        // Verify default parsers are available
-        assert!(source
-            .parser_registry
-            .contains("openweathermap_current_weather"));
-        assert!(source
-            .parser_registry
-            .contains("openweathermap_air_pollution"));
+        // Verify parser was created
+        assert_eq!(source.parser.name(), "flat_json");
     }
 
     #[test]
     fn test_generic_http_source_build_request_query_auth() {
         let config = GenericHttpPollingConfig::default();
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         let endpoint = EndpointConfig::new(
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather",
+            "flat_json",
         )
         .with_auth(AuthMethod::QueryParam {
             key: "apikey".to_string(),
@@ -1863,13 +1871,14 @@ mod tests {
     #[test]
     fn test_generic_http_source_build_request_header_auth() {
         let config = GenericHttpPollingConfig::default();
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         let endpoint = EndpointConfig::new(
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather",
+            "flat_json",
         )
         .with_auth(AuthMethod::Header {
             name: "X-API-Key".to_string(),
@@ -1883,13 +1892,14 @@ mod tests {
     #[test]
     fn test_generic_http_source_build_request_bearer_auth() {
         let config = GenericHttpPollingConfig::default();
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         let endpoint = EndpointConfig::new(
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather",
+            "flat_json",
         )
         .with_auth(AuthMethod::Bearer {
             token: "bearer_token_123".to_string(),
@@ -1908,12 +1918,13 @@ mod tests {
             "disabled",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather",
+            "flat_json",
         );
         endpoint.enabled = false;
         config.endpoints.push(endpoint);
 
-        let mut source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let mut source = GenericHttpPollingSource::new(config, parser).unwrap();
         let result = source.start().await;
 
         assert!(result.is_err());
@@ -1938,7 +1949,8 @@ mod tests {
     #[tokio::test]
     async fn test_generic_http_source_health_check_not_running() {
         let config = GenericHttpPollingConfig::default();
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         let health = source.health_check().await.unwrap();
         assert!(!health.healthy);
@@ -1948,7 +1960,8 @@ mod tests {
     #[tokio::test]
     async fn test_generic_http_source_fetch_empty() {
         let config = GenericHttpPollingConfig::default();
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         let points = source.fetch().await.unwrap();
         assert_eq!(points.len(), 0);
@@ -1957,13 +1970,14 @@ mod tests {
     #[tokio::test]
     async fn test_generic_http_source_build_request_with_headers() {
         let config = GenericHttpPollingConfig::default();
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         let endpoint = EndpointConfig::new(
             "test_endpoint",
             "https://api.example.com/data",
             "location1",
-            "openweathermap_current_weather",
+            "flat_json",
         )
         .with_header("User-Agent", "TestClient/1.0")
         .with_header("Accept", "application/json");
@@ -1975,14 +1989,15 @@ mod tests {
     #[tokio::test]
     async fn test_generic_http_source_build_request_query_auth_with_existing_params() {
         let config = GenericHttpPollingConfig::default();
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         // URL already has query parameters
         let endpoint = EndpointConfig::new(
             "test_endpoint",
             "https://api.example.com/data?foo=bar",
             "location1",
-            "openweathermap_current_weather",
+            "flat_json",
         )
         .with_auth(AuthMethod::QueryParam {
             key: "apikey".to_string(),
@@ -1999,7 +2014,8 @@ mod tests {
             buffer_capacity: 500,
             ..Default::default()
         };
-        let source = GenericHttpPollingSource::with_default_parsers(config).unwrap();
+        let parser = create_default_parser();
+        let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         assert_eq!(source.sender.capacity(), 500);
     }

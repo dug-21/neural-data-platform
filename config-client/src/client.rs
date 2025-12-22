@@ -32,7 +32,9 @@ impl ConfigClient {
 
         let resp = self.client.clone().get(full_key.clone(), None).await?;
 
-        let kv = resp.kvs().first()
+        let kv = resp
+            .kvs()
+            .first()
             .ok_or_else(|| ConfigError::NotFound(full_key.clone()))?;
 
         let value: T = serde_json::from_slice(kv.value())?;
@@ -72,9 +74,14 @@ impl ConfigClient {
         let full_prefix = self.full_key(prefix);
         let opts = GetOptions::new().with_prefix();
 
-        let resp = self.client.clone().get(full_prefix.clone(), Some(opts)).await?;
+        let resp = self
+            .client
+            .clone()
+            .get(full_prefix.clone(), Some(opts))
+            .await?;
 
-        let keys: Vec<String> = resp.kvs()
+        let keys: Vec<String> = resp
+            .kvs()
             .iter()
             .filter_map(|kv| String::from_utf8(kv.key().to_vec()).ok())
             .collect();
@@ -93,13 +100,16 @@ impl ConfigClient {
 
     /// Get with environment variable override
     /// Checks ENV_PREFIX_KEY before etcd
-    pub async fn get_with_env<T: DeserializeOwned>(&self, key: &str, env_prefix: &str) -> Result<T, ConfigError> {
+    pub async fn get_with_env<T: DeserializeOwned>(
+        &self,
+        key: &str,
+        env_prefix: &str,
+    ) -> Result<T, ConfigError> {
         // Convert key to env var name: /mqtt/broker_url -> MQTT_BROKER_URL
-        let env_key = format!("{}_{}",
+        let env_key = format!(
+            "{}_{}",
             env_prefix,
-            key.trim_start_matches('/')
-                .replace('/', "_")
-                .to_uppercase()
+            key.trim_start_matches('/').replace('/', "_").to_uppercase()
         );
 
         if let Ok(env_val) = std::env::var(&env_key) {

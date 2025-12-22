@@ -1,5 +1,5 @@
 use crate::ConfigError;
-use etcd_client::{Client, WatchOptions, EventType};
+use etcd_client::{Client, EventType, WatchOptions};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 

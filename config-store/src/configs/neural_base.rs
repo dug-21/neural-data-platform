@@ -42,7 +42,7 @@ pub struct NeuralConfig {
     pub error_threshold: f64,
     #[serde(default = "default_lookback_window")]
     pub lookback_window: usize,
-    
+
     // Additional neural-specific configurations
     #[serde(default = "default_input_size")]
     pub input_size: usize,
@@ -91,19 +91,45 @@ impl Default for NeuralConfig {
 }
 
 // Default value functions
-fn default_model_load_timeout() -> u64 { 300 }
-fn default_max_concurrent_predictions() -> u32 { 10 }
-fn default_true() -> bool { true }
-fn default_false() -> bool { false }
-fn default_accuracy_threshold() -> f64 { 0.85 }
-fn default_model_timeout_seconds() -> u64 { 60 }
-fn default_max_retries() -> u32 { 3 }
-fn default_error_threshold() -> f64 { 0.1 }
-fn default_lookback_window() -> usize { 24 }
-fn default_input_size() -> usize { 24 }
-fn default_output_size() -> usize { 1 }
-fn default_hidden_layers() -> Vec<usize> { vec![64, 32] }
-fn default_learning_rate() -> f32 { 0.001 }
+fn default_model_load_timeout() -> u64 {
+    300
+}
+fn default_max_concurrent_predictions() -> u32 {
+    10
+}
+fn default_true() -> bool {
+    true
+}
+fn default_false() -> bool {
+    false
+}
+fn default_accuracy_threshold() -> f64 {
+    0.85
+}
+fn default_model_timeout_seconds() -> u64 {
+    60
+}
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_error_threshold() -> f64 {
+    0.1
+}
+fn default_lookback_window() -> usize {
+    24
+}
+fn default_input_size() -> usize {
+    24
+}
+fn default_output_size() -> usize {
+    1
+}
+fn default_hidden_layers() -> Vec<usize> {
+    vec![64, 32]
+}
+fn default_learning_rate() -> f32 {
+    0.001
+}
 
 /// Neural network training configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,12 +161,24 @@ impl Default for TrainingConfig {
     }
 }
 
-fn default_epochs() -> usize { 1000 }
-fn default_batch_size() -> usize { 32 }
-fn default_validation_split() -> f32 { 0.2 }
-fn default_early_stopping() -> bool { true }
-fn default_patience() -> usize { 50 }
-fn default_min_delta() -> f32 { 0.001 }
+fn default_epochs() -> usize {
+    1000
+}
+fn default_batch_size() -> usize {
+    32
+}
+fn default_validation_split() -> f32 {
+    0.2
+}
+fn default_early_stopping() -> bool {
+    true
+}
+fn default_patience() -> usize {
+    50
+}
+fn default_min_delta() -> f32 {
+    0.001
+}
 
 /// Model ensemble configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,7 +204,15 @@ impl Default for EnsembleConfig {
     }
 }
 
-fn default_ensemble_size() -> usize { 5 }
-fn default_voting_strategy() -> String { "weighted_average".to_string() }
-fn default_diversity_threshold() -> f64 { 0.3 }
-fn default_confidence_threshold() -> f64 { 0.7 }
+fn default_ensemble_size() -> usize {
+    5
+}
+fn default_voting_strategy() -> String {
+    "weighted_average".to_string()
+}
+fn default_diversity_threshold() -> f64 {
+    0.3
+}
+fn default_confidence_threshold() -> f64 {
+    0.7
+}

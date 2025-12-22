@@ -115,6 +115,7 @@ mod tests {
             default_location_id: None,
             skip_fields: vec!["serialno".to_string(), "firmware".to_string()],
             field_mappings: None,
+            array_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -159,6 +160,7 @@ mod tests {
             default_location_id: Some("unknown".to_string()),
             skip_fields: vec!["serialno".to_string()],
             field_mappings: None,
+            array_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -201,6 +203,7 @@ mod tests {
             default_location_id: Some("test".to_string()),
             skip_fields: vec![],
             field_mappings: None,
+            array_config: None,
             default_tags,
         };
 

@@ -10,10 +10,9 @@ use std::env;
 /// Feature flags for controlling system behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFlags {
-    
     /// Enforce all neural predictions to route through FANN predictor
     pub enforce_fann_routing: bool,
-    
+
     /// Enable DAA (Distributed Autonomous Agents) orchestration
     pub enable_daa_orchestration: bool,
 }
@@ -21,7 +20,7 @@ pub struct FeatureFlags {
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
-            enforce_fann_routing: false,    // Enable in Phase 2
+            enforce_fann_routing: false,     // Enable in Phase 2
             enable_daa_orchestration: false, // Enable in Phase 3
         }
     }
@@ -31,11 +30,10 @@ impl FeatureFlags {
     /// Create feature flags from environment variables
     pub fn from_env() -> Result<Self> {
         let flags = Self {
-            
             enforce_fann_routing: env::var("ENFORCE_FANN_ROUTING")
                 .map(|v| v.to_lowercase() == "true")
                 .unwrap_or(false),
-            
+
             enable_daa_orchestration: env::var("ENABLE_DAA_ORCHESTRATION")
                 .map(|v| v.to_lowercase() == "true")
                 .unwrap_or(false),
@@ -48,7 +46,6 @@ impl FeatureFlags {
     pub fn get() -> Self {
         Self::from_env().unwrap_or_default()
     }
-
 
     /// Check if FANN routing should be enforced
     pub fn should_enforce_fann_routing(&self) -> bool {
@@ -83,7 +80,6 @@ pub struct FeatureFlagsBuilder {
 }
 
 impl FeatureFlagsBuilder {
-
     pub fn enforce_fann_routing(mut self, value: bool) -> Self {
         self.enforce_fann_routing = Some(value);
         self
@@ -97,8 +93,12 @@ impl FeatureFlagsBuilder {
     pub fn build(self) -> FeatureFlags {
         let defaults = FeatureFlags::default();
         FeatureFlags {
-            enforce_fann_routing: self.enforce_fann_routing.unwrap_or(defaults.enforce_fann_routing),
-            enable_daa_orchestration: self.enable_daa_orchestration.unwrap_or(defaults.enable_daa_orchestration),
+            enforce_fann_routing: self
+                .enforce_fann_routing
+                .unwrap_or(defaults.enforce_fann_routing),
+            enable_daa_orchestration: self
+                .enable_daa_orchestration
+                .unwrap_or(defaults.enable_daa_orchestration),
         }
     }
 }
@@ -110,15 +110,15 @@ pub fn should_use_feature(user_id: &str, feature_name: &str) -> bool {
         .ok()
         .and_then(|v| v.parse::<u8>().ok())
         .unwrap_or(0);
-    
+
     if percentage >= 100 {
         return true;
     }
-    
+
     if percentage == 0 {
         return false;
     }
-    
+
     // Calculate hash for consistent user assignment
     let hash = calculate_hash(&format!("{}{}", user_id, feature_name));
     (hash % 100) < percentage
@@ -142,10 +142,8 @@ mod tests {
 
     #[test]
     fn test_feature_flags_builder() {
-        let flags = FeatureFlags::builder()
-            .enforce_fann_routing(true)
-            .build();
-        
+        let flags = FeatureFlags::builder().enforce_fann_routing(true).build();
+
         assert!(flags.enforce_fann_routing);
         assert!(!flags.enable_daa_orchestration);
     }
@@ -155,11 +153,11 @@ mod tests {
         // Test with 0% rollout
         env::set_var("TEST_FEATURE_PERCENTAGE", "0");
         assert!(!should_use_feature("user123", "test_feature"));
-        
+
         // Test with 100% rollout
         env::set_var("TEST_FEATURE_PERCENTAGE", "100");
         assert!(should_use_feature("user123", "test_feature"));
-        
+
         // Clean up
         env::remove_var("TEST_FEATURE_PERCENTAGE");
     }

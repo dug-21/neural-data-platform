@@ -1,13 +1,13 @@
 //! MCP Tools for air quality data interaction
 //! Implements tools that Claude can use to query and analyze air quality data
 
+use anyhow::Result as AnyhowResult;
+use chrono::{DateTime, Utc};
+use mcp_sdk::tools::Tool;
+use mcp_sdk::types::{CallToolResponse, ToolResponseContent};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
-use mcp_sdk::tools::Tool;
-use mcp_sdk::types::{CallToolResponse, ToolResponseContent};
-use anyhow::Result as AnyhowResult;
-use chrono::{DateTime, Utc};
 
 // Re-export test types for testing
 #[cfg(test)]
@@ -16,18 +16,36 @@ pub use crate::mcp::test_types::*;
 // Trait definitions for dependency injection (enables mocking)
 pub trait AirQualityStore: Send + Sync {
     fn get_current_reading(&self, location_id: &str) -> Result<AirQualityData, String>;
-    fn get_readings_in_range(&self, location_id: &str, hours: u32) -> Result<Vec<AirQualityData>, String>;
+    fn get_readings_in_range(
+        &self,
+        location_id: &str,
+        hours: u32,
+    ) -> Result<Vec<AirQualityData>, String>;
     fn get_all_locations(&self) -> Result<Vec<Location>, String>;
 }
 
 pub trait ForecastService: Send + Sync {
-    fn predict(&self, location_id: &str, metric: &str, horizon_hours: u32) -> Result<Vec<ForecastPoint>, String>;
+    fn predict(
+        &self,
+        location_id: &str,
+        metric: &str,
+        horizon_hours: u32,
+    ) -> Result<Vec<ForecastPoint>, String>;
 }
 
 pub trait AlertService: Send + Sync {
     fn get_active_alerts(&self, location_id: &str) -> Result<Vec<Alert>, String>;
-    fn get_alerts_in_range(&self, location_id: &str, hours: u32, severity: Option<Vec<String>>) -> Result<Vec<Alert>, String>;
-    fn get_recommendations(&self, location_id: &str, data: &AirQualityData) -> Result<Vec<String>, String>;
+    fn get_alerts_in_range(
+        &self,
+        location_id: &str,
+        hours: u32,
+        severity: Option<Vec<String>>,
+    ) -> Result<Vec<Alert>, String>;
+    fn get_recommendations(
+        &self,
+        location_id: &str,
+        data: &AirQualityData,
+    ) -> Result<Vec<String>, String>;
 }
 
 // Data structures
@@ -84,7 +102,13 @@ fn default_time_range() -> String {
 }
 
 fn default_metrics() -> Vec<String> {
-    vec!["co2".to_string(), "pm25".to_string(), "voc".to_string(), "temp".to_string(), "humidity".to_string()]
+    vec![
+        "co2".to_string(),
+        "pm25".to_string(),
+        "voc".to_string(),
+        "temp".to_string(),
+        "humidity".to_string(),
+    ]
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -104,8 +128,14 @@ impl<S: AirQualityStore> AirQualityQueryTool<S> {
         Self { store }
     }
 
-    pub async fn execute(&self, input: AirQualityQueryInput) -> Result<AirQualityQueryOutput, String> {
-        info!("Querying air quality for location: {} ({})", input.location_id, input.time_range);
+    pub async fn execute(
+        &self,
+        input: AirQualityQueryInput,
+    ) -> Result<AirQualityQueryOutput, String> {
+        info!(
+            "Querying air quality for location: {} ({})",
+            input.location_id, input.time_range
+        );
 
         let readings = match input.time_range.as_str() {
             "current" => {
@@ -260,14 +290,22 @@ impl<F: ForecastService> AirQualityForecastTool<F> {
         Self { forecast }
     }
 
-    pub async fn execute(&self, input: AirQualityForecastInput) -> Result<AirQualityForecastOutput, String> {
-        info!("Forecasting {} for location: {} ({}h)", input.metric, input.location_id, input.horizon_hours);
+    pub async fn execute(
+        &self,
+        input: AirQualityForecastInput,
+    ) -> Result<AirQualityForecastOutput, String> {
+        info!(
+            "Forecasting {} for location: {} ({}h)",
+            input.metric, input.location_id, input.horizon_hours
+        );
 
         if input.horizon_hours > 6 {
             return Err("horizon_hours cannot exceed 6".to_string());
         }
 
-        let forecasts = self.forecast.predict(&input.location_id, &input.metric, input.horizon_hours)?;
+        let forecasts =
+            self.forecast
+                .predict(&input.location_id, &input.metric, input.horizon_hours)?;
 
         Ok(AirQualityForecastOutput { forecasts })
     }
@@ -373,13 +411,27 @@ impl<A: AlertService> AirQualityAlertsTool<A> {
         Self { alerts }
     }
 
-    pub async fn execute(&self, input: AirQualityAlertsInput) -> Result<AirQualityAlertsOutput, String> {
-        info!("Fetching alerts for location: {} ({})", input.location_id, input.time_range);
+    pub async fn execute(
+        &self,
+        input: AirQualityAlertsInput,
+    ) -> Result<AirQualityAlertsOutput, String> {
+        info!(
+            "Fetching alerts for location: {} ({})",
+            input.location_id, input.time_range
+        );
 
         let alerts = match input.time_range.as_str() {
             "active" => self.alerts.get_active_alerts(&input.location_id)?,
-            "last_24h" => self.alerts.get_alerts_in_range(&input.location_id, 24, input.severity_filter.clone())?,
-            "last_7d" => self.alerts.get_alerts_in_range(&input.location_id, 168, input.severity_filter.clone())?,
+            "last_24h" => self.alerts.get_alerts_in_range(
+                &input.location_id,
+                24,
+                input.severity_filter.clone(),
+            )?,
+            "last_7d" => self.alerts.get_alerts_in_range(
+                &input.location_id,
+                168,
+                input.severity_filter.clone(),
+            )?,
             _ => return Err(format!("Invalid time_range: {}", input.time_range)),
         };
 
@@ -594,8 +646,14 @@ impl<S: AirQualityStore, A: AlertService> AirQualityRecommendationsTool<S, A> {
         Self { store, alerts }
     }
 
-    pub async fn execute(&self, input: RecommendationsInput) -> Result<RecommendationsOutput, String> {
-        info!("Generating recommendations for location: {}", input.location_id);
+    pub async fn execute(
+        &self,
+        input: RecommendationsInput,
+    ) -> Result<RecommendationsOutput, String> {
+        info!(
+            "Generating recommendations for location: {}",
+            input.location_id
+        );
 
         let data = self.store.get_current_reading(&input.location_id)?;
         let recommendations = self.alerts.get_recommendations(&input.location_id, &data)?;
@@ -604,7 +662,9 @@ impl<S: AirQualityStore, A: AlertService> AirQualityRecommendationsTool<S, A> {
     }
 }
 
-impl<S: AirQualityStore + 'static, A: AlertService + 'static> Tool for AirQualityRecommendationsTool<S, A> {
+impl<S: AirQualityStore + 'static, A: AlertService + 'static> Tool
+    for AirQualityRecommendationsTool<S, A>
+{
     fn name(&self) -> String {
         "air_quality_recommendations".to_string()
     }
@@ -693,7 +753,8 @@ impl<S: AirQualityStore + 'static> Tool for ListLocationsTool<S> {
     }
 
     fn description(&self) -> String {
-        "List all available sensor locations with their IDs, names, and sensor serial numbers.".to_string()
+        "List all available sensor locations with their IDs, names, and sensor serial numbers."
+            .to_string()
     }
 
     fn input_schema(&self) -> serde_json::Value {

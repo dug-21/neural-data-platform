@@ -66,7 +66,9 @@ async fn test_list_keys() -> Result<(), ConfigError> {
             name: format!("item_{}", i),
             value: i,
         };
-        client.set(&format!("/list-test/item_{}", i), &config).await?;
+        client
+            .set(&format!("/list-test/item_{}", i), &config)
+            .await?;
     }
 
     // List all keys
@@ -103,7 +105,10 @@ fn test_error_types() {
     assert_eq!(err.to_string(), "Configuration not found: /test/key");
 
     let err = ConfigError::ConnectionFailed("connection refused".to_string());
-    assert_eq!(err.to_string(), "etcd connection failed: connection refused");
+    assert_eq!(
+        err.to_string(),
+        "etcd connection failed: connection refused"
+    );
 
     let err = ConfigError::SerializationError("invalid json".to_string());
     assert_eq!(err.to_string(), "Serialization error: invalid json");

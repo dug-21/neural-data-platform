@@ -10,11 +10,15 @@ use std::fs;
 use std::path::Path;
 
 use crate::configs::{
-    neural_base::{NeuralConfig, TrainingConfig, EnsembleConfig},
-    database::{DatabaseConfig, RedisConfig, BackupConfig},
-    monitoring::{MonitoringConfig, ObservabilityConfig, LoggingConfig, AlertsConfig, PerformanceConfig},
-    security::{SecurityConfig, CircuitBreakerConfig, GracefulShutdownConfig, AuthConfig, EncryptionConfig},
+    database::{BackupConfig, DatabaseConfig, RedisConfig},
     feature_flags::FeatureFlags as FeatureFlagsConfig,
+    monitoring::{
+        AlertsConfig, LoggingConfig, MonitoringConfig, ObservabilityConfig, PerformanceConfig,
+    },
+    neural_base::{EnsembleConfig, NeuralConfig, TrainingConfig},
+    security::{
+        AuthConfig, CircuitBreakerConfig, EncryptionConfig, GracefulShutdownConfig, SecurityConfig,
+    },
 };
 
 /// Main platform configuration - unified configuration system
@@ -126,105 +130,113 @@ impl PlatformConfig {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let config_str = fs::read_to_string(path.as_ref())
             .with_context(|| format!("Failed to read config file: {}", path.as_ref().display()))?;
-        
-        let mut config: Self = toml::from_str(&config_str)
-            .with_context(|| "Failed to parse config file as TOML")?;
-        
+
+        let mut config: Self =
+            toml::from_str(&config_str).with_context(|| "Failed to parse config file as TOML")?;
+
         // Apply environment variable overrides
         config.apply_environment_overrides();
-        
+
         Ok(config)
     }
-    
+
     /// Apply environment variable overrides
     pub fn apply_environment_overrides(&mut self) {
         // Database overrides
         if let Ok(url) = env::var("DATABASE_URL") {
             self.database.url = url;
         }
-        
+
         // Redis overrides
         if let Ok(url) = env::var("REDIS_URL") {
             self.redis.url = url;
         }
-        
+
         // Neural config overrides
         if let Ok(use_real_models) = env::var("NEURAL_USE_REAL_MODELS") {
             self.neural.use_real_models = use_real_models.parse().unwrap_or(false);
         }
-        
+
         // Security overrides
         if let Ok(api_key) = env::var("API_KEY") {
             self.security.api_key = Some(api_key);
         }
-        
+
         // Logging level override
         if let Ok(log_level) = env::var("LOG_LEVEL") {
             self.platform.log_level = log_level;
             self.logging.level = self.platform.log_level.clone();
         }
-        
+
         // Development mode override
         if let Ok(debug_mode) = env::var("DEBUG_MODE") {
             self.development.enable_debug_mode = debug_mode.parse().unwrap_or(false);
         }
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
         // Validate neural config
         if self.neural.input_size == 0 {
             return Err(anyhow::anyhow!("Neural input size must be greater than 0"));
         }
-        
+
         if self.neural.output_size == 0 {
             return Err(anyhow::anyhow!("Neural output size must be greater than 0"));
         }
-        
+
         // Validate database config
         if self.database.url.is_empty() {
             return Err(anyhow::anyhow!("Database URL cannot be empty"));
         }
-        
+
         // Validate monitoring config
         if self.monitoring.metrics_interval_secs == 0 {
             return Err(anyhow::anyhow!("Metrics interval must be greater than 0"));
         }
-        
+
         Ok(())
     }
-    
+
     /// Get a subset configuration for specific components
     pub fn get_neural_config(&self) -> &NeuralConfig {
         &self.neural
     }
-    
+
     pub fn get_database_config(&self) -> &DatabaseConfig {
         &self.database
     }
-    
+
     pub fn get_monitoring_config(&self) -> &MonitoringConfig {
         &self.monitoring
     }
-    
+
     pub fn get_security_config(&self) -> &SecurityConfig {
         &self.security
     }
 }
 
 // Default value functions
-fn default_environment() -> String { "development".to_string() }
-fn default_log_level() -> String { "info".to_string() }
-fn default_true() -> bool { true }
-fn default_false() -> bool { false }
+fn default_environment() -> String {
+    "development".to_string()
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_false() -> bool {
+    false
+}
 
 /// Default configuration path
 pub const DEFAULT_CONFIG_PATH: &str = "config/platform.toml";
 
 /// Load default configuration
 pub fn load_default_config() -> Result<PlatformConfig> {
-    let config_path = std::env::var("PLATFORM_CONFIG_PATH")
-        .unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_string());
+    let config_path =
+        std::env::var("PLATFORM_CONFIG_PATH").unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_string());
     PlatformConfig::load_from_file(&config_path)
 }
 
@@ -262,32 +274,32 @@ impl ConfigBuilder {
             config: PlatformConfig::default(),
         }
     }
-    
+
     pub fn with_neural_config(mut self, neural_config: NeuralConfig) -> Self {
         self.config.neural = neural_config;
         self
     }
-    
+
     pub fn with_database_config(mut self, database_config: DatabaseConfig) -> Self {
         self.config.database = database_config;
         self
     }
-    
+
     pub fn with_monitoring_config(mut self, monitoring_config: MonitoringConfig) -> Self {
         self.config.monitoring = monitoring_config;
         self
     }
-    
+
     pub fn with_security_config(mut self, security_config: SecurityConfig) -> Self {
         self.config.security = security_config;
         self
     }
-    
+
     pub fn with_environment(mut self, environment: String) -> Self {
         self.config.platform.environment = environment;
         self
     }
-    
+
     pub fn build(self) -> Result<PlatformConfig> {
         self.config.validate()?;
         Ok(self.config)
@@ -303,34 +315,34 @@ impl Default for ConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = PlatformConfig::default();
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_config_builder() {
         let config = ConfigBuilder::new()
             .with_environment("test".to_string())
             .build();
-        
+
         assert!(config.is_ok());
         assert_eq!(config.unwrap().platform.environment, "test");
     }
-    
+
     #[test]
     fn test_environment_overrides() {
         env::set_var("DATABASE_URL", "test://localhost");
         env::set_var("NEURAL_USE_REAL_MODELS", "true");
-        
+
         let mut config = PlatformConfig::default();
         config.apply_environment_overrides();
-        
+
         assert_eq!(config.database.url, "test://localhost");
         assert_eq!(config.neural.use_real_models, true);
-        
+
         // Cleanup
         env::remove_var("DATABASE_URL");
         env::remove_var("NEURAL_USE_REAL_MODELS");

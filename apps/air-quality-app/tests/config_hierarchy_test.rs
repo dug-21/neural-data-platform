@@ -5,7 +5,6 @@
 /// 1. With etcd running and config set -> should use etcd path
 /// 2. Without etcd, with DATA_DIR set -> should use DATA_DIR
 /// 3. Without etcd, without DATA_DIR -> should use default ./data/parquet
-
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -68,7 +67,10 @@ mod config_hierarchy_tests {
         assert_eq!(storage_path, "/data/from/storage_path");
 
         // In actual implementation, DATA_DIR would be chosen
-        assert!(data_dir != storage_path, "DATA_DIR should differ from STORAGE_PATH for this test");
+        assert!(
+            data_dir != storage_path,
+            "DATA_DIR should differ from STORAGE_PATH for this test"
+        );
 
         // Clean up
         env::remove_var("DATA_DIR");
@@ -165,15 +167,18 @@ storage:
     #[test]
     fn test_storage_path_formats() {
         let valid_paths = vec![
-            "./data/parquet",           // Relative path (default)
-            "/data/parquet",            // Absolute Unix path
-            "/mnt/storage/parquet",     // Mounted volume path
+            "./data/parquet",            // Relative path (default)
+            "/data/parquet",             // Absolute Unix path
+            "/mnt/storage/parquet",      // Mounted volume path
             "/var/lib/air-quality/data", // System path
         ];
 
         for path in valid_paths {
-            assert!(path.ends_with("parquet") || path.ends_with("data"),
-                    "Path should end with parquet or data directory: {}", path);
+            assert!(
+                path.ends_with("parquet") || path.ends_with("data"),
+                "Path should end with parquet or data directory: {}",
+                path
+            );
         }
     }
 

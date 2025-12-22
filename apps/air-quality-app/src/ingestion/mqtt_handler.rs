@@ -6,9 +6,9 @@
 //! - Forwards TimeSeriesPoint data through a channel to the storage pipeline
 //! - Provides health checking for monitoring
 
-use neural_core::{CoreError, MqttConfig, MqttSource, TimeSeriesPoint};
-use neural_core::parsers::{ParserConfig, ParserType, create_parser_from_config};
+use neural_core::parsers::{create_parser_from_config, ParserConfig, ParserType};
 use neural_core::traits::{HealthStatus, Source};
+use neural_core::{CoreError, MqttConfig, MqttSource, TimeSeriesPoint};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -33,14 +33,25 @@ impl MqttHandler {
         config: MqttConfig,
         sender: mpsc::Sender<TimeSeriesPoint>,
     ) -> Result<Self, CoreError> {
-        info!("Initializing MQTT handler with broker: {}:{}", config.broker_url, config.port);
+        info!(
+            "Initializing MQTT handler with broker: {}:{}",
+            config.broker_url, config.port
+        );
 
         // Create parser from config (FlatJson for AirGradient MQTT messages)
         let parser_config = ParserConfig {
             parser_type: ParserType::FlatJson,
             location_id_field: "serialno".to_string(),
             default_location_id: None,
-            skip_fields: vec!["serialno".to_string(), "wifi".to_string(), "boot".to_string(), "firmware".to_string(), "model".to_string(), "ledMode".to_string(), "bootCount".to_string()],
+            skip_fields: vec![
+                "serialno".to_string(),
+                "wifi".to_string(),
+                "boot".to_string(),
+                "firmware".to_string(),
+                "model".to_string(),
+                "ledMode".to_string(),
+                "bootCount".to_string(),
+            ],
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
         };
@@ -77,9 +88,10 @@ impl MqttHandler {
                         for point in points {
                             if let Err(e) = self.sender.send(point).await {
                                 error!("Failed to send point through channel: {}", e);
-                                return Err(CoreError::Source(
-                                    format!("Channel send failed: {}", e)
-                                ));
+                                return Err(CoreError::Source(format!(
+                                    "Channel send failed: {}",
+                                    e
+                                )));
                             }
                         }
                     }

@@ -3,7 +3,10 @@
 // Focus on behavior verification and interaction testing
 
 use config_client::stream::StreamRegistry;
-use neural_core::{FieldType, SchemaField, SourceConfig, SourceType, StorageConfig as StreamStorageConfig, StreamConfig};
+use neural_core::{
+    FieldType, SchemaField, SourceConfig, SourceType, StorageConfig as StreamStorageConfig,
+    StreamConfig,
+};
 use std::collections::HashMap;
 
 // ========== HELPER FUNCTIONS FOR TEST DATA ==========
@@ -11,13 +14,19 @@ use std::collections::HashMap;
 /// Create a test StreamConfig with MQTT source
 fn create_test_stream_config() -> StreamConfig {
     let mut mqtt_params = HashMap::new();
-    mqtt_params.insert("broker_url".to_string(), serde_json::json!("mqtt.example.com"));
+    mqtt_params.insert(
+        "broker_url".to_string(),
+        serde_json::json!("mqtt.example.com"),
+    );
     mqtt_params.insert("port".to_string(), serde_json::json!(1883));
     mqtt_params.insert("client_id".to_string(), serde_json::json!("test-client"));
     mqtt_params.insert("topic_pattern".to_string(), serde_json::json!("test/+"));
     mqtt_params.insert("qos".to_string(), serde_json::json!(1));
     mqtt_params.insert("reconnect_delay_secs".to_string(), serde_json::json!(1));
-    mqtt_params.insert("max_reconnect_delay_secs".to_string(), serde_json::json!(30));
+    mqtt_params.insert(
+        "max_reconnect_delay_secs".to_string(),
+        serde_json::json!(30),
+    );
 
     StreamConfig {
         stream_id: "test-stream".to_string(),
@@ -78,7 +87,10 @@ fn create_minimal_stream_config() -> StreamConfig {
 /// Create a StreamConfig with non-MQTT sources
 fn create_http_stream_config() -> StreamConfig {
     let mut http_params = HashMap::new();
-    http_params.insert("url".to_string(), serde_json::json!("https://api.example.com/data"));
+    http_params.insert(
+        "url".to_string(),
+        serde_json::json!("https://api.example.com/data"),
+    );
     http_params.insert("interval_secs".to_string(), serde_json::json!(60));
 
     StreamConfig {
@@ -116,7 +128,12 @@ fn test_extract_mqtt_broker_url_from_stream_config() {
     assert!(mqtt_source.is_some());
     let mqtt_source = mqtt_source.unwrap();
     assert_eq!(
-        mqtt_source.params.get("broker_url").unwrap().as_str().unwrap(),
+        mqtt_source
+            .params
+            .get("broker_url")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "mqtt.example.com"
     );
 }
@@ -153,10 +170,7 @@ fn test_extract_mqtt_qos_from_stream_config() {
         .unwrap();
 
     // Then: QoS is correctly extracted
-    assert_eq!(
-        mqtt_source.params.get("qos").unwrap().as_u64().unwrap(),
-        1
-    );
+    assert_eq!(mqtt_source.params.get("qos").unwrap().as_u64().unwrap(), 1);
 }
 
 #[test]
@@ -349,10 +363,7 @@ fn test_invalid_qos_value_outside_range() {
         .unwrap();
 
     // Then: Invalid QoS value extracted (should default to 1 in conversion)
-    assert_eq!(
-        mqtt_source.params.get("qos").unwrap().as_u64().unwrap(),
-        99
-    );
+    assert_eq!(mqtt_source.params.get("qos").unwrap().as_u64().unwrap(), 99);
 }
 
 // ========== BEHAVIOR TESTS: MULTIPLE SOURCES ==========
@@ -365,7 +376,10 @@ fn test_stream_with_multiple_sources_finds_mqtt() {
     mqtt_params.insert("topic_pattern".to_string(), serde_json::json!("test/+"));
 
     let mut http_params = HashMap::new();
-    http_params.insert("url".to_string(), serde_json::json!("https://api.example.com"));
+    http_params.insert(
+        "url".to_string(),
+        serde_json::json!("https://api.example.com"),
+    );
 
     let stream_config = StreamConfig {
         stream_id: "multi-source".to_string(),

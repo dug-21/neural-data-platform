@@ -1,14 +1,11 @@
-use crate::api::handlers::{
-    alerts_handler, forecast_handler, health_handler, latest_readings_handler, locations_handler,
-    readings_handler, aggregate_handler,
-};
 use crate::api::handlers::alerts::AlertStore;
 use crate::api::handlers::health::AppState;
 use crate::api::handlers::locations::LocationStore;
-use axum::{
-    routing::get,
-    Router,
+use crate::api::handlers::{
+    aggregate_handler, alerts_handler, forecast_handler, health_handler, latest_readings_handler,
+    locations_handler, readings_handler,
 };
+use axum::{routing::get, Router};
 use neural_core::{Forecast, Source, Store};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -73,11 +70,11 @@ mod tests {
     use crate::api::handlers::alerts::{Alert, AlertSeverity, AlertStatus};
     use crate::api::handlers::locations::Location;
     use axum_test::TestServer;
+    use mockall::mock;
     use neural_core::{
         AggregatedPoint, AggregationType, CoreError, ForecastedPoint, HealthStatus, ModelMetrics,
         TimeSeriesPoint,
     };
-    use mockall::mock;
     use std::collections::HashMap;
 
     mock! {
@@ -238,7 +235,9 @@ mod tests {
 
         let response = server.get("/health").await;
 
-        assert!(response.headers().contains_key("access-control-allow-origin"));
+        assert!(response
+            .headers()
+            .contains_key("access-control-allow-origin"));
     }
 
     #[tokio::test]

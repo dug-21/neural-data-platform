@@ -220,11 +220,13 @@ impl IngestionRouter {
         // Type validation
         match field.field_type {
             FieldType::Float => {
-                let parsed = value.parse::<f64>().map_err(|_| ValidationError::TypeMismatch {
-                    field: field.name.clone(),
-                    expected: "float".to_string(),
-                    actual: value.to_string(),
-                })?;
+                let parsed = value
+                    .parse::<f64>()
+                    .map_err(|_| ValidationError::TypeMismatch {
+                        field: field.name.clone(),
+                        expected: "float".to_string(),
+                        actual: value.to_string(),
+                    })?;
 
                 // Range validation
                 if let Some(ref range) = field.range {
@@ -242,11 +244,13 @@ impl IngestionRouter {
                 }
             }
             FieldType::Int => {
-                let parsed = value.parse::<i64>().map_err(|_| ValidationError::TypeMismatch {
-                    field: field.name.clone(),
-                    expected: "int".to_string(),
-                    actual: value.to_string(),
-                })?;
+                let parsed = value
+                    .parse::<i64>()
+                    .map_err(|_| ValidationError::TypeMismatch {
+                        field: field.name.clone(),
+                        expected: "int".to_string(),
+                        actual: value.to_string(),
+                    })?;
 
                 // Range validation
                 if let Some(ref range) = field.range {
@@ -267,11 +271,13 @@ impl IngestionRouter {
                 // String is always valid
             }
             FieldType::Bool => {
-                value.parse::<bool>().map_err(|_| ValidationError::TypeMismatch {
-                    field: field.name.clone(),
-                    expected: "bool".to_string(),
-                    actual: value.to_string(),
-                })?;
+                value
+                    .parse::<bool>()
+                    .map_err(|_| ValidationError::TypeMismatch {
+                        field: field.name.clone(),
+                        expected: "bool".to_string(),
+                        actual: value.to_string(),
+                    })?;
             }
             FieldType::Json => {
                 // JSON validation - must be valid JSON string
@@ -458,7 +464,11 @@ mod tests {
     async fn test_register_and_unregister_storage_channel() {
         let (dead_letter_tx, _rx) = mpsc::channel(10);
         let (storage_tx, _storage_rx) = mpsc::channel(100);
-        let registry = Arc::new(StreamRegistry::new(&["http://localhost:2379"]).await.unwrap());
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
 
         let router = IngestionRouter::new(registry, dead_letter_tx);
 
@@ -484,7 +494,11 @@ mod tests {
     async fn test_router_adds_stream_id_tag_to_points() {
         // CRITICAL TEST: Verify router enriches points with stream_id tag
         // This is the core fix for MQTT routing bug
-        let registry = Arc::new(StreamRegistry::new(&["http://localhost:2379"]).await.unwrap());
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
 
         // Create test stream config
         let config = create_test_config();
@@ -495,7 +509,9 @@ mod tests {
         let router = IngestionRouter::new(registry.clone(), dead_letter_tx);
 
         // Register storage channel
-        router.register_storage_channel("test-stream".to_string(), storage_tx).await;
+        router
+            .register_storage_channel("test-stream".to_string(), storage_tx)
+            .await;
 
         // Create point WITHOUT stream_id tag (simulating MQTT source)
         let mut tags = HashMap::new();
@@ -503,18 +519,31 @@ mod tests {
         let point = create_test_point_with_tags(tags);
 
         // Route point through router
-        router.route_point("mqtt-source", "test-stream", point).await.unwrap();
+        router
+            .route_point("mqtt-source", "test-stream", point)
+            .await
+            .unwrap();
 
         // Verify enriched point has stream_id tag
         let enriched = storage_rx.recv().await.unwrap();
-        assert_eq!(enriched.tags.get("stream_id"), Some(&"test-stream".to_string()));
-        assert_eq!(enriched.tags.get("source_id"), Some(&"mqtt-source".to_string()));
+        assert_eq!(
+            enriched.tags.get("stream_id"),
+            Some(&"test-stream".to_string())
+        );
+        assert_eq!(
+            enriched.tags.get("source_id"),
+            Some(&"mqtt-source".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_router_adds_source_id_tag_to_points() {
         // Verify router also adds source_id tag
-        let registry = Arc::new(StreamRegistry::new(&["http://localhost:2379"]).await.unwrap());
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
 
         let config = create_test_config();
         registry.save_stream(&config).await.unwrap();
@@ -523,25 +552,40 @@ mod tests {
         let (storage_tx, mut storage_rx) = mpsc::channel(100);
         let router = IngestionRouter::new(registry.clone(), dead_letter_tx);
 
-        router.register_storage_channel("test-stream".to_string(), storage_tx).await;
+        router
+            .register_storage_channel("test-stream".to_string(), storage_tx)
+            .await;
 
         let mut tags = HashMap::new();
         tags.insert("pm25".to_string(), "30.0".to_string());
         let point = create_test_point_with_tags(tags);
 
         // Route with specific source_id
-        router.route_point("air-quality-Mqtt", "test-stream", point).await.unwrap();
+        router
+            .route_point("air-quality-Mqtt", "test-stream", point)
+            .await
+            .unwrap();
 
         // Verify both tags are added
         let enriched = storage_rx.recv().await.unwrap();
-        assert_eq!(enriched.tags.get("stream_id"), Some(&"test-stream".to_string()));
-        assert_eq!(enriched.tags.get("source_id"), Some(&"air-quality-Mqtt".to_string()));
+        assert_eq!(
+            enriched.tags.get("stream_id"),
+            Some(&"test-stream".to_string())
+        );
+        assert_eq!(
+            enriched.tags.get("source_id"),
+            Some(&"air-quality-Mqtt".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_router_preserves_existing_tags() {
         // Verify router doesn't overwrite existing tags
-        let registry = Arc::new(StreamRegistry::new(&["http://localhost:2379"]).await.unwrap());
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
 
         let config = create_test_config();
         registry.save_stream(&config).await.unwrap();
@@ -550,7 +594,9 @@ mod tests {
         let (storage_tx, mut storage_rx) = mpsc::channel(100);
         let router = IngestionRouter::new(registry.clone(), dead_letter_tx);
 
-        router.register_storage_channel("test-stream".to_string(), storage_tx).await;
+        router
+            .register_storage_channel("test-stream".to_string(), storage_tx)
+            .await;
 
         // Point with existing tags including device MAC
         let mut tags = HashMap::new();
@@ -559,13 +605,28 @@ mod tests {
         tags.insert("sensor_type".to_string(), "airgradient".to_string());
         let point = create_test_point_with_tags(tags);
 
-        router.route_point("mqtt-source", "test-stream", point).await.unwrap();
+        router
+            .route_point("mqtt-source", "test-stream", point)
+            .await
+            .unwrap();
 
         // Verify all tags are present
         let enriched = storage_rx.recv().await.unwrap();
-        assert_eq!(enriched.tags.get("stream_id"), Some(&"test-stream".to_string()));
-        assert_eq!(enriched.tags.get("source_id"), Some(&"mqtt-source".to_string()));
-        assert_eq!(enriched.tags.get("device_mac"), Some(&"d83bda1cd074".to_string()));
-        assert_eq!(enriched.tags.get("sensor_type"), Some(&"airgradient".to_string()));
+        assert_eq!(
+            enriched.tags.get("stream_id"),
+            Some(&"test-stream".to_string())
+        );
+        assert_eq!(
+            enriched.tags.get("source_id"),
+            Some(&"mqtt-source".to_string())
+        );
+        assert_eq!(
+            enriched.tags.get("device_mac"),
+            Some(&"d83bda1cd074".to_string())
+        );
+        assert_eq!(
+            enriched.tags.get("sensor_type"),
+            Some(&"airgradient".to_string())
+        );
     }
 }

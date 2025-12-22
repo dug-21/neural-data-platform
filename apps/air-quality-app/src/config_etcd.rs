@@ -9,8 +9,8 @@ use tracing::{info, warn};
 /// Load configuration from etcd
 /// Falls back to file-based config if etcd is unavailable
 pub async fn load_from_etcd() -> Result<EtcdAppConfig, Box<dyn std::error::Error>> {
-    let etcd_endpoint = std::env::var("ETCD_ENDPOINT")
-        .unwrap_or_else(|_| "http://localhost:2379".to_string());
+    let etcd_endpoint =
+        std::env::var("ETCD_ENDPOINT").unwrap_or_else(|_| "http://localhost:2379".to_string());
 
     info!("Connecting to etcd at {}", etcd_endpoint);
 
@@ -20,37 +20,62 @@ pub async fn load_from_etcd() -> Result<EtcdAppConfig, Box<dyn std::error::Error
             load_config_from_client(&client).await
         }
         Err(e) => {
-            warn!("Failed to connect to etcd: {}. Falling back to file config.", e);
+            warn!(
+                "Failed to connect to etcd: {}. Falling back to file config.",
+                e
+            );
             Err(Box::new(e))
         }
     }
 }
 
-async fn load_config_from_client(client: &ConfigClient) -> Result<EtcdAppConfig, Box<dyn std::error::Error>> {
+async fn load_config_from_client(
+    client: &ConfigClient,
+) -> Result<EtcdAppConfig, Box<dyn std::error::Error>> {
     // Load each section, with env var overrides
     let server = ServerConfig {
-        host: client.get_with_env("/server/host", "AIR_QUALITY").await
+        host: client
+            .get_with_env("/server/host", "AIR_QUALITY")
+            .await
             .unwrap_or_else(|_| "0.0.0.0".to_string()),
-        port: client.get_with_env("/server/port", "AIR_QUALITY").await
+        port: client
+            .get_with_env("/server/port", "AIR_QUALITY")
+            .await
             .unwrap_or(8080),
     };
 
     let mqtt = MqttConfig {
-        broker_url: client.get_with_env("/mqtt/broker_url", "AIR_QUALITY").await
+        broker_url: client
+            .get_with_env("/mqtt/broker_url", "AIR_QUALITY")
+            .await
             .unwrap_or_else(|_| "localhost".to_string()),
-        port: client.get_with_env("/mqtt/port", "AIR_QUALITY").await
+        port: client
+            .get_with_env("/mqtt/port", "AIR_QUALITY")
+            .await
             .unwrap_or(1883),
-        client_id: client.get_with_env("/mqtt/client_id", "AIR_QUALITY").await
+        client_id: client
+            .get_with_env("/mqtt/client_id", "AIR_QUALITY")
+            .await
             .unwrap_or_else(|_| "air-quality-app".to_string()),
-        topic_pattern: client.get_with_env("/mqtt/topic_pattern", "AIR_QUALITY").await
+        topic_pattern: client
+            .get_with_env("/mqtt/topic_pattern", "AIR_QUALITY")
+            .await
             .unwrap_or_else(|_| "airgradient/readings/+".to_string()),
-        qos: client.get_with_env("/mqtt/qos", "AIR_QUALITY").await
+        qos: client
+            .get_with_env("/mqtt/qos", "AIR_QUALITY")
+            .await
             .unwrap_or(1),
-        reconnect_delay_secs: client.get_with_env("/mqtt/reconnect_delay_secs", "AIR_QUALITY").await
+        reconnect_delay_secs: client
+            .get_with_env("/mqtt/reconnect_delay_secs", "AIR_QUALITY")
+            .await
             .unwrap_or(1),
-        max_reconnect_delay_secs: client.get_with_env("/mqtt/max_reconnect_delay_secs", "AIR_QUALITY").await
+        max_reconnect_delay_secs: client
+            .get_with_env("/mqtt/max_reconnect_delay_secs", "AIR_QUALITY")
+            .await
             .unwrap_or(30),
-        buffer_capacity: client.get_with_env("/mqtt/buffer_capacity", "AIR_QUALITY").await
+        buffer_capacity: client
+            .get_with_env("/mqtt/buffer_capacity", "AIR_QUALITY")
+            .await
             .unwrap_or(1000),
     };
 
@@ -64,10 +89,16 @@ async fn load_config_from_client(client: &ConfigClient) -> Result<EtcdAppConfig,
                 }
                 Err(_) => {
                     if let Ok(data_dir) = std::env::var("DATA_DIR") {
-                        info!("Using storage base_path from DATA_DIR env var: {}", data_dir);
+                        info!(
+                            "Using storage base_path from DATA_DIR env var: {}",
+                            data_dir
+                        );
                         data_dir
                     } else if let Ok(storage_path) = std::env::var("STORAGE_PATH") {
-                        info!("Using storage base_path from STORAGE_PATH env var: {}", storage_path);
+                        info!(
+                            "Using storage base_path from STORAGE_PATH env var: {}",
+                            storage_path
+                        );
                         storage_path
                     } else {
                         warn!("No storage base_path in etcd or env vars, using default: ./data/parquet");
@@ -76,15 +107,25 @@ async fn load_config_from_client(client: &ConfigClient) -> Result<EtcdAppConfig,
                 }
             }
         },
-        wal_enabled: client.get_with_env("/storage/wal_enabled", "AIR_QUALITY").await
+        wal_enabled: client
+            .get_with_env("/storage/wal_enabled", "AIR_QUALITY")
+            .await
             .unwrap_or(true),
-        batch_size: client.get_with_env("/storage/batch_size", "AIR_QUALITY").await
+        batch_size: client
+            .get_with_env("/storage/batch_size", "AIR_QUALITY")
+            .await
             .unwrap_or(100),
-        batch_timeout_secs: client.get_with_env("/storage/batch_timeout_secs", "AIR_QUALITY").await
+        batch_timeout_secs: client
+            .get_with_env("/storage/batch_timeout_secs", "AIR_QUALITY")
+            .await
             .unwrap_or(5),
     };
 
-    Ok(EtcdAppConfig { server, mqtt, storage })
+    Ok(EtcdAppConfig {
+        server,
+        mqtt,
+        storage,
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]

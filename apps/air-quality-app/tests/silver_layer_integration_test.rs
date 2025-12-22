@@ -17,8 +17,8 @@
 
 use duckdb::{Connection, Result as DuckDbResult};
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
 use std::time::Instant;
+use tempfile::TempDir;
 
 // ========== TEST FIXTURES ==========
 
@@ -78,7 +78,10 @@ fn create_test_parquet_file(dir: &Path, filename: &str, row_count: usize) -> Pat
         let mut row_group_writer = writer.next_row_group().expect("Failed to get row group");
 
         // Write timestamp column
-        if let Some(mut col_writer) = row_group_writer.next_column().expect("Failed to get column") {
+        if let Some(mut col_writer) = row_group_writer
+            .next_column()
+            .expect("Failed to get column")
+        {
             use parquet::column::writer::ColumnWriter;
             if let ColumnWriter::Int64ColumnWriter(ref mut typed) = col_writer {
                 let timestamp = (base_time + Duration::minutes(i as i64)).timestamp_micros();
@@ -92,14 +95,17 @@ fn create_test_parquet_file(dir: &Path, filename: &str, row_count: usize) -> Pat
         }
 
         // Write pm25 column (with variety: valid, boundary, out-of-range, NULL)
-        if let Some(mut col_writer) = row_group_writer.next_column().expect("Failed to get column") {
+        if let Some(mut col_writer) = row_group_writer
+            .next_column()
+            .expect("Failed to get column")
+        {
             use parquet::column::writer::ColumnWriter;
             if let ColumnWriter::DoubleColumnWriter(ref mut typed) = col_writer {
                 let value = match i % 10 {
-                    0 => 0.0,         // Boundary: min
-                    1 => 500.0,       // Boundary: max
-                    2 => -10.0,       // Out-of-range: below min
-                    3 => 600.0,       // Out-of-range: above max
+                    0 => 0.0,                     // Boundary: min
+                    1 => 500.0,                   // Boundary: max
+                    2 => -10.0,                   // Out-of-range: below min
+                    3 => 600.0,                   // Out-of-range: above max
                     _ => 25.0 + (i as f64 * 2.5), // Valid values
                 };
                 let def_level = if i % 10 == 4 { 0 } else { 1 }; // Every 5th is NULL
@@ -114,15 +120,18 @@ fn create_test_parquet_file(dir: &Path, filename: &str, row_count: usize) -> Pat
 
         // Write remaining columns (simplified - all valid or NULL)
         for col_idx in 2..8 {
-            if let Some(mut col_writer) = row_group_writer.next_column().expect("Failed to get column") {
+            if let Some(mut col_writer) = row_group_writer
+                .next_column()
+                .expect("Failed to get column")
+            {
                 use parquet::column::writer::ColumnWriter;
                 if let ColumnWriter::DoubleColumnWriter(ref mut typed) = col_writer {
                     let value = match col_idx {
-                        2 => 50.0 + i as f64,       // pm10
-                        3 => 450.0 + i as f64,      // co2
+                        2 => 50.0 + i as f64,         // pm10
+                        3 => 450.0 + i as f64,        // co2
                         4 => 22.0 + (i as f64 * 0.1), // temperature
                         5 => 45.0 + (i as f64 * 0.5), // humidity
-                        6 => 100.0 + i as f64,      // tvoc
+                        6 => 100.0 + i as f64,        // tvoc
                         7 => 10.0 + (i as f64 * 0.2), // nox
                         _ => 0.0,
                     };
@@ -238,9 +247,11 @@ fn test_parquet_wildcard_expansion() {
     // Act: Load multiple files via wildcard
     let pattern = format!("{}/*.parquet", temp_dir.path().to_str().unwrap());
     let count: i64 = conn
-        .query_row(&format!("SELECT COUNT(*) FROM read_parquet('{}')", pattern), [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            &format!("SELECT COUNT(*) FROM read_parquet('{}')", pattern),
+            [],
+            |row| row.get(0),
+        )
         .expect("Failed to query Parquet files");
 
     // Assert: Should load all 150 rows from 3 files
@@ -627,7 +638,10 @@ fn test_invalid_parquet_path() {
     );
 
     // Assert: Should error gracefully
-    assert!(result.is_err(), "Should error for non-existent Parquet path");
+    assert!(
+        result.is_err(),
+        "Should error for non-existent Parquet path"
+    );
 }
 
 #[test]

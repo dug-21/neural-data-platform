@@ -49,15 +49,14 @@ pub async fn health_handler(
     let age_seconds = (now - state.start_time).num_seconds().max(0) as u64;
 
     // Determine overall status
-    let overall_status = if mqtt_status == ComponentStatus::Connected
-        && storage_status == ComponentStatus::Ok
-    {
-        "healthy"
-    } else if storage_status == ComponentStatus::Error {
-        "unhealthy"
-    } else {
-        "degraded"
-    };
+    let overall_status =
+        if mqtt_status == ComponentStatus::Connected && storage_status == ComponentStatus::Ok {
+            "healthy"
+        } else if storage_status == ComponentStatus::Error {
+            "unhealthy"
+        } else {
+            "degraded"
+        };
 
     let health = HealthResponse {
         status: overall_status.to_string(),
@@ -72,8 +71,8 @@ pub async fn health_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neural_core::{CoreError, HealthStatus};
     use mockall::mock;
+    use neural_core::{CoreError, HealthStatus};
     use std::collections::HashMap;
 
     mock! {
@@ -197,9 +196,9 @@ mod tests {
             })
         });
 
-        mock_store.expect_health_check().returning(|| {
-            Err(CoreError::DatabaseError("Connection failed".to_string()))
-        });
+        mock_store
+            .expect_health_check()
+            .returning(|| Err(CoreError::DatabaseError("Connection failed".to_string())));
 
         let state = create_app_state(mock_store, mock_source);
         let result = health_handler(State(state)).await;

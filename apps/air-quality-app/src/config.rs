@@ -278,14 +278,23 @@ storage:
         };
         assert!(matches!(config_qos0.get_qos(), QoS::AtMostOnce));
 
-        let config_qos1 = MqttConfig { qos: 1, ..config_qos0.clone() };
+        let config_qos1 = MqttConfig {
+            qos: 1,
+            ..config_qos0.clone()
+        };
         assert!(matches!(config_qos1.get_qos(), QoS::AtLeastOnce));
 
-        let config_qos2 = MqttConfig { qos: 2, ..config_qos0.clone() };
+        let config_qos2 = MqttConfig {
+            qos: 2,
+            ..config_qos0.clone()
+        };
         assert!(matches!(config_qos2.get_qos(), QoS::ExactlyOnce));
 
         // Invalid QoS defaults to AtLeastOnce
-        let config_invalid = MqttConfig { qos: 99, ..config_qos0 };
+        let config_invalid = MqttConfig {
+            qos: 99,
+            ..config_qos0
+        };
         assert!(matches!(config_invalid.get_qos(), QoS::AtLeastOnce));
     }
 }

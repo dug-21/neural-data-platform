@@ -14,7 +14,10 @@ pub struct StreamRegistry {
 impl StreamRegistry {
     /// Create a new StreamRegistry connected to etcd
     pub async fn new(endpoints: &[&str]) -> Result<Self, ConfigError> {
-        info!("Initializing StreamRegistry with etcd endpoints: {:?}", endpoints);
+        info!(
+            "Initializing StreamRegistry with etcd endpoints: {:?}",
+            endpoints
+        );
         let client = ConfigClient::with_prefix(endpoints, "/streams").await?;
 
         Ok(Self {
@@ -41,7 +44,8 @@ impl StreamRegistry {
         let config: StreamConfig = self.client.get(&key).await?;
 
         // Validate before caching
-        config.validate()
+        config
+            .validate()
             .map_err(|e| ConfigError::EnvError(format!("Invalid stream config: {}", e)))?;
 
         // Update cache
@@ -80,7 +84,9 @@ impl StreamRegistry {
     }
 
     /// Load all stream configurations
-    pub async fn load_all_streams(&self) -> Result<std::collections::HashMap<String, StreamConfig>, ConfigError> {
+    pub async fn load_all_streams(
+        &self,
+    ) -> Result<std::collections::HashMap<String, StreamConfig>, ConfigError> {
         debug!("Loading all stream configurations");
 
         let stream_ids = self.list_streams().await?;
@@ -117,7 +123,8 @@ impl StreamRegistry {
         debug!("Saving stream configuration: {}", config.stream_id);
 
         // Validate before saving
-        config.validate()
+        config
+            .validate()
             .map_err(|e| ConfigError::EnvError(format!("Invalid stream config: {}", e)))?;
 
         let key = format!("/{}/config", config.stream_id);
@@ -183,11 +190,9 @@ mod tests {
             retention_days: 30,
             compression_after_days: 7,
             partitioning_strategy: "daily".to_string(),
-            fields: vec![
-                SchemaField::new("value".to_string(), FieldType::Float)
-                    .required()
-                    .with_unit("test".to_string()),
-            ],
+            fields: vec![SchemaField::new("value".to_string(), FieldType::Float)
+                .required()
+                .with_unit("test".to_string())],
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
@@ -249,13 +254,19 @@ mod tests {
         registry.save_stream(&config).await.expect("Failed to save");
 
         // Load
-        let loaded = registry.load_stream("test-stream").await.expect("Failed to load");
+        let loaded = registry
+            .load_stream("test-stream")
+            .await
+            .expect("Failed to load");
 
         assert_eq!(loaded.stream_id, config.stream_id);
         assert_eq!(loaded.description, config.description);
 
         // Cleanup
-        registry.delete_stream("test-stream").await.expect("Failed to delete");
+        registry
+            .delete_stream("test-stream")
+            .await
+            .expect("Failed to delete");
     }
 
     #[tokio::test]
@@ -269,8 +280,14 @@ mod tests {
         let config1 = create_test_config("test-stream-1");
         let config2 = create_test_config("test-stream-2");
 
-        registry.save_stream(&config1).await.expect("Failed to save 1");
-        registry.save_stream(&config2).await.expect("Failed to save 2");
+        registry
+            .save_stream(&config1)
+            .await
+            .expect("Failed to save 1");
+        registry
+            .save_stream(&config2)
+            .await
+            .expect("Failed to save 2");
 
         // List
         let streams = registry.list_streams().await.expect("Failed to list");
@@ -279,8 +296,14 @@ mod tests {
         assert!(streams.contains(&"test-stream-2".to_string()));
 
         // Cleanup
-        registry.delete_stream("test-stream-1").await.expect("Failed to delete 1");
-        registry.delete_stream("test-stream-2").await.expect("Failed to delete 2");
+        registry
+            .delete_stream("test-stream-1")
+            .await
+            .expect("Failed to delete 1");
+        registry
+            .delete_stream("test-stream-2")
+            .await
+            .expect("Failed to delete 2");
     }
 
     #[tokio::test]
@@ -302,7 +325,10 @@ mod tests {
         assert!(registry.stream_exists("test-exists").await.unwrap());
 
         // Cleanup
-        registry.delete_stream("test-exists").await.expect("Failed to delete");
+        registry
+            .delete_stream("test-exists")
+            .await
+            .expect("Failed to delete");
 
         // Should not exist again
         assert!(!registry.stream_exists("test-exists").await.unwrap());
@@ -321,7 +347,10 @@ mod tests {
         registry.save_stream(&config).await.expect("Failed to save");
 
         // Load (should cache)
-        registry.load_stream("test-cache").await.expect("Failed to load");
+        registry
+            .load_stream("test-cache")
+            .await
+            .expect("Failed to load");
 
         // Check cache size
         assert_eq!(registry.cache_size().await, 1);
@@ -331,7 +360,10 @@ mod tests {
         assert_eq!(registry.cache_size().await, 0);
 
         // Cleanup
-        registry.delete_stream("test-cache").await.expect("Failed to delete");
+        registry
+            .delete_stream("test-cache")
+            .await
+            .expect("Failed to delete");
     }
 
     #[tokio::test]
@@ -346,12 +378,24 @@ mod tests {
         let config2 = create_test_config("test-all-2");
         let config3 = create_test_config("test-all-3");
 
-        registry.save_stream(&config1).await.expect("Failed to save 1");
-        registry.save_stream(&config2).await.expect("Failed to save 2");
-        registry.save_stream(&config3).await.expect("Failed to save 3");
+        registry
+            .save_stream(&config1)
+            .await
+            .expect("Failed to save 1");
+        registry
+            .save_stream(&config2)
+            .await
+            .expect("Failed to save 2");
+        registry
+            .save_stream(&config3)
+            .await
+            .expect("Failed to save 3");
 
         // Load all
-        let all_configs = registry.load_all_streams().await.expect("Failed to load all");
+        let all_configs = registry
+            .load_all_streams()
+            .await
+            .expect("Failed to load all");
 
         assert!(all_configs.contains_key("test-all-1"));
         assert!(all_configs.contains_key("test-all-2"));
@@ -359,8 +403,17 @@ mod tests {
         assert!(all_configs.len() >= 3);
 
         // Cleanup
-        registry.delete_stream("test-all-1").await.expect("Failed to delete 1");
-        registry.delete_stream("test-all-2").await.expect("Failed to delete 2");
-        registry.delete_stream("test-all-3").await.expect("Failed to delete 3");
+        registry
+            .delete_stream("test-all-1")
+            .await
+            .expect("Failed to delete 1");
+        registry
+            .delete_stream("test-all-2")
+            .await
+            .expect("Failed to delete 2");
+        registry
+            .delete_stream("test-all-3")
+            .await
+            .expect("Failed to delete 3");
     }
 }
