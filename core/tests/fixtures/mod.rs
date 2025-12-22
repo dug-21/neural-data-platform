@@ -4,3 +4,4 @@
 //! data sources to verify parsers remain config-driven.
 
 pub mod payloads;
+pub mod nws_payloads;

@@ -1,0 +1,115 @@
+{
+  "@context": [
+    "https://geojson.org/geojson-ld/geojson-context.jsonld",
+    {
+      "@version": "1.1",
+      "wx": "https://api.weather.gov/ontology#",
+      "@vocab": "https://api.weather.gov/ontology#"
+    }
+  ],
+  "type": "Feature",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-81.56, 30.30],
+        [-81.56, 30.28],
+        [-81.54, 30.28],
+        [-81.54, 30.30],
+        [-81.56, 30.30]
+      ]
+    ]
+  },
+  "properties": {
+    "updated": "2025-12-21T10:42:35+00:00",
+    "units": "us",
+    "forecastGenerator": "HourlyForecastGenerator",
+    "generatedAt": "2025-12-21T12:00:00+00:00",
+    "updateTime": "2025-12-21T10:42:35+00:00",
+    "validTimes": "2025-12-21T06:00:00+00:00/P7DT18H",
+    "elevation": {
+      "unitCode": "wmoUnit:m",
+      "value": 4.2672
+    },
+    "periods": [
+      {
+        "number": 1,
+        "startTime": "2025-12-21T13:00:00-05:00",
+        "endTime": "2025-12-21T14:00:00-05:00",
+        "isDaytime": true,
+        "temperature": 72,
+        "temperatureUnit": "F",
+        "temperatureTrend": null,
+        "probabilityOfPrecipitation": {
+          "unitCode": "wmoUnit:percent",
+          "value": 20
+        },
+        "dewpoint": {
+          "unitCode": "wmoUnit:degC",
+          "value": 16.111111111111
+        },
+        "relativeHumidity": {
+          "unitCode": "wmoUnit:percent",
+          "value": 65
+        },
+        "windSpeed": "10 mph",
+        "windDirection": "S",
+        "icon": "https://api.weather.gov/icons/land/day/rain_showers,20",
+        "shortForecast": "Slight Chance Rain Showers",
+        "detailedForecast": ""
+      },
+      {
+        "number": 2,
+        "startTime": "2025-12-21T14:00:00-05:00",
+        "endTime": "2025-12-21T15:00:00-05:00",
+        "isDaytime": true,
+        "temperature": 73,
+        "temperatureUnit": "F",
+        "temperatureTrend": null,
+        "probabilityOfPrecipitation": {
+          "unitCode": "wmoUnit:percent",
+          "value": 25
+        },
+        "dewpoint": {
+          "unitCode": "wmoUnit:degC",
+          "value": 16.666666666667
+        },
+        "relativeHumidity": {
+          "unitCode": "wmoUnit:percent",
+          "value": 63
+        },
+        "windSpeed": "5 to 10 mph",
+        "windDirection": "SW",
+        "icon": "https://api.weather.gov/icons/land/day/rain_showers,25",
+        "shortForecast": "Chance Rain Showers",
+        "detailedForecast": ""
+      },
+      {
+        "number": 3,
+        "startTime": "2025-12-21T15:00:00-05:00",
+        "endTime": "2025-12-21T16:00:00-05:00",
+        "isDaytime": true,
+        "temperature": 74,
+        "temperatureUnit": "F",
+        "temperatureTrend": null,
+        "probabilityOfPrecipitation": {
+          "unitCode": "wmoUnit:percent",
+          "value": 30
+        },
+        "dewpoint": {
+          "unitCode": "wmoUnit:degC",
+          "value": 17.222222222222
+        },
+        "relativeHumidity": {
+          "unitCode": "wmoUnit:percent",
+          "value": 61
+        },
+        "windSpeed": "10 to 15 mph",
+        "windDirection": "NE",
+        "icon": "https://api.weather.gov/icons/land/day/tsra,30",
+        "shortForecast": "Chance Thunderstorms",
+        "detailedForecast": ""
+      }
+    ]
+  }
+}
