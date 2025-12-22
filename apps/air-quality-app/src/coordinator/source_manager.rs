@@ -374,6 +374,7 @@ impl SourceManager {
             ],
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
+            array_config: None,
         };
         let parser = create_parser_from_config(parser_config).map_err(|e| {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
@@ -663,6 +664,7 @@ impl SourceManager {
             ],
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
+            array_config: None,
         };
         let parser = create_parser_from_config(parser_config).map_err(|e| {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
