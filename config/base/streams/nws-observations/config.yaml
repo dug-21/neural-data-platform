@@ -1,0 +1,188 @@
+stream_id: nws-observations
+description: Real-time weather observations from NWS station KSGJ
+version: "1.0.0"
+enabled: true
+retention_days: 365
+compression_after_days: 7
+partitioning_strategy: daily
+
+fields:
+  - name: temperature
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Ambient air temperature"
+  - name: dewpoint
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Dew point temperature"
+  - name: wind_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "Wind direction in degrees from north"
+  - name: wind_speed
+    type: float
+    nullable: true
+    unit: km/h
+    range: [0.0, 300.0]
+    description: "Wind speed"
+  - name: wind_gust
+    type: float
+    nullable: true
+    unit: km/h
+    range: [0.0, 400.0]
+    description: "Wind gust speed"
+  - name: barometric_pressure
+    type: float
+    nullable: true
+    unit: pa
+    range: [80000.0, 110000.0]
+    description: "Barometric pressure"
+  - name: sea_level_pressure
+    type: float
+    nullable: true
+    unit: pa
+    range: [80000.0, 110000.0]
+    description: "Sea level pressure"
+  - name: visibility
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 50000.0]
+    description: "Visibility distance"
+  - name: max_temperature_24h
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Maximum temperature in last 24 hours"
+  - name: min_temperature_24h
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Minimum temperature in last 24 hours"
+  - name: precipitation_1h
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 1.0]
+    description: "Precipitation in last hour"
+  - name: precipitation_3h
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 1.0]
+    description: "Precipitation in last 3 hours"
+  - name: precipitation_6h
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 1.0]
+    description: "Precipitation in last 6 hours"
+  - name: relative_humidity
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Relative humidity"
+  - name: wind_chill
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Wind chill temperature"
+  - name: heat_index
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Heat index temperature"
+
+sources:
+  - type: http_poll
+    enabled: true
+    poll_interval_secs: 300  # 5 minutes (NWS updates hourly but we check frequently)
+    timeout_secs: 30
+    retry_attempts: 3
+    retry_delay_secs: 5
+    parser_name: nws_observations
+    endpoints:
+      - endpoint_id: nws_ksgj_observations
+        location_id: ksgj
+        station_id: KSGJ
+        url: "https://api.weather.gov/stations/KSGJ/observations/latest"
+        auth_type: none
+        headers:
+          User-Agent: "(neural-data-platform, contact@example.com)"
+          Accept: "application/geo+json"
+    parser:
+      parser_type: json_path
+      location_id_field: properties.station
+      default_location_id: ksgj
+      timestamp_field: properties.timestamp  # Use observation time, not poll time
+      timestamp_format: iso8601
+      default_tags:
+        source: nws
+        api: observations
+        stream_id: nws-observations
+        station_id: KSGJ
+      field_mappings:
+        - path: properties.temperature.value
+          metric_name: temperature
+          unit: celsius
+        - path: properties.dewpoint.value
+          metric_name: dewpoint
+          unit: celsius
+        - path: properties.windDirection.value
+          metric_name: wind_direction
+          unit: degrees
+        - path: properties.windSpeed.value
+          metric_name: wind_speed
+          unit: km/h
+        - path: properties.windGust.value
+          metric_name: wind_gust
+          unit: km/h
+        - path: properties.barometricPressure.value
+          metric_name: barometric_pressure
+          unit: pa
+        - path: properties.seaLevelPressure.value
+          metric_name: sea_level_pressure
+          unit: pa
+        - path: properties.visibility.value
+          metric_name: visibility
+          unit: meters
+        - path: properties.maxTemperatureLast24Hours.value
+          metric_name: max_temperature_24h
+          unit: celsius
+        - path: properties.minTemperatureLast24Hours.value
+          metric_name: min_temperature_24h
+          unit: celsius
+        - path: properties.precipitationLastHour.value
+          metric_name: precipitation_1h
+          unit: meters
+        - path: properties.precipitationLast3Hours.value
+          metric_name: precipitation_3h
+          unit: meters
+        - path: properties.precipitationLast6Hours.value
+          metric_name: precipitation_6h
+          unit: meters
+        - path: properties.relativeHumidity.value
+          metric_name: relative_humidity
+          unit: percent
+        - path: properties.windChill.value
+          metric_name: wind_chill
+          unit: celsius
+        - path: properties.heatIndex.value
+          metric_name: heat_index
+          unit: celsius
+
+storage:
+  batch_size: 50
+  batch_timeout_secs: 30
+  buffer_capacity: 500

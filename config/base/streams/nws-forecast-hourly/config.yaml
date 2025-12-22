@@ -1,0 +1,142 @@
+stream_id: nws-forecast-hourly
+description: Hourly weather forecast from NWS gridpoint forecast
+version: "1.0.0"
+enabled: true
+retention_days: 30  # Forecasts are short-lived data
+compression_after_days: 7
+partitioning_strategy: daily
+
+fields:
+  - name: temperature
+    type: float
+    nullable: false
+    unit: fahrenheit
+    range: [-50.0, 130.0]
+    description: "Forecast temperature"
+  - name: dewpoint
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Forecast dew point"
+  - name: relative_humidity
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Forecast relative humidity"
+  - name: wind_speed
+    type: float
+    nullable: true
+    unit: mph
+    range: [0.0, 200.0]
+    description: "Forecast wind speed"
+  - name: wind_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "Forecast wind direction"
+  - name: short_forecast
+    type: string
+    nullable: true
+    description: "Brief forecast description"
+  - name: probability_of_precipitation
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Precipitation probability"
+
+sources:
+  - type: http_poll
+    enabled: true
+    poll_interval_secs: 3600  # 1 hour (NWS updates hourly)
+    timeout_secs: 30
+    retry_attempts: 3
+    retry_delay_secs: 5
+    parser_name: nws_forecast_hourly
+    endpoints:
+      - endpoint_id: nws_jax_79_49_forecast
+        location_id: ksgj
+        grid_office: JAX
+        grid_x: 79
+        grid_y: 49
+        url: "https://api.weather.gov/gridpoints/JAX/79,49/forecast/hourly"
+        auth_type: none
+        headers:
+          User-Agent: "(neural-data-platform, contact@example.com)"
+          Accept: "application/geo+json"
+    parser:
+      parser_type: array_iterator
+      location_id_field: properties.gridId
+      default_location_id: ksgj
+      default_tags:
+        source: nws
+        api: forecast_hourly
+        stream_id: nws-forecast-hourly
+        grid_office: JAX
+        grid_x: "79"
+        grid_y: "49"
+      # ArrayIteratorConfig - must be nested under array_config
+      array_config:
+        array_path: properties.periods
+        timestamp_field: startTime
+        metadata_tags:
+          - path: properties.generatedAt
+            tag_name: forecast_generated_at
+          - path: properties.updateTime
+            tag_name: forecast_update_time
+        element_mappings:
+          - path: temperature
+            metric_name: temperature
+            unit: fahrenheit
+            optional: false
+          - path: dewpoint.value
+            metric_name: dewpoint
+            unit: celsius
+            optional: true
+          - path: relativeHumidity.value
+            metric_name: relative_humidity
+            unit: percent
+            optional: true
+          - path: windSpeed
+            metric_name: wind_speed
+            unit: mph
+            optional: true
+            string_parse:
+              pattern: "^(\\d+)\\s*(?:to\\s*(\\d+)\\s*)?mph$"
+              capture_group: 1
+          - path: windDirection
+            metric_name: wind_direction
+            unit: degrees
+            optional: true
+            enum_map:
+              N: 0
+              NNE: 22.5
+              NE: 45
+              ENE: 67.5
+              E: 90
+              ESE: 112.5
+              SE: 135
+              SSE: 157.5
+              S: 180
+              SSW: 202.5
+              SW: 225
+              WSW: 247.5
+              W: 270
+              WNW: 292.5
+              NW: 315
+              NNW: 337.5
+          - path: shortForecast
+            metric_name: short_forecast
+            optional: true
+          - path: probabilityOfPrecipitation.value
+            metric_name: probability_of_precipitation
+            unit: percent
+            optional: true
+
+storage:
+  batch_size: 156  # 156 hours = 6.5 days of forecast
+  batch_timeout_secs: 60
+  buffer_capacity: 200
