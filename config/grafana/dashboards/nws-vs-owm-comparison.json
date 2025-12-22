@@ -1,0 +1,438 @@
+{
+  "uid": "ndp-nws-vs-owm",
+  "title": "Weather Source Comparison: NWS vs OpenWeatherMap",
+  "tags": ["ndp", "weather", "comparison", "nws", "openweathermap"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Temperature Delta",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT AVG(value) as temp FROM (SELECT value FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE metric = 'temperature' ORDER BY timestamp DESC LIMIT 100)), owm AS (SELECT AVG(value) as temp FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'temperature' ORDER BY timestamp DESC LIMIT 100)) SELECT (nws.temp - owm.temp) as value FROM nws, owm",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Wind Speed Delta",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT AVG(value) as wind FROM (SELECT value FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE metric = 'wind_speed' ORDER BY timestamp DESC LIMIT 100)), owm AS (SELECT AVG(value * 3.6) as wind FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'wind_speed' ORDER BY timestamp DESC LIMIT 100)) SELECT (nws.wind - owm.wind) as value FROM nws, owm",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitykmh",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Humidity Delta",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT AVG(value) as humidity FROM (SELECT value FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE metric = 'relative_humidity' ORDER BY timestamp DESC LIMIT 100)), owm AS (SELECT AVG(value) as humidity FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'humidity' ORDER BY timestamp DESC LIMIT 100)) SELECT (nws.humidity - owm.humidity) as value FROM nws, owm",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Pressure Delta",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT AVG(value/100) as pressure FROM (SELECT value FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE metric = 'barometric_pressure' ORDER BY timestamp DESC LIMIT 100)), owm AS (SELECT AVG(value) as pressure FROM (SELECT value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE metric = 'pressure' ORDER BY timestamp DESC LIMIT 100)) SELECT (nws.pressure - owm.pressure) as value FROM nws, owm",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurehpa",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Temperature Comparison",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'temperature' THEN value END) as temp FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1), owm AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'temperature' THEN value END) as temp FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT COALESCE(n.bucket, o.bucket) as time, n.temp as \"NWS Temperature\", o.temp as \"OpenWeatherMap Temperature\" FROM nws n FULL OUTER JOIN owm o ON n.bucket = o.bucket ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "celsius"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "NWS Temperature"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#5794F2"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "OpenWeatherMap Temperature"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#FF9830"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Wind Speed Comparison",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'wind_speed' THEN value END) as wind FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1), owm AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'wind_speed' THEN value * 3.6 END) as wind FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT COALESCE(n.bucket, o.bucket) as time, n.wind as \"NWS Wind Speed\", o.wind as \"OpenWeatherMap Wind Speed\" FROM nws n FULL OUTER JOIN owm o ON n.bucket = o.bucket ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "velocitykmh",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "NWS Wind Speed"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#5794F2"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "OpenWeatherMap Wind Speed"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#FF9830"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Humidity Comparison",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'relative_humidity' THEN value END) as humidity FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1), owm AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'humidity' THEN value END) as humidity FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT COALESCE(n.bucket, o.bucket) as time, n.humidity as \"NWS Humidity\", o.humidity as \"OpenWeatherMap Humidity\" FROM nws n FULL OUTER JOIN owm o ON n.bucket = o.bucket ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "NWS Humidity"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#5794F2"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "OpenWeatherMap Humidity"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#FF9830"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Pressure Comparison",
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "motherduck-duckdb-datasource",
+            "uid": "duckdb-ndp"
+          },
+          "rawSql": "WITH nws AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'barometric_pressure' THEN value / 100 END) as pressure FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1), owm AS (SELECT time_bucket(INTERVAL '10 minutes', to_timestamp(timestamp/1000000)) as bucket, AVG(CASE WHEN metric = 'pressure' THEN value END) as pressure FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT COALESCE(n.bucket, o.bucket) as time, n.pressure as \"NWS Pressure\", o.pressure as \"OpenWeatherMap Pressure\" FROM nws n FULL OUTER JOIN owm o ON n.bucket = o.bucket ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 5
+          },
+          "unit": "pressurehpa",
+          "min": 950,
+          "max": 1050
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "NWS Pressure"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#5794F2"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "OpenWeatherMap Pressure"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "#FF9830"}}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
