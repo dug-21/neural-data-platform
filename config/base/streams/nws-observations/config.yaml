@@ -119,7 +119,8 @@ sources:
         url: "https://api.weather.gov/stations/KSGJ/observations/latest"
         auth_type: none
         headers:
-          User-Agent: "(neural-data-platform, contact@example.com)"
+          # NWS requires valid contact info in User-Agent - update YOUR_EMAIL below
+          User-Agent: "(neural-data-platform/1.0, YOUR_EMAIL@your-domain.com)"
           Accept: "application/geo+json"
     parser:
       parser_type: json_path
