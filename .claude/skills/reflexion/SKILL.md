@@ -1,24 +1,38 @@
 ---
 name: "reflexion"
-description: "Record whether patterns and approaches worked. Essential feedback that trains the system to recommend better patterns over time."
+description: "Record feedback on whether patterns retrieved via get-pattern were helpful. Essential for training the recommendation system."
 ---
 
-# Reflexion - Record What Worked
+# Reflexion - Evaluate Pattern Effectiveness
 
 ## What This Skill Does
 
-Records the outcome of your work - whether patterns you used were helpful, approaches that succeeded or failed, and lessons learned. This feedback is **essential** for the learning system to improve recommendations over time.
+Records feedback on patterns you retrieved using `get-pattern`. This feedback trains the recommendation system to suggest better patterns over time.
 
-**Use this AFTER completing any significant work** to train the pattern memory.
+**Use this ONLY to evaluate patterns from `get-pattern`** - NOT for storing new patterns or swarm/transient memory.
 
-## Why This Matters
+## CRITICAL: What This Skill Is NOT For
 
-AgentDB uses reinforcement learning to recommend patterns. Without feedback:
-- Good patterns never get reinforced
-- Bad patterns keep getting recommended
-- The system can't learn from experience
+| DO NOT USE FOR | USE INSTEAD |
+|----------------|-------------|
+| Storing new patterns you discovered | `save-pattern` |
+| Recording swarm coordination state | MCP memory tools |
+| Transient task/agent memory | `mcp__claude-flow__memory_usage` |
+| Storing architecture decisions | `save-pattern` |
+| Recording procedures | `save-pattern` |
 
-Your feedback directly improves future agent performance.
+**This skill is ONLY for evaluating `get-pattern` results.**
+
+---
+
+## The Pattern Workflow
+
+```
+1. BEFORE work:  get-pattern  → Retrieve relevant patterns
+2. DURING work:  Apply the pattern
+3. AFTER work:   reflexion    → Did the pattern help? (THIS SKILL)
+                 save-pattern → Store NEW discoveries (if any)
+```
 
 ---
 
@@ -26,43 +40,49 @@ Your feedback directly improves future agent performance.
 
 ### Pattern Worked Well
 
+When a pattern from `get-pattern` was accurate and helpful:
+
 ```javascript
 mcp__agentdb__reflexion_store({
   session_id: "ndp-patterns",
-  task: "Brief description of what you did",
-  input: "What was requested",
-  output: "What you produced/accomplished",
+  task: "Used [pattern-name] pattern for [what you did]",
+  input: "Pattern retrieved: [pattern description]",
+  output: "Result: [what you accomplished using the pattern]",
   reward: 1.0,
   success: true,
-  critique: "Pattern was complete and accurate"
+  critique: "Pattern was complete and accurate - no adjustments needed"
 })
 ```
 
 ### Pattern Partially Worked
 
+When a pattern needed modifications:
+
 ```javascript
 mcp__agentdb__reflexion_store({
   session_id: "ndp-patterns",
-  task: "Brief description of what you did",
-  input: "What was requested",
-  output: "What you produced (with adjustments)",
+  task: "Used [pattern-name] pattern but needed adjustment",
+  input: "Pattern retrieved: [pattern description]",
+  output: "Completed after [what you had to change]",
   reward: 0.6,
   success: true,
-  critique: "Pattern needed adjustment - [describe what was missing or outdated]"
+  critique: "Pattern missing [specific gap] - consider updating via save-pattern"
 })
 ```
 
-### Pattern Failed / Approach Didn't Work
+### Pattern Failed
+
+When a pattern was wrong or outdated:
 
 ```javascript
 mcp__agentdb__reflexion_store({
   session_id: "ndp-patterns",
-  task: "Brief description of what you attempted",
-  input: "What was requested",
-  output: "What happened (failure description)",
+  task: "Pattern [pattern-name] failed",
+  input: "Pattern retrieved: [pattern description]",
+  output: "Failed because [what went wrong]",
   reward: 0.2,
   success: false,
-  critique: "Pattern failed because [reason] - needs update or replacement"
+  critique: "Pattern is outdated/wrong - [specific issue]. Needs update via save-pattern"
 })
 ```
 
@@ -83,9 +103,9 @@ mcp__agentdb__reflexion_store({
 
 ## What to Include in Critique
 
-The `critique` field is the most valuable part - it tells future agents what to watch for.
+The `critique` field trains future recommendations. Be specific:
 
-### Good Critique Examples
+### Good Critiques
 
 ```
 "Pattern was complete - followed steps exactly and deployment succeeded"
@@ -94,17 +114,15 @@ The `critique` field is the most valuable part - it tells future agents what to 
 
 "TimescaleDB connection pattern assumed localhost but we use Docker networking"
 
-"Error handling pattern didn't cover the async timeout case we encountered"
-
 "Architecture pattern was outdated - ADR-005 superseded the approach described"
 ```
 
-### Poor Critique Examples (Avoid)
+### Poor Critiques (Avoid)
 
 ```
-"It worked"           // Too vague
+"It worked"           // Too vague - doesn't help future agents
 "Failed"              // No actionable info
-"Good pattern"        // Doesn't help future agents
+"Good pattern"        // Doesn't explain what made it good
 ```
 
 ---
@@ -113,69 +131,48 @@ The `critique` field is the most valuable part - it tells future agents what to 
 
 Record feedback when you've:
 
-1. **Used a pattern from `get-pattern`** - Did it help?
-2. **Completed a significant implementation** - What worked?
-3. **Encountered an issue** - What went wrong?
-4. **Discovered something new** - Worth remembering?
-5. **Deviated from a pattern** - Why and what worked better?
+1. **Retrieved a pattern via `get-pattern`** and applied it
+2. **Found a pattern was outdated** or incorrect
+3. **Had to modify a pattern** to make it work
+
+**Do NOT record feedback for:**
+- Work where you didn't use `get-pattern`
+- New discoveries (use `save-pattern` instead)
+- Swarm/coordination state (use MCP memory tools)
 
 ---
 
-## Recording Multiple Outcomes
+## After Recording Feedback
 
-If you used multiple patterns in one task, record feedback for each:
-
-```javascript
-// Feedback on architecture pattern
-mcp__agentdb__reflexion_store({
-  session_id: "ndp-patterns",
-  task: "Used domain-adapter pattern for new source",
-  input: "Add HTTP polling source",
-  output: "Implemented HttpPollingSource with Source trait",
-  reward: 1.0,
-  success: true,
-  critique: "Domain adapter pattern worked perfectly for new source type"
-})
-
-// Feedback on deployment pattern
-mcp__agentdb__reflexion_store({
-  session_id: "ndp-patterns",
-  task: "Used Docker deployment pattern",
-  input: "Deploy new source to Pi",
-  output: "Deployment failed initially, fixed port mapping",
-  reward: 0.6,
-  success: true,
-  critique: "Pattern missing port mapping for new source - added 8080:8080"
-})
-```
-
----
-
-## Suggesting Pattern Updates
-
-If your critique identifies a pattern that needs updating, also use `save-pattern` to fix it:
+If your critique identifies a pattern that needs updating:
 
 ```javascript
-// First, record the feedback
+// 1. Record the feedback (this skill)
 mcp__agentdb__reflexion_store({
   session_id: "ndp-patterns",
   task: "Used add-stream pattern",
-  input: "Add new sensor stream",
+  input: "Pattern for adding new data streams",
   output: "Completed after adding retention field",
   reward: 0.6,
   success: true,
   critique: "Pattern missing required 'retention' field - needs update"
 })
 
-// Then, update the pattern (use save-pattern skill)
-// This ensures future agents get the correct version
+// 2. Update the pattern (save-pattern skill)
+mcp__agentdb__agentdb_pattern_store({
+  taskType: "development",
+  approach: "# Add New Data Stream (Updated)\n\n...updated content...",
+  successRate: 0.85,
+  tags: ["stream", "procedure"],
+  metadata: { pattern_name: "add-stream", version: "2.0" }
+})
 ```
 
 ---
 
 ## Causal Learning
 
-For outcomes that establish cause-effect relationships, also record causal edges:
+For outcomes that establish cause-effect relationships:
 
 ```javascript
 mcp__agentdb__causal_add_edge({
@@ -187,42 +184,31 @@ mcp__agentdb__causal_add_edge({
 })
 ```
 
-This helps the system learn "if X, then Y" relationships.
-
 ---
 
-## Check Your Learning Impact
+## Check Learning Impact
 
-See how your feedback has influenced the system:
+See how feedback has influenced recommendations:
 
 ```javascript
-// View learning metrics
 mcp__agentdb__learning_metrics({
   time_window_days: 7,
   group_by: "task"
 })
 
-// See pattern health
 mcp__agentdb__agentdb_pattern_stats({})
 ```
 
 ---
 
-## Integration with Pattern Workflow
-
-The complete pattern workflow:
-
-1. **BEFORE work**: Use `get-pattern` to find relevant patterns
-2. **DURING work**: Note what works, what doesn't
-3. **AFTER work**:
-   - Use `reflexion` (this skill) to record outcomes
-   - Use `save-pattern` if you discovered a new reusable approach
-
----
-
 ## Related Skills
 
-- `get-pattern` - Retrieve patterns before work
-- `save-pattern` - Store new patterns after discoveries
+- **`get-pattern`** - Retrieve patterns BEFORE work (use this first)
+- **`save-pattern`** - Store NEW patterns for architecture, procedures, conventions
 - `agentdb-learning` - Advanced reinforcement learning features
 - `reasoningbank-agentdb` - Adaptive learning with trajectory tracking
+
+**NOT related to:**
+- Swarm coordination memory
+- Transient task state
+- Agent communication

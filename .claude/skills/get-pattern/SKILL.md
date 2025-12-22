@@ -1,24 +1,48 @@
 ---
 name: "get-pattern"
-description: "Retrieve project patterns using semantic search via AgentDB. Use BEFORE implementing anything to ensure consistency with established approaches."
+description: "Retrieve APPLICATION patterns (architecture, procedures, conventions) via semantic search. Use BEFORE implementing to ensure consistency."
 ---
 
-# Get Pattern
+# Get Pattern - Retrieve Application Knowledge
 
 ## What This Skill Does
 
-Retrieves established patterns, conventions, and architecture documentation for the Neural Data Platform using AgentDB's semantic vector search. Patterns are found by **meaning**, not just exact key match.
+Retrieves established **application patterns** (architecture, procedures, conventions) for the Neural Data Platform using AgentDB's semantic vector search. Patterns are found by **meaning**, not just exact key match.
 
 **Use this BEFORE implementing anything** to ensure you follow project standards.
 
-## When to Use
+## CRITICAL: What This Skill IS and IS NOT For
 
-- Before implementing anything new
-- When unsure "how we do things here"
-- To find similar past approaches
-- "How do I add a new stream/source/parser?"
-- "What's the architecture of this system?"
-- "What are the naming conventions?"
+### USE FOR (Application Knowledge)
+
+| Type | Example Queries |
+|------|-----------------|
+| **Architecture** | "domain adapter pattern", "data pipeline architecture" |
+| **Procedures** | "how to add a new stream", "deployment commands" |
+| **Conventions** | "naming conventions", "code organization" |
+| **Troubleshooting** | "common build errors", "debugging checklist" |
+
+### DO NOT USE FOR (Transient/Swarm Memory)
+
+| Type | Use Instead |
+|------|-------------|
+| Current swarm status | `mcp__claude-flow__swarm_status` |
+| Agent task state | `mcp__claude-flow__task_status` |
+| Working memory | `mcp__claude-flow__memory_usage` |
+| Session context | MCP memory tools |
+
+**Patterns are PERMANENT application knowledge, not transient swarm state.**
+
+---
+
+## The Pattern Workflow
+
+```
+1. BEFORE work:  get-pattern  → Retrieve relevant patterns (THIS SKILL)
+2. DURING work:  Apply the pattern, note what works
+3. AFTER work:   reflexion    → Did get-pattern results help?
+                 save-pattern → Store NEW discoveries (if any)
+```
 
 ---
 
@@ -105,7 +129,31 @@ mcp__agentdb__reflexion_retrieve({
 
 ## CRITICAL: Record Pattern Usage
 
-After using a pattern, **always use the `reflexion` skill** to record whether it helped. This trains the system to recommend better patterns over time.
+After using a pattern, **always use the `reflexion` skill** to record whether it helped:
+
+```javascript
+// Pattern worked well
+mcp__agentdb__reflexion_store({
+  session_id: "ndp-patterns",
+  task: "Used [pattern-name] for [what you did]",
+  input: "Pattern retrieved: [description]",
+  output: "Result: [what you accomplished]",
+  reward: 1.0,
+  success: true,
+  critique: "Pattern was accurate and complete"
+})
+
+// Pattern needed fixes
+mcp__agentdb__reflexion_store({
+  session_id: "ndp-patterns",
+  task: "Used [pattern-name] but needed adjustment",
+  input: "Pattern retrieved: [description]",
+  output: "Completed after [modifications]",
+  reward: 0.6,
+  success: true,
+  critique: "Pattern missing [gap] - should update via save-pattern"
+})
+```
 
 Without feedback, the system can't learn which patterns actually work.
 
@@ -151,12 +199,12 @@ mcp__agentdb__agentdb_pattern_search({
 })
 ```
 
-### Deployment Commands
+### Creating Grafana Dashboards
 ```javascript
 mcp__agentdb__agentdb_pattern_search({
-  task: "deployment commands and procedures",
+  task: "grafana dashboard creation with DuckDB",
   k: 3,
-  filters: { taskType: "deployment" }
+  filters: { taskType: "procedures" }
 })
 ```
 
@@ -186,7 +234,12 @@ If no relevant pattern exists:
 
 ## Related Skills
 
-- `reflexion` - Record whether patterns worked (REQUIRED after using patterns)
-- `save-pattern` - Store new patterns or update outdated ones
+- **`save-pattern`** - Store NEW patterns for architecture, procedures, conventions
+- **`reflexion`** - Record feedback on whether `get-pattern` results helped (REQUIRED after using patterns)
 - `agentdb-memory-patterns` - Advanced memory management
 - `agentdb-vector-search` - Direct vector search capabilities
+
+**NOT related to:**
+- Swarm coordination (use claude-flow MCP tools)
+- Transient task memory (use MCP memory with TTL)
+- Agent state management (use claude-flow tools)

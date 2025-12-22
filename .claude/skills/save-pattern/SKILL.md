@@ -1,30 +1,52 @@
 ---
 name: "save-pattern"
-description: "Store, update, or deprecate project patterns in AgentDB. Use after discovering reusable approaches or when patterns become outdated."
+description: "Store, update, or deprecate APPLICATION patterns (architecture, procedures, conventions) in AgentDB. NOT for swarm/transient memory."
 ---
 
-# Save Pattern
+# Save Pattern - Store Application Knowledge
 
 ## What This Skill Does
 
-Manages the full lifecycle of project patterns in AgentDB:
+Manages the full lifecycle of **application patterns** in AgentDB:
 - **Store** - Create new patterns with semantic embeddings
 - **Update** - Replace patterns (AgentDB tracks versions)
 - **Deprecate** - Mark patterns as outdated with replacement guidance
 - **Delete** - Remove patterns entirely
 
-Patterns are stored with success tracking, enabling the system to learn which patterns are actually helpful over time.
+## CRITICAL: What This Skill IS and IS NOT For
 
-## When to Use
+### USE FOR (Application Knowledge)
 
-| Situation | Operation |
-|-----------|-----------|
-| Discovered a reusable approach | Store |
-| Defined a new process or procedure | Store |
-| Significantly changed the architecture | Update |
-| Pattern procedure has changed | Update |
-| Pattern replaced by better approach | Deprecate |
-| Pattern is wrong/dangerous/obsolete | Delete |
+| Type | Examples |
+|------|----------|
+| **Architecture** | System design, ADRs, schemas, trait patterns |
+| **Procedures** | "How to add a stream", "How to deploy", step-by-step guides |
+| **Conventions** | Naming rules, code style, organization standards |
+| **Data Flow** | Pipeline patterns, ETL approaches, transformation logic |
+| **Troubleshooting** | Common issues and solutions, debugging checklists |
+
+### DO NOT USE FOR (Transient/Swarm Memory)
+
+| Type | Use Instead |
+|------|-------------|
+| Swarm coordination state | `mcp__claude-flow__memory_usage` |
+| Agent task status | `mcp__claude-flow__task_status` |
+| Temporary working memory | `mcp__claude-flow__memory_usage` |
+| Inter-agent messages | `mcp__claude-flow__daa_communication` |
+| Session-specific context | MCP memory tools with TTL |
+
+**Patterns are PERMANENT application knowledge, not transient swarm state.**
+
+---
+
+## The Pattern Workflow
+
+```
+1. BEFORE work:  get-pattern  → Check existing patterns first
+2. DURING work:  Discover new approaches
+3. AFTER work:   save-pattern → Store reusable discoveries (THIS SKILL)
+                 reflexion    → Evaluate if get-pattern results helped
+```
 
 ---
 
@@ -35,22 +57,20 @@ Patterns are stored with success tracking, enabling the system to learn which pa
 ```javascript
 mcp__agentdb__agentdb_pattern_store({
   taskType: "development",
-  approach: "# Add New Data Stream\n\n## Prerequisites\n- Access to config/streams directory\n- etcd running\n\n## Steps\n1. Create config/streams/{stream-id}/config.yaml\n2. Define schema with fields (snake_case names)\n3. Add sources configuration\n4. Run ./deploy.sh sync\n5. Verify: docker exec etcd etcdctl get /streams/{id}/config\n\n## Example\nSee: config/streams/outdoor-weather/config.yaml",
+  approach: "# Pattern Name\n\n## Context\nWhen/why to use this.\n\n## Prerequisites\n- Required setup\n\n## Steps\n1. First step\n2. Second step\n\n## Example\nConcrete usage.\n\n## Verification\nHow to confirm it worked.",
   successRate: 0.9,
-  tags: ["stream", "procedure", "config", "etcd"],
+  tags: ["category", "specific-tags"],
   metadata: {
-    pattern_name: "add-stream",
+    pattern_name: "pattern-name",
     created_by: "agent",
     version: "1.0",
-    related_files: ["docs/procedures/HOW_TO_ADD_NEW_STREAM.md"],
-    last_verified: "2025-12-21"
+    related_files: ["path/to/related/file.md"],
+    last_verified: "2025-12-22"
   }
 })
 ```
 
-### Pattern Content Structure
-
-Use this template for pattern content:
+### Pattern Content Template
 
 ```markdown
 # Pattern Name
@@ -82,33 +102,32 @@ How to confirm it worked.
 
 | Category | Use For | Example Tags |
 |----------|---------|--------------|
-| `architecture` | System design, ADRs, schemas | `adr`, `design`, `schema` |
-| `data-flow` | Pipeline patterns, transformations | `pipeline`, `etl`, `channel` |
-| `development` | Implementation procedures | `procedure`, `howto`, `coding` |
-| `deployment` | Operational procedures | `docker`, `deploy`, `infrastructure` |
-| `troubleshooting` | Common issues and solutions | `debug`, `fix`, `checklist` |
+| `architecture` | System design, ADRs, schemas | `adr`, `design`, `schema`, `traits` |
+| `data-flow` | Pipeline patterns, transformations | `pipeline`, `etl`, `channel`, `ingestion` |
+| `development` | Implementation procedures | `procedure`, `howto`, `coding`, `rust` |
+| `deployment` | Operational procedures | `docker`, `deploy`, `infrastructure`, `pi` |
+| `troubleshooting` | Common issues and solutions | `debug`, `fix`, `checklist`, `errors` |
 | `conventions` | Naming rules, style guides | `naming`, `style`, `organization` |
-| `procedures` | Multi-component changes | `stream`, `source`, `parser` |
-| `streams` | Active stream documentation | `mqtt`, `http`, `sensor` |
+| `procedures` | Multi-component changes | `stream`, `source`, `parser`, `dashboard` |
+| `streams` | Active stream documentation | `mqtt`, `http`, `sensor`, `weather` |
 
 ---
 
 ## Update Existing Pattern
 
-Store with the same pattern_name - AgentDB handles versioning:
+Store with the same `pattern_name` - AgentDB handles versioning:
 
 ```javascript
 mcp__agentdb__agentdb_pattern_store({
   taskType: "development",
-  approach: "# Add New Data Stream (Updated)\n\n## Prerequisites\n...\n\n## Steps\n1. Create config...\n2. NEW: Add retention field (required since v2.0)\n3. ...",
+  approach: "# Add New Data Stream (Updated)\n\n## Steps\n1. Create config...\n2. NEW: Add retention field (required since v2.0)\n3. ...",
   successRate: 0.85,
-  tags: ["stream", "procedure", "config", "etcd"],
+  tags: ["stream", "procedure", "config"],
   metadata: {
     pattern_name: "add-stream",
     created_by: "agent",
     version: "2.0",
-    related_files: ["docs/procedures/HOW_TO_ADD_NEW_STREAM.md"],
-    last_verified: "2025-12-21",
+    last_verified: "2025-12-22",
     changelog: "Added required retention field"
   }
 })
@@ -123,136 +142,63 @@ When a pattern is replaced by a better approach:
 ```javascript
 mcp__agentdb__agentdb_pattern_store({
   taskType: "deployment",
-  approach: "# DEPRECATED: Manual Config Sync\n\n## Status\nDEPRECATED as of 2025-12-21\n\n## Replacement\nUse `deployment:automated-config-sync` instead.\n\n## Migration\n1. Stop using manual etcdctl put commands\n2. Edit YAML files in config/streams/\n3. Run: ./deploy.sh sync\n\n## Reason\nManual sync was error-prone and didn't validate YAML structure. Automated sync includes validation and atomic updates.",
+  approach: "# DEPRECATED: Manual Config Sync\n\n## Status\nDEPRECATED as of 2025-12-22\n\n## Replacement\nUse `deployment:automated-config-sync` instead.\n\n## Migration\n1. Stop using manual etcdctl put commands\n2. Edit YAML files in config/streams/\n3. Run: ./deploy.sh sync\n\n## Reason\nManual sync was error-prone.",
   successRate: 0.0,
-  tags: ["deprecated", "deployment", "config"],
+  tags: ["deprecated", "deployment"],
   metadata: {
     pattern_name: "manual-config-sync",
     status: "deprecated",
     replacement: "automated-config-sync",
-    deprecation_date: "2025-12-21",
-    created_by: "agent"
+    deprecation_date: "2025-12-22"
   }
 })
 ```
+
+**Prefer Deprecation over Deletion** - deprecated patterns serve as historical reference.
 
 ---
 
-## Delete Pattern
+## Real Examples
 
-For patterns that are actively harmful or completely wrong:
+### Architecture Pattern
 
 ```javascript
-mcp__agentdb__agentdb_delete({
-  filters: {
-    session_id: "ndp-patterns"
+mcp__agentdb__agentdb_pattern_store({
+  taskType: "architecture",
+  approach: "# Domain Adapter Pattern\n\n## Context\nAll data sources implement the Source trait for uniform handling.\n\n## Implementation\n1. Create struct implementing Source trait\n2. Implement fetch() -> Vec<TimeSeriesPoint>\n3. Implement health_check() -> HealthStatus\n\n## Example\nSee: core/src/sources/http_poll.rs",
+  successRate: 0.95,
+  tags: ["architecture", "traits", "hexagonal", "source"],
+  metadata: {
+    pattern_name: "domain-adapter-source",
+    related_files: ["core/src/sources/http_poll.rs", "core/src/traits.rs"]
   }
-  // Note: Prefer deprecation over deletion to preserve history
 })
 ```
 
-**Prefer Deprecation over Deletion** - deprecated patterns serve as historical reference and prevent others from re-discovering bad approaches.
+### Procedure Pattern
+
+```javascript
+mcp__agentdb__agentdb_pattern_store({
+  taskType: "procedures",
+  approach: "# Add Grafana Dashboard\n\n## Prerequisites\n- DuckDB datasource configured (uid: duckdb-ndp)\n- Stream data in Parquet bronze layer\n\n## Steps\n1. Create JSON in config/grafana/dashboards/\n2. Use time_bucket() for aggregation\n3. Filter by stream_id in WHERE clause\n4. Handle unit conversions in SQL\n\n## Verification\nRestart Grafana, check dashboard loads without errors",
+  successRate: 0.9,
+  tags: ["procedures", "grafana", "dashboard", "visualization"],
+  metadata: {
+    pattern_name: "add-grafana-dashboard",
+    related_files: ["config/grafana/dashboards/indoor-vs-outdoor.json"]
+  }
+})
+```
 
 ---
 
 ## Check Pattern Health
 
-See overall pattern statistics:
-
 ```javascript
 mcp__agentdb__agentdb_pattern_stats({})
 ```
 
-Returns:
-- Total patterns
-- Average success rates by category
-- Top task types
-- Patterns with low success rates (need review)
-
----
-
-## Record Pattern Outcomes
-
-When you or another agent uses a pattern, record the outcome to improve future recommendations:
-
-### Success
-```javascript
-mcp__agentdb__reflexion_store({
-  session_id: "ndp-patterns",
-  task: "Used add-stream pattern to create weather stream",
-  input: "Add weather monitoring stream",
-  output: "Successfully created and synced weather stream config",
-  reward: 1.0,
-  success: true,
-  critique: "Pattern was complete and accurate"
-})
-```
-
-### Partial Success (Pattern Needed Adjustment)
-```javascript
-mcp__agentdb__reflexion_store({
-  session_id: "ndp-patterns",
-  task: "Used add-stream pattern but needed adjustment",
-  input: "Add new data stream",
-  output: "Completed after adding missing retention field",
-  reward: 0.6,
-  success: true,
-  critique: "Pattern missing retention field - should be updated"
-})
-```
-
-### Failure
-```javascript
-mcp__agentdb__reflexion_store({
-  session_id: "ndp-patterns",
-  task: "add-stream pattern failed",
-  input: "Add new data stream",
-  output: "Could not sync - schema completely changed",
-  reward: 0.1,
-  success: false,
-  critique: "Pattern is obsolete - etcd schema changed in refactor"
-})
-```
-
----
-
-## Auto-Discover Patterns
-
-Let AgentDB find patterns from successful experiences:
-
-```javascript
-mcp__agentdb__learner_discover({
-  min_attempts: 3,
-  min_success_rate: 0.7,
-  min_confidence: 0.8,
-  dry_run: false
-})
-```
-
-This analyzes past experiences and automatically creates patterns from recurring successful approaches.
-
----
-
-## Alternative: Store with Full Control
-
-For more control over the stored data:
-
-```javascript
-mcp__agentdb__agentdb_insert({
-  text: "# Add New Stream\n\nComplete procedure for adding a new data stream to the Neural Data Platform...",
-  session_id: "ndp-patterns",
-  tags: ["development", "procedure", "streams"],
-  metadata: {
-    category: "development",
-    pattern_name: "add-stream",
-    status: "active",
-    version: "1.0",
-    created_by: "agent",
-    related_files: ["docs/procedures/HOW_TO_ADD_NEW_STREAM.md"],
-    last_verified: "2025-12-21"
-  }
-})
-```
+Returns: total patterns, average success rates, top task types, patterns needing review.
 
 ---
 
@@ -263,16 +209,20 @@ mcp__agentdb__agentdb_insert({
 3. **Reference Files** - Link to actual code that implements the pattern
 4. **Use Consistent Tags** - Category + descriptive tags (kebab-case)
 5. **Deprecate Don't Delete** - Preserve knowledge unless harmful
-6. **Record Outcomes** - Always log success/failure after using patterns
-7. **Set Realistic Success Rates** - Start at 0.8, let usage adjust it
-8. **Include Verification Steps** - How to confirm the pattern worked
+6. **Set Realistic Success Rates** - Start at 0.8-0.9, let feedback adjust
+7. **Include Verification Steps** - How to confirm the pattern worked
+8. **Store Only Reusable Knowledge** - Not one-off solutions
 
 ---
 
 ## Related Skills
 
-- `get-pattern` - Retrieve stored patterns
-- `reflexion` - Record whether patterns worked (use before saving new patterns)
+- **`get-pattern`** - Retrieve patterns BEFORE work (always check first)
+- **`reflexion`** - Record feedback on whether `get-pattern` results helped
 - `agentdb-memory-patterns` - Advanced memory management
 - `agentdb-learning` - Reinforcement learning capabilities
-- `reasoningbank-agentdb` - Adaptive learning integration
+
+**NOT related to:**
+- Swarm coordination (use claude-flow MCP tools)
+- Transient task memory (use MCP memory with TTL)
+- Agent state management (use claude-flow tools)
