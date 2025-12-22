@@ -263,8 +263,15 @@ async fn initialize_multi_stream_coordinator(
     // Create storage channel for all streams (MQTT + HTTP)
     let (storage_tx, mut storage_rx) = mpsc::channel::<TimeSeriesPoint>(1000);
 
-    // Register storage channels for known streams (both indoor MQTT and outdoor HTTP)
-    for stream_id in &["air-quality", "outdoor-weather", "outdoor-air-quality"] {
+    // Register storage channels for known streams
+    // TODO: This should be config-driven - dynamically register from StreamRegistry
+    for stream_id in &[
+        "air-quality",
+        "outdoor-weather",
+        "outdoor-air-quality",
+        "nws-observations",
+        "nws-forecast-hourly",
+    ] {
         router
             .register_storage_channel(stream_id.to_string(), storage_tx.clone())
             .await;
