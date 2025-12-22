@@ -49,7 +49,7 @@ fields:
 
 # Data sources configuration (SourceManager format)
 sources:
-  - source_type: mqtt
+  - type: mqtt
     enabled: true
     params:
       broker_url: "mosquitto"
