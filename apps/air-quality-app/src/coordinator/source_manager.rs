@@ -170,15 +170,16 @@ impl SourceManager {
                 let cancel_clone = cancel_token.clone();
 
                 if has_parser {
-                    // Parse GenericHttpPollingConfig for external APIs (OpenWeatherMap, etc.)
-                    let config =
+                    // Parse GenericHttpPollingConfig and ParserConfig for external APIs (NWS, OpenWeatherMap, etc.)
+                    let (http_config, parser_config) =
                         self.parse_generic_http_polling_config(stream_id, source_config)?;
 
                     Some(tokio::spawn(async move {
                         if let Err(e) = Self::run_generic_http_polling_source(
                             stream_id_clone,
                             source_id_clone,
-                            config,
+                            http_config,
+                            parser_config,
                             ingestion_sender,
                             cancel_clone,
                         )
@@ -425,12 +426,12 @@ impl SourceManager {
         Ok(())
     }
 
-    /// Parse GenericHttpPollingConfig for external APIs (OpenWeatherMap, etc.)
+    /// Parse GenericHttpPollingConfig and ParserConfig for external APIs (NWS, OpenWeatherMap, etc.)
     fn parse_generic_http_polling_config(
         &self,
         stream_id: &str,
         source_config: &SourceConfig,
-    ) -> Result<GenericHttpPollingConfig, SourceManagerError> {
+    ) -> Result<(GenericHttpPollingConfig, ParserConfig), SourceManagerError> {
         let parser_name = source_config
             .params
             .get("parser_name")
@@ -547,13 +548,37 @@ impl SourceManager {
             )));
         }
 
-        Ok(GenericHttpPollingConfig {
+        // Parse the parser configuration from YAML
+        let parser_config = if let Some(parser_val) = source_config.params.get("parser") {
+            // Try to deserialize from YAML/JSON Value
+            serde_json::from_value::<ParserConfig>(parser_val.clone()).map_err(|e| {
+                SourceManagerError::ConfigError(format!(
+                    "Failed to parse parser config for stream {}: {}",
+                    stream_id, e
+                ))
+            })?
+        } else {
+            // Fallback to default FlatJson parser if no parser config specified
+            ParserConfig {
+                parser_type: ParserType::FlatJson,
+                location_id_field: "location_id".to_string(),
+                default_location_id: Some(stream_id.to_string()),
+                skip_fields: Vec::new(),
+                field_mappings: None,
+                default_tags: std::collections::HashMap::new(),
+                array_config: None,
+            }
+        };
+
+        let http_config = GenericHttpPollingConfig {
             endpoints,
             poll_interval: std::time::Duration::from_secs(poll_interval_secs),
             timeout: std::time::Duration::from_secs(timeout_secs),
             retry_config: RetryConfig::default(),
             buffer_capacity,
-        })
+        };
+
+        Ok((http_config, parser_config))
     }
 
     /// Expand environment variables in a string (e.g., ${VAR_NAME})
@@ -727,15 +752,21 @@ impl SourceManager {
         stream_id: String,
         source_id: String,
         config: GenericHttpPollingConfig,
+        parser_config: ParserConfig,
         ingestion_sender: mpsc::Sender<(String, String, TimeSeriesPoint)>,
         cancel_token: CancellationToken,
     ) -> Result<(), SourceManagerError> {
         info!(
-            "Starting generic HTTP polling source for stream {}",
-            stream_id
+            "Starting generic HTTP polling source for stream {} with parser type {:?}",
+            stream_id, parser_config.parser_type
         );
 
-        let mut source = GenericHttpPollingSource::with_default_parsers(config)
+        // Create parser from config (uses the actual parser type from YAML, not hardcoded FlatJson)
+        let parser = create_parser_from_config(parser_config).map_err(|e| {
+            SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
+        })?;
+
+        let mut source = GenericHttpPollingSource::new(config, parser)
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
