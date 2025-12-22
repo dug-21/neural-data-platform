@@ -38,7 +38,49 @@ See: `.claude/agents/ndp/README.md` for full documentation.
 |-------|------|---------|
 | `get-pattern` | Before implementation | Retrieve project patterns from memory |
 | `save-pattern` | After discoveries | Store new reusable patterns |
+| `reflexion` | After using get-pattern | Evaluate if retrieved patterns helped |
 | `ndp-github-workflow` | ALL git operations | Branch naming, commits, PRs |
+
+---
+
+## 🧠 Pattern Memory for Project Knowledge
+
+**Pattern skills store APPLICATION knowledge - not swarm/transient state.**
+
+### What Patterns Are For
+
+Patterns capture **permanent, reusable project knowledge**:
+- Architecture decisions and ADRs
+- Implementation procedures ("how to add a stream")
+- Naming conventions and code organization
+- Troubleshooting guides and checklists
+- Data flow and pipeline designs
+
+### What Patterns Are NOT For
+
+Do NOT use pattern skills for:
+- Swarm coordination state (use MCP memory tools)
+- Agent task progress (use claude-flow task tools)
+- Session-specific working memory (use MCP memory with TTL)
+- Inter-agent communication (use claude-flow DAA tools)
+
+### The Pattern Workflow
+
+```
+BEFORE work:  get-pattern   → Research existing project approaches
+DURING work:  Apply patterns, note gaps or new discoveries
+AFTER work:   reflexion     → Rate if get-pattern results helped
+              save-pattern  → Store NEW reusable knowledge (if any)
+```
+
+### Why This Matters
+
+1. **Consistency** - Patterns ensure all agents follow established project conventions
+2. **Learning** - Feedback via reflexion improves future pattern recommendations
+3. **Knowledge Capture** - New discoveries become available to future sessions
+4. **Project Memory** - The codebase evolves; patterns document the "why" and "how"
+
+**See skill files in `.claude/skills/` for usage details.**
 
 ---
 
