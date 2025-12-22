@@ -89,6 +89,49 @@ impl IngestionRouter {
         debug!("Unregistered storage channel for stream: {}", stream_id);
     }
 
+    /// Check if a storage channel is registered for a stream
+    pub async fn has_storage_channel(&self, stream_id: &str) -> bool {
+        let channels = self.storage_channels.read().await;
+        channels.contains_key(stream_id)
+    }
+
+    /// Get the count of registered storage channels
+    pub async fn registered_stream_count(&self) -> usize {
+        let channels = self.storage_channels.read().await;
+        channels.len()
+    }
+
+    /// Register storage channels for all streams in the registry
+    ///
+    /// This is the config-driven approach: streams are loaded from StreamRegistry
+    /// (which is populated from YAML configs via etcd), not hardcoded.
+    pub async fn register_all_streams_from_registry(
+        &self,
+        storage_tx: mpsc::Sender<TimeSeriesPoint>,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let stream_ids = self.registry.list_streams().await.map_err(|e| {
+            tracing::error!("Failed to list streams from registry: {}", e);
+            Box::new(e) as Box<dyn std::error::Error + Send + Sync>
+        })?;
+
+        if stream_ids.is_empty() {
+            tracing::warn!("No streams found in registry. Ensure configs are synced to etcd.");
+            return Ok(0);
+        }
+
+        for stream_id in &stream_ids {
+            self.register_storage_channel(stream_id.clone(), storage_tx.clone()).await;
+        }
+
+        tracing::info!(
+            "Registered {} storage channels from StreamRegistry: {:?}",
+            stream_ids.len(),
+            stream_ids
+        );
+
+        Ok(stream_ids.len())
+    }
+
     /// Route a point to the appropriate storage channel
     pub async fn route_point(
         &self,
@@ -299,7 +342,6 @@ impl IngestionRouter {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use config_client::ConfigError;
     use neural_core::{FieldType, SchemaField, SourceConfig, SourceType};
     use tokio::sync::mpsc;
 
@@ -628,5 +670,98 @@ mod tests {
             enriched.tags.get("sensor_type"),
             Some(&"airgradient".to_string())
         );
+    }
+
+    // ========== CONFIG-DRIVEN REGISTRATION TESTS ==========
+
+    #[tokio::test]
+    async fn test_has_storage_channel() {
+        let (dead_letter_tx, _rx) = mpsc::channel(10);
+        let (storage_tx, _storage_rx) = mpsc::channel(100);
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+
+        let router = IngestionRouter::new(registry, dead_letter_tx);
+
+        // Initially no channels
+        assert!(!router.has_storage_channel("test-stream").await);
+
+        // Register and verify
+        router
+            .register_storage_channel("test-stream".to_string(), storage_tx)
+            .await;
+        assert!(router.has_storage_channel("test-stream").await);
+
+        // Unregister and verify
+        router.unregister_storage_channel("test-stream").await;
+        assert!(!router.has_storage_channel("test-stream").await);
+    }
+
+    #[tokio::test]
+    async fn test_registered_stream_count() {
+        let (dead_letter_tx, _rx) = mpsc::channel(10);
+        let (storage_tx, _storage_rx) = mpsc::channel(100);
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+
+        let router = IngestionRouter::new(registry, dead_letter_tx);
+
+        assert_eq!(router.registered_stream_count().await, 0);
+
+        router
+            .register_storage_channel("stream-1".to_string(), storage_tx.clone())
+            .await;
+        assert_eq!(router.registered_stream_count().await, 1);
+
+        router
+            .register_storage_channel("stream-2".to_string(), storage_tx.clone())
+            .await;
+        assert_eq!(router.registered_stream_count().await, 2);
+
+        router.unregister_storage_channel("stream-1").await;
+        assert_eq!(router.registered_stream_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_register_all_streams_from_registry() {
+        // This test verifies config-driven registration
+        let (dead_letter_tx, _rx) = mpsc::channel(10);
+        let (storage_tx, _storage_rx) = mpsc::channel(100);
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+
+        // Save test stream configs to registry
+        let test_config = create_test_config();
+        registry.save_stream(&test_config).await.unwrap();
+
+        let router = IngestionRouter::new(registry.clone(), dead_letter_tx);
+
+        // Initially no channels
+        assert_eq!(router.registered_stream_count().await, 0);
+
+        // Register all from registry
+        let count = router
+            .register_all_streams_from_registry(storage_tx)
+            .await
+            .unwrap();
+
+        // Should have registered at least the test stream
+        assert!(count >= 1, "Should register at least 1 stream from registry");
+        assert!(
+            router.has_storage_channel("test-stream").await,
+            "test-stream should be registered from registry"
+        );
+
+        // Cleanup
+        registry.delete_stream("test-stream").await.ok();
     }
 }

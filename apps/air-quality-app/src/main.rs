@@ -263,18 +263,42 @@ async fn initialize_multi_stream_coordinator(
     // Create storage channel for all streams (MQTT + HTTP)
     let (storage_tx, mut storage_rx) = mpsc::channel::<TimeSeriesPoint>(1000);
 
-    // Register storage channels for known streams
-    // TODO: This should be config-driven - dynamically register from StreamRegistry
-    for stream_id in &[
-        "air-quality",
-        "outdoor-weather",
-        "outdoor-air-quality",
-        "nws-observations",
-        "nws-forecast-hourly",
-    ] {
-        router
-            .register_storage_channel(stream_id.to_string(), storage_tx.clone())
-            .await;
+    // Register storage channels dynamically from StreamRegistry (config-driven)
+    // Streams are loaded from etcd, which is populated from YAML configs via deploy.sh sync
+    match router.register_all_streams_from_registry(storage_tx.clone()).await {
+        Ok(count) => {
+            tracing::info!(
+                "Config-driven: Registered {} storage channels from StreamRegistry",
+                count
+            );
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to register streams from registry: {}. \
+                Falling back to YAML directory scan.",
+                e
+            );
+            // Fallback: scan config/base/streams/ directory for stream IDs
+            let stream_config_dir = std::env::var("STREAM_CONFIG_DIR")
+                .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
+
+            if let Ok(entries) = std::fs::read_dir(&stream_config_dir) {
+                for entry in entries.flatten() {
+                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        let stream_id = entry.file_name().to_string_lossy().to_string();
+                        router
+                            .register_storage_channel(stream_id.clone(), storage_tx.clone())
+                            .await;
+                        tracing::info!("Fallback: Registered storage channel for {}", stream_id);
+                    }
+                }
+            } else {
+                tracing::error!(
+                    "YAML fallback failed: Cannot read {}. No storage channels registered!",
+                    stream_config_dir
+                );
+            }
+        }
     }
 
     // Spawn storage writer for all data (MQTT + HTTP)
