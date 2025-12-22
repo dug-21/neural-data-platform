@@ -363,7 +363,6 @@ impl HttpPollingSource {
 
         let client = Client::builder()
             .timeout(config.timeout)
-            .user_agent("neural-data-platform/1.0")
             .build()
             .map_err(|e| CoreError::Source(format!("Failed to create HTTP client: {}", e)))?;
 
@@ -628,7 +627,6 @@ impl GenericHttpPollingSource {
 
         let client = Client::builder()
             .timeout(config.timeout)
-            .user_agent("neural-data-platform/1.0")
             .build()
             .map_err(|e| CoreError::Source(format!("Failed to create HTTP client: {}", e)))?;
 
