@@ -2,6 +2,7 @@
 //!
 //! Defines the configuration structures for creating parsers from YAML/JSON config.
 
+use crate::parsers::array_iterator::ArrayIteratorConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -29,6 +30,10 @@ pub struct ParserConfig {
     /// Tags to add to all extracted points
     #[serde(default)]
     pub default_tags: HashMap<String, String>,
+
+    /// For ArrayIteratorParser: array-specific configuration
+    #[serde(default)]
+    pub array_config: Option<ArrayIteratorConfig>,
 }
 
 impl Default for ParserConfig {
@@ -40,6 +45,7 @@ impl Default for ParserConfig {
             skip_fields: Vec::new(),
             field_mappings: None,
             default_tags: HashMap::new(),
+            array_config: None,
         }
     }
 }
@@ -52,6 +58,8 @@ pub enum ParserType {
     FlatJson,
     /// Extract specific fields using JSON path expressions
     JsonPath,
+    /// Iterate over JSON arrays to produce multiple TimeSeriesPoints
+    ArrayIterator,
     /// Custom parser (must be registered in code)
     Custom(String),
 }

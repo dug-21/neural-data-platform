@@ -1,0 +1,778 @@
+//! Array Iterator Parser Implementation
+//!
+//! Iterates over JSON arrays to produce multiple TimeSeriesPoints per element.
+//! Used for parsing forecast data where each period produces multiple metrics.
+//!
+//! Features:
+//! - Array path navigation (JSONPath-like)
+//! - Element iteration producing multiple TimeSeriesPoints
+//! - String parsing with regex patterns (e.g., "15 mph" → 15.0)
+//! - Enum mapping (e.g., cardinal directions N→0, NE→45)
+//! - Metadata tags from shared response fields
+
+use crate::error::{CoreError, CoreResult};
+use crate::parsers::config::ParserConfig;
+use crate::parsers::traits::Parser;
+use crate::traits::TimeSeriesPoint;
+use chrono::{DateTime, Utc};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use tracing::{debug, warn};
+
+/// Configuration for array iterator parser
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ArrayIteratorConfig {
+    /// Path to the array in the JSON (e.g., "properties.periods")
+    pub array_path: String,
+
+    /// Field in each array element to use as timestamp (e.g., "startTime")
+    pub timestamp_field: String,
+
+    /// Metadata tags to extract from root/shared fields
+    #[serde(default)]
+    pub metadata_tags: Vec<MetadataTagMapping>,
+
+    /// Element field mappings
+    pub element_mappings: Vec<ElementMapping>,
+}
+
+/// Metadata tag extracted from shared response fields
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MetadataTagMapping {
+    /// JSON path to the metadata value (e.g., "properties.generatedAt")
+    pub path: String,
+
+    /// Tag name to store the value under
+    pub tag_name: String,
+}
+
+/// Mapping configuration for extracting a field from each array element
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ElementMapping {
+    /// JSON path within the element (e.g., "temperature", "windSpeed")
+    pub path: String,
+
+    /// Metric name for the TimeSeriesPoint
+    pub metric_name: String,
+
+    /// Optional unit for the metric
+    #[serde(default)]
+    pub unit: Option<String>,
+
+    /// Optional string parse pattern (regex with capture group)
+    #[serde(default)]
+    pub string_parse: Option<StringParseConfig>,
+
+    /// Optional enum mapping (string → numeric)
+    #[serde(default)]
+    pub enum_map: Option<HashMap<String, f64>>,
+
+    /// Whether this field is optional (skip if missing)
+    #[serde(default)]
+    pub optional: bool,
+}
+
+/// String parsing configuration using regex
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct StringParseConfig {
+    /// Regex pattern to match (e.g., r"^(\d+)\s*(?:to\s*(\d+)\s*)?mph$")
+    pub pattern: String,
+
+    /// Capture group index to extract (1-based)
+    pub capture_group: usize,
+
+    /// Optional second capture group for range averaging
+    #[serde(default)]
+    pub capture_group_high: Option<usize>,
+}
+
+/// Parser that iterates over JSON arrays to produce multiple TimeSeriesPoints
+#[derive(Debug)]
+pub struct ArrayIteratorParser {
+    config: ParserConfig,
+    array_config: ArrayIteratorConfig,
+}
+
+impl ArrayIteratorParser {
+    /// Create a new ArrayIteratorParser from configuration
+    ///
+    /// Extracts array_config from ParserConfig.array_config field.
+    /// Returns error if array_config is not present.
+    pub fn from_config(config: ParserConfig) -> CoreResult<Self> {
+        let array_config = config.array_config.clone().ok_or_else(|| {
+            CoreError::Config(
+                "ArrayIteratorParser requires 'array_config' in ParserConfig".to_string(),
+            )
+        })?;
+
+        Ok(Self {
+            config,
+            array_config,
+        })
+    }
+
+    /// Create from explicit configs (for testing)
+    #[cfg(test)]
+    pub fn from_configs(config: ParserConfig, array_config: ArrayIteratorConfig) -> CoreResult<Self> {
+        Ok(Self {
+            config,
+            array_config,
+        })
+    }
+
+    /// Extract value at JSON path (supports dot notation and array access)
+    fn extract_at_path<'a>(&self, root: &'a Value, path: &str) -> Option<&'a Value> {
+        let mut current = root;
+
+        for segment in path.split('.') {
+            // Handle array access: field[0]
+            if let Some(bracket_pos) = segment.find('[') {
+                let field_name = &segment[..bracket_pos];
+                let index_str = &segment[bracket_pos + 1..segment.len() - 1];
+                let index: usize = index_str.parse().ok()?;
+
+                current = current.get(field_name)?;
+                current = current.get(index)?;
+            } else {
+                current = current.get(segment)?;
+            }
+        }
+
+        Some(current)
+    }
+
+    /// Extract array from JSON at specified path
+    fn extract_array<'a>(&self, payload: &'a Value) -> CoreResult<&'a Vec<Value>> {
+        let array_value = self
+            .extract_at_path(payload, &self.array_config.array_path)
+            .ok_or_else(|| {
+                CoreError::Source(format!(
+                    "Array not found at path: {}",
+                    self.array_config.array_path
+                ))
+            })?;
+
+        array_value.as_array().ok_or_else(|| {
+            CoreError::Source(format!(
+                "Value at path '{}' is not an array",
+                self.array_config.array_path
+            ))
+        })
+    }
+
+    /// Extract timestamp from element
+    fn extract_element_timestamp(&self, element: &Value) -> CoreResult<DateTime<Utc>> {
+        let timestamp_value = self
+            .extract_at_path(element, &self.array_config.timestamp_field)
+            .ok_or_else(|| {
+                CoreError::Source(format!(
+                    "Timestamp field '{}' not found in element",
+                    self.array_config.timestamp_field
+                ))
+            })?;
+
+        let timestamp_str = timestamp_value
+            .as_str()
+            .ok_or_else(|| CoreError::Source("Timestamp value is not a string".to_string()))?;
+
+        DateTime::parse_from_rfc3339(timestamp_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .map_err(|e| CoreError::Source(format!("Invalid RFC3339 timestamp: {}", e)))
+    }
+
+    /// Extract metadata tags from shared fields
+    fn extract_metadata_tags(&self, payload: &Value) -> HashMap<String, String> {
+        let mut tags = HashMap::new();
+
+        for metadata_mapping in &self.array_config.metadata_tags {
+            if let Some(value) = self.extract_at_path(payload, &metadata_mapping.path) {
+                let value_str = match value {
+                    Value::String(s) => s.clone(),
+                    Value::Number(n) => n.to_string(),
+                    Value::Bool(b) => b.to_string(),
+                    _ => format!("{}", value),
+                };
+                tags.insert(metadata_mapping.tag_name.clone(), value_str);
+            } else {
+                warn!(
+                    "Metadata path '{}' not found, skipping tag '{}'",
+                    metadata_mapping.path, metadata_mapping.tag_name
+                );
+            }
+        }
+
+        tags
+    }
+
+    /// Parse numeric value from string using regex
+    fn parse_string_value(
+        &self,
+        string_val: &str,
+        parse_config: &StringParseConfig,
+    ) -> Option<f64> {
+        // Compile regex (cached via lazy_static pattern)
+        let re = Regex::new(&parse_config.pattern).ok()?;
+        let caps = re.captures(string_val.trim())?;
+
+        // Extract primary capture group
+        let low = caps
+            .get(parse_config.capture_group)
+            .and_then(|m| m.as_str().parse::<f64>().ok())?;
+
+        // If there's a high capture group (for ranges), average them
+        if let Some(high_group) = parse_config.capture_group_high {
+            if let Some(high) = caps
+                .get(high_group)
+                .and_then(|m| m.as_str().parse::<f64>().ok())
+            {
+                return Some((low + high) / 2.0);
+            }
+        }
+
+        Some(low)
+    }
+
+    /// Extract numeric value from element field
+    fn extract_element_value(&self, element: &Value, mapping: &ElementMapping) -> Option<f64> {
+        let field_value = self.extract_at_path(element, &mapping.path)?;
+
+        // Try direct numeric extraction
+        if let Some(num) = field_value.as_f64() {
+            return Some(num);
+        }
+        if let Some(num) = field_value.as_i64() {
+            return Some(num as f64);
+        }
+        if let Some(num) = field_value.as_u64() {
+            return Some(num as f64);
+        }
+
+        // Try string parsing with regex
+        if let Some(parse_config) = &mapping.string_parse {
+            if let Some(s) = field_value.as_str() {
+                return self.parse_string_value(s, parse_config);
+            }
+        }
+
+        // Try enum mapping
+        if let Some(enum_map) = &mapping.enum_map {
+            if let Some(s) = field_value.as_str() {
+                return enum_map.get(&s.to_uppercase()).copied();
+            }
+        }
+
+        None
+    }
+
+    /// Extract location ID from payload
+    fn extract_location_id(&self, payload: &Value) -> CoreResult<String> {
+        // Try to extract using path
+        if let Some(value) = self.extract_at_path(payload, &self.config.location_id_field) {
+            if let Some(s) = value.as_str() {
+                return Ok(s.to_string());
+            }
+            if let Some(num) = value.as_f64() {
+                return Ok(num.to_string());
+            }
+        }
+
+        // Try direct field access
+        if let Some(value) = payload.get(&self.config.location_id_field) {
+            if let Some(s) = value.as_str() {
+                return Ok(s.to_string());
+            }
+        }
+
+        // Fall back to default
+        self.config
+            .default_location_id
+            .clone()
+            .ok_or_else(|| CoreError::Source("Could not extract location ID".into()))
+    }
+}
+
+impl Parser for ArrayIteratorParser {
+    fn parse(&self, payload: &Value, timestamp: DateTime<Utc>) -> CoreResult<Vec<TimeSeriesPoint>> {
+        // Extract location ID
+        let location_id = self.extract_location_id(payload)?;
+
+        // Extract shared metadata tags
+        let mut metadata_tags = self.extract_metadata_tags(payload);
+        metadata_tags.extend(self.config.default_tags.clone());
+
+        // Extract array
+        let array = self.extract_array(payload)?;
+        let element_count = array.len();
+
+        debug!(
+            "Processing {} array elements from path '{}'",
+            element_count, self.array_config.array_path
+        );
+
+        // Estimate capacity: elements × mappings
+        let mut points =
+            Vec::with_capacity(element_count * self.array_config.element_mappings.len());
+
+        // Iterate over array elements
+        for (idx, element) in array.iter().enumerate() {
+            // Extract element timestamp
+            let element_timestamp = match self.extract_element_timestamp(element) {
+                Ok(ts) => ts,
+                Err(e) => {
+                    warn!("Skipping element {}: {}", idx, e);
+                    continue;
+                }
+            };
+
+            // Process each mapping for this element
+            for mapping in &self.array_config.element_mappings {
+                match self.extract_element_value(element, mapping) {
+                    Some(value) => {
+                        // Build tags
+                        let mut tags = metadata_tags.clone();
+                        tags.insert("metric".to_string(), mapping.metric_name.clone());
+
+                        if let Some(unit) = &mapping.unit {
+                            tags.insert("unit".to_string(), unit.clone());
+                        }
+
+                        // Add element timestamp as forecast_valid_time
+                        tags.insert(
+                            "forecast_valid_time".to_string(),
+                            element_timestamp.timestamp().to_string(),
+                        );
+
+                        // Create point
+                        points.push(TimeSeriesPoint {
+                            timestamp,
+                            location_id: location_id.clone(),
+                            value,
+                            tags,
+                        });
+
+                        debug!(
+                            "Element {}: extracted {} = {}",
+                            idx, mapping.metric_name, value
+                        );
+                    }
+                    None => {
+                        if !mapping.optional {
+                            return Err(CoreError::Source(format!(
+                                "Required field '{}' not found or invalid in element {}",
+                                mapping.path, idx
+                            )));
+                        } else {
+                            debug!(
+                                "Element {}: optional field '{}' not found, skipping",
+                                idx, mapping.path
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        if points.is_empty() {
+            warn!("No points extracted from array");
+        } else {
+            debug!(
+                "Extracted {} points from {} elements",
+                points.len(),
+                element_count
+            );
+        }
+
+        Ok(points)
+    }
+
+    fn name(&self) -> &str {
+        "array_iterator"
+    }
+
+    fn config(&self) -> &ParserConfig {
+        &self.config
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parsers::config::ParserType;
+    use serde_json::json;
+
+    fn create_test_parser(
+        array_path: &str,
+        timestamp_field: &str,
+        mappings: Vec<ElementMapping>,
+    ) -> ArrayIteratorParser {
+        let array_config = ArrayIteratorConfig {
+            array_path: array_path.to_string(),
+            timestamp_field: timestamp_field.to_string(),
+            metadata_tags: vec![],
+            element_mappings: mappings,
+        };
+
+        let base_config = ParserConfig {
+            parser_type: ParserType::Custom("array_iterator".to_string()),
+            location_id_field: "location".to_string(),
+            default_location_id: Some("test_location".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            default_tags: HashMap::new(),
+            array_config: Some(array_config),
+        };
+
+        ArrayIteratorParser::from_config(base_config).unwrap()
+    }
+
+    #[test]
+    fn test_array_iteration_produces_correct_point_count() {
+        let mappings = vec![
+            ElementMapping {
+                path: "temperature".to_string(),
+                metric_name: "temp".to_string(),
+                unit: Some("celsius".to_string()),
+                string_parse: None,
+                enum_map: None,
+                optional: false,
+            },
+            ElementMapping {
+                path: "humidity".to_string(),
+                metric_name: "humid".to_string(),
+                unit: Some("percent".to_string()),
+                string_parse: None,
+                enum_map: None,
+                optional: false,
+            },
+        ];
+
+        let parser = create_test_parser("periods", "time", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "temperature": 20.5, "humidity": 65.0},
+                {"time": "2025-12-21T13:00:00Z", "temperature": 21.0, "humidity": 63.0},
+                {"time": "2025-12-21T14:00:00Z", "temperature": 22.0, "humidity": 60.0}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        // 3 elements × 2 metrics = 6 points
+        assert_eq!(points.len(), 6);
+
+        // Verify we have both metrics for each element
+        let temp_points: Vec<_> = points
+            .iter()
+            .filter(|p| p.tags.get("metric") == Some(&"temp".to_string()))
+            .collect();
+        let humid_points: Vec<_> = points
+            .iter()
+            .filter(|p| p.tags.get("metric") == Some(&"humid".to_string()))
+            .collect();
+
+        assert_eq!(temp_points.len(), 3);
+        assert_eq!(humid_points.len(), 3);
+    }
+
+    #[test]
+    fn test_timestamp_extraction_from_elements() {
+        let mappings = vec![ElementMapping {
+            path: "value".to_string(),
+            metric_name: "test".to_string(),
+            unit: None,
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let parser = create_test_parser("data", "timestamp", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "data": [
+                {"timestamp": "2025-12-21T12:00:00Z", "value": 10.0},
+                {"timestamp": "2025-12-21T13:00:00Z", "value": 20.0}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        assert_eq!(points.len(), 2);
+
+        // Verify forecast_valid_time tags are different
+        let time1 = points[0].tags.get("forecast_valid_time").unwrap();
+        let time2 = points[1].tags.get("forecast_valid_time").unwrap();
+        assert_ne!(time1, time2);
+
+        // Verify they correspond to the element timestamps
+        let expected_time1 = DateTime::parse_from_rfc3339("2025-12-21T12:00:00Z")
+            .unwrap()
+            .timestamp()
+            .to_string();
+        assert_eq!(time1, &expected_time1);
+    }
+
+    #[test]
+    fn test_string_parsing_with_regex() {
+        let mappings = vec![ElementMapping {
+            path: "windSpeed".to_string(),
+            metric_name: "wind_speed".to_string(),
+            unit: Some("m/s".to_string()),
+            string_parse: Some(StringParseConfig {
+                pattern: r"^(\d+)\s*mph$".to_string(),
+                capture_group: 1,
+                capture_group_high: None,
+            }),
+            enum_map: None,
+            optional: false,
+        }];
+
+        let parser = create_test_parser("periods", "time", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "windSpeed": "15 mph"}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].value, 15.0);
+        assert_eq!(points[0].tags.get("metric").unwrap(), "wind_speed");
+    }
+
+    #[test]
+    fn test_string_parsing_with_range_averaging() {
+        let mappings = vec![ElementMapping {
+            path: "windSpeed".to_string(),
+            metric_name: "wind_speed".to_string(),
+            unit: Some("m/s".to_string()),
+            string_parse: Some(StringParseConfig {
+                pattern: r"^(\d+)\s*to\s*(\d+)\s*mph$".to_string(),
+                capture_group: 1,
+                capture_group_high: Some(2),
+            }),
+            enum_map: None,
+            optional: false,
+        }];
+
+        let parser = create_test_parser("periods", "time", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "windSpeed": "5 to 10 mph"}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].value, 7.5); // Average of 5 and 10
+    }
+
+    #[test]
+    fn test_enum_mapping_for_wind_direction() {
+        let mut enum_map = HashMap::new();
+        enum_map.insert("N".to_string(), 0.0);
+        enum_map.insert("NE".to_string(), 45.0);
+        enum_map.insert("E".to_string(), 90.0);
+        enum_map.insert("SE".to_string(), 135.0);
+        enum_map.insert("S".to_string(), 180.0);
+        enum_map.insert("SW".to_string(), 225.0);
+        enum_map.insert("W".to_string(), 270.0);
+        enum_map.insert("NW".to_string(), 315.0);
+
+        let mappings = vec![ElementMapping {
+            path: "windDirection".to_string(),
+            metric_name: "wind_dir".to_string(),
+            unit: Some("degrees".to_string()),
+            string_parse: None,
+            enum_map: Some(enum_map),
+            optional: false,
+        }];
+
+        let parser = create_test_parser("periods", "time", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "windDirection": "N"},
+                {"time": "2025-12-21T13:00:00Z", "windDirection": "NE"},
+                {"time": "2025-12-21T14:00:00Z", "windDirection": "S"}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[0].value, 0.0); // N
+        assert_eq!(points[1].value, 45.0); // NE
+        assert_eq!(points[2].value, 180.0); // S
+    }
+
+    #[test]
+    fn test_metadata_tags_propagation() {
+        let mappings = vec![ElementMapping {
+            path: "value".to_string(),
+            metric_name: "test".to_string(),
+            unit: None,
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let array_config = ArrayIteratorConfig {
+            array_path: "periods".to_string(),
+            timestamp_field: "time".to_string(),
+            metadata_tags: vec![MetadataTagMapping {
+                path: "generatedAt".to_string(),
+                tag_name: "issue_time".to_string(),
+            }],
+            element_mappings: mappings,
+        };
+
+        let base_config = ParserConfig {
+            parser_type: ParserType::Custom("array_iterator".to_string()),
+            location_id_field: "location".to_string(),
+            default_location_id: Some("test_location".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            default_tags: {
+                let mut tags = HashMap::new();
+                tags.insert("source".to_string(), "nws".to_string());
+                tags
+            },
+            array_config: Some(array_config),
+        };
+
+        let parser = ArrayIteratorParser::from_config(base_config).unwrap();
+
+        let payload = json!({
+            "location": "test",
+            "generatedAt": "2025-12-21T10:00:00Z",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "value": 10.0}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        assert_eq!(points.len(), 1);
+
+        // Verify default tags
+        assert_eq!(points[0].tags.get("source").unwrap(), "nws");
+
+        // Verify metadata tags
+        assert_eq!(
+            points[0].tags.get("issue_time").unwrap(),
+            "2025-12-21T10:00:00Z"
+        );
+
+        // Verify metric tag
+        assert_eq!(points[0].tags.get("metric").unwrap(), "test");
+    }
+
+    #[test]
+    fn test_optional_fields_gracefully_skipped() {
+        let mappings = vec![
+            ElementMapping {
+                path: "required".to_string(),
+                metric_name: "req".to_string(),
+                unit: None,
+                string_parse: None,
+                enum_map: None,
+                optional: false,
+            },
+            ElementMapping {
+                path: "optional".to_string(),
+                metric_name: "opt".to_string(),
+                unit: None,
+                string_parse: None,
+                enum_map: None,
+                optional: true,
+            },
+        ];
+
+        let parser = create_test_parser("periods", "time", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "required": 10.0}
+                // optional field missing
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        // Should only get 1 point (the required field)
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].tags.get("metric").unwrap(), "req");
+    }
+
+    #[test]
+    fn test_missing_required_field_returns_error() {
+        let mappings = vec![ElementMapping {
+            path: "required".to_string(),
+            metric_name: "req".to_string(),
+            unit: None,
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let parser = create_test_parser("periods", "time", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z"}
+                // required field missing
+            ]
+        });
+
+        let result = parser.parse(&payload, Utc::now());
+        assert!(result.is_err());
+
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Required field"));
+        }
+    }
+
+    #[test]
+    fn test_nested_array_path_navigation() {
+        let mappings = vec![ElementMapping {
+            path: "temp".to_string(),
+            metric_name: "temperature".to_string(),
+            unit: None,
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let parser = create_test_parser("data.forecast.periods", "timestamp", mappings);
+
+        let payload = json!({
+            "location": "test",
+            "data": {
+                "forecast": {
+                    "periods": [
+                        {"timestamp": "2025-12-21T12:00:00Z", "temp": 20.5}
+                    ]
+                }
+            }
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].value, 20.5);
+    }
+}

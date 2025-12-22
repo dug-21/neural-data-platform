@@ -4,6 +4,7 @@
 //! implementation based on configuration.
 
 use crate::error::{CoreError, CoreResult};
+use crate::parsers::array_iterator::ArrayIteratorParser;
 use crate::parsers::config::{ParserConfig, ParserType};
 use crate::parsers::flat_json::FlatJsonParser;
 use crate::parsers::json_path::JsonPathParser;
@@ -31,9 +32,13 @@ pub fn create_parser_from_config(
             let parser = JsonPathParser::from_config(config)?;
             Ok(Box::new(parser))
         }
+        ParserType::ArrayIterator => {
+            let parser = ArrayIteratorParser::from_config(config)?;
+            Ok(Box::new(parser))
+        }
         ParserType::Custom(ref name) => {
             Err(CoreError::Config(format!(
-                "Custom parser type '{}' not registered. Only built-in parsers (flat_json, json_path) are supported.",
+                "Custom parser type '{}' not registered. Only built-in parsers (flat_json, json_path, array_iterator) are supported.",
                 name
             )))
         }
@@ -54,6 +59,7 @@ mod tests {
             default_location_id: Some("unknown".to_string()),
             skip_fields: vec!["firmware".to_string()],
             field_mappings: None,
+            array_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -77,6 +83,7 @@ mod tests {
                 unit: Some("celsius".to_string()),
                 transform: None,
             }]),
+            array_config: None,
             default_tags,
         };
 
@@ -92,6 +99,7 @@ mod tests {
             default_location_id: Some("test".to_string()),
             skip_fields: vec![],
             field_mappings: None,
+            array_config: None,
             default_tags: HashMap::new(),
         };
 
