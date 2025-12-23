@@ -30,7 +30,11 @@ fn parse_wind_speed(wind_speed_str: &str) -> Option<f64> {
         let parts: Vec<&str> = trimmed.split(" to ").collect();
         if parts.len() == 2 {
             let low = parts[0].trim().parse::<f64>().ok()?;
-            let high = parts[1].trim().trim_end_matches(" mph").parse::<f64>().ok()?;
+            let high = parts[1]
+                .trim()
+                .trim_end_matches(" mph")
+                .parse::<f64>()
+                .ok()?;
             let average_mph = (low + high) / 2.0;
             return Some(average_mph * 0.44704); // mph to m/s
         }
@@ -130,7 +134,10 @@ fn test_nws_observation_null_field_handling() {
         .get("windGust")
         .and_then(|v| v.get("value"))
         .and_then(|v| v.as_f64());
-    assert!(wind_gust.is_none(), "Wind gust should be None for null value");
+    assert!(
+        wind_gust.is_none(),
+        "Wind gust should be None for null value"
+    );
 
     // Temperature should still be present
     let temp = properties
@@ -202,17 +209,32 @@ fn test_nws_forecast_parse_valid_response() {
     let period = &periods[0];
 
     // Temperature in Fahrenheit -> Celsius
-    let temp_f = period.get("temperature").and_then(|v| v.as_f64()).expect("Missing temperature");
+    let temp_f = period
+        .get("temperature")
+        .and_then(|v| v.as_f64())
+        .expect("Missing temperature");
     let temp_c = fahrenheit_to_celsius(temp_f);
-    assert!((temp_c - 22.222).abs() < 0.01, "Temperature conversion failed");
+    assert!(
+        (temp_c - 22.222).abs() < 0.01,
+        "Temperature conversion failed"
+    );
 
     // Wind speed string parsing
-    let wind_speed_str = period.get("windSpeed").and_then(|v| v.as_str()).expect("Missing wind speed");
+    let wind_speed_str = period
+        .get("windSpeed")
+        .and_then(|v| v.as_str())
+        .expect("Missing wind speed");
     let wind_speed_ms = parse_wind_speed(wind_speed_str).expect("Failed to parse wind speed");
-    assert!((wind_speed_ms - 4.4704).abs() < 0.01, "Wind speed parsing failed");
+    assert!(
+        (wind_speed_ms - 4.4704).abs() < 0.01,
+        "Wind speed parsing failed"
+    );
 
     // Wind direction string parsing
-    let wind_dir_str = period.get("windDirection").and_then(|v| v.as_str()).expect("Missing wind direction");
+    let wind_dir_str = period
+        .get("windDirection")
+        .and_then(|v| v.as_str())
+        .expect("Missing wind direction");
     let wind_dir_deg = parse_wind_direction(wind_dir_str).expect("Failed to parse wind direction");
     assert_eq!(wind_dir_deg, 180.0, "Wind direction parsing failed");
 }
@@ -221,40 +243,60 @@ fn test_nws_forecast_parse_valid_response() {
 fn test_nws_forecast_with_wind_speed_range() {
     let payload = nws_payloads::nws_forecast_three_periods();
     let properties = payload.get("properties").expect("Missing properties");
-    let periods = properties.get("periods").and_then(|v| v.as_array()).expect("Missing periods");
+    let periods = properties
+        .get("periods")
+        .and_then(|v| v.as_array())
+        .expect("Missing periods");
 
     // Second period has wind speed range "5 to 10 mph"
     let period = &periods[1];
-    let wind_speed_str = period.get("windSpeed").and_then(|v| v.as_str()).expect("Missing wind speed");
+    let wind_speed_str = period
+        .get("windSpeed")
+        .and_then(|v| v.as_str())
+        .expect("Missing wind speed");
 
     assert_eq!(wind_speed_str, "5 to 10 mph");
 
     let wind_speed_ms = parse_wind_speed(wind_speed_str).expect("Failed to parse wind speed range");
 
     // Average of 5 and 10 is 7.5 mph -> 3.3528 m/s
-    assert!((wind_speed_ms - 3.3528).abs() < 0.01, "Wind speed range parsing failed");
+    assert!(
+        (wind_speed_ms - 3.3528).abs() < 0.01,
+        "Wind speed range parsing failed"
+    );
 }
 
 #[test]
 fn test_nws_forecast_all_wind_directions() {
     let payload = nws_payloads::nws_forecast_three_periods();
     let properties = payload.get("properties").expect("Missing properties");
-    let periods = properties.get("periods").and_then(|v| v.as_array()).expect("Missing periods");
+    let periods = properties
+        .get("periods")
+        .and_then(|v| v.as_array())
+        .expect("Missing periods");
 
-    let expected_directions = vec![
-        ("S", 180.0),
-        ("SW", 225.0),
-        ("NE", 45.0),
-    ];
+    let expected_directions = vec![("S", 180.0), ("SW", 225.0), ("NE", 45.0)];
 
     for (idx, (expected_dir, expected_deg)) in expected_directions.iter().enumerate() {
         let period = &periods[idx];
-        let wind_dir_str = period.get("windDirection").and_then(|v| v.as_str()).expect("Missing wind direction");
+        let wind_dir_str = period
+            .get("windDirection")
+            .and_then(|v| v.as_str())
+            .expect("Missing wind direction");
 
-        assert_eq!(wind_dir_str, *expected_dir, "Period {} has wrong direction", idx);
+        assert_eq!(
+            wind_dir_str, *expected_dir,
+            "Period {} has wrong direction",
+            idx
+        );
 
-        let wind_dir_deg = parse_wind_direction(wind_dir_str).expect("Failed to parse wind direction");
-        assert_eq!(wind_dir_deg, *expected_deg, "Period {} has wrong degrees", idx);
+        let wind_dir_deg =
+            parse_wind_direction(wind_dir_str).expect("Failed to parse wind direction");
+        assert_eq!(
+            wind_dir_deg, *expected_deg,
+            "Period {} has wrong degrees",
+            idx
+        );
     }
 }
 
@@ -262,7 +304,10 @@ fn test_nws_forecast_all_wind_directions() {
 fn test_nws_forecast_empty_periods() {
     let payload = nws_payloads::nws_forecast_empty_periods();
     let properties = payload.get("properties").expect("Missing properties");
-    let periods = properties.get("periods").and_then(|v| v.as_array()).expect("Missing periods");
+    let periods = properties
+        .get("periods")
+        .and_then(|v| v.as_array())
+        .expect("Missing periods");
 
     assert_eq!(periods.len(), 0, "Should have 0 forecast periods");
 }
@@ -280,13 +325,22 @@ fn test_nws_forecast_timestamp_validation() {
     let properties = payload.get("properties").expect("Missing properties");
 
     // Extract issue_time
-    let issue_time_str = properties.get("generatedAt").and_then(|v| v.as_str()).expect("Missing generatedAt");
+    let issue_time_str = properties
+        .get("generatedAt")
+        .and_then(|v| v.as_str())
+        .expect("Missing generatedAt");
     let issue_time = parse_rfc3339(issue_time_str).expect("Failed to parse issue_time");
 
     // Extract first period valid_time
-    let periods = properties.get("periods").and_then(|v| v.as_array()).expect("Missing periods");
+    let periods = properties
+        .get("periods")
+        .and_then(|v| v.as_array())
+        .expect("Missing periods");
     let period = &periods[0];
-    let valid_time_str = period.get("startTime").and_then(|v| v.as_str()).expect("Missing startTime");
+    let valid_time_str = period
+        .get("startTime")
+        .and_then(|v| v.as_str())
+        .expect("Missing startTime");
     let valid_time = parse_rfc3339(valid_time_str).expect("Failed to parse valid_time");
 
     // Validate: valid_time should be >= issue_time
@@ -308,7 +362,10 @@ fn test_nws_forecast_timestamp_validation() {
 fn test_nws_forecast_tall_format_point_count() {
     let payload = nws_payloads::nws_forecast_three_periods();
     let properties = payload.get("properties").expect("Missing properties");
-    let periods = properties.get("periods").and_then(|v| v.as_array()).expect("Missing periods");
+    let periods = properties
+        .get("periods")
+        .and_then(|v| v.as_array())
+        .expect("Missing periods");
 
     // Each period should generate multiple points (tall format)
     // Fields: temperature, dewpoint, humidity, wind_speed, wind_direction, precip_probability

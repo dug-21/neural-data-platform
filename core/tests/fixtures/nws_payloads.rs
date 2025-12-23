@@ -201,10 +201,20 @@ mod tests {
         let properties = payload.get("properties").unwrap();
 
         // Temperature should be present
-        assert!(properties.get("temperature").unwrap().get("value").unwrap().is_f64());
+        assert!(properties
+            .get("temperature")
+            .unwrap()
+            .get("value")
+            .unwrap()
+            .is_f64());
 
         // Dewpoint should be null
-        assert!(properties.get("dewpoint").unwrap().get("value").unwrap().is_null());
+        assert!(properties
+            .get("dewpoint")
+            .unwrap()
+            .get("value")
+            .unwrap()
+            .is_null());
     }
 
     #[test]

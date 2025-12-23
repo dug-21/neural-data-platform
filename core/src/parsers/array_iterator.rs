@@ -34,6 +34,10 @@ pub struct ArrayIteratorConfig {
     #[serde(default)]
     pub metadata_tags: Vec<MetadataTagMapping>,
 
+    /// Metadata metrics to emit as metric rows (e.g., issue_time)
+    #[serde(default)]
+    pub metadata_metrics: Vec<MetadataMetricMapping>,
+
     /// Element field mappings
     pub element_mappings: Vec<ElementMapping>,
 }
@@ -46,6 +50,39 @@ pub struct MetadataTagMapping {
 
     /// Tag name to store the value under
     pub tag_name: String,
+}
+
+/// Metadata metric extracted from shared response fields (emitted as a metric row)
+///
+/// Unlike metadata_tags which are stored in tags (and may not be persisted),
+/// metadata_metrics emit actual metric rows with the value stored in the value column.
+/// This is useful for timestamps that need to be queryable for analytics.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MetadataMetricMapping {
+    /// JSON path to the metadata value (e.g., "properties.updateTime")
+    pub path: String,
+
+    /// Metric name for the emitted TimeSeriesPoint
+    pub metric_name: String,
+
+    /// Value type determines how to extract the numeric value
+    #[serde(default)]
+    pub value_type: MetadataValueType,
+
+    /// Optional unit for the metric
+    #[serde(default)]
+    pub unit: Option<String>,
+}
+
+/// How to extract a numeric value from a metadata field
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MetadataValueType {
+    /// Parse as ISO 8601 timestamp, emit epoch seconds
+    #[default]
+    Timestamp,
+    /// Parse as direct numeric value
+    Numeric,
 }
 
 /// Mapping configuration for extracting a field from each array element
@@ -115,7 +152,10 @@ impl ArrayIteratorParser {
 
     /// Create from explicit configs (for testing)
     #[cfg(test)]
-    pub fn from_configs(config: ParserConfig, array_config: ArrayIteratorConfig) -> CoreResult<Self> {
+    pub fn from_configs(
+        config: ParserConfig,
+        array_config: ArrayIteratorConfig,
+    ) -> CoreResult<Self> {
         Ok(Self {
             config,
             array_config,
@@ -204,6 +244,74 @@ impl ArrayIteratorParser {
         }
 
         tags
+    }
+
+    /// Extract metadata metrics from shared fields
+    ///
+    /// Returns Vec of (metric_name, value, unit) tuples.
+    /// - For Timestamp type: parses ISO 8601 string, converts to epoch seconds (f64)
+    /// - For Numeric type: extracts numeric value directly
+    fn extract_metadata_metrics(&self, payload: &Value) -> Vec<(String, f64, Option<String>)> {
+        let mut metrics = Vec::new();
+
+        for metadata_metric in &self.array_config.metadata_metrics {
+            if let Some(value) = self.extract_at_path(payload, &metadata_metric.path) {
+                let numeric_value = match metadata_metric.value_type {
+                    MetadataValueType::Timestamp => {
+                        // Parse ISO 8601 timestamp and convert to epoch seconds
+                        if let Some(timestamp_str) = value.as_str() {
+                            match DateTime::parse_from_rfc3339(timestamp_str) {
+                                Ok(dt) => Some(dt.timestamp() as f64),
+                                Err(e) => {
+                                    warn!(
+                                        "Failed to parse timestamp '{}' for metadata metric '{}': {}",
+                                        timestamp_str, metadata_metric.metric_name, e
+                                    );
+                                    None
+                                }
+                            }
+                        } else {
+                            warn!(
+                                "Metadata metric '{}' value is not a string (expected ISO 8601 timestamp)",
+                                metadata_metric.metric_name
+                            );
+                            None
+                        }
+                    }
+                    MetadataValueType::Numeric => {
+                        // Extract numeric value directly
+                        if let Some(num) = value.as_f64() {
+                            Some(num)
+                        } else if let Some(num) = value.as_i64() {
+                            Some(num as f64)
+                        } else if let Some(num) = value.as_u64() {
+                            Some(num as f64)
+                        } else {
+                            warn!(
+                                "Metadata metric '{}' value is not numeric: {:?}",
+                                metadata_metric.metric_name, value
+                            );
+                            None
+                        }
+                    }
+                };
+
+                if let Some(value) = numeric_value {
+                    metrics.push((
+                        metadata_metric.metric_name.clone(),
+                        value,
+                        metadata_metric.unit.clone(),
+                    ));
+                }
+            } else {
+                warn!(
+                    "Metadata path '{}' not found, skipping metric '{}'",
+                    metadata_metric.path, metadata_metric.metric_name
+                );
+            }
+        }
+
+        metrics
     }
 
     /// Parse numeric value from string using regex
@@ -302,6 +410,9 @@ impl Parser for ArrayIteratorParser {
         let mut metadata_tags = self.extract_metadata_tags(payload);
         metadata_tags.extend(self.config.default_tags.clone());
 
+        // Extract metadata metrics (to emit as metric rows)
+        let metadata_metrics = self.extract_metadata_metrics(payload);
+
         // Extract array
         let array = self.extract_array(payload)?;
         let element_count = array.len();
@@ -311,9 +422,10 @@ impl Parser for ArrayIteratorParser {
             element_count, self.array_config.array_path
         );
 
-        // Estimate capacity: elements × mappings
-        let mut points =
-            Vec::with_capacity(element_count * self.array_config.element_mappings.len());
+        // Estimate capacity: elements × (element_mappings + metadata_metrics)
+        let mut points = Vec::with_capacity(
+            element_count * (self.array_config.element_mappings.len() + metadata_metrics.len()),
+        );
 
         // Iterate over array elements
         for (idx, element) in array.iter().enumerate() {
@@ -372,6 +484,35 @@ impl Parser for ArrayIteratorParser {
                     }
                 }
             }
+
+            // Emit metadata metrics for this element
+            // These use the same element_timestamp, location_id, and metadata_tags
+            for (metric_name, value, unit) in &metadata_metrics {
+                let mut tags = metadata_tags.clone();
+                tags.insert("metric".to_string(), metric_name.clone());
+
+                if let Some(unit) = unit {
+                    tags.insert("unit".to_string(), unit.clone());
+                }
+
+                // Add element timestamp as forecast_valid_time
+                tags.insert(
+                    "forecast_valid_time".to_string(),
+                    element_timestamp.timestamp().to_string(),
+                );
+
+                points.push(TimeSeriesPoint {
+                    timestamp,
+                    location_id: location_id.clone(),
+                    value: *value,
+                    tags,
+                });
+
+                debug!(
+                    "Element {}: emitted metadata metric {} = {}",
+                    idx, metric_name, value
+                );
+            }
         }
 
         if points.is_empty() {
@@ -411,6 +552,7 @@ mod tests {
             array_path: array_path.to_string(),
             timestamp_field: timestamp_field.to_string(),
             metadata_tags: vec![],
+            metadata_metrics: vec![],
             element_mappings: mappings,
         };
 
@@ -635,6 +777,7 @@ mod tests {
                 path: "generatedAt".to_string(),
                 tag_name: "issue_time".to_string(),
             }],
+            metadata_metrics: vec![],
             element_mappings: mappings,
         };
 
@@ -774,5 +917,272 @@ mod tests {
 
         assert_eq!(points.len(), 1);
         assert_eq!(points[0].value, 20.5);
+    }
+
+    #[test]
+    fn test_metadata_metrics_timestamp_extraction() {
+        let mappings = vec![ElementMapping {
+            path: "temperature".to_string(),
+            metric_name: "temp".to_string(),
+            unit: Some("celsius".to_string()),
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let array_config = ArrayIteratorConfig {
+            array_path: "periods".to_string(),
+            timestamp_field: "time".to_string(),
+            metadata_tags: vec![],
+            metadata_metrics: vec![MetadataMetricMapping {
+                path: "updateTime".to_string(),
+                metric_name: "issue_time".to_string(),
+                value_type: MetadataValueType::Timestamp,
+                unit: Some("epoch_seconds".to_string()),
+            }],
+            element_mappings: mappings,
+        };
+
+        let base_config = ParserConfig {
+            parser_type: ParserType::Custom("array_iterator".to_string()),
+            location_id_field: "location".to_string(),
+            default_location_id: Some("test_location".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            default_tags: HashMap::new(),
+            array_config: Some(array_config),
+        };
+
+        let parser = ArrayIteratorParser::from_config(base_config).unwrap();
+
+        let payload = json!({
+            "location": "test",
+            "updateTime": "2025-12-21T10:00:00Z",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "temperature": 20.5},
+                {"time": "2025-12-21T13:00:00Z", "temperature": 21.0}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        // Should have 2 elements × 2 metrics (temp + issue_time) = 4 points
+        assert_eq!(points.len(), 4);
+
+        // Find issue_time points
+        let issue_time_points: Vec<_> = points
+            .iter()
+            .filter(|p| p.tags.get("metric") == Some(&"issue_time".to_string()))
+            .collect();
+
+        assert_eq!(issue_time_points.len(), 2);
+
+        // Verify the timestamp was converted to epoch seconds
+        let expected_epoch = DateTime::parse_from_rfc3339("2025-12-21T10:00:00Z")
+            .unwrap()
+            .timestamp() as f64;
+
+        for point in issue_time_points {
+            assert_eq!(point.value, expected_epoch);
+            assert_eq!(point.tags.get("unit").unwrap(), "epoch_seconds");
+        }
+
+        // Verify temperature points still work
+        let temp_points: Vec<_> = points
+            .iter()
+            .filter(|p| p.tags.get("metric") == Some(&"temp".to_string()))
+            .collect();
+
+        assert_eq!(temp_points.len(), 2);
+        assert_eq!(temp_points[0].value, 20.5);
+        assert_eq!(temp_points[1].value, 21.0);
+    }
+
+    #[test]
+    fn test_metadata_metrics_numeric_extraction() {
+        let mappings = vec![ElementMapping {
+            path: "value".to_string(),
+            metric_name: "measurement".to_string(),
+            unit: None,
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let array_config = ArrayIteratorConfig {
+            array_path: "data".to_string(),
+            timestamp_field: "time".to_string(),
+            metadata_tags: vec![],
+            metadata_metrics: vec![MetadataMetricMapping {
+                path: "confidence".to_string(),
+                metric_name: "confidence_score".to_string(),
+                value_type: MetadataValueType::Numeric,
+                unit: Some("percent".to_string()),
+            }],
+            element_mappings: mappings,
+        };
+
+        let base_config = ParserConfig {
+            parser_type: ParserType::Custom("array_iterator".to_string()),
+            location_id_field: "location".to_string(),
+            default_location_id: Some("test_location".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            default_tags: HashMap::new(),
+            array_config: Some(array_config),
+        };
+
+        let parser = ArrayIteratorParser::from_config(base_config).unwrap();
+
+        let payload = json!({
+            "location": "test",
+            "confidence": 95.5,
+            "data": [
+                {"time": "2025-12-21T12:00:00Z", "value": 10.0}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        // Should have 1 element × 2 metrics = 2 points
+        assert_eq!(points.len(), 2);
+
+        // Find confidence_score point
+        let confidence_point = points
+            .iter()
+            .find(|p| p.tags.get("metric") == Some(&"confidence_score".to_string()))
+            .unwrap();
+
+        assert_eq!(confidence_point.value, 95.5);
+        assert_eq!(confidence_point.tags.get("unit").unwrap(), "percent");
+    }
+
+    #[test]
+    fn test_metadata_metrics_emitted_per_element() {
+        // Verify that metadata metrics are emitted once per array element,
+        // not once per document
+        let mappings = vec![ElementMapping {
+            path: "temp".to_string(),
+            metric_name: "temperature".to_string(),
+            unit: None,
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let array_config = ArrayIteratorConfig {
+            array_path: "periods".to_string(),
+            timestamp_field: "time".to_string(),
+            metadata_tags: vec![],
+            metadata_metrics: vec![MetadataMetricMapping {
+                path: "issued".to_string(),
+                metric_name: "issue_time".to_string(),
+                value_type: MetadataValueType::Timestamp,
+                unit: None,
+            }],
+            element_mappings: mappings,
+        };
+
+        let base_config = ParserConfig {
+            parser_type: ParserType::Custom("array_iterator".to_string()),
+            location_id_field: "location".to_string(),
+            default_location_id: Some("test_location".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            default_tags: HashMap::new(),
+            array_config: Some(array_config),
+        };
+
+        let parser = ArrayIteratorParser::from_config(base_config).unwrap();
+
+        let payload = json!({
+            "location": "test",
+            "issued": "2025-12-21T10:00:00Z",
+            "periods": [
+                {"time": "2025-12-21T12:00:00Z", "temp": 20.0},
+                {"time": "2025-12-21T13:00:00Z", "temp": 21.0},
+                {"time": "2025-12-21T14:00:00Z", "temp": 22.0}
+            ]
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+
+        // 3 elements × 2 metrics (temp + issue_time) = 6 points
+        assert_eq!(points.len(), 6);
+
+        // Verify we have 3 issue_time points (one per element)
+        let issue_time_points: Vec<_> = points
+            .iter()
+            .filter(|p| p.tags.get("metric") == Some(&"issue_time".to_string()))
+            .collect();
+
+        assert_eq!(issue_time_points.len(), 3);
+
+        // Each should have different forecast_valid_time tags
+        let valid_times: Vec<_> = issue_time_points
+            .iter()
+            .map(|p| p.tags.get("forecast_valid_time").unwrap().as_str())
+            .collect();
+
+        assert_eq!(valid_times.len(), 3);
+        // Verify they're all different (converted to set should still have 3 items)
+        let unique_times: std::collections::HashSet<_> = valid_times.iter().collect();
+        assert_eq!(unique_times.len(), 3);
+    }
+
+    #[test]
+    fn test_metadata_metrics_missing_optional() {
+        // Test graceful handling when metadata path doesn't exist
+        let mappings = vec![ElementMapping {
+            path: "value".to_string(),
+            metric_name: "measurement".to_string(),
+            unit: None,
+            string_parse: None,
+            enum_map: None,
+            optional: false,
+        }];
+
+        let array_config = ArrayIteratorConfig {
+            array_path: "data".to_string(),
+            timestamp_field: "time".to_string(),
+            metadata_tags: vec![],
+            metadata_metrics: vec![MetadataMetricMapping {
+                path: "nonexistent.field".to_string(),
+                metric_name: "missing_metric".to_string(),
+                value_type: MetadataValueType::Numeric,
+                unit: None,
+            }],
+            element_mappings: mappings,
+        };
+
+        let base_config = ParserConfig {
+            parser_type: ParserType::Custom("array_iterator".to_string()),
+            location_id_field: "location".to_string(),
+            default_location_id: Some("test_location".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            default_tags: HashMap::new(),
+            array_config: Some(array_config),
+        };
+
+        let parser = ArrayIteratorParser::from_config(base_config).unwrap();
+
+        let payload = json!({
+            "location": "test",
+            "data": [
+                {"time": "2025-12-21T12:00:00Z", "value": 10.0}
+            ]
+        });
+
+        // Should not error, just warn and skip the missing metadata metric
+        let result = parser.parse(&payload, Utc::now());
+        assert!(result.is_ok());
+
+        let points = result.unwrap();
+
+        // Should only have 1 point from element mapping (metadata metric skipped)
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].tags.get("metric").unwrap(), "measurement");
+        assert_eq!(points[0].value, 10.0);
     }
 }

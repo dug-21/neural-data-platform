@@ -88,6 +88,12 @@ sources:
             tag_name: forecast_generated_at
           - path: properties.updateTime
             tag_name: forecast_update_time
+        # Emit metadata as queryable metric values
+        metadata_metrics:
+          - path: properties.updateTime
+            metric_name: forecast_issue_time
+            value_type: timestamp
+            unit: epoch_seconds
         element_mappings:
           - path: temperature
             metric_name: temperature

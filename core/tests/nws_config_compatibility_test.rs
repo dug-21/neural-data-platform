@@ -15,11 +15,11 @@ fn test_nws_observations_config_deserializes() {
         "/../config/base/streams/nws-observations/config.yaml"
     );
 
-    let yaml_content = fs::read_to_string(yaml_path)
-        .expect("Failed to read nws-observations config.yaml");
+    let yaml_content =
+        fs::read_to_string(yaml_path).expect("Failed to read nws-observations config.yaml");
 
-    let config: serde_yaml::Value = serde_yaml::from_str(&yaml_content)
-        .expect("Failed to parse YAML");
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&yaml_content).expect("Failed to parse YAML");
 
     // Extract the parser section
     let parser_yaml = config
@@ -43,7 +43,11 @@ fn test_nws_observations_config_deserializes() {
             println!("✅ NWS observations config deserialized successfully");
         }
         Err(e) => {
-            panic!("❌ Failed to deserialize nws-observations parser config: {}\n\nYAML:\n{}", e, serde_yaml::to_string(parser_yaml).unwrap());
+            panic!(
+                "❌ Failed to deserialize nws-observations parser config: {}\n\nYAML:\n{}",
+                e,
+                serde_yaml::to_string(parser_yaml).unwrap()
+            );
         }
     }
 }
@@ -56,11 +60,11 @@ fn test_nws_forecast_hourly_config_deserializes() {
         "/../config/base/streams/nws-forecast-hourly/config.yaml"
     );
 
-    let yaml_content = fs::read_to_string(yaml_path)
-        .expect("Failed to read nws-forecast-hourly config.yaml");
+    let yaml_content =
+        fs::read_to_string(yaml_path).expect("Failed to read nws-forecast-hourly config.yaml");
 
-    let config: serde_yaml::Value = serde_yaml::from_str(&yaml_content)
-        .expect("Failed to parse YAML");
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&yaml_content).expect("Failed to parse YAML");
 
     // Extract the parser section
     let parser_yaml = config
@@ -76,7 +80,10 @@ fn test_nws_forecast_hourly_config_deserializes() {
     match result {
         Ok(parser_config) => {
             // Verify it parsed correctly
-            assert!(matches!(parser_config.parser_type, ParserType::ArrayIterator));
+            assert!(matches!(
+                parser_config.parser_type,
+                ParserType::ArrayIterator
+            ));
             assert_eq!(parser_config.location_id_field, "properties.gridId");
             assert_eq!(parser_config.default_location_id, Some("ksgj".to_string()));
 
@@ -90,7 +97,10 @@ fn test_nws_forecast_hourly_config_deserializes() {
                 println!("✅ NWS forecast hourly config deserialized successfully");
                 println!("   Array path: {}", array_config.array_path);
                 println!("   Timestamp field: {}", array_config.timestamp_field);
-                println!("   Element mappings: {}", array_config.element_mappings.len());
+                println!(
+                    "   Element mappings: {}",
+                    array_config.element_mappings.len()
+                );
                 println!("   Metadata tags: {}", array_config.metadata_tags.len());
             } else {
                 // This is the problem - array_config is None
@@ -109,7 +119,11 @@ fn test_nws_forecast_hourly_config_deserializes() {
             }
         }
         Err(e) => {
-            panic!("❌ Failed to deserialize nws-forecast-hourly parser config: {}\n\nYAML:\n{}", e, serde_yaml::to_string(parser_yaml).unwrap());
+            panic!(
+                "❌ Failed to deserialize nws-forecast-hourly parser config: {}\n\nYAML:\n{}",
+                e,
+                serde_yaml::to_string(parser_yaml).unwrap()
+            );
         }
     }
 }
@@ -125,11 +139,10 @@ fn test_create_array_iterator_parser_from_nws_config() {
         "/../config/base/streams/nws-forecast-hourly/config.yaml"
     );
 
-    let yaml_content = fs::read_to_string(yaml_path)
-        .expect("Failed to read config");
+    let yaml_content = fs::read_to_string(yaml_path).expect("Failed to read config");
 
-    let config: serde_yaml::Value = serde_yaml::from_str(&yaml_content)
-        .expect("Failed to parse YAML");
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&yaml_content).expect("Failed to parse YAML");
 
     let parser_yaml = config
         .get("sources")
@@ -138,8 +151,8 @@ fn test_create_array_iterator_parser_from_nws_config() {
         .and_then(|src| src.get("parser"))
         .expect("Parser config not found");
 
-    let parser_config: ParserConfig = serde_yaml::from_value(parser_yaml.clone())
-        .expect("Failed to deserialize ParserConfig");
+    let parser_config: ParserConfig =
+        serde_yaml::from_value(parser_yaml.clone()).expect("Failed to deserialize ParserConfig");
 
     // Try to create ArrayIteratorParser
     let parser = ArrayIteratorParser::from_config(parser_config)
