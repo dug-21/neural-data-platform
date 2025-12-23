@@ -66,8 +66,8 @@ sources:
       - endpoint_id: nws_jax_79_49_forecast
         location_id: ksgj
         grid_office: JAX
-        grid_x: 79
-        grid_y: 49
+        grid_x: 80
+        grid_y: 50
         url: "https://api.weather.gov/gridpoints/JAX/79,49/forecast/hourly"
         auth_type: none
         headers:
@@ -83,8 +83,8 @@ sources:
         api: forecast_hourly
         stream_id: nws-forecast-hourly
         grid_office: JAX
-        grid_x: "79"
-        grid_y: "49"
+        grid_x: "80"
+        grid_y: "50"
       # ArrayIteratorConfig - must be nested under array_config
       array_config:
         array_path: properties.periods
