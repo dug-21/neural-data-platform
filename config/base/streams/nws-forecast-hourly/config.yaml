@@ -60,6 +60,7 @@ sources:
     timeout_secs: 30
     retry_attempts: 3
     retry_delay_secs: 5
+    buffer_capacity: 2500  # NWS generates ~1092 points per poll
     parser_name: nws_forecast_hourly
     endpoints:
       - endpoint_id: nws_jax_79_49_forecast

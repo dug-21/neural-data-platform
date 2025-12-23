@@ -917,6 +917,10 @@ impl Source for GenericHttpPollingSource {
             points.push(point);
         }
 
+        if !points.is_empty() {
+            info!("fetch() retrieved {} points from internal buffer", points.len());
+        }
+
         Ok(points)
     }
 
