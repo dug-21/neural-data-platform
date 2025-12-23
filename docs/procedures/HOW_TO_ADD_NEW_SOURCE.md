@@ -508,6 +508,111 @@ Before merging your new source:
 
 ---
 
+## Buffer Capacity Sizing
+
+When adding sources, proper buffer sizing prevents silent data loss.
+
+### The Problem
+
+Sources using `array_iterator` parsers can generate many points per poll:
+- NWS forecast: 156 periods × 7 metrics = **1092 points per poll**
+- At startup, initial poll + background loop may fire simultaneously
+- Default `buffer_capacity` of 1000 causes overflow and data loss
+
+### Sizing Formula
+
+```
+buffer_capacity = array_length × metrics_count × 2.5
+```
+
+### Configuration Example
+
+```yaml
+sources:
+  - type: http_poll
+    buffer_capacity: 2500  # NWS generates ~1092 points per poll
+    parser:
+      parser_type: array_iterator
+      array_config:
+        array_path: properties.periods  # 156 elements
+        element_mappings:  # 7 metrics per element
+          - path: temperature
+          - path: dewpoint.value
+          # ... more metrics
+```
+
+### Source Type Buffer Guidelines
+
+| Source Type | Expected Points | Recommended Buffer |
+|-------------|-----------------|-------------------|
+| Flat JSON (MQTT) | 1-10 per poll | 100-500 |
+| JSON Path (single obs) | 1-20 per poll | 100-500 |
+| Array Iterator (small) | 50-200 per poll | 500-1000 |
+| Array Iterator (large) | 500-2000+ per poll | 2500+ |
+
+---
+
+## Guiding Principle: Collect All Available Information
+
+**Capture everything the source provides.** Storage is cheap; missing historical data is expensive.
+
+### Why This Matters
+
+- Future analysis without re-polling historical data
+- Lead time calculations (forecast issue time vs valid time)
+- Data quality monitoring (compare predictions to actuals)
+- ML feature engineering flexibility
+
+### Application
+
+**1. Document-Level Metadata**
+
+Extract metadata from the response wrapper:
+
+```yaml
+metadata_tags:
+  - path: properties.generatedAt
+    tag_name: forecast_generated_at
+metadata_metrics:
+  - path: properties.updateTime
+    metric_name: forecast_issue_time
+    value_type: timestamp
+```
+
+**2. All Available Fields**
+
+Map every meaningful field, even if currently unused:
+
+```yaml
+element_mappings:
+  - path: temperature
+    metric_name: temperature
+  - path: dewpoint.value           # Often overlooked
+    metric_name: dewpoint
+  - path: shortForecast            # Text descriptions have value
+    metric_name: short_forecast
+```
+
+**3. Schema Documentation**
+
+Define all fields with proper units and ranges:
+
+```yaml
+fields:
+  - name: forecast_issue_time
+    type: float
+    nullable: true
+    unit: epoch_seconds
+    description: "Forecast issue timestamp as epoch seconds"
+```
+
+### Anti-Pattern
+
+❌ "We only need temperature, skip the rest"
+✅ "Capture everything; filter at query time"
+
+---
+
 ## Troubleshooting
 
 ### Source Won't Connect
@@ -520,15 +625,23 @@ Before merging your new source:
 ### Data Not Appearing
 
 1. Verify source is returning data: check health endpoint
-2. Check channel is not full (increase `buffer_capacity`)
+2. Check channel is not full (increase `buffer_capacity` - see sizing guide above)
 3. Verify StorageWriter is running
 4. Check Parquet files: `ls -la /app/data/`
+
+### Data Loss / Missing Points
+
+1. Check if source uses `array_iterator` parser
+2. Calculate expected points: `array_length × metrics_count`
+3. Increase `buffer_capacity` to 2.5x expected points
+4. Check logs for "forwarded X points" matching "Polled endpoint - X points"
 
 ### Performance Issues
 
 1. Adjust polling interval (not too frequent)
 2. Increase batch size in StorageWriter
 3. Check memory usage: `docker stats`
+4. For array sources, ensure buffer_capacity handles concurrent polls
 
 ---
 

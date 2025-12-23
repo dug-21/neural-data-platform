@@ -817,6 +817,20 @@ TimeSeriesPoint {
 5. **Enum mapping:** Converts human-readable values to numeric
 6. **Forecast tracking:** `forecast_generated_at` tag enables forecast verification
 
+### Buffer Capacity for Array Sources
+
+**Critical:** Array iterator sources generate many points per poll. Default `buffer_capacity` of 1000 may overflow.
+
+```yaml
+sources:
+  - type: http_poll
+    buffer_capacity: 2500  # NWS: 156 periods × 7 metrics = 1092 points
+```
+
+**Sizing formula:** `buffer_capacity = array_length × metrics_count × 2.5`
+
+The 2.5x multiplier handles concurrent polls at startup (initial poll + background loop first tick).
+
 ---
 
 ## Multi-Stream Architecture (Future)
@@ -953,6 +967,45 @@ parser:
 
 ---
 
+## Best Practices
+
+### Collect All Available Information
+
+**Guiding principle:** Capture everything the source provides. Storage is cheap; missing historical data is expensive.
+
+**Why:**
+- Future analysis without re-polling historical data
+- Lead time calculations (forecast issue time vs valid time)
+- Data quality monitoring (compare predictions to actuals)
+- ML feature engineering flexibility
+
+**How:**
+
+1. **Extract document-level metadata** as tags or metrics:
+```yaml
+metadata_tags:
+  - path: properties.generatedAt
+    tag_name: forecast_generated_at
+metadata_metrics:
+  - path: properties.updateTime
+    metric_name: forecast_issue_time
+    value_type: timestamp
+```
+
+2. **Map all meaningful fields**, even if not immediately needed:
+```yaml
+element_mappings:
+  - path: shortForecast     # Text has value for analysis
+    metric_name: short_forecast
+```
+
+3. **Document everything** in the schema with units and descriptions
+
+**Anti-pattern:** "We only need temperature, skip the rest"
+**Best practice:** "Capture everything; filter at query time"
+
+---
+
 ## Checklist
 
 Before deploying a new stream:
@@ -975,6 +1028,12 @@ Before deploying a new stream:
 - [ ] `timestamp_format` specified correctly (iso8601, unix, etc.)
 - [ ] `array_path` configured for array_iterator parsers
 - [ ] `metadata_tags` configured if tracking response-level metadata
+- [ ] All available source fields mapped (collect everything)
+
+### Buffer Capacity (for array_iterator sources)
+- [ ] Calculate expected points: `array_length × metrics_count`
+- [ ] Set `buffer_capacity` to at least 2.5x expected points
+- [ ] Example: NWS (156 periods × 7 metrics = 1092) → buffer_capacity: 2500
 
 ### Transform Configuration (if needed)
 - [ ] `string_parse` patterns tested for text fields
@@ -989,6 +1048,7 @@ Before deploying a new stream:
 - [ ] Parser produces expected number of points
 - [ ] Timestamps extracted correctly (not using poll time when shouldn't)
 - [ ] Metadata tags present on generated points
+- [ ] Log "forwarded X points" matches "Polled endpoint - X points" (no data loss)
 
 ---
 
