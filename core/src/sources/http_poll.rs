@@ -813,8 +813,8 @@ impl GenericHttpPollingSource {
 
             match self.poll_endpoint(endpoint).await {
                 Ok(points) => {
-                    debug!(
-                        "Successfully polled endpoint {} - got {} points",
+                    info!(
+                        "Polled endpoint {} - {} points",
                         endpoint.endpoint_id,
                         points.len()
                     );
@@ -836,6 +836,10 @@ impl GenericHttpPollingSource {
 
     /// Background polling loop
     async fn polling_loop(&self) -> CoreResult<()> {
+        info!(
+            "HTTP polling loop started (interval: {:?})",
+            self.config.poll_interval
+        );
         let mut interval = tokio::time::interval(self.config.poll_interval);
 
         while *self.is_running.lock().await {
@@ -851,9 +855,18 @@ impl GenericHttpPollingSource {
 
     /// Start the source
     pub async fn start(&mut self) -> CoreResult<()> {
-        info!("Starting generic HTTP polling source");
+        let enabled_endpoints: Vec<_> = self.config.endpoints.iter()
+            .filter(|e| e.enabled)
+            .map(|e| e.endpoint_id.as_str())
+            .collect();
+        let enabled_count = enabled_endpoints.len();
 
-        let enabled_count = self.config.endpoints.iter().filter(|e| e.enabled).count();
+        info!(
+            "Starting generic HTTP polling source with {} endpoints: {:?} (interval: {:?})",
+            enabled_count,
+            enabled_endpoints,
+            self.config.poll_interval
+        );
         if enabled_count == 0 {
             return Err(CoreError::Source(
                 "No enabled endpoints configured".to_string(),
