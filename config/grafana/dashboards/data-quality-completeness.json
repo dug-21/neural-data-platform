@@ -1,0 +1,468 @@
+{
+  "uid": "ndp-data-quality",
+  "title": "Data Quality & Completeness",
+  "tags": ["ndp", "data-quality", "exploration"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Stream Health",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Air Quality (24h)",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT COUNT(*) as value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= (EXTRACT(epoch FROM NOW() - INTERVAL '24 hours') * 1000000)::BIGINT",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 1000},
+              {"color": "yellow", "value": 5000},
+              {"color": "green", "value": 8000}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Outdoor Weather (24h)",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT COUNT(*) as value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= (EXTRACT(epoch FROM NOW() - INTERVAL '24 hours') * 1000000)::BIGINT",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 50},
+              {"color": "yellow", "value": 100},
+              {"color": "green", "value": 120}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Outdoor Air Quality (24h)",
+      "gridPos": {"x": 8, "y": 1, "w": 5, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT COUNT(*) as value FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE timestamp >= (EXTRACT(epoch FROM NOW() - INTERVAL '24 hours') * 1000000)::BIGINT",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 50},
+              {"color": "yellow", "value": 100},
+              {"color": "green", "value": 120}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "NWS Observations (24h)",
+      "gridPos": {"x": 13, "y": 1, "w": 5, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT COUNT(*) as value FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= (EXTRACT(epoch FROM NOW() - INTERVAL '24 hours') * 1000000)::BIGINT",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 100},
+              {"color": "yellow", "value": 200},
+              {"color": "green", "value": 250}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "NWS Forecast Hourly (24h)",
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT COUNT(*) as value FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE timestamp >= (EXTRACT(epoch FROM NOW() - INTERVAL '24 hours') * 1000000)::BIGINT",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 100},
+              {"color": "yellow", "value": 200},
+              {"color": "green", "value": 250}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Data Freshness",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Air Quality Last Seen",
+      "gridPos": {"x": 0, "y": 6, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT EXTRACT(epoch FROM NOW())::BIGINT - MAX(timestamp)/1000000 as value FROM read_parquet('/data/data/air-quality/**/*.parquet')",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 300},
+              {"color": "orange", "value": 600},
+              {"color": "red", "value": 1800}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Outdoor Weather Last Seen",
+      "gridPos": {"x": 4, "y": 6, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT EXTRACT(epoch FROM NOW())::BIGINT - MAX(timestamp)/1000000 as value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet')",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 600},
+              {"color": "orange", "value": 1200},
+              {"color": "red", "value": 3600}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Outdoor AQ Last Seen",
+      "gridPos": {"x": 8, "y": 6, "w": 5, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT EXTRACT(epoch FROM NOW())::BIGINT - MAX(timestamp)/1000000 as value FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet')",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 600},
+              {"color": "orange", "value": 1200},
+              {"color": "red", "value": 3600}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "NWS Obs Last Seen",
+      "gridPos": {"x": 13, "y": 6, "w": 5, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT EXTRACT(epoch FROM NOW())::BIGINT - MAX(timestamp)/1000000 as value FROM read_parquet('/data/data/nws-observations/**/*.parquet')",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 600},
+              {"color": "orange", "value": 1200},
+              {"color": "red", "value": 3600}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "NWS Forecast Last Seen",
+      "gridPos": {"x": 18, "y": 6, "w": 6, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT EXTRACT(epoch FROM NOW())::BIGINT - MAX(timestamp)/1000000 as value FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet')",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 600},
+              {"color": "orange", "value": 1200},
+              {"color": "red", "value": 3600}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Data Gaps Timeline (>10 minutes)",
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "WITH gaps AS (SELECT 'air-quality' as stream, to_timestamp(timestamp/1000000) as time, EXTRACT(epoch FROM (to_timestamp(timestamp/1000000) - LAG(to_timestamp(timestamp/1000000)) OVER (ORDER BY timestamp))) as gap_seconds FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'outdoor-weather', to_timestamp(timestamp/1000000), EXTRACT(epoch FROM (to_timestamp(timestamp/1000000) - LAG(to_timestamp(timestamp/1000000)) OVER (ORDER BY timestamp))) FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'outdoor-air-quality', to_timestamp(timestamp/1000000), EXTRACT(epoch FROM (to_timestamp(timestamp/1000000) - LAG(to_timestamp(timestamp/1000000)) OVER (ORDER BY timestamp))) FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'nws-observations', to_timestamp(timestamp/1000000), EXTRACT(epoch FROM (to_timestamp(timestamp/1000000) - LAG(to_timestamp(timestamp/1000000)) OVER (ORDER BY timestamp))) FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'nws-forecast-hourly', to_timestamp(timestamp/1000000), EXTRACT(epoch FROM (to_timestamp(timestamp/1000000) - LAG(to_timestamp(timestamp/1000000)) OVER (ORDER BY timestamp))) FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000) SELECT time, stream || ' gap' as stream, gap_seconds/60 as \"Gap (minutes)\" FROM gaps WHERE gap_seconds > 600 ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "custom": {"drawStyle": "points", "pointSize": 5, "fillOpacity": 0}
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Completeness Rate (Records per Hour vs Expected)",
+      "gridPos": {"x": 0, "y": 18, "w": 24, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "WITH hourly_counts AS (SELECT 'air-quality' as stream, 360 as expected, time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as hour, COUNT(*) as actual FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY hour UNION ALL SELECT 'outdoor-weather', 6, time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)), COUNT(*) FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY hour UNION ALL SELECT 'outdoor-air-quality', 6, time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)), COUNT(*) FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY hour UNION ALL SELECT 'nws-observations', 12, time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)), COUNT(*) FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY hour UNION ALL SELECT 'nws-forecast-hourly', 12, time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)), COUNT(*) FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY hour) SELECT hour as time, stream, (actual::FLOAT / expected * 100) as \"Completeness %\" FROM hourly_counts ORDER BY hour, stream",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["mean", "min"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 50},
+              {"color": "yellow", "value": 80},
+              {"color": "green", "value": 95}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "barchart",
+      "title": "Null Value Distribution by Metric",
+      "gridPos": {"x": 0, "y": 26, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "WITH all_data AS (SELECT metric, value FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT metric, value FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT metric, value FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT metric, value FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT metric, value FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000) SELECT metric, (SUM(CASE WHEN value IS NULL THEN 1 ELSE 0 END)::FLOAT / COUNT(*) * 100) as \"Null %\" FROM all_data GROUP BY metric ORDER BY \"Null %\" DESC",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "always"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "orange", "value": 15},
+              {"color": "red", "value": 30}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "piechart",
+      "title": "Records Volume by Stream",
+      "gridPos": {"x": 12, "y": 26, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "WITH stream_counts AS (SELECT 'air-quality' as stream, COUNT(*) as count FROM read_parquet('/data/data/air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'outdoor-weather', COUNT(*) FROM read_parquet('/data/data/outdoor-weather/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'outdoor-air-quality', COUNT(*) FROM read_parquet('/data/data/outdoor-air-quality/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'nws-observations', COUNT(*) FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 UNION ALL SELECT 'nws-forecast-hourly', COUNT(*) FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000) SELECT stream, count as value FROM stream_counts ORDER BY count DESC",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+        "pieType": "pie",
+        "displayLabels": ["name", "percent"]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    }
+  ]
+}
