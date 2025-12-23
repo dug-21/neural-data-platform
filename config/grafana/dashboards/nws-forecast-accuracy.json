@@ -20,7 +20,7 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 8,
+        "w": 24,
         "h": 4
       },
       "targets": [
@@ -64,10 +64,10 @@
       "type": "barchart",
       "title": "MAE by Forecast Lead Time",
       "gridPos": {
-        "x": 8,
-        "y": 0,
-        "w": 8,
-        "h": 4
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
       },
       "targets": [
         {
@@ -115,10 +115,10 @@
       "type": "barchart",
       "title": "Accuracy % by Lead Time (within 2°C)",
       "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 8,
-        "h": 4
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
       },
       "targets": [
         {
@@ -169,7 +169,7 @@
       "title": "Forecast vs Actual Temperature",
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 12,
         "w": 24,
         "h": 8
       },
@@ -229,7 +229,7 @@
       "title": "Forecast Error Over Time",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 20,
         "w": 24,
         "h": 6
       },
@@ -294,7 +294,7 @@
       "title": "Wind Forecast vs Actual",
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 26,
         "w": 12,
         "h": 6
       },
@@ -354,7 +354,7 @@
       "title": "Humidity Forecast vs Actual",
       "gridPos": {
         "x": 12,
-        "y": 18,
+        "y": 26,
         "w": 12,
         "h": 6
       },
