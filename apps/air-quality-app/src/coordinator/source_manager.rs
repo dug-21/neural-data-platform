@@ -790,10 +790,6 @@ impl SourceManager {
                     // Fetch points from the source's internal buffer
                     match source.fetch().await {
                         Ok(points) => {
-                            let count = points.len();
-                            if count > 0 {
-                                info!("Forwarding {} points from {} to ingestion", count, stream_id);
-                            }
                             for point in points {
                                 if let Err(e) = ingestion_sender.send((
                                     source_id.clone(),
