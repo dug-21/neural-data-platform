@@ -61,8 +61,8 @@
     },
     {
       "id": 2,
-      "type": "stat",
-      "title": "Mean Absolute Error",
+      "type": "barchart",
+      "title": "MAE by Forecast Lead Time",
       "gridPos": {
         "x": 8,
         "y": 0,
@@ -75,25 +75,30 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH forecast AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as hour, AVG(CASE WHEN metric = 'temperature' THEN (value-32)*5/9 END) as temp FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1), observations AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as hour, AVG(CASE WHEN metric = 'temperature' THEN value END) as temp FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT AVG(ABS(f.temp - o.temp)) as value FROM forecast f INNER JOIN observations o ON f.hour = o.hour",
+          "rawSql": "WITH forecast AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as valid_hour, (value-32)*5/9 as temp_c, CASE WHEN TRY_CAST(forecast_generated_at AS TIMESTAMP) IS NOT NULL THEN (timestamp/1000000 - epoch(forecast_generated_at::TIMESTAMP)) / 3600 ELSE NULL END as lead_hours FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE metric = 'temperature' AND timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000), observations AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as hour, AVG(value) as temp_c FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE metric = 'temperature' AND timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT CASE WHEN f.lead_hours <= 3 THEN '0-3h' WHEN f.lead_hours <= 6 THEN '3-6h' WHEN f.lead_hours <= 12 THEN '6-12h' WHEN f.lead_hours <= 24 THEN '12-24h' ELSE '24h+' END as \"Lead Time\", AVG(ABS(f.temp_c - o.temp_c)) as \"MAE (°C)\" FROM forecast f INNER JOIN observations o ON f.valid_hour = o.hour WHERE f.lead_hours IS NOT NULL GROUP BY 1 ORDER BY CASE WHEN \"Lead Time\" = '0-3h' THEN 1 WHEN \"Lead Time\" = '3-6h' THEN 2 WHEN \"Lead Time\" = '6-12h' THEN 3 WHEN \"Lead Time\" = '12-24h' THEN 4 ELSE 5 END",
           "refId": "A"
         }
       ],
       "options": {
-        "graphMode": "none",
-        "colorMode": "value",
-        "justifyMode": "auto",
-        "textMode": "value_and_name",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"]
+        "orientation": "horizontal",
+        "showValue": "always",
+        "barWidth": 0.8,
+        "groupWidth": 0.7,
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
         }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "celsius",
-          "decimals": 1,
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -107,8 +112,8 @@
     },
     {
       "id": 3,
-      "type": "gauge",
-      "title": "Accuracy %",
+      "type": "barchart",
+      "title": "Accuracy % by Lead Time (within 2°C)",
       "gridPos": {
         "x": 16,
         "y": 0,
@@ -121,17 +126,21 @@
             "type": "motherduck-duckdb-datasource",
             "uid": "duckdb-ndp"
           },
-          "rawSql": "WITH forecast AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as hour, AVG(CASE WHEN metric = 'temperature' THEN (value-32)*5/9 END) as temp FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1), observations AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as hour, AVG(CASE WHEN metric = 'temperature' THEN value END) as temp FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT (COUNT(*) FILTER (WHERE ABS(f.temp - o.temp) <= 2.0) * 100.0 / NULLIF(COUNT(*), 0)) as value FROM forecast f INNER JOIN observations o ON f.hour = o.hour",
+          "rawSql": "WITH forecast AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as valid_hour, (value-32)*5/9 as temp_c, CASE WHEN TRY_CAST(forecast_generated_at AS TIMESTAMP) IS NOT NULL THEN (timestamp/1000000 - epoch(forecast_generated_at::TIMESTAMP)) / 3600 ELSE NULL END as lead_hours FROM read_parquet('/data/data/nws-forecast-hourly/**/*.parquet') WHERE metric = 'temperature' AND timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000), observations AS (SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as hour, AVG(value) as temp_c FROM read_parquet('/data/data/nws-observations/**/*.parquet') WHERE metric = 'temperature' AND timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1) SELECT CASE WHEN f.lead_hours <= 3 THEN '0-3h' WHEN f.lead_hours <= 6 THEN '3-6h' WHEN f.lead_hours <= 12 THEN '6-12h' WHEN f.lead_hours <= 24 THEN '12-24h' ELSE '24h+' END as \"Lead Time\", (COUNT(*) FILTER (WHERE ABS(f.temp_c - o.temp_c) <= 2.0) * 100.0 / NULLIF(COUNT(*), 0)) as \"Accuracy %\" FROM forecast f INNER JOIN observations o ON f.valid_hour = o.hour WHERE f.lead_hours IS NOT NULL GROUP BY 1 ORDER BY CASE WHEN \"Lead Time\" = '0-3h' THEN 1 WHEN \"Lead Time\" = '3-6h' THEN 2 WHEN \"Lead Time\" = '6-12h' THEN 3 WHEN \"Lead Time\" = '12-24h' THEN 4 ELSE 5 END",
           "refId": "A"
         }
       ],
       "options": {
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"]
+        "orientation": "horizontal",
+        "showValue": "always",
+        "barWidth": 0.8,
+        "groupWidth": 0.7,
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
         }
       },
       "fieldConfig": {
@@ -140,6 +149,9 @@
           "decimals": 0,
           "min": 0,
           "max": 100,
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
