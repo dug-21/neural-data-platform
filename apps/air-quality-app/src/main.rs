@@ -311,6 +311,7 @@ async fn initialize_multi_stream_coordinator(
         loop {
             tokio::select! {
                 Some(point) = storage_rx.recv() => {
+                    let stream_id = point.tags.get("stream_id").cloned().unwrap_or_else(|| "unknown".to_string());
                     batch.push(point);
                     if batch.len() >= batch_size {
                         let write_batch = std::mem::take(&mut batch);
@@ -318,7 +319,7 @@ async fn initialize_multi_stream_coordinator(
                         if let Err(e) = store_clone.write_batch(write_batch).await {
                             tracing::error!("Failed to write data batch: {}", e);
                         } else {
-                            tracing::debug!("Wrote {} data points", count);
+                            tracing::info!("Wrote {} data points (last: {})", count, stream_id);
                         }
                     }
                 }
@@ -330,7 +331,7 @@ async fn initialize_multi_stream_coordinator(
                         if let Err(e) = store_clone.write_batch(write_batch).await {
                             tracing::error!("Failed to flush data batch: {}", e);
                         } else {
-                            tracing::debug!("Flushed {} data points", count);
+                            tracing::info!("Flushed {} data points", count);
                         }
                     }
                 }

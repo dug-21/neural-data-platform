@@ -47,6 +47,11 @@ fields:
     unit: percent
     range: [0.0, 100.0]
     description: "Precipitation probability"
+  - name: forecast_issue_time
+    type: float
+    nullable: true
+    unit: epoch_seconds
+    description: "Forecast issue timestamp as epoch seconds"
 
 sources:
   - type: http_poll
