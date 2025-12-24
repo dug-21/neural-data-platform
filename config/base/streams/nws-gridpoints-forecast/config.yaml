@@ -270,9 +270,9 @@ sources:
       - endpoint_id: nws_jax_79_49_gridpoints
         location_id: ksgj_gridpoints
         grid_office: JAX
-        grid_x: 79
-        grid_y: 49
-        url: "https://api.weather.gov/gridpoints/JAX/79,49"
+        grid_x: 80
+        grid_y: 50
+        url: "https://api.weather.gov/gridpoints/JAX/80,50"
         auth_type: none
         headers:
           # NWS requires valid contact info in User-Agent - update YOUR_EMAIL below
