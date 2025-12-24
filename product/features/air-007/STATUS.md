@@ -83,6 +83,23 @@
 | `config/base/streams/nws-gridpoints-forecast/config.yaml` | 43+ metrics, column_oriented parser, 3600s poll |
 | `config/base/streams/nws-station-observations/config.yaml` | 17 metrics, flat_json parser, 900s poll |
 
+### Grafana Dashboards Created
+
+| File | Description |
+|------|-------------|
+| `config/grafana/dashboards/nws-gridpoints-forecast.json` | Comprehensive exploration dashboard with 30 visualization panels across 9 sections |
+
+**Dashboard Sections:**
+- Current Forecast Conditions (6 stat panels)
+- Temperature Suite (4 timeseries - temp, dewpoint, min/max, apparent/heat index, wind chill)
+- Wind Suite (4 timeseries - speed/gust, direction, transport wind, 20-foot wind)
+- Precipitation Suite (3 timeseries - probability, QPF, snowfall/ice)
+- Sky & Visibility (3 timeseries - sky cover, visibility, ceiling height)
+- Humidity (1 timeseries)
+- Fire Weather & Indices (4 timeseries - fire indices, dispersion, mixing height, thunder probability)
+- Marine/Coastal (4 timeseries - wave height/period, direction, primary/secondary swell)
+- Data Quality (1 table - metrics summary with counts and ranges)
+
 ### Test Results
 
 - **15/15 ColumnOrientedParser unit tests pass**
@@ -115,4 +132,4 @@
 
 1. **Deployment**: Sync stream configs to etcd and deploy to Pi
 2. **Monitoring**: Verify data ingestion in Parquet files
-3. **Dashboards**: Create Grafana visualizations for new weather data
+3. ~~**Dashboards**: Create Grafana visualizations for new weather data~~ ✅ Complete (2025-12-24)

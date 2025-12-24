@@ -36,8 +36,8 @@ See: `.claude/agents/ndp/README.md` for full documentation.
 
 | Skill | When | Purpose |
 |-------|------|---------|
-| `get-pattern` | Before implementation | Retrieve project patterns from memory |
-| `save-pattern` | After discoveries | Store new reusable patterns |
+| `get-pattern` | Before implementation | Search for "How do I" questions |
+| `save-pattern` | After discoveries | Answers "How Agents should do x" questions |
 | `reflexion` | After using get-pattern | Evaluate if retrieved patterns helped |
 | `ndp-github-workflow` | ALL git operations | Branch naming, commits, PRs |
 
@@ -49,6 +49,7 @@ See: `.claude/agents/ndp/README.md` for full documentation.
 
 ### What Patterns Are For
 
+This is intended to be a definitive source to maintain consistency of development across many different agents over developing many different features.
 Patterns capture **permanent, reusable project knowledge**:
 - Architecture decisions and ADRs
 - Implementation procedures ("how to add a stream")
@@ -59,7 +60,7 @@ Patterns capture **permanent, reusable project knowledge**:
 ### What Patterns Are NOT For
 
 Do NOT use pattern skills for:
-- Swarm coordination state (use MCP memory tools)
+- Swarm coordination state (use claude-flow memory tools)
 - Agent task progress (use claude-flow task tools)
 - Session-specific working memory (use MCP memory with TTL)
 - Inter-agent communication (use claude-flow DAA tools)
@@ -95,10 +96,9 @@ AFTER work:   reflexion     → Rate if get-pattern results helped
 /config-client           - etcd configuration client
 /deploy                  - Docker and Pi deployment
 /docs                    - Architecture and procedures
-/product/features        - SPARC documentation per feature
+/product/features/{feature name}        - SPARC documentation per feature
 /.claude/agents/ndp      - NDP agent definitions
 /.claude/skills          - Project skills
-/.claude/patterns        - Pattern index
 ```
 
 ---
@@ -162,23 +162,75 @@ product/features/{phase}-{NNN}/
 
 ---
 
-## 🎯 Claude Code Task Tool for Agent Execution
+## 🎯 When to Use Swarms vs Task Tool
 
-**Claude Code's Task tool is the PRIMARY way to spawn agents:**
+### Use MCP Swarms When:
+- Tasks need **shared memory/state** between agents
+- You need **monitored, trackable progress**
+- Work requires **coordinated handoffs** between agents
+- You want **persistent task history** and results
+- Complex multi-step workflows with dependencies
 
-```javascript
-// ✅ CORRECT: Use NDP agents via Task tool for parallel execution
-[Single Message]:
-  Task("Design Silver layer schema", "Create TimescaleDB hypertables...", "ndp-timescale-dev")
-  Task("Build Parquet ETL", "Implement Bronze to Silver ETL...", "ndp-parquet-dev")
-  Task("Create dashboard queries", "Design Grafana panel queries...", "ndp-grafana-dev")
-  Task("Write integration tests", "Test full pipeline flow...", "ndp-tester")
+### Use Task Tool When:
+- Tasks are **independent** (no shared state needed)
+- Simple parallel execution is sufficient
+- You don't need coordination tracking
+- Quick one-off agent invocations
+
+---
+
+## 🔄 Swarm Execution Workflow (CRITICAL)
+
+**When using swarms, follow this COMPLETE workflow:**
+
+```
+1. swarm_init        → Create swarm with topology
+2. agent_spawn       → Add agents TO the swarm (NOT Task tool!)
+3. task_orchestrate  → Assign work TO swarm agents
+4. task_status       → Monitor progress
+5. task_results      → Retrieve completed work
 ```
 
-**MCP tools are ONLY for coordination setup:**
-- `mcp__claude-flow__swarm_init` - Initialize coordination topology
-- `mcp__claude-flow__agent_spawn` - Define agent types for coordination
-- `mcp__claude-flow__task_orchestrate` - Orchestrate high-level workflows
+**⚠️ WRONG Pattern (causes empty swarms):**
+```javascript
+// ❌ WRONG: Creates swarm then ignores it
+mcp__claude-flow__swarm_init({ topology: "hierarchical" })
+Task("Do work", "...", "ndp-rust-dev")  // Work happens OUTSIDE swarm!
+```
+
+**✅ CORRECT Pattern (work happens IN swarm):**
+```javascript
+// ✅ RIGHT: Full swarm lifecycle
+mcp__claude-flow__swarm_init({ topology: "hierarchical", maxAgents: 5 })
+
+// Spawn agents INTO the swarm
+mcp__claude-flow__agent_spawn({ type: "coordinator", name: "lead" })
+mcp__claude-flow__agent_spawn({ type: "coder", name: "rust-dev" })
+mcp__claude-flow__agent_spawn({ type: "analyst", name: "reviewer" })
+
+// Orchestrate work TO the swarm agents
+mcp__claude-flow__task_orchestrate({
+  task: "Implement TimescaleDB ETL pipeline with tests",
+  strategy: "adaptive",
+  priority: "high"
+})
+
+// Monitor and retrieve results
+mcp__claude-flow__task_status({ taskId: "..." })
+mcp__claude-flow__task_results({ taskId: "...", format: "detailed" })
+```
+
+---
+
+## 🎯 Swarm Agents vs Task Agents
+
+| Aspect | MCP Swarm Agents | Task Tool Agents |
+|--------|------------------|------------------|
+| **Coordination** | Shared memory, tracked state | Independent, isolated |
+| **Monitoring** | `swarm_status`, `task_status` | No built-in monitoring |
+| **Results** | `task_results` retrieves | Returned directly in response |
+| **Memory** | Persistent across tasks | Session only |
+| **Use Case** | Complex coordinated workflows | Simple parallel tasks |
 
 ---
 
@@ -207,31 +259,29 @@ product/features/{phase}-{NNN}/
 
 ## 🎯 Claude Code vs MCP Tools
 
-### Claude Code Handles ALL EXECUTION:
-- **Task tool**: Spawn NDP agents concurrently for actual work
+### Claude Code Direct Tools:
 - File operations (Read, Write, Edit, Glob, Grep)
 - Code generation and Rust implementation
 - Bash commands and cargo operations
 - Git operations (using `ndp-github-workflow` skill)
 - Testing and debugging
+- **Task tool**: For independent parallel agents (no coordination needed)
 
-### MCP Tools ONLY COORDINATE:
-- Swarm initialization (topology setup)
-- Agent type definitions (coordination patterns)
-- Task orchestration (high-level planning)
-- Memory management (pattern storage/retrieval)
-- Performance tracking
+### MCP Swarm Tools (Full Execution Cycle):
+- **Swarm lifecycle**: `swarm_init` → `agent_spawn` → `task_orchestrate` → `task_results`
+- **Agents do actual work** when tasks are orchestrated to them
+- Memory management and shared state across agents
+- Performance tracking and monitoring
 
-**KEY**: MCP coordinates the strategy, Claude Code's Task tool executes with NDP agents.
+### AgentDB Tools (Pattern Memory):
+- `npx agentdb query` - Retrieve patterns
+- `npx agentdb store-pattern` - Save patterns
+- `npx agentdb reflexion` - Record feedback
+
+**KEY**: If you initialize a swarm, USE IT - orchestrate tasks to swarm agents, don't spawn separate Task agents.
 
 ---
 
-## 🚀 Quick Setup
-
-```bash
-# Add MCP server (required)
-claude mcp add claude-flow claude-flow mcp start
-```
 
 ## MCP Tool Categories
 
@@ -241,7 +291,7 @@ claude mcp add claude-flow claude-flow mcp start
 ### Monitoring
 `swarm_status`, `agent_list`, `agent_metrics`, `task_status`, `task_results`
 
-### Memory & Neural
+### Claude-flow Memory & Neural
 `memory_usage`, `memory_search`, `neural_status`, `neural_train`, `neural_patterns`
 
 ### System
@@ -249,67 +299,74 @@ claude mcp add claude-flow claude-flow mcp start
 
 ---
 
-## 🚀 NDP Agent Execution Examples
+## 🚀 NDP Execution Examples
 
-### Example: Silver Layer Development
+### Example 1: Swarm-Coordinated Development (Complex Workflows)
+
+Use swarms when you need coordination, shared state, and tracked progress:
 
 ```javascript
-// Single message with NDP agents via Task tool
-[Single Message - Parallel Agent Execution]:
-  Task("Design TimescaleDB schema", "Create hypertables and continuous aggregates for air quality data. Use get-pattern skill first.", "ndp-timescale-dev")
-  Task("Build ETL pipeline", "Implement Parquet to TimescaleDB ETL. Check architecture patterns.", "ndp-parquet-dev")
-  Task("Create feature aggregations", "Design hourly/daily rollups for ML features.", "ndp-feature-engineer")
-  Task("Write integration tests", "Test ETL pipeline with mock data.", "ndp-tester")
+// Step 1: Initialize swarm
+mcp__claude-flow__swarm_init({ topology: "hierarchical", maxAgents: 6, strategy: "specialized" })
 
-  // Batch ALL todos in ONE call
-  TodoWrite { todos: [
-    {content: "Design TimescaleDB schema", status: "in_progress", activeForm: "Designing TimescaleDB schema"},
-    {content: "Create continuous aggregates", status: "pending", activeForm: "Creating continuous aggregates"},
-    {content: "Implement ETL from Parquet", status: "pending", activeForm: "Implementing ETL"},
-    {content: "Add retention policies", status: "pending", activeForm: "Adding retention policies"},
-    {content: "Write integration tests", status: "pending", activeForm: "Writing integration tests"},
-    {content: "Update architecture docs", status: "pending", activeForm: "Updating architecture docs"}
-  ]}
+// Step 2: Spawn specialized agents INTO the swarm
+mcp__claude-flow__agent_spawn({ type: "coordinator", name: "dp-lead" })
+mcp__claude-flow__agent_spawn({ type: "coder", name: "timescale-dev" })
+mcp__claude-flow__agent_spawn({ type: "coder", name: "parquet-dev" })
+mcp__claude-flow__agent_spawn({ type: "analyst", name: "feature-eng" })
+mcp__claude-flow__agent_spawn({ type: "tester", name: "qa" })
+
+// Step 3: Orchestrate the work TO the swarm
+mcp__claude-flow__task_orchestrate({
+  task: "Implement Silver Layer: 1) Design TimescaleDB schema with hypertables, 2) Build Parquet ETL, 3) Create feature aggregations, 4) Write integration tests",
+  strategy: "adaptive",
+  priority: "high",
+  maxAgents: 4
+})
+
+// Step 4: Monitor progress
+mcp__claude-flow__swarm_status({})
+mcp__claude-flow__task_status({ detailed: true })
+
+// Step 5: Retrieve results when complete
+mcp__claude-flow__task_results({ taskId: "...", format: "detailed" })
 ```
 
-### Example: New Feature Kickoff
+### Example 2: Task Tool for Independent Work (Simple Parallel)
+
+Use Task tool when agents don't need to coordinate:
 
 ```javascript
-// Initialize feature with scrum master
+// Independent parallel agents - no shared state needed
 [Single Message]:
-  Task("Initialize dp-001 feature", "Create feature directory structure, STATUS.md, coordinate SPARC phases.", "ndp-scrum-master")
-  Task("Design architecture", "Create Silver layer architecture for dp-001. Document ADRs.", "ndp-architect")
+  Task("Review PR #42", "Check code quality and tests.", "ndp-tester")
+  Task("Update docs", "Add API documentation for new endpoints.", "ndp-architect")
+  Task("Fix linting", "Run cargo clippy and fix warnings.", "ndp-rust-dev")
+```
 
-  // Create feature branch
-  Bash "git checkout -b feature/dp-001"
+### Example 3: New Feature Kickoff (Swarm + Branch)
+
+```javascript
+// Create feature branch first
+Bash "git checkout -b feature/dp-001"
+
+// Initialize coordinated swarm for feature
+mcp__claude-flow__swarm_init({ topology: "hierarchical", maxAgents: 4 })
+mcp__claude-flow__agent_spawn({ type: "coordinator", name: "scrum-master" })
+mcp__claude-flow__agent_spawn({ type: "architect", name: "designer" })
+mcp__claude-flow__agent_spawn({ type: "coder", name: "implementer" })
+
+// Orchestrate SPARC workflow
+mcp__claude-flow__task_orchestrate({
+  task: "Initialize dp-001: Create feature directory, STATUS.md, specification docs, architecture ADRs",
+  strategy: "sequential",
+  priority: "high"
+})
 ```
 
 ---
 
-## 📋 Agent Coordination Protocol
-
-### Every NDP Agent MUST:
-
-**1️⃣ BEFORE Work:**
-```bash
-# Use get-pattern skill to retrieve relevant patterns
-claude-flow memory query "architecture" --namespace ndp-patterns
-claude-flow hooks pre-task --description "[task]"
-```
-
-**2️⃣ DURING Work:**
-```bash
-claude-flow hooks post-edit --file "[file]" --memory-key "swarm/[agent]/[step]"
-claude-flow hooks notify --message "[what was done]"
-```
-
-**3️⃣ AFTER Work:**
-```bash
-# Use save-pattern skill if discovered reusable pattern
-claude-flow memory store "category:pattern-name" "description" --namespace ndp-patterns
-claude-flow hooks post-task --task-id "[task]"
-```
-
+## 📋 Agent Protocols
 ---
 
 ## 🔀 Git Workflow (REQUIRED)

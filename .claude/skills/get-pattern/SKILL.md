@@ -26,10 +26,10 @@ Retrieves established **application patterns** (architecture, procedures, conven
 
 | Type | Use Instead |
 |------|-------------|
-| Current swarm status | `mcp__claude-flow__swarm_status` |
-| Agent task state | `mcp__claude-flow__task_status` |
-| Working memory | `mcp__claude-flow__memory_usage` |
-| Session context | MCP memory tools |
+| Current swarm status | claude-flow swarm tools |
+| Agent task state | claude-flow task tools |
+| Working memory | claude-flow memory tools |
+| Session context | claude-flow memory with TTL |
 
 **Patterns are PERMANENT application knowledge, not transient swarm state.**
 
@@ -52,62 +52,47 @@ Retrieves established **application patterns** (architecture, procedures, conven
 
 Find patterns by describing what you're trying to do:
 
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "how to add a new data stream",
-  k: 5,
-  threshold: 0.7,
-  filters: { minSuccessRate: 0.6 }
-})
+```bash
+npx agentdb query --query "how to add a new data stream" --k 5 --min-confidence 0.7
 ```
 
 **Examples:**
-```javascript
-// Find architecture patterns
-mcp__agentdb__agentdb_pattern_search({
-  task: "data pipeline architecture",
-  k: 3
-})
+```bash
+# Find architecture patterns
+npx agentdb query --query "data pipeline architecture" --k 3
 
-// Find deployment procedures
-mcp__agentdb__agentdb_pattern_search({
-  task: "deploy to raspberry pi",
-  k: 3,
-  filters: { taskType: "deployment" }
-})
+# Find deployment procedures
+npx agentdb query --query "deploy to raspberry pi" --domain "deployment" --k 3
 
-// Find naming conventions
-mcp__agentdb__agentdb_pattern_search({
-  task: "naming conventions for streams and fields",
-  k: 2
-})
+# Find naming conventions
+npx agentdb query --query "naming conventions for streams and fields" --k 2
+
+# Get synthesized context with patterns and insights
+npx agentdb query --query "domain adapter pattern" --k 5 --synthesize-context
 ```
 
 ### Method 2: Category-Filtered Search
 
-When you know the category:
+When you know the domain or need filtered results:
 
-```javascript
-mcp__agentdb__agentdb_search({
-  query: "add new data source",
-  k: 3,
-  filters: {
-    tags: ["development", "procedure"],
-    session_id: "ndp-patterns"
-  }
-})
+```bash
+# Filter by domain
+npx agentdb query --query "add new data source" --domain "development" --k 3
+
+# Use metadata filters (MongoDB-style)
+npx agentdb query --query "add new data source" --filters '{"metadata.category":"procedure"}' --k 3
 ```
 
 ### Method 3: Find Similar Past Experiences
 
 See how similar tasks were handled before:
 
-```javascript
-mcp__agentdb__reflexion_retrieve({
-  task: "adding a new MQTT data source",
-  k: 5,
-  only_successes: true
-})
+```bash
+# Retrieve successful episodes
+npx agentdb reflexion retrieve "adding a new MQTT data source" --k 5 --only-successes
+
+# Get synthesized context from past experiences
+npx agentdb reflexion retrieve "MQTT data source" --k 5 --synthesize-context
 ```
 
 ---
@@ -131,28 +116,18 @@ mcp__agentdb__reflexion_retrieve({
 
 After using a pattern, **always use the `reflexion` skill** to record whether it helped:
 
-```javascript
-// Pattern worked well
-mcp__agentdb__reflexion_store({
-  session_id: "ndp-patterns",
-  task: "Used [pattern-name] for [what you did]",
-  input: "Pattern retrieved: [description]",
-  output: "Result: [what you accomplished]",
-  reward: 1.0,
-  success: true,
-  critique: "Pattern was accurate and complete"
-})
+```bash
+# Pattern worked well
+npx agentdb reflexion store "ndp-patterns" \
+  "Used [pattern-name] for [what you did]" \
+  1.0 true \
+  "Pattern was accurate and complete"
 
-// Pattern needed fixes
-mcp__agentdb__reflexion_store({
-  session_id: "ndp-patterns",
-  task: "Used [pattern-name] but needed adjustment",
-  input: "Pattern retrieved: [description]",
-  output: "Completed after [modifications]",
-  reward: 0.6,
-  success: true,
-  critique: "Pattern missing [gap] - should update via save-pattern"
-})
+# Pattern needed fixes
+npx agentdb reflexion store "ndp-patterns" \
+  "Used [pattern-name] but needed adjustment" \
+  0.6 true \
+  "Pattern missing [gap] - should update via save-pattern"
 ```
 
 Without feedback, the system can't learn which patterns actually work.
@@ -176,36 +151,23 @@ When patterns reference files, check these locations:
 ## Common Pattern Lookups
 
 ### Adding a New Data Stream
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "add new data stream to the platform",
-  k: 3
-})
+```bash
+npx agentdb query --query "add new data stream to the platform" --k 3
 ```
 
 ### Understanding the Architecture
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "system architecture and component relationships",
-  k: 5
-})
+```bash
+npx agentdb query --query "system architecture and component relationships" --k 5 --synthesize-context
 ```
 
 ### Naming Conventions
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "naming conventions for streams fields and modules",
-  k: 3
-})
+```bash
+npx agentdb query --query "naming conventions for streams fields and modules" --k 3
 ```
 
 ### Creating Grafana Dashboards
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "grafana dashboard creation with DuckDB",
-  k: 3,
-  filters: { taskType: "procedures" }
-})
+```bash
+npx agentdb query --query "grafana dashboard creation with DuckDB" --domain "procedures" --k 3
 ```
 
 ---
@@ -214,8 +176,8 @@ mcp__agentdb__agentdb_pattern_search({
 
 See which patterns exist and their success rates:
 
-```javascript
-mcp__agentdb__agentdb_pattern_stats({})
+```bash
+npx agentdb db stats
 ```
 
 Returns: total patterns, average success rates, top task types, patterns needing review.
@@ -236,10 +198,8 @@ If no relevant pattern exists:
 
 - **`save-pattern`** - Store NEW patterns for architecture, procedures, conventions
 - **`reflexion`** - Record feedback on whether `get-pattern` results helped (REQUIRED after using patterns)
-- `agentdb-memory-patterns` - Advanced memory management
-- `agentdb-vector-search` - Direct vector search capabilities
 
 **NOT related to:**
-- Swarm coordination (use claude-flow MCP tools)
-- Transient task memory (use MCP memory with TTL)
+- Swarm coordination (use claude-flow tools)
+- Transient task memory (use claude-flow memory with TTL)
 - Agent state management (use claude-flow tools)

@@ -1,0 +1,530 @@
+{
+  "uid": "ndp-nws-gridpoints-forecast",
+  "title": "NWS Gridpoints Forecast (Data Exploration)",
+  "description": "Comprehensive exploration of all 40+ NWS gridpoint forecast metrics",
+  "tags": ["ndp", "nws", "forecast", "weather", "exploration", "air-007"],
+  "timezone": "browser",
+  "refresh": "1h",
+  "time": {
+    "from": "now-3d",
+    "to": "now+4d"
+  },
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Current Forecast Conditions",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Temperature",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE metric = 'temperature' ORDER BY timestamp DESC LIMIT 100)",
+          "refId": "A"
+        }
+      ],
+      "options": {"graphMode": "area", "colorMode": "none", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "celsius", "decimals": 1}}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Dewpoint",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE metric = 'dewpoint' ORDER BY timestamp DESC LIMIT 100)",
+          "refId": "A"
+        }
+      ],
+      "options": {"graphMode": "area", "colorMode": "none", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "celsius", "decimals": 1}}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Humidity",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE metric = 'relative_humidity' ORDER BY timestamp DESC LIMIT 100)",
+          "refId": "A"
+        }
+      ],
+      "options": {"graphMode": "area", "colorMode": "none", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0}}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Precip Probability",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE metric = 'probability_of_precipitation' ORDER BY timestamp DESC LIMIT 100)",
+          "refId": "A"
+        }
+      ],
+      "options": {"graphMode": "none", "colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 30}, {"color": "orange", "value": 60}, {"color": "red", "value": 80}]}}}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Sky Cover",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE metric = 'sky_cover' ORDER BY timestamp DESC LIMIT 100)",
+          "refId": "A"
+        }
+      ],
+      "options": {"graphMode": "area", "colorMode": "none", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0}}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Wind Speed",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT AVG(value) as value FROM (SELECT value FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE metric = 'wind_speed' ORDER BY timestamp DESC LIMIT 100)",
+          "refId": "A"
+        }
+      ],
+      "options": {"graphMode": "area", "colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "velocitykmh", "decimals": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 20}, {"color": "red", "value": 40}]}}}
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Temperature Suite (8 metrics)",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Temperature & Dewpoint Forecast",
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'temperature' THEN value END) as \"Temperature\", AVG(CASE WHEN metric = 'dewpoint' THEN value END) as \"Dewpoint\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "celsius", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}}}
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Min/Max Temperature Forecast",
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'max_temperature' THEN value END) as \"Max Temp\", AVG(CASE WHEN metric = 'min_temperature' THEN value END) as \"Min Temp\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "celsius", "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": [{"matcher": {"id": "byName", "options": "Max Temp"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}, {"matcher": {"id": "byName", "options": "Min Temp"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}]}
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Apparent Temperature & Heat Index",
+      "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'apparent_temperature' THEN value END) as \"Apparent Temp\", AVG(CASE WHEN metric = 'heat_index' THEN value END) as \"Heat Index\", AVG(CASE WHEN metric = 'wet_bulb_globe_temperature' THEN value END) as \"Wet Bulb Globe\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "celsius", "custom": {"drawStyle": "line", "lineWidth": 2}}}
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Wind Chill Forecast",
+      "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wind_chill' THEN value END) as \"Wind Chill\", AVG(CASE WHEN metric = 'temperature' THEN value END) as \"Temperature\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "celsius", "custom": {"drawStyle": "line", "lineWidth": 2}}}
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Wind Suite (7 metrics)",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Wind Speed & Gusts",
+      "gridPos": {"x": 0, "y": 23, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wind_speed' THEN value END) as \"Wind Speed\", AVG(CASE WHEN metric = 'wind_gust' THEN value END) as \"Wind Gust\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "velocitykmh", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}}, "overrides": [{"matcher": {"id": "byName", "options": "Wind Gust"}, "properties": [{"id": "custom.fillOpacity", "value": 0}, {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}]}
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Wind Direction",
+      "gridPos": {"x": 12, "y": 23, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wind_direction' THEN value END) as \"Wind Direction\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "degree", "min": 0, "max": 360, "custom": {"drawStyle": "points", "pointSize": 5}}}
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Transport Wind (Fire Weather)",
+      "gridPos": {"x": 0, "y": 31, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'transport_wind_speed' THEN value END) as \"Transport Wind Speed\", AVG(CASE WHEN metric = 'transport_wind_direction' THEN value END) as \"Transport Direction\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": [{"matcher": {"id": "byName", "options": "Transport Wind Speed"}, "properties": [{"id": "unit", "value": "velocitykmh"}, {"id": "custom.axisPlacement", "value": "left"}]}, {"matcher": {"id": "byName", "options": "Transport Direction"}, "properties": [{"id": "unit", "value": "degree"}, {"id": "custom.axisPlacement", "value": "right"}, {"id": "custom.drawStyle", "value": "points"}]}]}
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "20-Foot Wind (Fire Weather)",
+      "gridPos": {"x": 12, "y": 31, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'twenty_foot_wind_speed' THEN value END) as \"20ft Wind Speed\", AVG(CASE WHEN metric = 'twenty_foot_wind_direction' THEN value END) as \"20ft Direction\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": [{"matcher": {"id": "byName", "options": "20ft Wind Speed"}, "properties": [{"id": "unit", "value": "velocitykmh"}, {"id": "custom.axisPlacement", "value": "left"}]}, {"matcher": {"id": "byName", "options": "20ft Direction"}, "properties": [{"id": "unit", "value": "degree"}, {"id": "custom.axisPlacement", "value": "right"}, {"id": "custom.drawStyle", "value": "points"}]}]}
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Precipitation Suite (4 metrics)",
+      "gridPos": {"x": 0, "y": 39, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Precipitation Probability",
+      "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'probability_of_precipitation' THEN value END) as \"Precip Probability\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 30, "gradientMode": "scheme"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 30}, {"color": "orange", "value": 60}, {"color": "red", "value": 80}]}, "color": {"mode": "thresholds"}}}
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Quantitative Precipitation Forecast",
+      "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'quantitative_precipitation' THEN value END) as \"QPF (mm)\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "lengthmm", "min": 0, "custom": {"drawStyle": "bars", "lineWidth": 1, "fillOpacity": 80}}}
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Snowfall & Ice Accumulation",
+      "gridPos": {"x": 0, "y": 48, "w": 24, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'snowfall_amount' THEN value END) as \"Snowfall\", AVG(CASE WHEN metric = 'ice_accumulation' THEN value END) as \"Ice Accumulation\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "lengthmm", "min": 0, "custom": {"drawStyle": "bars", "lineWidth": 1, "fillOpacity": 80}}, "overrides": [{"matcher": {"id": "byName", "options": "Ice Accumulation"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "light-blue"}}]}]}
+    },
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Sky & Visibility (3 metrics)",
+      "gridPos": {"x": 0, "y": 56, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Sky Cover",
+      "gridPos": {"x": 0, "y": 57, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'sky_cover' THEN value END) as \"Sky Cover %\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 30}}}
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Visibility",
+      "gridPos": {"x": 12, "y": 57, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'visibility' THEN value/1000 END) as \"Visibility (km)\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "lengthkm", "min": 0, "custom": {"drawStyle": "line", "lineWidth": 2}}}
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Ceiling Height",
+      "gridPos": {"x": 0, "y": 65, "w": 24, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'ceiling_height' THEN value END) as \"Ceiling Height (m)\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "lengthm", "custom": {"drawStyle": "line", "lineWidth": 2}}}
+    },
+    {
+      "id": 105,
+      "type": "row",
+      "title": "Humidity",
+      "gridPos": {"x": 0, "y": 73, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 50,
+      "type": "timeseries",
+      "title": "Relative Humidity",
+      "gridPos": {"x": 0, "y": 74, "w": 24, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'relative_humidity' THEN value END) as \"Relative Humidity %\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}}}
+    },
+    {
+      "id": 106,
+      "type": "row",
+      "title": "Fire Weather & Indices (9 metrics)",
+      "gridPos": {"x": 0, "y": 82, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 60,
+      "type": "timeseries",
+      "title": "Fire Weather Indices",
+      "gridPos": {"x": 0, "y": 83, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'haines_index' THEN value END) as \"Haines Index\", AVG(CASE WHEN metric = 'davis_stability_index' THEN value END) as \"Davis Stability\", AVG(CASE WHEN metric = 'red_flag_threat_index' THEN value END) as \"Red Flag Threat\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}}
+    },
+    {
+      "id": 61,
+      "type": "timeseries",
+      "title": "Dispersion & Atmospheric Indices",
+      "gridPos": {"x": 12, "y": 83, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'dispersion_index' THEN value END) as \"Dispersion Index\", AVG(CASE WHEN metric = 'atmospheric_dispersion_index' THEN value END) as \"Atmospheric Dispersion\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}}
+    },
+    {
+      "id": 62,
+      "type": "timeseries",
+      "title": "Mixing Height & Visibility Risk",
+      "gridPos": {"x": 0, "y": 91, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'mixing_height' THEN value END) as \"Mixing Height (m)\", AVG(CASE WHEN metric = 'low_visibility_risk' THEN value END) as \"Low Vis Risk %\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": [{"matcher": {"id": "byName", "options": "Mixing Height (m)"}, "properties": [{"id": "unit", "value": "lengthm"}, {"id": "custom.axisPlacement", "value": "left"}]}, {"matcher": {"id": "byName", "options": "Low Vis Risk %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "custom.axisPlacement", "value": "right"}]}]}
+    },
+    {
+      "id": 63,
+      "type": "timeseries",
+      "title": "Probability of Thunder & Low Visibility Risk Index",
+      "gridPos": {"x": 12, "y": 91, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'probability_of_thunder' THEN value END) as \"Thunder Prob %\", AVG(CASE WHEN metric = 'low_visibility_occurrence_risk_index' THEN value END) as \"Low Vis Occurrence Risk\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "custom": {"drawStyle": "line", "lineWidth": 2}}}
+    },
+    {
+      "id": 107,
+      "type": "row",
+      "title": "Marine / Coastal (7 metrics)",
+      "gridPos": {"x": 0, "y": 99, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 70,
+      "type": "timeseries",
+      "title": "Wave Height & Period",
+      "gridPos": {"x": 0, "y": 100, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wave_height' THEN value END) as \"Wave Height (m)\", AVG(CASE WHEN metric = 'wave_period' THEN value END) as \"Wave Period (s)\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": [{"matcher": {"id": "byName", "options": "Wave Height (m)"}, "properties": [{"id": "unit", "value": "lengthm"}, {"id": "custom.axisPlacement", "value": "left"}]}, {"matcher": {"id": "byName", "options": "Wave Period (s)"}, "properties": [{"id": "unit", "value": "s"}, {"id": "custom.axisPlacement", "value": "right"}]}]}
+    },
+    {
+      "id": 71,
+      "type": "timeseries",
+      "title": "Wave Direction",
+      "gridPos": {"x": 12, "y": 100, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'wave_direction' THEN value END) as \"Wave Direction\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"unit": "degree", "min": 0, "max": 360, "custom": {"drawStyle": "points", "pointSize": 5}}}
+    },
+    {
+      "id": 72,
+      "type": "timeseries",
+      "title": "Primary Swell",
+      "gridPos": {"x": 0, "y": 108, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'primary_swell_height' THEN value END) as \"Primary Swell Height (m)\", AVG(CASE WHEN metric = 'primary_swell_direction' THEN value END) as \"Primary Swell Dir\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": [{"matcher": {"id": "byName", "options": "Primary Swell Height (m)"}, "properties": [{"id": "unit", "value": "lengthm"}, {"id": "custom.axisPlacement", "value": "left"}]}, {"matcher": {"id": "byName", "options": "Primary Swell Dir"}, "properties": [{"id": "unit", "value": "degree"}, {"id": "custom.axisPlacement", "value": "right"}, {"id": "custom.drawStyle", "value": "points"}]}]}
+    },
+    {
+      "id": 73,
+      "type": "timeseries",
+      "title": "Secondary Swell",
+      "gridPos": {"x": 12, "y": 108, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT time_bucket(INTERVAL '1 hour', to_timestamp(timestamp/1000000)) as time, AVG(CASE WHEN metric = 'secondary_swell_height' THEN value END) as \"Secondary Swell Height (m)\", AVG(CASE WHEN metric = 'secondary_swell_direction' THEN value END) as \"Secondary Swell Dir\" FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": [{"matcher": {"id": "byName", "options": "Secondary Swell Height (m)"}, "properties": [{"id": "unit", "value": "lengthm"}, {"id": "custom.axisPlacement", "value": "left"}]}, {"matcher": {"id": "byName", "options": "Secondary Swell Dir"}, "properties": [{"id": "unit", "value": "degree"}, {"id": "custom.axisPlacement", "value": "right"}, {"id": "custom.drawStyle", "value": "points"}]}]}
+    },
+    {
+      "id": 108,
+      "type": "row",
+      "title": "Data Quality & Metrics Overview",
+      "gridPos": {"x": 0, "y": 116, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 80,
+      "type": "table",
+      "title": "Available Metrics Summary",
+      "gridPos": {"x": 0, "y": 117, "w": 24, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "motherduck-duckdb-datasource", "uid": "duckdb-ndp"},
+          "rawSql": "SELECT metric, COUNT(*) as data_points, MIN(to_timestamp(timestamp/1000000)) as earliest, MAX(to_timestamp(timestamp/1000000)) as latest, ROUND(AVG(value), 2) as avg_value, ROUND(MIN(value), 2) as min_value, ROUND(MAX(value), 2) as max_value FROM read_parquet('/data/data/nws-gridpoints-forecast/**/*.parquet') WHERE timestamp >= ${__from}::BIGINT * 1000 AND timestamp <= ${__to}::BIGINT * 1000 GROUP BY metric ORDER BY data_points DESC",
+          "refId": "A"
+        }
+      ],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "data_points", "desc": true}]},
+      "fieldConfig": {"defaults": {}}
+    }
+  ]
+}

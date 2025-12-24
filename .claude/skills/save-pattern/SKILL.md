@@ -29,11 +29,11 @@ Manages the full lifecycle of **application patterns** in AgentDB:
 
 | Type | Use Instead |
 |------|-------------|
-| Swarm coordination state | `mcp__claude-flow__memory_usage` |
-| Agent task status | `mcp__claude-flow__task_status` |
-| Temporary working memory | `mcp__claude-flow__memory_usage` |
-| Inter-agent messages | `mcp__claude-flow__daa_communication` |
-| Session-specific context | MCP memory tools with TTL |
+| Swarm coordination state | claude-flow memory tools |
+| Agent task status | claude-flow task tools |
+| Temporary working memory | claude-flow memory tools |
+| Inter-agent messages | claude-flow DAA tools |
+| Session-specific context | claude-flow memory with TTL |
 
 **Patterns are PERMANENT application knowledge, not transient swarm state.**
 
@@ -54,20 +54,18 @@ Manages the full lifecycle of **application patterns** in AgentDB:
 
 ### Store New Pattern
 
-```javascript
-mcp__agentdb__agentdb_pattern_store({
-  taskType: "development",
-  approach: "# Pattern Name\n\n## Context\nWhen/why to use this.\n\n## Prerequisites\n- Required setup\n\n## Steps\n1. First step\n2. Second step\n\n## Example\nConcrete usage.\n\n## Verification\nHow to confirm it worked.",
-  successRate: 0.9,
-  tags: ["category", "specific-tags"],
-  metadata: {
-    pattern_name: "pattern-name",
-    created_by: "agent",
-    version: "1.0",
-    related_files: ["path/to/related/file.md"],
-    last_verified: "2025-12-22"
-  }
-})
+```bash
+npx agentdb store-pattern \
+  --type "development" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "pattern-name",
+    "approach": "# Pattern Name\n\n## Context\nWhen/why to use this.\n\n## Prerequisites\n- Required setup\n\n## Steps\n1. First step\n2. Second step\n\n## Example\nConcrete usage.\n\n## Verification\nHow to confirm it worked.",
+    "version": "1.0",
+    "related_files": ["path/to/related/file.md"],
+    "last_verified": "2025-12-22"
+  }' \
+  --confidence 0.9
 ```
 
 ### Pattern Content Template
@@ -115,22 +113,20 @@ How to confirm it worked.
 
 ## Update Existing Pattern
 
-Store with the same `pattern_name` - AgentDB handles versioning:
+Store with the same pattern name - AgentDB handles versioning:
 
-```javascript
-mcp__agentdb__agentdb_pattern_store({
-  taskType: "development",
-  approach: "# Add New Data Stream (Updated)\n\n## Steps\n1. Create config...\n2. NEW: Add retention field (required since v2.0)\n3. ...",
-  successRate: 0.85,
-  tags: ["stream", "procedure", "config"],
-  metadata: {
-    pattern_name: "add-stream",
-    created_by: "agent",
-    version: "2.0",
-    last_verified: "2025-12-22",
-    changelog: "Added required retention field"
-  }
-})
+```bash
+npx agentdb store-pattern \
+  --type "development" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "add-stream",
+    "approach": "# Add New Data Stream (Updated)\n\n## Steps\n1. Create config...\n2. NEW: Add retention field (required since v2.0)\n3. ...",
+    "version": "2.0",
+    "last_verified": "2025-12-22",
+    "changelog": "Added required retention field"
+  }' \
+  --confidence 0.85
 ```
 
 ---
@@ -139,19 +135,18 @@ mcp__agentdb__agentdb_pattern_store({
 
 When a pattern is replaced by a better approach:
 
-```javascript
-mcp__agentdb__agentdb_pattern_store({
-  taskType: "deployment",
-  approach: "# DEPRECATED: Manual Config Sync\n\n## Status\nDEPRECATED as of 2025-12-22\n\n## Replacement\nUse `deployment:automated-config-sync` instead.\n\n## Migration\n1. Stop using manual etcdctl put commands\n2. Edit YAML files in config/streams/\n3. Run: ./deploy.sh sync\n\n## Reason\nManual sync was error-prone.",
-  successRate: 0.0,
-  tags: ["deprecated", "deployment"],
-  metadata: {
-    pattern_name: "manual-config-sync",
-    status: "deprecated",
-    replacement: "automated-config-sync",
-    deprecation_date: "2025-12-22"
-  }
-})
+```bash
+npx agentdb store-pattern \
+  --type "deployment" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "manual-config-sync",
+    "approach": "# DEPRECATED: Manual Config Sync\n\n## Status\nDEPRECATED as of 2025-12-22\n\n## Replacement\nUse deployment:automated-config-sync instead.\n\n## Migration\n1. Stop using manual etcdctl put commands\n2. Edit YAML files in config/streams/\n3. Run: ./deploy.sh sync\n\n## Reason\nManual sync was error-prone.",
+    "status": "deprecated",
+    "replacement": "automated-config-sync",
+    "deprecation_date": "2025-12-22"
+  }' \
+  --confidence 0.0
 ```
 
 **Prefer Deprecation over Deletion** - deprecated patterns serve as historical reference.
@@ -162,40 +157,40 @@ mcp__agentdb__agentdb_pattern_store({
 
 ### Architecture Pattern
 
-```javascript
-mcp__agentdb__agentdb_pattern_store({
-  taskType: "architecture",
-  approach: "# Domain Adapter Pattern\n\n## Context\nAll data sources implement the Source trait for uniform handling.\n\n## Implementation\n1. Create struct implementing Source trait\n2. Implement fetch() -> Vec<TimeSeriesPoint>\n3. Implement health_check() -> HealthStatus\n\n## Example\nSee: core/src/sources/http_poll.rs",
-  successRate: 0.95,
-  tags: ["architecture", "traits", "hexagonal", "source"],
-  metadata: {
-    pattern_name: "domain-adapter-source",
-    related_files: ["core/src/sources/http_poll.rs", "core/src/traits.rs"]
-  }
-})
+```bash
+npx agentdb store-pattern \
+  --type "architecture" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "domain-adapter-source",
+    "approach": "# Domain Adapter Pattern\n\n## Context\nAll data sources implement the Source trait for uniform handling.\n\n## Implementation\n1. Create struct implementing Source trait\n2. Implement fetch() -> Vec<TimeSeriesPoint>\n3. Implement health_check() -> HealthStatus\n\n## Example\nSee: core/src/sources/http_poll.rs",
+    "tags": ["architecture", "traits", "hexagonal", "source"],
+    "related_files": ["core/src/sources/http_poll.rs", "core/src/traits.rs"]
+  }' \
+  --confidence 0.95
 ```
 
 ### Procedure Pattern
 
-```javascript
-mcp__agentdb__agentdb_pattern_store({
-  taskType: "procedures",
-  approach: "# Add Grafana Dashboard\n\n## Prerequisites\n- DuckDB datasource configured (uid: duckdb-ndp)\n- Stream data in Parquet bronze layer\n\n## Steps\n1. Create JSON in config/grafana/dashboards/\n2. Use time_bucket() for aggregation\n3. Filter by stream_id in WHERE clause\n4. Handle unit conversions in SQL\n\n## Verification\nRestart Grafana, check dashboard loads without errors",
-  successRate: 0.9,
-  tags: ["procedures", "grafana", "dashboard", "visualization"],
-  metadata: {
-    pattern_name: "add-grafana-dashboard",
-    related_files: ["config/grafana/dashboards/indoor-vs-outdoor.json"]
-  }
-})
+```bash
+npx agentdb store-pattern \
+  --type "procedures" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "add-grafana-dashboard",
+    "approach": "# Add Grafana Dashboard\n\n## Prerequisites\n- DuckDB datasource configured (uid: duckdb-ndp)\n- Stream data in Parquet bronze layer\n\n## Steps\n1. Create JSON in config/grafana/dashboards/\n2. Use time_bucket() for aggregation\n3. Filter by stream_id in WHERE clause\n4. Handle unit conversions in SQL\n\n## Verification\nRestart Grafana, check dashboard loads without errors",
+    "tags": ["procedures", "grafana", "dashboard", "visualization"],
+    "related_files": ["config/grafana/dashboards/indoor-vs-outdoor.json"]
+  }' \
+  --confidence 0.9
 ```
 
 ---
 
 ## Check Pattern Health
 
-```javascript
-mcp__agentdb__agentdb_pattern_stats({})
+```bash
+npx agentdb db stats
 ```
 
 Returns: total patterns, average success rates, top task types, patterns needing review.
@@ -219,10 +214,8 @@ Returns: total patterns, average success rates, top task types, patterns needing
 
 - **`get-pattern`** - Retrieve patterns BEFORE work (always check first)
 - **`reflexion`** - Record feedback on whether `get-pattern` results helped
-- `agentdb-memory-patterns` - Advanced memory management
-- `agentdb-learning` - Reinforcement learning capabilities
 
 **NOT related to:**
-- Swarm coordination (use claude-flow MCP tools)
-- Transient task memory (use MCP memory with TTL)
+- Swarm coordination (use claude-flow tools)
+- Transient task memory (use claude-flow memory with TTL)
 - Agent state management (use claude-flow tools)
