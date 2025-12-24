@@ -267,7 +267,7 @@ sources:
     buffer_capacity: 2500  # 40+ columns × ~156 values = ~6,240 points per poll
     parser_name: nws_gridpoints
     endpoints:
-      - endpoint_id: nws_jax_79_49_gridpoints
+      - endpoint_id: nws_jax_80_50_gridpoints
         location_id: ksgj_gridpoints
         grid_office: JAX
         grid_x: 80
@@ -287,8 +287,8 @@ sources:
         api: gridpoints
         stream_id: nws-gridpoints-forecast
         grid_office: JAX
-        grid_x: "79"
-        grid_y: "49"
+        grid_x: "80"
+        grid_y: "50"
       # ColumnOrientedConfig
       column_config:
         metrics_base_path: properties

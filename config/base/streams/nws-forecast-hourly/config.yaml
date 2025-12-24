@@ -63,12 +63,12 @@ sources:
     buffer_capacity: 2500  # NWS generates ~1092 points per poll
     parser_name: nws_forecast_hourly
     endpoints:
-      - endpoint_id: nws_jax_79_49_forecast
+      - endpoint_id: nws_jax_80_50_forecast
         location_id: ksgj
         grid_office: JAX
         grid_x: 80
         grid_y: 50
-        url: "https://api.weather.gov/gridpoints/JAX/79,49/forecast/hourly"
+        url: "https://api.weather.gov/gridpoints/JAX/80,50/forecast/hourly"
         auth_type: none
         headers:
           # NWS requires valid contact info in User-Agent - update YOUR_EMAIL below
