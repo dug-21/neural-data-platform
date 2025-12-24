@@ -120,7 +120,8 @@ impl IngestionRouter {
         }
 
         for stream_id in &stream_ids {
-            self.register_storage_channel(stream_id.clone(), storage_tx.clone()).await;
+            self.register_storage_channel(stream_id.clone(), storage_tx.clone())
+                .await;
         }
 
         tracing::info!(
@@ -755,7 +756,10 @@ mod tests {
             .unwrap();
 
         // Should have registered at least the test stream
-        assert!(count >= 1, "Should register at least 1 stream from registry");
+        assert!(
+            count >= 1,
+            "Should register at least 1 stream from registry"
+        );
         assert!(
             router.has_storage_channel("test-stream").await,
             "test-stream should be registered from registry"

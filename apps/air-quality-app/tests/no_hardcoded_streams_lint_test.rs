@@ -13,8 +13,7 @@ use std::fs;
 #[test]
 fn test_no_hardcoded_stream_arrays_in_main() {
     let main_rs_path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs");
-    let source = fs::read_to_string(main_rs_path)
-        .expect("Failed to read main.rs");
+    let source = fs::read_to_string(main_rs_path).expect("Failed to read main.rs");
 
     // Patterns that indicate hardcoded stream registration
     let forbidden_patterns = vec![
@@ -62,8 +61,7 @@ fn test_no_hardcoded_stream_arrays_in_main() {
 #[test]
 fn test_uses_config_driven_registration() {
     let main_rs_path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs");
-    let source = fs::read_to_string(main_rs_path)
-        .expect("Failed to read main.rs");
+    let source = fs::read_to_string(main_rs_path).expect("Failed to read main.rs");
 
     // Must use the config-driven method
     let has_config_driven = source.contains("register_all_streams_from_registry");

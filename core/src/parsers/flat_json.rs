@@ -116,6 +116,7 @@ mod tests {
             skip_fields: vec!["serialno".to_string(), "firmware".to_string()],
             field_mappings: None,
             array_config: None,
+            column_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -161,6 +162,7 @@ mod tests {
             skip_fields: vec!["serialno".to_string()],
             field_mappings: None,
             array_config: None,
+            column_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -204,6 +206,7 @@ mod tests {
             skip_fields: vec![],
             field_mappings: None,
             array_config: None,
+            column_config: None,
             default_tags,
         };
 

@@ -397,6 +397,7 @@ impl SourceManager {
                 ],
                 field_mappings: None,
                 array_config: None,
+            column_config: None,
                 default_tags: [("source".to_string(), default_source.to_string())]
                     .into_iter()
                     .collect(),

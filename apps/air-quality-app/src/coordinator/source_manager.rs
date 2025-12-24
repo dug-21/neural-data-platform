@@ -376,6 +376,7 @@ impl SourceManager {
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
             array_config: None,
+            column_config: None,
         };
         let parser = create_parser_from_config(parser_config).map_err(|e| {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
@@ -526,7 +527,8 @@ impl SourceManager {
                         if let Some(headers) = v.get("headers").and_then(|h| h.as_object()) {
                             for (name, value) in headers {
                                 if let Some(val_str) = value.as_str() {
-                                    endpoint = endpoint.with_header(name, Self::expand_env_vars(val_str));
+                                    endpoint =
+                                        endpoint.with_header(name, Self::expand_env_vars(val_str));
                                 }
                             }
                         }
@@ -567,6 +569,7 @@ impl SourceManager {
                 field_mappings: None,
                 default_tags: std::collections::HashMap::new(),
                 array_config: None,
+            column_config: None,
             }
         };
 
@@ -700,6 +703,7 @@ impl SourceManager {
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
             array_config: None,
+            column_config: None,
         };
         let parser = create_parser_from_config(parser_config).map_err(|e| {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))

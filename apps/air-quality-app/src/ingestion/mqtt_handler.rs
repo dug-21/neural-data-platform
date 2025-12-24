@@ -55,6 +55,7 @@ impl MqttHandler {
             field_mappings: None,
             default_tags: std::collections::HashMap::new(),
             array_config: None,
+            column_config: None,
         };
         let parser = create_parser_from_config(parser_config)
             .map_err(|e| CoreError::Config(format!("Failed to create parser: {}", e)))?;

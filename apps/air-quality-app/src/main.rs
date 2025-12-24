@@ -265,7 +265,10 @@ async fn initialize_multi_stream_coordinator(
 
     // Register storage channels dynamically from StreamRegistry (config-driven)
     // Streams are loaded from etcd, which is populated from YAML configs via deploy.sh sync
-    match router.register_all_streams_from_registry(storage_tx.clone()).await {
+    match router
+        .register_all_streams_from_registry(storage_tx.clone())
+        .await
+    {
         Ok(count) => {
             tracing::info!(
                 "Config-driven: Registered {} storage channels from StreamRegistry",
@@ -279,8 +282,9 @@ async fn initialize_multi_stream_coordinator(
                 e
             );
             // Fallback: scan config/base/streams/ directory for stream IDs
-            let stream_config_dir = std::env::var("STREAM_CONFIG_DIR")
-                .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
+            let stream_config_dir = std::env::var("STREAM_CONFIG_DIR").unwrap_or_else(|_| {
+                "/workspaces/neural-data-platform/config/base/streams".to_string()
+            });
 
             if let Ok(entries) = std::fs::read_dir(&stream_config_dir) {
                 for entry in entries.flatten() {

@@ -325,6 +325,7 @@ mod tests {
             ],
             field_mappings: None,
             array_config: None,
+            column_config: None,
             default_tags: [("source".to_string(), "mqtt".to_string())]
                 .into_iter()
                 .collect(),

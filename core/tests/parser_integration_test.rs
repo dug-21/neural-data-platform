@@ -20,6 +20,7 @@ fn test_parser_factory_creates_flat_json() {
         field_mappings: None,
         default_tags: HashMap::new(),
         array_config: None,
+        column_config: None,
     };
 
     let parser = create_parser_from_config(config);
@@ -44,6 +45,7 @@ fn test_parser_factory_creates_json_path() {
         }]),
         default_tags: HashMap::new(),
         array_config: None,
+        column_config: None,
     };
 
     let parser = create_parser_from_config(config);
@@ -63,6 +65,7 @@ fn test_parser_factory_unknown_parser_error() {
         field_mappings: None,
         default_tags: HashMap::new(),
         array_config: None,
+        column_config: None,
     };
 
     let result = create_parser_from_config(config);
@@ -87,6 +90,7 @@ async fn test_generic_http_source_accepts_parser_injection() {
         field_mappings: None,
         default_tags: [("source".to_string(), "http".to_string())].into(),
         array_config: None,
+        column_config: None,
     };
 
     let parser = FlatJsonParser::from_config(parser_config).unwrap();
@@ -124,6 +128,7 @@ async fn test_generic_http_source_accepts_json_path_parser() {
         ]),
         default_tags: [("source".to_string(), "http".to_string())].into(),
         array_config: None,
+        column_config: None,
     };
 
     let parser = JsonPathParser::from_config(parser_config).unwrap();
@@ -148,6 +153,7 @@ async fn test_parser_factory_to_source_integration() {
         field_mappings: None,
         default_tags: [("source".to_string(), "http".to_string())].into(),
         array_config: None,
+        column_config: None,
     };
 
     let parser = create_parser_from_config(parser_config).expect("Parser creation failed");

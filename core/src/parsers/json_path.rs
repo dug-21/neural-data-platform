@@ -189,6 +189,7 @@ mod tests {
             skip_fields: vec![],
             field_mappings: Some(mappings),
             array_config: None,
+            column_config: None,
             default_tags,
         }
     }

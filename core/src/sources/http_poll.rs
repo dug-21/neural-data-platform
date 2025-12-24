@@ -653,6 +653,7 @@ impl GenericHttpPollingSource {
             skip_fields: vec!["serialno".to_string(), "firmware".to_string()],
             field_mappings: None,
             array_config: None,
+            column_config: None,
             default_tags: [("source".to_string(), "http".to_string())].into(),
         };
         let parser = crate::parsers::FlatJsonParser::from_config(parser_config)

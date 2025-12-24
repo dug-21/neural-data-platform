@@ -1,0 +1,432 @@
+stream_id: nws-gridpoints-forecast
+description: Raw NWS gridpoint forecast data with 40+ comprehensive weather metrics
+version: "1.0.0"
+enabled: true
+retention_days: 30
+compression_after_days: 7
+partitioning_strategy: daily
+
+fields:
+  # Temperature Suite
+  - name: temperature
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Forecast temperature"
+  - name: dewpoint
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Forecast dewpoint temperature"
+  - name: max_temperature
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Daily maximum temperature"
+  - name: min_temperature
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Daily minimum temperature"
+  - name: apparent_temperature
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-60.0, 70.0]
+    description: "Feels-like temperature"
+  - name: wet_bulb_globe_temperature
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: "Wet bulb globe temperature (heat stress)"
+  - name: heat_index
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 70.0]
+    description: "Heat index (when applicable)"
+  - name: wind_chill
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-70.0, 20.0]
+    description: "Wind chill (when applicable)"
+
+  # Wind Suite
+  - name: wind_speed
+    type: float
+    nullable: true
+    unit: km/h
+    range: [0.0, 300.0]
+    description: "Forecast wind speed"
+  - name: wind_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "Forecast wind direction"
+  - name: wind_gust
+    type: float
+    nullable: true
+    unit: km/h
+    range: [0.0, 400.0]
+    description: "Forecast wind gust speed"
+  - name: transport_wind_speed
+    type: float
+    nullable: true
+    unit: km/h
+    range: [0.0, 300.0]
+    description: "Transport wind speed"
+  - name: transport_wind_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "Transport wind direction"
+  - name: twenty_foot_wind_speed
+    type: float
+    nullable: true
+    unit: km/h
+    range: [0.0, 300.0]
+    description: "20-foot wind speed (fire weather)"
+  - name: twenty_foot_wind_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "20-foot wind direction (fire weather)"
+
+  # Precipitation Suite
+  - name: probability_of_precipitation
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Precipitation probability"
+  - name: quantitative_precipitation
+    type: float
+    nullable: true
+    unit: mm
+    range: [0.0, 500.0]
+    description: "Quantitative precipitation forecast"
+  - name: snowfall_amount
+    type: float
+    nullable: true
+    unit: mm
+    range: [0.0, 1000.0]
+    description: "Snowfall amount"
+  - name: ice_accumulation
+    type: float
+    nullable: true
+    unit: mm
+    range: [0.0, 100.0]
+    description: "Ice accumulation"
+
+  # Sky & Visibility
+  - name: sky_cover
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Cloud cover percentage"
+  - name: visibility
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 50000.0]
+    description: "Visibility distance"
+  - name: ceiling_height
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 20000.0]
+    description: "Cloud ceiling height"
+
+  # Humidity & Moisture
+  - name: relative_humidity
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Relative humidity"
+
+  # Fire Weather & Indices
+  - name: dispersion_index
+    type: float
+    nullable: true
+    unit: index
+    range: [0.0, 100.0]
+    description: "Smoke dispersion index"
+  - name: low_visibility_occurrence_risk_index
+    type: float
+    nullable: true
+    unit: index
+    range: [0.0, 100.0]
+    description: "Low visibility occurrence risk"
+  - name: probability_of_thunder
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Probability of thunderstorms"
+  - name: mixing_height
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 10000.0]
+    description: "Atmospheric mixing height"
+  - name: haines_index
+    type: float
+    nullable: true
+    unit: index
+    range: [2.0, 6.0]
+    description: "Haines index (fire weather)"
+  - name: davis_stability_index
+    type: float
+    nullable: true
+    unit: index
+    range: [-20.0, 20.0]
+    description: "Davis stability index"
+  - name: atmospheric_dispersion_index
+    type: float
+    nullable: true
+    unit: index
+    range: [0.0, 10.0]
+    description: "Atmospheric dispersion index"
+  - name: low_visibility_risk
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: "Low visibility risk percentage"
+  - name: red_flag_threat_index
+    type: float
+    nullable: true
+    unit: index
+    range: [0.0, 100.0]
+    description: "Red flag threat index (fire weather)"
+
+  # Marine (Coastal Areas)
+  - name: wave_height
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 30.0]
+    description: "Wave height (coastal areas)"
+  - name: wave_period
+    type: float
+    nullable: true
+    unit: seconds
+    range: [0.0, 30.0]
+    description: "Wave period (coastal areas)"
+  - name: wave_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "Wave direction (coastal areas)"
+
+  # Additional Fields
+  - name: primary_swell_height
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 30.0]
+    description: "Primary swell height"
+  - name: primary_swell_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "Primary swell direction"
+  - name: secondary_swell_height
+    type: float
+    nullable: true
+    unit: meters
+    range: [0.0, 30.0]
+    description: "Secondary swell height"
+  - name: secondary_swell_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: "Secondary swell direction"
+
+sources:
+  - type: http_poll
+    enabled: true
+    poll_interval_secs: 3600  # 1 hour (gridpoints update hourly)
+    timeout_secs: 30
+    retry_attempts: 3
+    retry_delay_secs: 5
+    buffer_capacity: 2500  # 40+ columns × ~156 values = ~6,240 points per poll
+    parser_name: nws_gridpoints
+    endpoints:
+      - endpoint_id: nws_jax_79_49_gridpoints
+        location_id: ksgj_gridpoints
+        grid_office: JAX
+        grid_x: 79
+        grid_y: 49
+        url: "https://api.weather.gov/gridpoints/JAX/79,49"
+        auth_type: none
+        headers:
+          # NWS requires valid contact info in User-Agent - update YOUR_EMAIL below
+          User-Agent: "(neural-data-platform/1.0, something1@gmail.com)"
+          Accept: "application/geo+json"
+    parser:
+      parser_type: column_oriented
+      location_id_field: properties.gridId
+      default_location_id: ksgj_gridpoints
+      default_tags:
+        source: nws
+        api: gridpoints
+        stream_id: nws-gridpoints-forecast
+        grid_office: JAX
+        grid_x: "79"
+        grid_y: "49"
+      # ColumnOrientedConfig
+      column_config:
+        metrics_base_path: properties
+        timestamp_format:
+          type: iso8601_duration
+        columns:
+          # Temperature Suite
+          - metric_path: temperature
+            field_name: temperature
+            unit: celsius
+          - metric_path: dewpoint
+            field_name: dewpoint
+            unit: celsius
+          - metric_path: maxTemperature
+            field_name: max_temperature
+            unit: celsius
+          - metric_path: minTemperature
+            field_name: min_temperature
+            unit: celsius
+          - metric_path: apparentTemperature
+            field_name: apparent_temperature
+            unit: celsius
+          - metric_path: wetBulbGlobeTemperature
+            field_name: wet_bulb_globe_temperature
+            unit: celsius
+          - metric_path: heatIndex
+            field_name: heat_index
+            unit: celsius
+          - metric_path: windChill
+            field_name: wind_chill
+            unit: celsius
+
+          # Wind Suite
+          - metric_path: windSpeed
+            field_name: wind_speed
+            unit: km/h
+          - metric_path: windDirection
+            field_name: wind_direction
+            unit: degrees
+          - metric_path: windGust
+            field_name: wind_gust
+            unit: km/h
+          - metric_path: transportWindSpeed
+            field_name: transport_wind_speed
+            unit: km/h
+          - metric_path: transportWindDirection
+            field_name: transport_wind_direction
+            unit: degrees
+          - metric_path: twentyFootWindSpeed
+            field_name: twenty_foot_wind_speed
+            unit: km/h
+          - metric_path: twentyFootWindDirection
+            field_name: twenty_foot_wind_direction
+            unit: degrees
+
+          # Precipitation Suite
+          - metric_path: probabilityOfPrecipitation
+            field_name: probability_of_precipitation
+            unit: percent
+          - metric_path: quantitativePrecipitation
+            field_name: quantitative_precipitation
+            unit: mm
+          - metric_path: snowfallAmount
+            field_name: snowfall_amount
+            unit: mm
+          - metric_path: iceAccumulation
+            field_name: ice_accumulation
+            unit: mm
+
+          # Sky & Visibility
+          - metric_path: skyCover
+            field_name: sky_cover
+            unit: percent
+          - metric_path: visibility
+            field_name: visibility
+            unit: meters
+          - metric_path: ceilingHeight
+            field_name: ceiling_height
+            unit: meters
+
+          # Humidity
+          - metric_path: relativeHumidity
+            field_name: relative_humidity
+            unit: percent
+
+          # Fire Weather & Indices
+          - metric_path: dispersionIndex
+            field_name: dispersion_index
+            unit: index
+          - metric_path: lowVisibilityOccurrenceRiskIndex
+            field_name: low_visibility_occurrence_risk_index
+            unit: index
+          - metric_path: probabilityOfThunder
+            field_name: probability_of_thunder
+            unit: percent
+          - metric_path: mixingHeight
+            field_name: mixing_height
+            unit: meters
+          - metric_path: hainesIndex
+            field_name: haines_index
+            unit: index
+          - metric_path: davisStabilityIndex
+            field_name: davis_stability_index
+            unit: index
+          - metric_path: atmosphericDispersionIndex
+            field_name: atmospheric_dispersion_index
+            unit: index
+          - metric_path: lowVisibilityRisk
+            field_name: low_visibility_risk
+            unit: percent
+          - metric_path: redFlagThreatIndex
+            field_name: red_flag_threat_index
+            unit: index
+
+          # Marine (Coastal)
+          - metric_path: waveHeight
+            field_name: wave_height
+            unit: meters
+          - metric_path: wavePeriod
+            field_name: wave_period
+            unit: seconds
+          - metric_path: waveDirection
+            field_name: wave_direction
+            unit: degrees
+          - metric_path: primarySwellHeight
+            field_name: primary_swell_height
+            unit: meters
+          - metric_path: primarySwellDirection
+            field_name: primary_swell_direction
+            unit: degrees
+          - metric_path: secondarySwellHeight
+            field_name: secondary_swell_height
+            unit: meters
+          - metric_path: secondarySwellDirection
+            field_name: secondary_swell_direction
+            unit: degrees
+
+storage:
+  batch_size: 200  # Batch larger for efficiency with high point count
+  batch_timeout_secs: 60
+  buffer_capacity: 2500

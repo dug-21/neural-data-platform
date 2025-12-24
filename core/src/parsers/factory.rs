@@ -5,6 +5,7 @@
 
 use crate::error::{CoreError, CoreResult};
 use crate::parsers::array_iterator::ArrayIteratorParser;
+use crate::parsers::column_oriented::ColumnOrientedParser;
 use crate::parsers::config::{ParserConfig, ParserType};
 use crate::parsers::flat_json::FlatJsonParser;
 use crate::parsers::json_path::JsonPathParser;
@@ -36,9 +37,13 @@ pub fn create_parser_from_config(
             let parser = ArrayIteratorParser::from_config(config)?;
             Ok(Box::new(parser))
         }
+        ParserType::ColumnOriented => {
+            let parser = ColumnOrientedParser::from_config(config)?;
+            Ok(Box::new(parser))
+        }
         ParserType::Custom(ref name) => {
             Err(CoreError::Config(format!(
-                "Custom parser type '{}' not registered. Only built-in parsers (flat_json, json_path, array_iterator) are supported.",
+                "Custom parser type '{}' not registered. Only built-in parsers (flat_json, json_path, array_iterator, column_oriented) are supported.",
                 name
             )))
         }
@@ -48,7 +53,7 @@ pub fn create_parser_from_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsers::config::FieldMapping;
+    use crate::parsers::config::{ColumnMapping, ColumnOrientedConfig, FieldMapping, TimestampFormat};
     use std::collections::HashMap;
 
     #[test]
@@ -60,6 +65,7 @@ mod tests {
             skip_fields: vec!["firmware".to_string()],
             field_mappings: None,
             array_config: None,
+            column_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -84,6 +90,7 @@ mod tests {
                 transform: None,
             }]),
             array_config: None,
+            column_config: None,
             default_tags,
         };
 
@@ -100,6 +107,7 @@ mod tests {
             skip_fields: vec![],
             field_mappings: None,
             array_config: None,
+            column_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -108,5 +116,44 @@ mod tests {
         if let Err(e) = result {
             assert!(e.to_string().contains("field_mappings"));
         }
+    }
+
+    #[test]
+    fn test_create_column_oriented_parser() {
+        let column_config = ColumnOrientedConfig {
+            metrics_base_path: "properties".to_string(),
+            columns: vec![
+                ColumnMapping {
+                    metric_path: "temperature".to_string(),
+                    field_name: "temperature".to_string(),
+                    values_path: None,
+                    timestamp_path: None,
+                    value_path: None,
+                },
+                ColumnMapping {
+                    metric_path: "dewpoint".to_string(),
+                    field_name: "dewpoint".to_string(),
+                    values_path: None,
+                    timestamp_path: None,
+                    value_path: None,
+                },
+            ],
+            timestamp_format: TimestampFormat::Iso8601Duration,
+            unit_conversions: std::collections::HashMap::new(),
+        };
+
+        let config = ParserConfig {
+            parser_type: ParserType::ColumnOriented,
+            location_id_field: "properties.gridId".to_string(),
+            default_location_id: Some("unknown".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            array_config: None,
+            column_config: Some(column_config),
+            default_tags: HashMap::new(),
+        };
+
+        let parser = create_parser_from_config(config).unwrap();
+        assert_eq!(parser.name(), "column_oriented");
     }
 }

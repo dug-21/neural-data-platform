@@ -34,6 +34,10 @@ pub struct ParserConfig {
     /// For ArrayIteratorParser: array-specific configuration
     #[serde(default)]
     pub array_config: Option<ArrayIteratorConfig>,
+
+    /// For ColumnOrientedParser: column-specific configuration
+    #[serde(default)]
+    pub column_config: Option<ColumnOrientedConfig>,
 }
 
 impl Default for ParserConfig {
@@ -46,6 +50,7 @@ impl Default for ParserConfig {
             field_mappings: None,
             default_tags: HashMap::new(),
             array_config: None,
+            column_config: None,
         }
     }
 }
@@ -60,6 +65,8 @@ pub enum ParserType {
     JsonPath,
     /// Iterate over JSON arrays to produce multiple TimeSeriesPoints
     ArrayIterator,
+    /// Extract metrics from column-oriented data structures
+    ColumnOriented,
     /// Custom parser (must be registered in code)
     Custom(String),
 }
@@ -77,4 +84,114 @@ pub struct FieldMapping {
     /// Optional transformation (e.g., kelvin_to_celsius)
     #[serde(default)]
     pub transform: Option<String>,
+}
+
+/// Mapping for a single column/metric in ColumnOrientedParser
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ColumnMapping {
+    /// Path within metrics base (e.g., "temperature" for NWS)
+    pub metric_path: String,
+
+    /// Output field name in TimeSeriesPoint
+    pub field_name: String,
+
+    /// Path to values array within metric (default: "values")
+    #[serde(default)]
+    pub values_path: Option<String>,
+
+    /// Path to timestamp within value entry (default: "validTime")
+    #[serde(default)]
+    pub timestamp_path: Option<String>,
+
+    /// Path to value within entry (default: "value")
+    #[serde(default)]
+    pub value_path: Option<String>,
+}
+
+/// Configuration for column-oriented parser
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ColumnOrientedConfig {
+    /// Base path to metrics container (e.g., "properties" for NWS)
+    pub metrics_base_path: String,
+
+    /// Column mappings: metric_path -> field_name
+    pub columns: Vec<ColumnMapping>,
+
+    /// Timestamp format variant
+    pub timestamp_format: TimestampFormat,
+
+    /// Unit conversions
+    #[serde(default)]
+    pub unit_conversions: HashMap<String, UnitConversion>,
+}
+
+/// Timestamp format variants for column-oriented parser
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TimestampFormat {
+    /// NWS format: "2025-12-23T00:00:00+00:00/PT1H"
+    /// Split on "/" and parse first component
+    Iso8601Duration,
+
+    /// Open-Meteo format: Separate time array
+    /// Time values are in a parallel array at specified path
+    ParallelArray {
+        /// Path to time array (e.g., "hourly.time")
+        time_path: String,
+    },
+}
+
+/// Unit conversion configuration
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UnitConversion {
+    /// Source unit identifier
+    pub from: String,
+
+    /// Target unit identifier
+    pub to: String,
+
+    /// Optional conversion factor (for simple multiplication)
+    #[serde(default)]
+    pub factor: Option<f64>,
+
+    /// Optional conversion formula (for complex conversions)
+    #[serde(default)]
+    pub formula: Option<ConversionFormula>,
+}
+
+impl UnitConversion {
+    /// Apply conversion to value
+    pub fn convert(&self, value: f64) -> f64 {
+        if let Some(factor) = self.factor {
+            value * factor
+        } else if let Some(formula) = &self.formula {
+            formula.apply(value)
+        } else {
+            value // No conversion
+        }
+    }
+}
+
+/// Conversion formula types
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ConversionFormula {
+    /// Linear: (value * scale) + offset
+    Linear { scale: f64, offset: f64 },
+
+    /// Custom Rust code (future enhancement)
+    Custom { code: String },
+}
+
+impl ConversionFormula {
+    /// Apply formula to value
+    pub fn apply(&self, value: f64) -> f64 {
+        match self {
+            ConversionFormula::Linear { scale, offset } => (value * scale) + offset,
+            ConversionFormula::Custom { .. } => {
+                // Future: compile and execute custom code
+                value
+            }
+        }
+    }
 }
