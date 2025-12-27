@@ -134,6 +134,22 @@ impl SourceManager {
     ) -> Result<String, SourceManagerError> {
         let source_id = format!("{}-{:?}", stream_id, source_config.source_type);
 
+        // Stop any existing source with the same ID to prevent duplicates
+        // This is defensive - normally sources should only be spawned once
+        {
+            let sources = self.sources.read().await;
+            if sources.contains_key(&source_id) {
+                drop(sources); // Release read lock before acquiring write lock
+                warn!(
+                    "Source {} already exists, stopping before respawn",
+                    source_id
+                );
+                if let Err(e) = self.stop_source(&source_id).await {
+                    warn!("Failed to stop existing source {}: {}", source_id, e);
+                }
+            }
+        }
+
         info!(
             "Spawning source {} ({:?}) for stream {}",
             source_id, source_config.source_type, stream_id
