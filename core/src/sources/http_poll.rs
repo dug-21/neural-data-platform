@@ -440,7 +440,9 @@ impl HttpPollingSource {
 
     /// Background polling task
     async fn polling_loop(&self) -> CoreResult<()> {
-        let mut interval = tokio::time::interval(self.config.poll_interval);
+        // Use interval_at to start AFTER the first interval, since start() already does initial poll
+        let start = tokio::time::Instant::now() + self.config.poll_interval;
+        let mut interval = tokio::time::interval_at(start, self.config.poll_interval);
 
         while *self.is_running.lock().await {
             interval.tick().await;
@@ -841,7 +843,9 @@ impl GenericHttpPollingSource {
             "HTTP polling loop started (interval: {:?})",
             self.config.poll_interval
         );
-        let mut interval = tokio::time::interval(self.config.poll_interval);
+        // Use interval_at to start AFTER the first interval, since start() already does initial poll
+        let start = tokio::time::Instant::now() + self.config.poll_interval;
+        let mut interval = tokio::time::interval_at(start, self.config.poll_interval);
 
         while *self.is_running.lock().await {
             interval.tick().await;
