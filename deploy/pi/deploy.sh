@@ -186,8 +186,10 @@ update() {
     log "Syncing to origin/main..."
     git -C "$REPO_ROOT" reset --hard origin/main
 
-    # Rebuild and restart
-    build
+    # Rebuild with --no-cache to ensure source changes are picked up
+    log "Rebuilding with fresh cache..."
+    dc build --no-cache --progress=plain
+
     dc up -d
     sync_config
     init_streams
