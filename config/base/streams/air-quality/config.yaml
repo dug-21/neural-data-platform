@@ -48,18 +48,18 @@ fields:
     nullable: true
 
 # Data sources configuration (SourceManager format)
+# Note: Fields are at source level (flat), not nested under 'params'
 sources:
   - type: mqtt
     enabled: true
-    params:
-      broker_url: "mosquitto"
-      port: 1883
-      client_id: "air-quality-app"
-      topic_pattern: "airgradient/readings/+"
-      qos: 1
-      reconnect_delay_secs: 1
-      max_reconnect_delay_secs: 30
-      buffer_capacity: 1000
+    broker_url: "mosquitto"
+    port: 1883
+    client_id: "air-quality-app"
+    topic_pattern: "airgradient/readings/+"
+    qos: 1
+    reconnect_delay_secs: 1
+    max_reconnect_delay_secs: 30
+    buffer_capacity: 1000
     parser:
       parser_type: flat_json
       location_id_field: serialno
