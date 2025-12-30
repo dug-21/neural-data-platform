@@ -32,8 +32,7 @@ fields:
     description: "Entity-specific attributes (JSON string)"
 
 sources:
-  - id: mqtt-statestream
-    type: mqtt
+  - type: mqtt
     enabled: true
     params:
       broker_url: "mosquitto"
@@ -41,6 +40,14 @@ sources:
       client_id: "ndp-homeassistant"
       topic_pattern: "homeassistant/+/+/state"
       qos: 1
+      reconnect_delay_secs: 1
+      max_reconnect_delay_secs: 30
+      buffer_capacity: 1000
+    parser:
+      parser_type: flat_json
+      default_tags:
+        source: mqtt
+        stream_id: homeassistant
 
 # Entity schemas for specific device types (data dictionary)
 entity_schemas:
