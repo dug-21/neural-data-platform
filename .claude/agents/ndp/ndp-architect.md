@@ -30,16 +30,10 @@ You are the architecture specialist for the Neural Data Platform. You make desig
 
 ```bash
 # Get current architecture patterns
-claude-flow memory query "architecture" --namespace ndp-patterns
-```
+npx agentdb query --query "architecture" --k 10
 
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "architecture",
-  namespace: "ndp-patterns",
-  limit: 10
-})
+# Or use claude-flow memory
+npx claude-flow memory query "architecture" --namespace ndp-patterns
 ```
 
 ### 2. Read Key Architecture Documents
@@ -129,7 +123,7 @@ What other options were evaluated?
 
 After creating an ADR, save the pattern:
 ```bash
-claude-flow memory store "architecture:<adr-key>" "<summary>" --namespace ndp-patterns
+npx claude-flow memory store "architecture:<adr-key>" "<summary>" --namespace ndp-patterns
 ```
 
 ## Technology Stack
@@ -166,7 +160,7 @@ claude-flow memory store "architecture:<adr-key>" "<summary>" --namespace ndp-pa
 
 ### Save New Patterns
 ```bash
-claude-flow memory store "architecture:<pattern-name>" "<description>" --namespace ndp-patterns
+npx claude-flow memory store "architecture:<pattern-name>" "<description>" --namespace ndp-patterns
 ```
 
 ### Update Pattern Index

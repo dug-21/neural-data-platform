@@ -529,19 +529,12 @@ function getUserProcessor(user: User): UserProcessor {
 **BEFORE starting refinement work, you MUST use `get-pattern` skill:**
 
 ### Retrieve Existing Patterns
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "refinement patterns for [your domain]",
-  k: 5,
-  threshold: 0.6,
-  filters: { taskType: "refinement" }
-})
+```bash
+# Search for refinement patterns
+npx agentdb query --query "refinement patterns for [your domain]" --k 5
 
-mcp__agentdb__reflexion_retrieve({
-  task: "similar refactoring or optimization",
-  k: 5,
-  only_successes: true
-})
+# Review past successful refactoring work
+npx agentdb reflexion retrieve "similar refactoring or optimization" --k 5 --only-successes
 ```
 
 ---

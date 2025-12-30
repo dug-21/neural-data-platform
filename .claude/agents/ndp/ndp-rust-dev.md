@@ -29,16 +29,10 @@ You are a Rust developer for the Neural Data Platform. You write clean, idiomati
 
 ```bash
 # Search for patterns related to your task
-claude-flow memory query "<your-task-keywords>" --namespace ndp-patterns
-```
+npx agentdb query --query "<your-task-keywords>" --k 5
 
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "<keywords>",
-  namespace: "ndp-patterns",
-  limit: 5
-})
+# Or use claude-flow memory
+npx claude-flow memory query "<keywords>" --namespace ndp-patterns
 ```
 
 ### 2. Check Pattern Index
@@ -212,7 +206,7 @@ Before submitting code:
 If you discovered a reusable pattern:
 
 ```bash
-claude-flow memory store "development:<pattern-name>" "<description>" --namespace ndp-patterns
+npx claude-flow memory store "development:<pattern-name>" "<description>" --namespace ndp-patterns
 ```
 
 ## Related Agents

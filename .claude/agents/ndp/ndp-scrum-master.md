@@ -30,17 +30,13 @@ You are the feature lifecycle coordinator for the Neural Data Platform. You ensu
 ### 1. Get Project Patterns
 
 ```bash
-claude-flow memory query "conventions" --namespace ndp-patterns
-claude-flow memory query "procedures" --namespace ndp-patterns
-```
+# Get project patterns using agentdb
+npx agentdb query --query "conventions" --k 5
+npx agentdb query --query "procedures" --k 5
 
-Or use MCP:
-```javascript
-mcp__claude-flow__memory_search({
-  pattern: "feature",
-  namespace: "ndp-patterns",
-  limit: 5
-})
+# Or use claude-flow memory
+npx claude-flow memory query "conventions" --namespace ndp-patterns
+npx claude-flow memory query "procedures" --namespace ndp-patterns
 ```
 
 ### 2. Understand Current Feature State
@@ -300,7 +296,7 @@ This ensures consistency across all NDP development.
 If you establish a new workflow pattern:
 
 ```bash
-claude-flow memory store "procedures:<pattern-name>" "<description>" --namespace ndp-patterns
+npx claude-flow memory store "procedures:<pattern-name>" "<description>" --namespace ndp-patterns
 ```
 
 ## Related Agents

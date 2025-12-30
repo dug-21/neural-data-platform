@@ -476,30 +476,21 @@ scalability_patterns:
 **BEFORE starting any architecture work, you MUST use `get-pattern` skill:**
 
 ### Step 1: Retrieve Existing Patterns
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "architecture patterns for [your task]",
-  k: 5,
-  threshold: 0.6,
-  filters: { taskType: "architecture" }
-})
+```bash
+# Search for architecture patterns
+npx agentdb query --query "architecture patterns for [your task]" --k 5
 ```
 
 ### Step 2: Review Past Architecture Decisions
-```javascript
-mcp__agentdb__reflexion_retrieve({
-  task: "similar architecture decisions",
-  k: 5,
-  only_successes: true
-})
+```bash
+# Review past successful architecture decisions
+npx agentdb reflexion retrieve "similar architecture decisions" --k 5 --only-successes
 ```
 
 ### Step 3: Check Causal Relationships
-```javascript
-mcp__agentdb__causal_query({
-  cause: "architecture pattern",
-  min_confidence: 0.7
-})
+```bash
+# Check causal relationships for architecture patterns
+npx agentdb causal query --cause "architecture pattern" --min-confidence 0.7
 ```
 
 ---

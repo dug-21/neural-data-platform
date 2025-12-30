@@ -280,19 +280,12 @@ Before completing specification:
 **BEFORE starting specification work, you MUST use `get-pattern` skill:**
 
 ### Retrieve Existing Patterns
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "specification patterns for [your domain]",
-  k: 5,
-  threshold: 0.6,
-  filters: { taskType: "specification" }
-})
+```bash
+# Search for specification patterns
+npx agentdb query --query "specification patterns for [your domain]" --k 5
 
-mcp__agentdb__reflexion_retrieve({
-  task: "similar specification work",
-  k: 5,
-  only_successes: true
-})
+# Review past successful specifications
+npx agentdb reflexion retrieve "similar specification work" --k 5 --only-successes
 ```
 
 ---

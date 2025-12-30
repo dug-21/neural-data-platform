@@ -322,19 +322,12 @@ CLASS: EventEmitter
 **BEFORE starting pseudocode work, you MUST use `get-pattern` skill:**
 
 ### Retrieve Existing Patterns
-```javascript
-mcp__agentdb__agentdb_pattern_search({
-  task: "algorithm patterns for [your domain]",
-  k: 5,
-  threshold: 0.6,
-  filters: { taskType: "pseudocode" }
-})
+```bash
+# Search for algorithm patterns
+npx agentdb query --query "algorithm patterns for [your domain]" --k 5
 
-mcp__agentdb__reflexion_retrieve({
-  task: "similar algorithm design",
-  k: 5,
-  only_successes: true
-})
+# Review past successful algorithm designs
+npx agentdb reflexion retrieve "similar algorithm design" --k 5 --only-successes
 ```
 
 ---
