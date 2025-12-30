@@ -10,26 +10,26 @@ partitioning_strategy: daily
 
 # Generic Bronze layer schema (captures all HA entities)
 fields:
-  - name: entity_id
-    type: string
+  entity_id:
+    type: "string"
     nullable: false
-    description: Home Assistant entity identifier
-  - name: state
-    type: string
+    description: "Home Assistant entity identifier"
+  state:
+    type: "string"
     nullable: false
-    description: Current state value
-  - name: last_changed
-    type: string
+    description: "Current state value"
+  last_changed:
+    type: "string"
     nullable: true
-    description: When state last changed (ISO8601)
-  - name: last_updated
-    type: string
+    description: "When state last changed (ISO8601)"
+  last_updated:
+    type: "string"
     nullable: true
-    description: When entity was last updated (ISO8601)
-  - name: attributes
-    type: string
+    description: "When entity was last updated (ISO8601)"
+  attributes:
+    type: "string"
     nullable: true
-    description: Entity-specific attributes (JSON string)
+    description: "Entity-specific attributes (JSON string)"
 
 sources:
   - id: mqtt-statestream
