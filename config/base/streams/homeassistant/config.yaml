@@ -19,17 +19,17 @@ fields:
     nullable: false
     description: Current state value
   - name: last_changed
-    type: timestamp
+    type: string
     nullable: true
-    description: When state last changed
+    description: When state last changed (ISO8601)
   - name: last_updated
-    type: timestamp
+    type: string
     nullable: true
-    description: When entity was last updated
+    description: When entity was last updated (ISO8601)
   - name: attributes
-    type: json
+    type: string
     nullable: true
-    description: Entity-specific attributes
+    description: Entity-specific attributes (JSON string)
 
 sources:
   - id: mqtt-statestream
