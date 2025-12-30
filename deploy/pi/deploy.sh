@@ -397,6 +397,41 @@ update() {
     status
 }
 
+refresh() {
+    log "Refreshing configuration (no rebuild)..."
+
+    # Fetch latest from origin
+    git -C "$REPO_ROOT" fetch origin
+
+    # Check for local uncommitted changes to tracked files
+    if ! git -C "$REPO_ROOT" diff --quiet HEAD 2>/dev/null; then
+        warn "Local changes detected in tracked files:"
+        git -C "$REPO_ROOT" diff --stat HEAD
+        warn "These will be overwritten. Ctrl+C to abort, or wait 5 seconds to continue..."
+        sleep 5
+    fi
+
+    # Reset to match origin exactly
+    log "Syncing to origin/main..."
+    git -C "$REPO_ROOT" reset --hard origin/main
+
+    # Sync configurations (no rebuild)
+    sync_config
+    init_streams
+
+    # Sync data dictionary if TimescaleDB is running
+    if docker exec pi5-timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; then
+        sync_to_data_dictionary
+    fi
+
+    # Restart Grafana to pick up dashboard/datasource changes
+    log "Restarting Grafana..."
+    docker restart grafana
+
+    log "Refresh complete!"
+    status
+}
+
 # Main
 case "${1:-deploy}" in
     deploy)
@@ -420,6 +455,9 @@ case "${1:-deploy}" in
     update)
         check_prereqs
         update
+        ;;
+    refresh)
+        refresh
         ;;
     build)
         check_prereqs
@@ -458,7 +496,7 @@ case "${1:-deploy}" in
         warn "To remove data: docker volume rm pi_duckdb_data pi_grafana_data"
         ;;
     *)
-        echo "Usage: $0 {deploy|start|stop|logs|status|update|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback}"
+        echo "Usage: $0 {deploy|start|stop|logs|status|update|refresh|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback}"
         echo ""
         echo "Commands:"
         echo "  deploy          - Full deploy (build + start all services)"
@@ -466,7 +504,8 @@ case "${1:-deploy}" in
         echo "  stop            - Stop all services"
         echo "  logs            - View logs"
         echo "  status          - Check service health and URLs"
-        echo "  update          - Pull latest and rebuild"
+        echo "  update          - Pull latest and rebuild (for code changes)"
+        echo "  refresh         - Pull latest configs only (no rebuild)"
         echo "  build           - Build Docker images"
         echo "  sync            - Sync configuration to etcd"
         echo "  init-streams    - Initialize stream configurations"
