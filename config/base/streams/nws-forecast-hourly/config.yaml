@@ -153,3 +153,54 @@ storage:
   batch_size: 156  # 156 hours = 6.5 days of forecast
   batch_timeout_secs: 60
   buffer_capacity: 200
+
+# Entity schemas for data dictionary (DP-002)
+entity_schemas:
+  - schema_name: nws-hourly
+    description: Hourly weather forecast from NWS gridpoint forecast
+    attributes:
+      - name: temperature
+        type: float
+        unit: fahrenheit
+        description: Forecast temperature
+        nullable: false
+        range: [-50, 130]
+      - name: dewpoint
+        type: float
+        unit: celsius
+        description: Forecast dew point
+        nullable: true
+        range: [-50, 60]
+      - name: relative_humidity
+        type: float
+        unit: percent
+        description: Forecast relative humidity
+        nullable: true
+        range: [0, 100]
+      - name: wind_speed
+        type: float
+        unit: mph
+        description: Forecast wind speed
+        nullable: true
+        range: [0, 200]
+      - name: wind_direction
+        type: float
+        unit: degrees
+        description: Forecast wind direction
+        nullable: true
+        range: [0, 360]
+      - name: short_forecast
+        type: string
+        description: Brief forecast description
+        nullable: true
+      - name: probability_of_precipitation
+        type: float
+        unit: percent
+        description: Precipitation probability
+        nullable: true
+        range: [0, 100]
+      - name: forecast_issue_time
+        type: float
+        unit: epoch_seconds
+        description: Forecast issue timestamp as epoch seconds
+        nullable: true

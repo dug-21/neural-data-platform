@@ -967,6 +967,105 @@ parser:
 
 ---
 
+## Entity Schemas (Data Dictionary) - DP-002
+
+Starting with DP-002, all streams should include `entity_schemas` in their configuration. Entity schemas populate the Data Dictionary in TimescaleDB and enable data quality monitoring.
+
+### Relationship: `fields` vs `entity_schemas`
+
+| Concept | Purpose | Used By |
+|---------|---------|---------|
+| `fields` | Bronze Parquet column schema | Ingestion engine (technical) |
+| `entity_schemas` | Data dictionary entries | Data dictionary, DQ dashboard, documentation |
+
+**Important**: Always add `entity_schemas` without modifying existing `fields` sections.
+
+### Entity Schema Format
+
+```yaml
+entity_schemas:
+  - schema_name: my-schema-name
+    description: Human-readable description of this data source
+    device_class: optional_device_classification  # e.g., air_quality, temperature
+    attributes:
+      - name: attribute_name
+        type: float  # float, int, string, bool, json, timestamp
+        unit: ug/m3  # measurement unit
+        description: What this attribute represents
+        nullable: true
+        range: [0, 1000]  # optional min/max for validation
+```
+
+### Attribute Types
+
+| Type | Description | Example Values |
+|------|-------------|----------------|
+| `float` | Floating-point number | `23.5`, `-5.0` |
+| `int` | Integer | `42`, `1500` |
+| `string` | Text string | `"Partly Cloudy"` |
+| `bool` | Boolean | `true`, `false` |
+| `json` | JSON object/array | `{"key": "value"}` |
+| `timestamp` | ISO 8601 timestamp | `"2025-12-30T15:00:00Z"` |
+
+### Standard Units
+
+| Category | Units |
+|----------|-------|
+| Temperature | `celsius`, `fahrenheit`, `kelvin` |
+| Concentration | `ug/m3`, `ppm`, `ppb` |
+| Percentage | `percent` |
+| Pressure | `hpa`, `pa`, `mbar` |
+| Speed | `m/s`, `km/h`, `mph` |
+| Distance | `meters`, `km`, `miles` |
+| Direction | `degrees` |
+
+### Syncing to Data Dictionary
+
+After adding or updating entity_schemas, run:
+
+```bash
+./deploy.sh sync-dictionary
+```
+
+This syncs all stream configurations to the TimescaleDB Data Dictionary.
+
+### Example: Complete Stream Config with Entity Schema
+
+```yaml
+stream_id: my-stream
+description: My data stream description
+version: "1.0.0"
+enabled: true
+retention_days: 365
+
+fields:
+  - name: value
+    type: float
+    nullable: false
+
+sources:
+  - id: mqtt-source
+    type: mqtt
+    enabled: true
+    params:
+      topic: "sensors/#"
+
+# Data Dictionary entry
+entity_schemas:
+  - schema_name: my-sensor
+    description: Sensor readings from my device
+    device_class: sensor
+    attributes:
+      - name: value
+        type: float
+        unit: celsius
+        description: Temperature reading
+        nullable: false
+        range: [-40, 85]
+```
+
+---
+
 ## Best Practices
 
 ### Collect All Available Information

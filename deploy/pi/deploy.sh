@@ -81,6 +81,134 @@ init_streams() {
     fi
 }
 
+sync_to_data_dictionary() {
+    log "Syncing Data Dictionary to TimescaleDB..."
+
+    # Check if TimescaleDB is running
+    until docker exec pi5-timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+        warn "Waiting for TimescaleDB to be ready..."
+        sleep 2
+    done
+
+    # Check if yq is available
+    if ! command -v yq &> /dev/null; then
+        error "yq is required for sync-dictionary but not installed. Install with: sudo snap install yq"
+    fi
+
+    local CONFIG_DIR="$REPO_ROOT/config/base/streams"
+    local SQL_FILE="/tmp/data_dictionary_sync_$$.sql"
+
+    # Generate SQL
+    {
+        echo "-- Data Dictionary Sync"
+        echo "-- Generated: $(date -Iseconds)"
+        echo ""
+        echo "BEGIN;"
+        echo ""
+        echo "-- Record sync start"
+        echo "INSERT INTO data_dictionary.sync_status (sync_type, status) VALUES ('full', 'running');"
+        echo ""
+        echo "-- Clear existing data"
+        echo "DELETE FROM data_dictionary.entity_schema_attributes;"
+        echo "DELETE FROM data_dictionary.entity_schemas;"
+        echo "DELETE FROM data_dictionary.sources;"
+        echo "DELETE FROM data_dictionary.fields;"
+        echo "DELETE FROM data_dictionary.streams;"
+        echo ""
+
+        # Process each stream config
+        local stream_count=0
+        local schema_count=0
+        for config_dir in "$CONFIG_DIR"/*/; do
+            if [ -f "$config_dir/config.yaml" ]; then
+                local stream_id=$(basename "$config_dir")
+                local config_file="$config_dir/config.yaml"
+
+                # Extract stream metadata
+                local description=$(yq eval '.description // ""' "$config_file" | sed "s/'/''/g")
+                local version=$(yq eval '.version // "1.0.0"' "$config_file")
+                local enabled=$(yq eval '.enabled // true' "$config_file")
+                local retention_days=$(yq eval '.retention_days // 90' "$config_file")
+
+                echo "-- Stream: $stream_id"
+                echo "INSERT INTO data_dictionary.streams (stream_id, description, version, enabled, retention_days)"
+                echo "VALUES ('$stream_id', '$description', '$version', $enabled, $retention_days);"
+                echo ""
+
+                # Process entity_schemas if present
+                local es_count=$(yq eval '.entity_schemas | length // 0' "$config_file")
+                if [ "$es_count" -gt 0 ]; then
+                    for i in $(seq 0 $((es_count - 1))); do
+                        local schema_name=$(yq eval ".entity_schemas[$i].schema_name" "$config_file" | sed "s/'/''/g")
+                        local schema_desc=$(yq eval ".entity_schemas[$i].description // ''" "$config_file" | sed "s/'/''/g")
+                        local device_class=$(yq eval ".entity_schemas[$i].device_class // null" "$config_file")
+
+                        if [ "$device_class" = "null" ]; then
+                            device_class="NULL"
+                        else
+                            device_class="'$device_class'"
+                        fi
+
+                        echo "INSERT INTO data_dictionary.entity_schemas (stream_id, schema_name, description, device_class)"
+                        echo "VALUES ('$stream_id', '$schema_name', '$schema_desc', $device_class);"
+
+                        # Process attributes
+                        local attr_count=$(yq eval ".entity_schemas[$i].attributes | length // 0" "$config_file")
+                        for j in $(seq 0 $((attr_count - 1))); do
+                            local attr_name=$(yq eval ".entity_schemas[$i].attributes[$j].name" "$config_file")
+                            local attr_type=$(yq eval ".entity_schemas[$i].attributes[$j].type" "$config_file")
+                            local attr_unit=$(yq eval ".entity_schemas[$i].attributes[$j].unit // null" "$config_file")
+                            local attr_desc=$(yq eval ".entity_schemas[$i].attributes[$j].description // ''" "$config_file" | sed "s/'/''/g")
+                            local attr_nullable=$(yq eval ".entity_schemas[$i].attributes[$j].nullable // true" "$config_file")
+
+                            if [ "$attr_unit" = "null" ]; then
+                                attr_unit="NULL"
+                            else
+                                attr_unit="'$attr_unit'"
+                            fi
+
+                            echo "INSERT INTO data_dictionary.entity_schema_attributes (schema_id, attribute_name, attribute_type, unit, description, nullable, sort_order)"
+                            echo "SELECT id, '$attr_name', '$attr_type', $attr_unit, '$attr_desc', $attr_nullable, $j"
+                            echo "FROM data_dictionary.entity_schemas WHERE stream_id = '$stream_id' AND schema_name = '$schema_name';"
+                        done
+                        echo ""
+                        schema_count=$((schema_count + 1))
+                    done
+                fi
+
+                stream_count=$((stream_count + 1))
+            fi
+        done
+
+        echo "-- Update sync status"
+        echo "UPDATE data_dictionary.sync_status"
+        echo "SET completed_at = NOW(),"
+        echo "    status = 'success',"
+        echo "    streams_synced = (SELECT COUNT(*) FROM data_dictionary.streams),"
+        echo "    schemas_synced = (SELECT COUNT(*) FROM data_dictionary.entity_schemas),"
+        echo "    attributes_synced = (SELECT COUNT(*) FROM data_dictionary.entity_schema_attributes)"
+        echo "WHERE status = 'running' AND completed_at IS NULL;"
+        echo ""
+        echo "COMMIT;"
+
+    } > "$SQL_FILE"
+
+    # Execute sync
+    log "Executing sync..."
+    if docker exec -i pi5-timescaledb psql -U postgres -d ndp < "$SQL_FILE" > /dev/null 2>&1; then
+        log "Data Dictionary sync successful"
+        rm -f "$SQL_FILE"
+
+        # Show summary
+        docker exec pi5-timescaledb psql -U postgres -d ndp -c \
+            "SELECT streams_synced, schemas_synced, attributes_synced, completed_at FROM data_dictionary.sync_status ORDER BY id DESC LIMIT 1;"
+    else
+        error "Data Dictionary sync failed"
+        rm -f "$SQL_FILE"
+        return 1
+    fi
+}
+
 build() {
     log "Building Docker images (this may take 15-30 minutes on first run)..."
     dc build --progress=plain
@@ -144,7 +272,7 @@ status() {
     echo "  MQTT Broker: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:1883 2>/dev/null || echo 'N/A (TCP only)')"
     echo "  etcd:        $(docker exec etcd etcdctl endpoint health 2>/dev/null || echo 'Not running')"
     echo "  Air Quality: $(curl -s http://localhost:8080/health 2>/dev/null || echo 'Not running')"
-    echo "  DuckDB:      $(docker exec duckdb test -f /var/duckdb/grafana.db 2>/dev/null && echo 'Running (SQLite export OK)' || echo 'Not running')"
+    echo "  TimescaleDB: $(docker exec pi5-timescaledb pg_isready -U postgres -d ndp 2>/dev/null && echo 'Running' || echo 'Not running')"
     echo "  Grafana:     $(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health 2>/dev/null || echo 'Not running')"
     echo ""
 
@@ -239,6 +367,9 @@ case "${1:-deploy}" in
             error "Stream listing script not found"
         fi
         ;;
+    sync-dictionary)
+        sync_to_data_dictionary
+        ;;
     analytics)
         log "Starting analytics stack (DuckDB + Grafana)..."
         dc up -d duckdb
@@ -256,21 +387,22 @@ case "${1:-deploy}" in
         warn "To remove data: docker volume rm pi_duckdb_data pi_grafana_data"
         ;;
     *)
-        echo "Usage: $0 {deploy|start|stop|logs|status|update|build|sync|init-streams|list-streams|analytics|rollback}"
+        echo "Usage: $0 {deploy|start|stop|logs|status|update|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback}"
         echo ""
         echo "Commands:"
-        echo "  deploy       - Full deploy (build + start all services)"
-        echo "  start        - Start all services"
-        echo "  stop         - Stop all services"
-        echo "  logs         - View logs"
-        echo "  status       - Check service health and URLs"
-        echo "  update       - Pull latest and rebuild"
-        echo "  build        - Build Docker images"
-        echo "  sync         - Sync configuration to etcd"
-        echo "  init-streams - Initialize stream configurations"
-        echo "  list-streams - List configured streams"
-        echo "  analytics    - Start DuckDB + Grafana analytics stack"
-        echo "  rollback     - Stop and remove analytics stack"
+        echo "  deploy          - Full deploy (build + start all services)"
+        echo "  start           - Start all services"
+        echo "  stop            - Stop all services"
+        echo "  logs            - View logs"
+        echo "  status          - Check service health and URLs"
+        echo "  update          - Pull latest and rebuild"
+        echo "  build           - Build Docker images"
+        echo "  sync            - Sync configuration to etcd"
+        echo "  init-streams    - Initialize stream configurations"
+        echo "  list-streams    - List configured streams"
+        echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
+        echo "  analytics       - Start DuckDB + Grafana analytics stack"
+        echo "  rollback        - Stop and remove analytics stack"
         exit 1
         ;;
 esac

@@ -11,6 +11,8 @@
 
 This guide explains how to add a new data source type to the Neural Data Platform. A "source" is any system that provides data to be ingested (e.g., MQTT broker, HTTP API, webhook endpoint, file watcher).
 
+> **Note**: When adding new sources, also consider updating the stream's `entity_schemas` to document the data attributes for the Data Dictionary. See [HOW_TO_ADD_NEW_STREAM.md](./HOW_TO_ADD_NEW_STREAM.md#entity-schemas-data-dictionary---dp-002) for details.
+
 ### Prerequisites
 
 - Rust development environment

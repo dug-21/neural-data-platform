@@ -1,0 +1,309 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_NDP-TIMESCALEDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "${DS_NDP-TIMESCALEDB}"},
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) as total_streams FROM data_dictionary.streams WHERE enabled = true;",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Streams",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_NDP-TIMESCALEDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "${DS_NDP-TIMESCALEDB}"},
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) as total_schemas FROM data_dictionary.entity_schemas;",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Entity Schemas",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_NDP-TIMESCALEDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "${DS_NDP-TIMESCALEDB}"},
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) as total_attributes FROM data_dictionary.entity_schema_attributes;",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Attributes Defined",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_NDP-TIMESCALEDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"},
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "${DS_NDP-TIMESCALEDB}"},
+          "format": "table",
+          "rawSql": "SELECT stream_id, description, version, enabled, schema_count, updated_at FROM data_dictionary.stream_overview ORDER BY stream_id;",
+          "refId": "A"
+        }
+      ],
+      "title": "Stream Overview",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_NDP-TIMESCALEDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"},
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "${DS_NDP-TIMESCALEDB}"},
+          "format": "table",
+          "rawSql": "SELECT es.stream_id, es.schema_name, es.device_class, COUNT(esa.id) as attribute_count FROM data_dictionary.entity_schemas es LEFT JOIN data_dictionary.entity_schema_attributes esa ON es.id = esa.schema_id GROUP BY es.stream_id, es.schema_name, es.device_class ORDER BY es.stream_id, es.schema_name;",
+          "refId": "A"
+        }
+      ],
+      "title": "Entity Schemas",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_NDP-TIMESCALEDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"},
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 12},
+      "id": 6,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "${DS_NDP-TIMESCALEDB}"},
+          "format": "table",
+          "rawSql": "SELECT stream_id, schema_name, attribute_name, attribute_type, unit, attribute_description, nullable FROM data_dictionary.v_data_dictionary ORDER BY stream_id, schema_name, attribute_name;",
+          "refId": "A"
+        }
+      ],
+      "title": "Complete Data Dictionary",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_NDP-TIMESCALEDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"},
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 22},
+      "id": 7,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "${DS_NDP-TIMESCALEDB}"},
+          "format": "table",
+          "rawSql": "SELECT sync_type, status, streams_synced, schemas_synced, attributes_synced, started_at, completed_at FROM data_dictionary.sync_status ORDER BY id DESC LIMIT 10;",
+          "refId": "A"
+        }
+      ],
+      "title": "Sync History",
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["data-dictionary", "data-quality", "dp-002"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Data Dictionary & Quality",
+  "uid": "dp002-data-dictionary",
+  "version": 1,
+  "weekStart": ""
+}

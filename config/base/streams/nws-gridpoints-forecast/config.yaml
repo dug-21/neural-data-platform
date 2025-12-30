@@ -430,3 +430,87 @@ storage:
   batch_size: 200  # Batch larger for efficiency with high point count
   batch_timeout_secs: 60
   buffer_capacity: 2500
+
+# Entity schemas for data dictionary (DP-002)
+entity_schemas:
+  - schema_name: nws-gridpoints
+    description: Raw NWS gridpoint forecast data with comprehensive weather metrics
+    attributes:
+      - name: temperature
+        type: float
+        unit: celsius
+        description: Forecast temperature
+        nullable: true
+        range: [-50, 60]
+      - name: dewpoint
+        type: float
+        unit: celsius
+        description: Forecast dewpoint temperature
+        nullable: true
+        range: [-50, 60]
+      - name: max_temperature
+        type: float
+        unit: celsius
+        description: Daily maximum temperature
+        nullable: true
+        range: [-50, 60]
+      - name: min_temperature
+        type: float
+        unit: celsius
+        description: Daily minimum temperature
+        nullable: true
+        range: [-50, 60]
+      - name: apparent_temperature
+        type: float
+        unit: celsius
+        description: Feels-like temperature
+        nullable: true
+        range: [-60, 70]
+      - name: wind_speed
+        type: float
+        unit: km/h
+        description: Forecast wind speed
+        nullable: true
+        range: [0, 300]
+      - name: wind_direction
+        type: float
+        unit: degrees
+        description: Forecast wind direction
+        nullable: true
+        range: [0, 360]
+      - name: wind_gust
+        type: float
+        unit: km/h
+        description: Forecast wind gust speed
+        nullable: true
+        range: [0, 400]
+      - name: probability_of_precipitation
+        type: float
+        unit: percent
+        description: Precipitation probability
+        nullable: true
+        range: [0, 100]
+      - name: quantitative_precipitation
+        type: float
+        unit: mm
+        description: Quantitative precipitation forecast
+        nullable: true
+        range: [0, 500]
+      - name: sky_cover
+        type: float
+        unit: percent
+        description: Cloud cover percentage
+        nullable: true
+        range: [0, 100]
+      - name: relative_humidity
+        type: float
+        unit: percent
+        description: Relative humidity
+        nullable: true
+        range: [0, 100]
+      - name: visibility
+        type: float
+        unit: meters
+        description: Visibility distance
+        nullable: true
+        range: [0, 50000]

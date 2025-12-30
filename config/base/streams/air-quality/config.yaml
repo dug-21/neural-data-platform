@@ -89,3 +89,52 @@ storage:
   batch_size: 100
   batch_timeout_secs: 5
   buffer_capacity: 1000
+
+# Entity schemas for data dictionary (DP-002)
+entity_schemas:
+  - schema_name: airgradient
+    description: AirGradient indoor air quality sensors (AG One, AG Pro)
+    device_class: air_quality
+    attributes:
+      - name: pm25
+        type: float
+        unit: ug/m3
+        description: Particulate Matter 2.5 micrometers
+        nullable: false
+        range: [0, 1000]
+      - name: pm10
+        type: float
+        unit: ug/m3
+        description: Particulate Matter 10 micrometers
+        nullable: true
+        range: [0, 1000]
+      - name: co2
+        type: int
+        unit: ppm
+        description: Carbon Dioxide concentration
+        nullable: true
+        range: [400, 10000]
+      - name: temperature
+        type: float
+        unit: celsius
+        description: Ambient temperature
+        nullable: true
+        range: [-40, 85]
+      - name: humidity
+        type: float
+        unit: percent
+        description: Relative humidity
+        nullable: true
+        range: [0, 100]
+      - name: tvoc
+        type: int
+        unit: ppb
+        description: Total Volatile Organic Compounds
+        nullable: true
+        range: [0, 60000]
+      - name: nox
+        type: int
+        unit: ppb
+        description: Nitrogen Oxides index
+        nullable: true
+        range: [1, 500]

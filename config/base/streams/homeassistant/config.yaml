@@ -1,0 +1,135 @@
+# HomeAssistant Stream Configuration
+# DP-002: Entity states via MQTT Statestream
+stream_id: homeassistant
+description: Home Assistant entity states via MQTT Statestream
+version: "1.0.0"
+enabled: false  # Enable when HA integration is active
+retention_days: 365
+compression_after_days: 7
+partitioning_strategy: daily
+
+# Generic Bronze layer schema (captures all HA entities)
+fields:
+  - name: entity_id
+    type: string
+    nullable: false
+    description: Home Assistant entity identifier
+  - name: state
+    type: string
+    nullable: false
+    description: Current state value
+  - name: last_changed
+    type: timestamp
+    nullable: true
+    description: When state last changed
+  - name: last_updated
+    type: timestamp
+    nullable: true
+    description: When entity was last updated
+  - name: attributes
+    type: json
+    nullable: true
+    description: Entity-specific attributes
+
+sources:
+  - id: mqtt-statestream
+    type: mqtt
+    enabled: true
+    params:
+      broker_url: "mosquitto"
+      port: 1883
+      client_id: "ndp-homeassistant"
+      topic_pattern: "homeassistant/+/+/state"
+      qos: 1
+
+# Entity schemas for specific device types (data dictionary)
+entity_schemas:
+  # AirGradient sensors via Home Assistant
+  - schema_name: "sensor.airgradient_*"
+    description: AirGradient air quality sensors exposed through Home Assistant
+    device_class: air_quality
+    attributes:
+      - name: pm02
+        type: float
+        unit: ug/m3
+        description: Particulate Matter 2.5 (HA naming convention)
+        nullable: true
+        range: [0, 1000]
+      - name: pm10
+        type: float
+        unit: ug/m3
+        description: Particulate Matter 10
+        nullable: true
+        range: [0, 1000]
+      - name: atmp
+        type: float
+        unit: celsius
+        description: Ambient temperature
+        nullable: true
+        range: [-40, 85]
+      - name: rhum
+        type: float
+        unit: percent
+        description: Relative humidity
+        nullable: true
+        range: [0, 100]
+      - name: rco2
+        type: int
+        unit: ppm
+        description: CO2 concentration
+        nullable: true
+        range: [400, 10000]
+      - name: tvoc
+        type: int
+        unit: ppb
+        description: Total VOC index
+        nullable: true
+        range: [0, 60000]
+
+  # Window/door contact sensors
+  - schema_name: "binary_sensor.*_window*"
+    description: Window contact sensors (open/closed)
+    device_class: window
+    attributes:
+      - name: state
+        type: string
+        description: Window state (on=open, off=closed)
+        nullable: false
+      - name: device_class
+        type: string
+        description: Entity device class
+        nullable: true
+      - name: battery
+        type: int
+        unit: percent
+        description: Battery level
+        nullable: true
+        range: [0, 100]
+
+  # Temperature sensors
+  - schema_name: "sensor.*_temperature"
+    description: Temperature sensors from any device
+    device_class: temperature
+    attributes:
+      - name: state
+        type: float
+        unit: celsius
+        description: Temperature reading
+        nullable: false
+        range: [-40, 100]
+      - name: unit_of_measurement
+        type: string
+        description: Unit of measurement
+        nullable: true
+
+  # Humidity sensors
+  - schema_name: "sensor.*_humidity"
+    description: Humidity sensors from any device
+    device_class: humidity
+    attributes:
+      - name: state
+        type: float
+        unit: percent
+        description: Humidity reading
+        nullable: false
+        range: [0, 100]

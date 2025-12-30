@@ -119,3 +119,75 @@ storage:
   batch_size: 50
   batch_timeout_secs: 30
   buffer_capacity: 500
+
+# Entity schemas for data dictionary (DP-002)
+entity_schemas:
+  - schema_name: nws-weather
+    description: Outdoor weather data from OpenWeatherMap Current Weather API
+    attributes:
+      - name: temperature
+        type: float
+        unit: celsius
+        description: Current temperature
+        nullable: false
+        range: [-50, 60]
+      - name: feels_like
+        type: float
+        unit: celsius
+        description: Feels-like temperature
+        nullable: true
+        range: [-50, 60]
+      - name: pressure
+        type: float
+        unit: hpa
+        description: Atmospheric pressure at sea level
+        nullable: true
+        range: [800, 1200]
+      - name: humidity
+        type: float
+        unit: percent
+        description: Relative humidity
+        nullable: true
+        range: [0, 100]
+      - name: wind_speed
+        type: float
+        unit: m/s
+        description: Wind speed
+        nullable: true
+        range: [0, 100]
+      - name: wind_deg
+        type: float
+        unit: degrees
+        description: Wind direction in degrees
+        nullable: true
+        range: [0, 360]
+      - name: wind_gust
+        type: float
+        unit: m/s
+        description: Wind gust speed
+        nullable: true
+        range: [0, 150]
+      - name: clouds
+        type: float
+        unit: percent
+        description: Cloudiness percentage
+        nullable: true
+        range: [0, 100]
+      - name: visibility
+        type: float
+        unit: meters
+        description: Visibility distance
+        nullable: true
+        range: [0, 50000]
+      - name: rain_1h
+        type: float
+        unit: mm
+        description: Rain volume for last 1 hour
+        nullable: true
+        range: [0, 500]
+      - name: snow_1h
+        type: float
+        unit: mm
+        description: Snow volume for last 1 hour
+        nullable: true
+        range: [0, 500]
