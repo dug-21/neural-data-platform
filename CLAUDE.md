@@ -192,32 +192,31 @@ product/features/{phase}-{NNN}/
 ```
 
 **⚠️ WRONG Pattern (causes empty swarms):**
-```javascript
-// ❌ WRONG: Creates swarm then ignores it
-mcp__claude-flow__swarm_init({ topology: "hierarchical" })
-Task("Do work", "...", "ndp-rust-dev")  // Work happens OUTSIDE swarm!
+```bash
+# ❌ WRONG: Creates swarm then ignores it
+npx claude-flow swarm init --topology hierarchical
+Task("Do work", "...", "ndp-rust-dev")  # Work happens OUTSIDE swarm!
 ```
 
 **✅ CORRECT Pattern (work happens IN swarm):**
-```javascript
-// ✅ RIGHT: Full swarm lifecycle
-mcp__claude-flow__swarm_init({ topology: "hierarchical", maxAgents: 5 })
+```bash
+# ✅ RIGHT: Full swarm lifecycle
+npx claude-flow swarm init --topology hierarchical --max-agents 5
 
-// Spawn agents INTO the swarm
-mcp__claude-flow__agent_spawn({ type: "coordinator", name: "lead" })
-mcp__claude-flow__agent_spawn({ type: "coder", name: "rust-dev" })
-mcp__claude-flow__agent_spawn({ type: "analyst", name: "reviewer" })
+# Spawn agents INTO the swarm
+npx claude-flow agent spawn --type coordinator --name "lead"
+npx claude-flow agent spawn --type coder --name "rust-dev"
+npx claude-flow agent spawn --type analyst --name "reviewer"
 
-// Orchestrate work TO the swarm agents
-mcp__claude-flow__task_orchestrate({
-  task: "Implement TimescaleDB ETL pipeline with tests",
-  strategy: "adaptive",
-  priority: "high"
-})
+# Orchestrate work TO the swarm agents
+npx claude-flow task orchestrate \
+  --task "Implement TimescaleDB ETL pipeline with tests" \
+  --strategy adaptive \
+  --priority high
 
-// Monitor and retrieve results
-mcp__claude-flow__task_status({ taskId: "..." })
-mcp__claude-flow__task_results({ taskId: "...", format: "detailed" })
+# Monitor and retrieve results
+npx claude-flow task status --task-id "..."
+npx claude-flow task results --task-id "..." --format detailed
 ```
 
 ---
@@ -267,35 +266,58 @@ mcp__claude-flow__task_results({ taskId: "...", format: "detailed" })
 - Testing and debugging
 - **Task tool**: For independent parallel agents (no coordination needed)
 
-### MCP Swarm Tools (Full Execution Cycle):
-- **Swarm lifecycle**: `swarm_init` → `agent_spawn` → `task_orchestrate` → `task_results`
-- **Agents do actual work** when tasks are orchestrated to them
-- Memory management and shared state across agents
-- Performance tracking and monitoring
+### Claude-Flow CLI (Swarm Coordination):
+All swarm operations use `npx claude-flow` commands:
+```bash
+# Swarm lifecycle
+npx claude-flow swarm init --topology hierarchical --max-agents 5
+npx claude-flow agent spawn --type coordinator --name "lead"
+npx claude-flow task orchestrate --task "<task>" --strategy adaptive
+npx claude-flow task results --task-id "<id>"
+```
 
-### AgentDB Tools (Pattern Memory):
-- `npx agentdb query` - Retrieve patterns
-- `npx agentdb store-pattern` - Save patterns
-- `npx agentdb reflexion` - Record feedback
+### AgentDB CLI (Pattern Memory):
+All pattern operations use `npx agentdb` commands:
+```bash
+npx agentdb query --query "<search>" --k 5
+npx agentdb reflexion store "<session>" "<task>" <reward> <success> "<critique>"
+npx agentdb reflexion retrieve "<task>" --k 5
+```
 
 **KEY**: If you initialize a swarm, USE IT - orchestrate tasks to swarm agents, don't spawn separate Task agents.
 
 ---
 
 
-## MCP Tool Categories
+## Claude-Flow CLI Commands
 
-### Coordination
-`swarm_init`, `agent_spawn`, `task_orchestrate`
+### Swarm Coordination
+```bash
+npx claude-flow swarm init --topology <type> --max-agents <n>
+npx claude-flow agent spawn --type <type> --name "<name>"
+npx claude-flow task orchestrate --task "<task>" --strategy <strategy>
+```
 
 ### Monitoring
-`swarm_status`, `agent_list`, `agent_metrics`, `task_status`, `task_results`
+```bash
+npx claude-flow swarm status
+npx claude-flow agent list
+npx claude-flow task status --task-id "<id>"
+npx claude-flow task results --task-id "<id>" --format detailed
+```
 
-### Claude-flow Memory & Neural
-`memory_usage`, `memory_search`, `neural_status`, `neural_train`, `neural_patterns`
+### Memory Operations
+```bash
+npx claude-flow memory store "<key>" "<value>" --namespace <ns>
+npx claude-flow memory query "<pattern>" --namespace <ns>
+```
 
-### System
-`benchmark_run`, `features_detect`, `swarm_monitor`
+### AgentDB (Pattern Storage)
+```bash
+npx agentdb query --query "<search>" --k 5
+npx agentdb reflexion store "<session>" "<task>" <reward> <success> "<critique>"
+npx agentdb reflexion retrieve "<task>" --k 5
+```
 
 ---
 
@@ -305,31 +327,30 @@ mcp__claude-flow__task_results({ taskId: "...", format: "detailed" })
 
 Use swarms when you need coordination, shared state, and tracked progress:
 
-```javascript
-// Step 1: Initialize swarm
-mcp__claude-flow__swarm_init({ topology: "hierarchical", maxAgents: 6, strategy: "specialized" })
+```bash
+# Step 1: Initialize swarm
+npx claude-flow swarm init --topology hierarchical --max-agents 6 --strategy specialized
 
-// Step 2: Spawn specialized agents INTO the swarm
-mcp__claude-flow__agent_spawn({ type: "coordinator", name: "dp-lead" })
-mcp__claude-flow__agent_spawn({ type: "coder", name: "timescale-dev" })
-mcp__claude-flow__agent_spawn({ type: "coder", name: "parquet-dev" })
-mcp__claude-flow__agent_spawn({ type: "analyst", name: "feature-eng" })
-mcp__claude-flow__agent_spawn({ type: "tester", name: "qa" })
+# Step 2: Spawn specialized agents INTO the swarm
+npx claude-flow agent spawn --type coordinator --name "dp-lead"
+npx claude-flow agent spawn --type coder --name "timescale-dev"
+npx claude-flow agent spawn --type coder --name "parquet-dev"
+npx claude-flow agent spawn --type analyst --name "feature-eng"
+npx claude-flow agent spawn --type tester --name "qa"
 
-// Step 3: Orchestrate the work TO the swarm
-mcp__claude-flow__task_orchestrate({
-  task: "Implement Silver Layer: 1) Design TimescaleDB schema with hypertables, 2) Build Parquet ETL, 3) Create feature aggregations, 4) Write integration tests",
-  strategy: "adaptive",
-  priority: "high",
-  maxAgents: 4
-})
+# Step 3: Orchestrate the work TO the swarm
+npx claude-flow task orchestrate \
+  --task "Implement Silver Layer: 1) Design TimescaleDB schema with hypertables, 2) Build Parquet ETL, 3) Create feature aggregations, 4) Write integration tests" \
+  --strategy adaptive \
+  --priority high \
+  --max-agents 4
 
-// Step 4: Monitor progress
-mcp__claude-flow__swarm_status({})
-mcp__claude-flow__task_status({ detailed: true })
+# Step 4: Monitor progress
+npx claude-flow swarm status
+npx claude-flow task status --detailed
 
-// Step 5: Retrieve results when complete
-mcp__claude-flow__task_results({ taskId: "...", format: "detailed" })
+# Step 5: Retrieve results when complete
+npx claude-flow task results --task-id "..." --format detailed
 ```
 
 ### Example 2: Task Tool for Independent Work (Simple Parallel)
@@ -346,22 +367,21 @@ Use Task tool when agents don't need to coordinate:
 
 ### Example 3: New Feature Kickoff (Swarm + Branch)
 
-```javascript
-// Create feature branch first
-Bash "git checkout -b feature/dp-001"
+```bash
+# Create feature branch first
+git checkout -b feature/dp-001
 
-// Initialize coordinated swarm for feature
-mcp__claude-flow__swarm_init({ topology: "hierarchical", maxAgents: 4 })
-mcp__claude-flow__agent_spawn({ type: "coordinator", name: "scrum-master" })
-mcp__claude-flow__agent_spawn({ type: "architect", name: "designer" })
-mcp__claude-flow__agent_spawn({ type: "coder", name: "implementer" })
+# Initialize coordinated swarm for feature
+npx claude-flow swarm init --topology hierarchical --max-agents 4
+npx claude-flow agent spawn --type coordinator --name "scrum-master"
+npx claude-flow agent spawn --type architect --name "designer"
+npx claude-flow agent spawn --type coder --name "implementer"
 
-// Orchestrate SPARC workflow
-mcp__claude-flow__task_orchestrate({
-  task: "Initialize dp-001: Create feature directory, STATUS.md, specification docs, architecture ADRs",
-  strategy: "sequential",
-  priority: "high"
-})
+# Orchestrate SPARC workflow
+npx claude-flow task orchestrate \
+  --task "Initialize dp-001: Create feature directory, STATUS.md, specification docs, architecture ADRs" \
+  --strategy sequential \
+  --priority high
 ```
 
 ---
