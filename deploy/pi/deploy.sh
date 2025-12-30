@@ -90,13 +90,84 @@ sync_to_data_dictionary() {
         sleep 2
     done
 
-    # Check if yq is available
-    if ! command -v yq &> /dev/null; then
-        error "yq is required for sync-dictionary but not installed. Install with: sudo snap install yq"
-    fi
-
     local CONFIG_DIR="$REPO_ROOT/config/base/streams"
     local SQL_FILE="/tmp/data_dictionary_sync_$$.sql"
+
+    # Helper function to extract YAML values (compatible with both Python yq and Go yq)
+    # Falls back to grep/sed if yq is unavailable
+    yaml_get() {
+        local file="$1"
+        local key="$2"
+        local default="$3"
+        local result=""
+
+        if command -v yq &> /dev/null; then
+            # Detect which yq variant is installed
+            if yq --version 2>&1 | grep -q "mikefarah"; then
+                # Go yq (mikefarah/yq)
+                result=$(yq eval ".$key // \"$default\"" "$file" 2>/dev/null)
+            else
+                # Python yq (kislyuk/yq) - uses jq syntax
+                result=$(yq -r ".$key // \"$default\"" "$file" 2>/dev/null)
+            fi
+        fi
+
+        # Fallback to grep/sed if yq failed or not installed
+        if [ -z "$result" ] || [ "$result" = "null" ]; then
+            result=$(grep -E "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//' | tr -d '"' || echo "$default")
+        fi
+
+        # Return default if still empty
+        if [ -z "$result" ] || [ "$result" = "null" ]; then
+            echo "$default"
+        else
+            echo "$result"
+        fi
+    }
+
+    # Helper to get array length
+    yaml_array_len() {
+        local file="$1"
+        local key="$2"
+        local result=0
+
+        if command -v yq &> /dev/null; then
+            if yq --version 2>&1 | grep -q "mikefarah"; then
+                result=$(yq eval ".$key | length" "$file" 2>/dev/null || echo "0")
+            else
+                result=$(yq -r ".$key | length" "$file" 2>/dev/null || echo "0")
+            fi
+        fi
+
+        # Validate it's a number
+        if ! [[ "$result" =~ ^[0-9]+$ ]]; then
+            result=0
+        fi
+
+        echo "$result"
+    }
+
+    # Helper to get array item value
+    yaml_array_get() {
+        local file="$1"
+        local path="$2"
+        local default="$3"
+        local result=""
+
+        if command -v yq &> /dev/null; then
+            if yq --version 2>&1 | grep -q "mikefarah"; then
+                result=$(yq eval "$path // \"$default\"" "$file" 2>/dev/null)
+            else
+                result=$(yq -r "$path // \"$default\"" "$file" 2>/dev/null)
+            fi
+        fi
+
+        if [ -z "$result" ] || [ "$result" = "null" ]; then
+            echo "$default"
+        else
+            echo "$result"
+        fi
+    }
 
     # Generate SQL
     {
@@ -124,11 +195,11 @@ sync_to_data_dictionary() {
                 local stream_id=$(basename "$config_dir")
                 local config_file="$config_dir/config.yaml"
 
-                # Extract stream metadata
-                local description=$(yq eval '.description // ""' "$config_file" | sed "s/'/''/g")
-                local version=$(yq eval '.version // "1.0.0"' "$config_file")
-                local enabled=$(yq eval '.enabled // true' "$config_file")
-                local retention_days=$(yq eval '.retention_days // 90' "$config_file")
+                # Extract stream metadata using helper functions
+                local description=$(yaml_get "$config_file" "description" "" | sed "s/'/''/g")
+                local version=$(yaml_get "$config_file" "version" "1.0.0")
+                local enabled=$(yaml_get "$config_file" "enabled" "true")
+                local retention_days=$(yaml_get "$config_file" "retention_days" "90")
 
                 echo "-- Stream: $stream_id"
                 echo "INSERT INTO data_dictionary.streams (stream_id, description, version, enabled, retention_days)"
@@ -136,14 +207,14 @@ sync_to_data_dictionary() {
                 echo ""
 
                 # Process entity_schemas if present
-                local es_count=$(yq eval '.entity_schemas | length // 0' "$config_file")
+                local es_count=$(yaml_array_len "$config_file" "entity_schemas")
                 if [ "$es_count" -gt 0 ]; then
                     for i in $(seq 0 $((es_count - 1))); do
-                        local schema_name=$(yq eval ".entity_schemas[$i].schema_name" "$config_file" | sed "s/'/''/g")
-                        local schema_desc=$(yq eval ".entity_schemas[$i].description // ''" "$config_file" | sed "s/'/''/g")
-                        local device_class=$(yq eval ".entity_schemas[$i].device_class // null" "$config_file")
+                        local schema_name=$(yaml_array_get "$config_file" ".entity_schemas[$i].schema_name" "" | sed "s/'/''/g")
+                        local schema_desc=$(yaml_array_get "$config_file" ".entity_schemas[$i].description" "" | sed "s/'/''/g")
+                        local device_class=$(yaml_array_get "$config_file" ".entity_schemas[$i].device_class" "null")
 
-                        if [ "$device_class" = "null" ]; then
+                        if [ "$device_class" = "null" ] || [ -z "$device_class" ]; then
                             device_class="NULL"
                         else
                             device_class="'$device_class'"
@@ -153,15 +224,15 @@ sync_to_data_dictionary() {
                         echo "VALUES ('$stream_id', '$schema_name', '$schema_desc', $device_class);"
 
                         # Process attributes
-                        local attr_count=$(yq eval ".entity_schemas[$i].attributes | length // 0" "$config_file")
+                        local attr_count=$(yaml_array_len "$config_file" "entity_schemas[$i].attributes")
                         for j in $(seq 0 $((attr_count - 1))); do
-                            local attr_name=$(yq eval ".entity_schemas[$i].attributes[$j].name" "$config_file")
-                            local attr_type=$(yq eval ".entity_schemas[$i].attributes[$j].type" "$config_file")
-                            local attr_unit=$(yq eval ".entity_schemas[$i].attributes[$j].unit // null" "$config_file")
-                            local attr_desc=$(yq eval ".entity_schemas[$i].attributes[$j].description // ''" "$config_file" | sed "s/'/''/g")
-                            local attr_nullable=$(yq eval ".entity_schemas[$i].attributes[$j].nullable // true" "$config_file")
+                            local attr_name=$(yaml_array_get "$config_file" ".entity_schemas[$i].attributes[$j].name" "")
+                            local attr_type=$(yaml_array_get "$config_file" ".entity_schemas[$i].attributes[$j].type" "String")
+                            local attr_unit=$(yaml_array_get "$config_file" ".entity_schemas[$i].attributes[$j].unit" "null")
+                            local attr_desc=$(yaml_array_get "$config_file" ".entity_schemas[$i].attributes[$j].description" "" | sed "s/'/''/g")
+                            local attr_nullable=$(yaml_array_get "$config_file" ".entity_schemas[$i].attributes[$j].nullable" "true")
 
-                            if [ "$attr_unit" = "null" ]; then
+                            if [ "$attr_unit" = "null" ] || [ -z "$attr_unit" ]; then
                                 attr_unit="NULL"
                             else
                                 attr_unit="'$attr_unit'"
