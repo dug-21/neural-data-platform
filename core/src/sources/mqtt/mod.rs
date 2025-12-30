@@ -4,6 +4,16 @@
 //! - Auto-reconnect with exponential backoff
 //! - Backpressure handling with bounded queues
 //! - Topic pattern substitution for multiple sensors
+//! - Multi-subscription support with per-subscription parser configuration
+
+mod router;
+mod subscription;
+
+// Re-export subscription types
+pub use subscription::{SubscriptionConfig, SubscriptionError};
+// Re-export router types
+pub use router::{mqtt_pattern_to_regex, RouteEntry, RouterError, TopicRouter};
+// ConfigError is re-exported below after its definition
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -21,29 +31,152 @@ use crate::parsers::Parser;
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 
 /// Configuration for MQTT source
+///
+/// Supports both new multi-subscription format and legacy single-topic format.
+///
+/// # New Format (Recommended)
+///
+/// ```yaml
+/// broker_url: "mosquitto"
+/// port: 1883
+/// subscriptions:
+///   - stream_id: air-quality
+///     topic_pattern: "airgradient/readings/+"
+///   - stream_id: homeassistant
+///     topic_pattern: "homeassistant/+/+/state"
+/// ```
+///
+/// # Legacy Format (Deprecated)
+///
+/// ```yaml
+/// broker_url: "mosquitto"
+/// port: 1883
+/// topic_pattern: "airgradient/readings/{SERIAL_NUMBER}"
+/// ```
 #[derive(Debug, Clone)]
 pub struct MqttConfig {
     pub broker_url: String,
     pub port: u16,
     pub client_id: String,
-    pub topic_pattern: String,
+    /// Legacy topic pattern - deprecated, use subscriptions instead
+    #[deprecated(since = "0.2.0", note = "Use subscriptions field instead")]
+    pub topic_pattern: Option<String>,
+    /// New multi-subscription support
+    pub subscriptions: Vec<SubscriptionConfig>,
     pub qos: QoS,
     pub reconnect_delay: Duration,
     pub max_reconnect_delay: Duration,
     pub buffer_capacity: usize,
+    /// Default stream ID for legacy topic_pattern
+    pub default_stream_id: String,
+}
+
+/// Errors from MqttConfig validation
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConfigError {
+    NoSubscriptions,
+    DuplicateStreamId(String),
+    InvalidSubscription { stream_id: String, error: String },
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoSubscriptions => write!(
+                f,
+                "no subscriptions configured (use subscriptions array or legacy topic_pattern)"
+            ),
+            Self::DuplicateStreamId(id) => write!(f, "duplicate stream_id: {}", id),
+            Self::InvalidSubscription { stream_id, error } => {
+                write!(f, "invalid subscription '{}': {}", stream_id, error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+impl MqttConfig {
+    /// Get effective subscriptions, handling both new and legacy formats.
+    ///
+    /// This method provides backward compatibility:
+    /// - If `subscriptions` is non-empty, returns those
+    /// - If `topic_pattern` is set (legacy), converts to a subscription
+    /// - Logs deprecation warning for legacy format
+    #[allow(deprecated)]
+    pub fn get_subscriptions(&self) -> Vec<SubscriptionConfig> {
+        if !self.subscriptions.is_empty() {
+            return self.subscriptions.clone();
+        }
+
+        // Legacy fallback
+        if let Some(ref pattern) = self.topic_pattern {
+            warn!(
+                topic_pattern = %pattern,
+                "Using deprecated topic_pattern field. Migrate to subscriptions array."
+            );
+
+            // Convert {SERIAL_NUMBER} placeholder to MQTT wildcard
+            let mqtt_pattern = pattern.replace("{SERIAL_NUMBER}", "+");
+
+            vec![SubscriptionConfig::new(
+                &self.default_stream_id,
+                mqtt_pattern,
+            )]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No subscriptions are configured (neither subscriptions nor topic_pattern)
+    /// - Stream IDs are not unique
+    /// - Any subscription is invalid
+    #[allow(deprecated)]
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        let subs = self.get_subscriptions();
+
+        if subs.is_empty() {
+            return Err(ConfigError::NoSubscriptions);
+        }
+
+        // Check for duplicate stream IDs
+        let mut seen_ids = std::collections::HashSet::new();
+        for sub in &subs {
+            if !seen_ids.insert(&sub.stream_id) {
+                return Err(ConfigError::DuplicateStreamId(sub.stream_id.clone()));
+            }
+
+            // Validate each subscription
+            sub.validate()
+                .map_err(|e| ConfigError::InvalidSubscription {
+                    stream_id: sub.stream_id.clone(),
+                    error: e.to_string(),
+                })?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for MqttConfig {
+    #[allow(deprecated)]
     fn default() -> Self {
         Self {
             broker_url: "localhost".to_string(),
             port: 1883,
             client_id: "neural-data-platform".to_string(),
-            topic_pattern: "airgradient/readings/{SERIAL_NUMBER}".to_string(),
+            topic_pattern: Some("airgradient/readings/{SERIAL_NUMBER}".to_string()),
+            subscriptions: Vec::new(),
             qos: QoS::AtLeastOnce,
             reconnect_delay: Duration::from_secs(1),
             max_reconnect_delay: Duration::from_secs(30),
             buffer_capacity: 1000,
+            default_stream_id: "default".to_string(),
         }
     }
 }
@@ -53,7 +186,9 @@ pub struct MqttSource {
     config: MqttConfig,
     parser: Arc<dyn Parser + Send + Sync>,
     client: Option<AsyncClient>,
+    #[allow(dead_code)]
     receiver: Arc<Mutex<mpsc::Receiver<TimeSeriesPoint>>>,
+    #[allow(dead_code)]
     sender: mpsc::Sender<TimeSeriesPoint>,
     is_running: Arc<Mutex<bool>>,
     connection_healthy: Arc<Mutex<bool>>,
@@ -78,6 +213,7 @@ impl MqttSource {
     }
 
     /// Parse MQTT payload into time series points using injected parser
+    #[allow(dead_code)]
     fn parse_payload(&self, payload: &[u8]) -> CoreResult<Vec<TimeSeriesPoint>> {
         let json: Value = serde_json::from_slice(payload)
             .map_err(|e| CoreError::Source(format!("Failed to parse MQTT payload: {}", e)))?;
@@ -96,8 +232,10 @@ impl MqttSource {
     }
 
     /// Process MQTT events - runs in a spawned task
+    #[allow(clippy::too_many_arguments)]
     async fn process_events(
         config: MqttConfig,
+        router: TopicRouter,
         parser: Arc<dyn Parser + Send + Sync>,
         mut event_loop: EventLoop,
         client: AsyncClient,
@@ -107,13 +245,13 @@ impl MqttSource {
     ) -> CoreResult<()> {
         let mut reconnect_attempt = 0_u32;
 
-        // Subscribe to topics
-        let topic = config.topic_pattern.replace("{SERIAL_NUMBER}", "+");
-        client
-            .subscribe(&topic, config.qos)
-            .await
-            .map_err(|e| CoreError::Source(format!("Failed to subscribe: {}", e)))?;
-        info!("Subscribed to topic: {}", topic);
+        // Subscribe to all topic patterns from router
+        for pattern in router.topic_patterns() {
+            client.subscribe(pattern, config.qos).await.map_err(|e| {
+                CoreError::Source(format!("Failed to subscribe to {}: {}", pattern, e))
+            })?;
+            info!("Subscribed to topic pattern: {}", pattern);
+        }
 
         while *is_running.lock().await {
             match event_loop.poll().await {
@@ -121,23 +259,55 @@ impl MqttSource {
                     debug!("Received MQTT message on topic: {}", publish.topic);
                     reconnect_attempt = 0;
 
-                    // Parse payload using injected parser
-                    match serde_json::from_slice::<Value>(&publish.payload) {
-                        Ok(json) => {
-                            let timestamp = Utc::now();
-                            match parser.parse(&json, timestamp) {
-                                Ok(points) => {
-                                    // Add to cache for fetch()
-                                    let mut cache = cached_points.lock().await;
-                                    cache.extend(points);
+                    // Route topic to subscription
+                    match router.route(&publish.topic) {
+                        Some(route) => {
+                            // Parse payload using injected parser (future: use route.parser_config)
+                            match serde_json::from_slice::<Value>(&publish.payload) {
+                                Ok(json) => {
+                                    let timestamp = Utc::now();
+                                    match parser.parse(&json, timestamp) {
+                                        Ok(mut points) => {
+                                            // Tag points with stream_id and topic
+                                            for point in &mut points {
+                                                point.tags.insert(
+                                                    "stream_id".to_string(),
+                                                    route.stream_id.clone(),
+                                                );
+                                                point.tags.insert(
+                                                    "topic".to_string(),
+                                                    publish.topic.clone(),
+                                                );
+                                            }
+                                            // Add to cache for fetch()
+                                            let mut cache = cached_points.lock().await;
+                                            cache.extend(points);
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                topic = %publish.topic,
+                                                stream_id = %route.stream_id,
+                                                error = %e,
+                                                "Failed to parse MQTT payload"
+                                            );
+                                        }
+                                    }
                                 }
                                 Err(e) => {
-                                    error!("Failed to parse MQTT payload: {}", e);
+                                    error!(
+                                        topic = %publish.topic,
+                                        error = %e,
+                                        "Failed to parse JSON from MQTT payload"
+                                    );
                                 }
                             }
                         }
-                        Err(e) => {
-                            error!("Failed to parse JSON from MQTT payload: {}", e);
+                        None => {
+                            // Dead letter - no route matched
+                            warn!(
+                                topic = %publish.topic,
+                                "No route found for topic (dead letter)"
+                            );
                         }
                     }
                 }
@@ -168,9 +338,11 @@ impl MqttSource {
                     match Self::create_connection(&config) {
                         Ok((new_client, new_event_loop)) => {
                             event_loop = new_event_loop;
-                            // Subscribe again
-                            if let Err(e) = new_client.subscribe(&topic, config.qos).await {
-                                error!("Failed to resubscribe: {}", e);
+                            // Subscribe again to all patterns
+                            for pattern in router.topic_patterns() {
+                                if let Err(e) = new_client.subscribe(pattern, config.qos).await {
+                                    error!(pattern = %pattern, "Failed to resubscribe: {}", e);
+                                }
                             }
                             *connection_healthy.lock().await = true;
                         }
@@ -201,9 +373,11 @@ impl MqttSource {
                     match Self::create_connection(&config) {
                         Ok((new_client, new_event_loop)) => {
                             event_loop = new_event_loop;
-                            // Subscribe again
-                            if let Err(e) = new_client.subscribe(&topic, config.qos).await {
-                                error!("Failed to resubscribe: {}", e);
+                            // Subscribe again to all patterns
+                            for pattern in router.topic_patterns() {
+                                if let Err(e) = new_client.subscribe(pattern, config.qos).await {
+                                    error!(pattern = %pattern, "Failed to resubscribe: {}", e);
+                                }
                             }
                             *connection_healthy.lock().await = true;
                         }
@@ -225,6 +399,11 @@ impl MqttSource {
 
         *self.is_running.lock().await = true;
 
+        // Create router from config subscriptions
+        let subscriptions = self.config.get_subscriptions();
+        let router = TopicRouter::new(subscriptions)
+            .map_err(|e| CoreError::Config(format!("Failed to create topic router: {}", e)))?;
+
         // Create initial connection
         let (client, event_loop) = Self::create_connection(&self.config)?;
         self.client = Some(client.clone());
@@ -240,6 +419,7 @@ impl MqttSource {
         tokio::spawn(async move {
             if let Err(e) = Self::process_events(
                 config,
+                router,
                 parser,
                 event_loop,
                 client,
@@ -493,13 +673,18 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_topic_pattern_substitution() {
         let config = MqttConfig {
-            topic_pattern: "airgradient/readings/{SERIAL_NUMBER}".to_string(),
+            topic_pattern: Some("airgradient/readings/{SERIAL_NUMBER}".to_string()),
             ..Default::default()
         };
 
-        let topic = config.topic_pattern.replace("{SERIAL_NUMBER}", "+");
+        let topic = config
+            .topic_pattern
+            .as_ref()
+            .unwrap()
+            .replace("{SERIAL_NUMBER}", "+");
         assert_eq!(topic, "airgradient/readings/+");
     }
 
@@ -801,5 +986,167 @@ mod tests {
             .find(|p| p.tags.get("metric") == Some(&"negativeInt".to_string()))
             .unwrap();
         assert_eq!(neg_point.value, -29.0);
+    }
+
+    // ==========================================================================
+    // MqttConfig Tests (Phase 3)
+    // ==========================================================================
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_get_subscriptions_from_new_format() {
+        let config = MqttConfig {
+            subscriptions: vec![
+                SubscriptionConfig::new("air-quality", "airgradient/readings/+"),
+                SubscriptionConfig::new("homeassistant", "homeassistant/+/+/state"),
+            ],
+            topic_pattern: None,
+            ..Default::default()
+        };
+
+        let subs = config.get_subscriptions();
+        assert_eq!(subs.len(), 2);
+        assert_eq!(subs[0].stream_id, "air-quality");
+        assert_eq!(subs[1].stream_id, "homeassistant");
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_get_subscriptions_from_legacy_format() {
+        let config = MqttConfig {
+            subscriptions: Vec::new(),
+            topic_pattern: Some("airgradient/readings/{SERIAL_NUMBER}".to_string()),
+            default_stream_id: "air-quality".to_string(),
+            ..Default::default()
+        };
+
+        let subs = config.get_subscriptions();
+        assert_eq!(subs.len(), 1);
+        assert_eq!(subs[0].stream_id, "air-quality");
+        // {SERIAL_NUMBER} should be converted to +
+        assert_eq!(subs[0].topic_pattern, "airgradient/readings/+");
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_get_subscriptions_prefers_new_format() {
+        // When both are set, new format takes precedence
+        let config = MqttConfig {
+            subscriptions: vec![SubscriptionConfig::new("new-stream", "new/topic/+")],
+            topic_pattern: Some("legacy/topic/+".to_string()),
+            default_stream_id: "legacy-stream".to_string(),
+            ..Default::default()
+        };
+
+        let subs = config.get_subscriptions();
+        assert_eq!(subs.len(), 1);
+        assert_eq!(subs[0].stream_id, "new-stream");
+        assert_eq!(subs[0].topic_pattern, "new/topic/+");
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_get_subscriptions_empty_when_nothing_configured() {
+        let config = MqttConfig {
+            subscriptions: Vec::new(),
+            topic_pattern: None,
+            ..Default::default()
+        };
+
+        let subs = config.get_subscriptions();
+        assert!(subs.is_empty());
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_validate_success_with_new_format() {
+        let config = MqttConfig {
+            subscriptions: vec![
+                SubscriptionConfig::new("stream1", "topic/+"),
+                SubscriptionConfig::new("stream2", "topic/#"),
+            ],
+            topic_pattern: None,
+            ..Default::default()
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_validate_success_with_legacy_format() {
+        let config = MqttConfig {
+            subscriptions: Vec::new(),
+            topic_pattern: Some("airgradient/readings/+".to_string()),
+            default_stream_id: "default".to_string(),
+            ..Default::default()
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_validate_error_no_subscriptions() {
+        let config = MqttConfig {
+            subscriptions: Vec::new(),
+            topic_pattern: None,
+            ..Default::default()
+        };
+
+        let result = config.validate();
+        assert!(matches!(result, Err(ConfigError::NoSubscriptions)));
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_validate_error_duplicate_stream_id() {
+        let config = MqttConfig {
+            subscriptions: vec![
+                SubscriptionConfig::new("same-id", "topic/a/+"),
+                SubscriptionConfig::new("same-id", "topic/b/+"),
+            ],
+            topic_pattern: None,
+            ..Default::default()
+        };
+
+        let result = config.validate();
+        assert!(matches!(result, Err(ConfigError::DuplicateStreamId(id)) if id == "same-id"));
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)]
+    async fn test_config_validate_error_invalid_subscription() {
+        let config = MqttConfig {
+            subscriptions: vec![SubscriptionConfig {
+                stream_id: "".to_string(), // Invalid: empty
+                topic_pattern: "test/+".to_string(),
+                parser: None,
+                enabled: true,
+            }],
+            topic_pattern: None,
+            ..Default::default()
+        };
+
+        let result = config.validate();
+        assert!(matches!(result, Err(ConfigError::InvalidSubscription { .. })));
+    }
+
+    #[test]
+    fn test_config_error_display() {
+        let no_subs = ConfigError::NoSubscriptions;
+        assert!(no_subs.to_string().contains("no subscriptions"));
+
+        let duplicate = ConfigError::DuplicateStreamId("test".to_string());
+        assert!(duplicate.to_string().contains("duplicate"));
+        assert!(duplicate.to_string().contains("test"));
+
+        let invalid = ConfigError::InvalidSubscription {
+            stream_id: "bad".to_string(),
+            error: "empty field".to_string(),
+        };
+        assert!(invalid.to_string().contains("invalid subscription"));
+        assert!(invalid.to_string().contains("bad"));
+        assert!(invalid.to_string().contains("empty field"));
     }
 }

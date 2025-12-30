@@ -11,9 +11,7 @@
 //! - Graceful error handling with warnings
 
 use crate::error::{CoreError, CoreResult};
-use crate::parsers::config::{
-    ColumnMapping, ColumnOrientedConfig, ParserConfig, TimestampFormat,
-};
+use crate::parsers::config::{ColumnMapping, ColumnOrientedConfig, ParserConfig, TimestampFormat};
 use crate::parsers::traits::Parser;
 use crate::traits::TimeSeriesPoint;
 use chrono::{DateTime, Utc};
@@ -185,11 +183,7 @@ impl ColumnOrientedParser {
 }
 
 impl Parser for ColumnOrientedParser {
-    fn parse(
-        &self,
-        payload: &Value,
-        timestamp: DateTime<Utc>,
-    ) -> CoreResult<Vec<TimeSeriesPoint>> {
+    fn parse(&self, payload: &Value, timestamp: DateTime<Utc>) -> CoreResult<Vec<TimeSeriesPoint>> {
         // Extract location ID
         let location_id = self.extract_location_id(payload)?;
 
@@ -610,9 +604,9 @@ mod tests {
         let columns = vec![ColumnMapping {
             metric_path: "temperature".to_string(),
             field_name: "temp_c".to_string(),
-            values_path: None, // Should default to "values"
+            values_path: None,    // Should default to "values"
             timestamp_path: None, // Should default to "validTime"
-            value_path: None,  // Should default to "value"
+            value_path: None,     // Should default to "value"
         }];
 
         let parser = create_test_parser("properties", columns);

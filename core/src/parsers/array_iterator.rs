@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use tracing::{debug, warn};
 
 /// Configuration for array iterator parser
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ArrayIteratorConfig {
     /// Path to the array in the JSON (e.g., "properties.periods")
     pub array_path: String,
@@ -43,7 +43,7 @@ pub struct ArrayIteratorConfig {
 }
 
 /// Metadata tag extracted from shared response fields
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct MetadataTagMapping {
     /// JSON path to the metadata value (e.g., "properties.generatedAt")
     pub path: String,
@@ -57,7 +57,7 @@ pub struct MetadataTagMapping {
 /// Unlike metadata_tags which are stored in tags (and may not be persisted),
 /// metadata_metrics emit actual metric rows with the value stored in the value column.
 /// This is useful for timestamps that need to be queryable for analytics.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct MetadataMetricMapping {
     /// JSON path to the metadata value (e.g., "properties.updateTime")
     pub path: String,
@@ -75,7 +75,7 @@ pub struct MetadataMetricMapping {
 }
 
 /// How to extract a numeric value from a metadata field
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MetadataValueType {
     /// Parse as ISO 8601 timestamp, emit epoch seconds
@@ -86,7 +86,7 @@ pub enum MetadataValueType {
 }
 
 /// Mapping configuration for extracting a field from each array element
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ElementMapping {
     /// JSON path within the element (e.g., "temperature", "windSpeed")
     pub path: String,
@@ -112,7 +112,7 @@ pub struct ElementMapping {
 }
 
 /// String parsing configuration using regex
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct StringParseConfig {
     /// Regex pattern to match (e.g., r"^(\d+)\s*(?:to\s*(\d+)\s*)?mph$")
     pub pattern: String,

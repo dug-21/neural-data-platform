@@ -129,16 +129,19 @@ mod tests {
     use std::time::Duration;
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_mqtt_handler_creation() {
         let config = MqttConfig {
             broker_url: "localhost".to_string(),
             port: 1883,
             client_id: "test-handler".to_string(),
-            topic_pattern: "test/+".to_string(),
+            topic_pattern: Some("test/+".to_string()),
+            subscriptions: Vec::new(),
             qos: rumqttc::QoS::AtLeastOnce,
             reconnect_delay: Duration::from_secs(1),
             max_reconnect_delay: Duration::from_secs(10),
             buffer_capacity: 100,
+            default_stream_id: "test".to_string(),
         };
 
         let (sender, _receiver) = mpsc::channel(100);

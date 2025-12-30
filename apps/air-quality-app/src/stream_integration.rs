@@ -90,15 +90,17 @@ async fn load_mqtt_config(client: &ConfigClient) -> Result<MqttConfig, ConfigErr
         broker_url,
         port,
         client_id,
-        topic_pattern,
+        topic_pattern: Some(topic_pattern.clone()),
+        subscriptions: Vec::new(),
         qos,
         reconnect_delay_secs,
         max_reconnect_delay_secs,
         buffer_capacity,
+        default_stream_id: "air-quality".to_string(),
     };
 
     debug!(
-        "Loaded MQTT config: broker={}:{}, topic={}",
+        "Loaded MQTT config: broker={}:{}, topic={:?}",
         mqtt_config.broker_url, mqtt_config.port, mqtt_config.topic_pattern
     );
 

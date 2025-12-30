@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Configuration for a parser instance
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ParserConfig {
     /// Parser type identifier
     pub parser_type: ParserType,
@@ -56,7 +56,7 @@ impl Default for ParserConfig {
 }
 
 /// Parser type enumeration
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ParserType {
     /// Extract all numeric fields from flat JSON object
@@ -72,7 +72,7 @@ pub enum ParserType {
 }
 
 /// Field mapping for JsonPathParser
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct FieldMapping {
     /// JSON path to extract value (e.g., "main.temp", "list[0].components.pm2_5")
     pub path: String,
@@ -87,7 +87,7 @@ pub struct FieldMapping {
 }
 
 /// Mapping for a single column/metric in ColumnOrientedParser
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ColumnMapping {
     /// Path within metrics base (e.g., "temperature" for NWS)
     pub metric_path: String,
@@ -109,7 +109,7 @@ pub struct ColumnMapping {
 }
 
 /// Configuration for column-oriented parser
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ColumnOrientedConfig {
     /// Base path to metrics container (e.g., "properties" for NWS)
     pub metrics_base_path: String,
@@ -126,7 +126,7 @@ pub struct ColumnOrientedConfig {
 }
 
 /// Timestamp format variants for column-oriented parser
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TimestampFormat {
     /// NWS format: "2025-12-23T00:00:00+00:00/PT1H"
@@ -142,7 +142,7 @@ pub enum TimestampFormat {
 }
 
 /// Unit conversion configuration
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct UnitConversion {
     /// Source unit identifier
     pub from: String,
@@ -173,7 +173,7 @@ impl UnitConversion {
 }
 
 /// Conversion formula types
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ConversionFormula {
     /// Linear: (value * scale) + offset

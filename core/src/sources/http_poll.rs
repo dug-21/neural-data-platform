@@ -860,7 +860,10 @@ impl GenericHttpPollingSource {
 
     /// Start the source
     pub async fn start(&mut self) -> CoreResult<()> {
-        let enabled_endpoints: Vec<_> = self.config.endpoints.iter()
+        let enabled_endpoints: Vec<_> = self
+            .config
+            .endpoints
+            .iter()
             .filter(|e| e.enabled)
             .map(|e| e.endpoint_id.as_str())
             .collect();
@@ -868,9 +871,7 @@ impl GenericHttpPollingSource {
 
         info!(
             "Starting generic HTTP polling source with {} endpoints: {:?} (interval: {:?})",
-            enabled_count,
-            enabled_endpoints,
-            self.config.poll_interval
+            enabled_count, enabled_endpoints, self.config.poll_interval
         );
         if enabled_count == 0 {
             return Err(CoreError::Source(

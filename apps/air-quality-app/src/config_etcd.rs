@@ -58,9 +58,10 @@ async fn load_config_from_client(
             .await
             .unwrap_or_else(|_| "air-quality-app".to_string()),
         topic_pattern: client
-            .get_with_env("/mqtt/topic_pattern", "AIR_QUALITY")
+            .get_with_env::<String>("/mqtt/topic_pattern", "AIR_QUALITY")
             .await
-            .unwrap_or_else(|_| "airgradient/readings/+".to_string()),
+            .ok(),
+        subscriptions: Vec::new(), // Will be populated from YAML or subscriptions keys
         qos: client
             .get_with_env("/mqtt/qos", "AIR_QUALITY")
             .await
@@ -77,6 +78,7 @@ async fn load_config_from_client(
             .get_with_env("/mqtt/buffer_capacity", "AIR_QUALITY")
             .await
             .unwrap_or(1000),
+        default_stream_id: "air-quality".to_string(),
     };
 
     let storage = StorageConfig {
@@ -141,16 +143,41 @@ pub struct ServerConfig {
     pub port: u16,
 }
 
+/// Subscription configuration for MQTT multi-subscription support
+#[derive(Debug, Clone, Deserialize)]
+pub struct SubscriptionConfig {
+    pub stream_id: String,
+    pub topic_pattern: String,
+    #[serde(default = "default_true_etcd")]
+    pub enabled: bool,
+}
+
+fn default_true_etcd() -> bool {
+    true
+}
+
+fn default_stream_id_etcd() -> String {
+    "air-quality".to_string()
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MqttConfig {
     pub broker_url: String,
     pub port: u16,
     pub client_id: String,
-    pub topic_pattern: String,
+    /// Legacy single topic pattern - deprecated, use subscriptions instead
+    #[serde(default)]
+    pub topic_pattern: Option<String>,
+    /// New multi-subscription support
+    #[serde(default)]
+    pub subscriptions: Vec<SubscriptionConfig>,
     pub qos: u8,
     pub reconnect_delay_secs: u64,
     pub max_reconnect_delay_secs: u64,
     pub buffer_capacity: usize,
+    /// Default stream ID for legacy topic_pattern
+    #[serde(default = "default_stream_id_etcd")]
+    pub default_stream_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

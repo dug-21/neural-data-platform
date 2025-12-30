@@ -13,13 +13,12 @@ pub mod json_path;
 pub mod traits;
 
 pub use array_iterator::{
-    ArrayIteratorConfig, ArrayIteratorParser, ElementMapping, MetadataTagMapping,
-    StringParseConfig,
+    ArrayIteratorConfig, ArrayIteratorParser, ElementMapping, MetadataTagMapping, StringParseConfig,
 };
 pub use column_oriented::ColumnOrientedParser;
 pub use config::{
-    ColumnMapping, ColumnOrientedConfig, ConversionFormula, FieldMapping, ParserConfig,
-    ParserType, TimestampFormat, UnitConversion,
+    ColumnMapping, ColumnOrientedConfig, ConversionFormula, FieldMapping, ParserConfig, ParserType,
+    TimestampFormat, UnitConversion,
 };
 pub use factory::create_parser_from_config;
 pub use flat_json::FlatJsonParser;

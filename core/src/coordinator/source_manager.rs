@@ -102,8 +102,7 @@ impl SourceManager {
         let topic_pattern = params
             .get("topic_pattern")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| CoreError::Config("Missing topic_pattern for MQTT source".to_string()))?
-            .to_string();
+            .map(|s| s.to_string());
 
         let qos = match params.get("qos").and_then(|v| v.as_u64()).unwrap_or(1) {
             0 => QoS::AtMostOnce,
@@ -127,15 +126,24 @@ impl SourceManager {
             .and_then(|v| v.as_u64())
             .unwrap_or(1000) as usize;
 
+        let default_stream_id = params
+            .get("stream_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("default")
+            .to_string();
+
+        #[allow(deprecated)]
         let mqtt_config = MqttConfig {
             broker_url,
             port,
             client_id,
             topic_pattern,
+            subscriptions: Vec::new(),
             qos,
             reconnect_delay: std::time::Duration::from_secs(reconnect_delay_secs),
             max_reconnect_delay: std::time::Duration::from_secs(max_reconnect_delay_secs),
             buffer_capacity,
+            default_stream_id,
         };
 
         // Extract parser configuration
@@ -397,7 +405,7 @@ impl SourceManager {
                 ],
                 field_mappings: None,
                 array_config: None,
-            column_config: None,
+                column_config: None,
                 default_tags: [("source".to_string(), default_source.to_string())]
                     .into_iter()
                     .collect(),

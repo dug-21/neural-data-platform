@@ -585,7 +585,7 @@ impl SourceManager {
                 field_mappings: None,
                 default_tags: std::collections::HashMap::new(),
                 array_config: None,
-            column_config: None,
+                column_config: None,
             }
         };
 
@@ -640,8 +640,7 @@ impl SourceManager {
             .params
             .get("topic_pattern")
             .and_then(|v| v.as_str())
-            .unwrap_or("airgradient/readings/+")
-            .to_string();
+            .map(|s| s.to_string());
 
         let client_id = source_config
             .params
@@ -680,15 +679,18 @@ impl SourceManager {
             .and_then(|v| v.as_u64())
             .unwrap_or(30);
 
+        #[allow(deprecated)]
         Ok(MqttConfig {
             broker_url,
             port,
             client_id,
             topic_pattern,
+            subscriptions: Vec::new(), // Using legacy topic_pattern for backward compatibility
             qos,
             reconnect_delay: std::time::Duration::from_secs(reconnect_delay_secs),
             max_reconnect_delay: std::time::Duration::from_secs(max_reconnect_delay_secs),
             buffer_capacity,
+            default_stream_id: stream_id.to_string(),
         })
     }
 

@@ -1,7 +1,7 @@
 //! Data source implementations for ingesting time series data
 //!
 //! This module provides different strategies for ingesting data:
-//! - MQTT: Real-time streaming from MQTT brokers
+//! - MQTT: Real-time streaming from MQTT brokers with multi-subscription support
 //! - HTTP Polling: Periodic polling of HTTP endpoints
 //! - Merge: Combining and deduplicating data from multiple sources
 //! - Parsers: Parse external API responses into TimeSeriesPoint format
@@ -17,5 +17,8 @@ pub use http_poll::{
     ResponseParser, RetryConfig, SensorConfig,
 };
 pub use merge::{MergeConfig, ReadingMerger};
-pub use mqtt::{MqttConfig, MqttSource};
+pub use mqtt::{
+    mqtt_pattern_to_regex, ConfigError, MqttConfig, MqttSource, RouteEntry, RouterError,
+    SubscriptionConfig, SubscriptionError, TopicRouter,
+};
 pub use parsers::{AirPollutionParser, WeatherParser};

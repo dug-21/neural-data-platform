@@ -15,16 +15,41 @@ pub struct ServerConfig {
     pub port: u16,
 }
 
+/// Subscription configuration for MQTT multi-subscription support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionConfig {
+    pub stream_id: String,
+    pub topic_pattern: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttConfig {
     pub broker_url: String,
     pub port: u16,
     pub client_id: String,
-    pub topic_pattern: String,
+    /// Legacy single topic pattern - deprecated, use subscriptions instead
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topic_pattern: Option<String>,
+    /// New multi-subscription support
+    #[serde(default)]
+    pub subscriptions: Vec<SubscriptionConfig>,
     pub qos: u8,
     pub reconnect_delay_secs: u64,
     pub max_reconnect_delay_secs: u64,
     pub buffer_capacity: usize,
+    /// Default stream ID for legacy topic_pattern
+    #[serde(default = "default_stream_id")]
+    pub default_stream_id: String,
+}
+
+fn default_stream_id() -> String {
+    "air-quality".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,11 +81,13 @@ impl AppConfig {
                 broker_url: "localhost".to_string(),
                 port: 1883,
                 client_id: "air-quality-app".to_string(),
-                topic_pattern: "airgradient/readings/+".to_string(),
+                topic_pattern: Some("airgradient/readings/+".to_string()),
+                subscriptions: Vec::new(),
                 qos: 1,
                 reconnect_delay_secs: 1,
                 max_reconnect_delay_secs: 30,
                 buffer_capacity: 1000,
+                default_stream_id: "air-quality".to_string(),
             },
             storage: StorageConfig {
                 base_path: "./data/parquet".to_string(),
@@ -159,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_yaml() {
+    fn test_from_yaml_legacy() {
         let yaml_content = r#"
 server:
   host: "127.0.0.1"
@@ -181,7 +208,7 @@ storage:
 "#;
 
         let temp_dir = std::env::temp_dir();
-        let temp_file = temp_dir.join("test_config.yaml");
+        let temp_file = temp_dir.join("test_config_legacy.yaml");
         let mut file = std::fs::File::create(&temp_file).unwrap();
         file.write_all(yaml_content.as_bytes()).unwrap();
 
@@ -190,7 +217,7 @@ storage:
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.mqtt.broker_url, "broker.example.com");
         assert_eq!(config.mqtt.port, 1883);
-        assert_eq!(config.mqtt.topic_pattern, "test/topic/+");
+        assert_eq!(config.mqtt.topic_pattern, Some("test/topic/+".to_string()));
         assert_eq!(config.mqtt.qos, 2);
         assert_eq!(config.mqtt.reconnect_delay_secs, 5);
         assert_eq!(config.mqtt.max_reconnect_delay_secs, 60);
@@ -199,6 +226,51 @@ storage:
         assert_eq!(config.storage.wal_enabled, false);
         assert_eq!(config.storage.batch_size, 50);
         assert_eq!(config.storage.batch_timeout_secs, 10);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_from_yaml_with_subscriptions() {
+        let yaml_content = r#"
+server:
+  host: "127.0.0.1"
+  port: 8080
+mqtt:
+  broker_url: "broker.example.com"
+  port: 1883
+  client_id: "test-client"
+  subscriptions:
+    - stream_id: air-quality
+      topic_pattern: "airgradient/readings/+"
+    - stream_id: homeassistant
+      topic_pattern: "homeassistant/+/+/state"
+      enabled: false
+  qos: 1
+  reconnect_delay_secs: 5
+  max_reconnect_delay_secs: 60
+  buffer_capacity: 2000
+storage:
+  base_path: "/data/parquet"
+  wal_enabled: true
+  batch_size: 50
+  batch_timeout_secs: 10
+"#;
+
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_config_subs.yaml");
+        let mut file = std::fs::File::create(&temp_file).unwrap();
+        file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = AppConfig::from_yaml(&temp_file).unwrap();
+        assert_eq!(config.mqtt.subscriptions.len(), 2);
+        assert_eq!(config.mqtt.subscriptions[0].stream_id, "air-quality");
+        assert_eq!(config.mqtt.subscriptions[0].topic_pattern, "airgradient/readings/+");
+        assert!(config.mqtt.subscriptions[0].enabled);
+        assert_eq!(config.mqtt.subscriptions[1].stream_id, "homeassistant");
+        assert!(!config.mqtt.subscriptions[1].enabled);
+        // topic_pattern should be None when using subscriptions
+        assert!(config.mqtt.topic_pattern.is_none());
 
         std::fs::remove_file(temp_file).ok();
     }
@@ -251,11 +323,13 @@ storage:
             broker_url: "test.broker.com".to_string(),
             port: 1883,
             client_id: "test-client".to_string(),
-            topic_pattern: "test/+".to_string(),
+            topic_pattern: Some("test/+".to_string()),
+            subscriptions: Vec::new(),
             qos: 1,
             reconnect_delay_secs: 2,
             max_reconnect_delay_secs: 60,
             buffer_capacity: 500,
+            default_stream_id: "test".to_string(),
         };
 
         assert_eq!(config.get_reconnect_delay(), Duration::from_secs(2));
@@ -270,11 +344,13 @@ storage:
             broker_url: "test".to_string(),
             port: 1883,
             client_id: "test".to_string(),
-            topic_pattern: "test/+".to_string(),
+            topic_pattern: Some("test/+".to_string()),
+            subscriptions: Vec::new(),
             qos: 0,
             reconnect_delay_secs: 1,
             max_reconnect_delay_secs: 30,
             buffer_capacity: 100,
+            default_stream_id: "test".to_string(),
         };
         assert!(matches!(config_qos0.get_qos(), QoS::AtMostOnce));
 

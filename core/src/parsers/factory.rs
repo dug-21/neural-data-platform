@@ -53,7 +53,9 @@ pub fn create_parser_from_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsers::config::{ColumnMapping, ColumnOrientedConfig, FieldMapping, TimestampFormat};
+    use crate::parsers::config::{
+        ColumnMapping, ColumnOrientedConfig, FieldMapping, TimestampFormat,
+    };
     use std::collections::HashMap;
 
     #[test]
