@@ -16,4 +16,5 @@ datasources:
     isDefault: true
     editable: true
     jsonData:
-      path: /duckdb/neural_platform.db
+      # Use in-memory DuckDB - dashboards query Parquet files directly via read_parquet()
+      path: ":memory:"
