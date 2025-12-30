@@ -198,7 +198,7 @@ pub struct SourceConfig {
     pub enabled: bool,
 
     /// Source-specific parameters
-    #[serde(flatten)]
+    #[serde(default)]
     pub params: HashMap<String, serde_json::Value>,
 }
 
