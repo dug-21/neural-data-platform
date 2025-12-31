@@ -654,6 +654,8 @@ async fn test_concurrent_writes_different_locations() {
                 location_id: format!("concurrent-{}", i),
                 value: i as f64,
                 tags: HashMap::new(),
+                ndp_id: None,
+                context: None,
             };
             store_clone.write_batch(vec![point]).await
         });

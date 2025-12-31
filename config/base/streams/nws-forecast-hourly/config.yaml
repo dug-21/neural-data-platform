@@ -56,15 +56,17 @@ fields:
 sources:
   - type: http_poll
     enabled: true
-    ndp_id: "nws-forecast-hourly-http-001"
+    ndp_id: "weather-nws-001"
     context:
-      provider: nws
-      api: forecast_hourly
-      grid_office: JAX
-      grid_x: 80
-      grid_y: 50
-      location: ksgj
-      environment: outdoor
+      source_type:
+        provider: nws
+        purpose: forecast_hourly
+        grid_office: JAX
+        station: ksgj
+      location:
+        coordinates: [29.95838,-81.30878]
+        type: outdoor
+        path: beachhouse
     poll_interval_secs: 3600  # 1 hour (NWS updates hourly)
     timeout_secs: 30
     retry_attempts: 3

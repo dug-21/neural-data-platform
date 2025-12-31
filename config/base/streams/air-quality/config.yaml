@@ -52,10 +52,13 @@ fields:
 sources:
   - type: mqtt
     enabled: true
-    ndp_id: "air-quality-mqtt-001"
+    ndp_id: "aq_airgradient_1"
     context:
       device_type: airgradient
-      location: home
+      location:
+        coordinates: [29.95838,-81.30878]
+        type: indoor
+        path: /beachhouse/livingroom
       environment: indoor
     broker_url: "mosquitto"
     port: 1883

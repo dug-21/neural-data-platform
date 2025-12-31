@@ -66,12 +66,15 @@ fields:
 sources:
   - type: http_poll
     enabled: true
-    ndp_id: "outdoor-weather-http-001"
+    ndp_id: "weather-owm-002"
     context:
-      provider: openweathermap
-      api: current_weather
-      location: home
-      environment: outdoor
+      source_type:
+        provider: openweathermap
+        purpose: current_weather
+      location:
+        coordinates: [29.95838,-81.30878]
+        type: outdoor
+        path: beachhouse
     poll_interval_secs: 600
     timeout_secs: 30
     parser_name: openweathermap_current_weather

@@ -107,13 +107,17 @@ fields:
 sources:
   - type: http_poll
     enabled: true
-    ndp_id: "nws-observations-http-001"
+    ndp_id: "weather-nws-003"
     context:
-      provider: nws
-      api: observations
-      station_id: KSGJ
-      location: ksgj
-      environment: outdoor
+      source_type:
+        provider: nws
+        purpose: current_weather
+        grid_office: JAX
+        station: ksgj
+      location:
+        coordinates: [29.95838,-81.30878]
+        type: outdoor
+        path: beachhouse
     poll_interval_secs: 300  # 5 minutes (NWS updates hourly but we check frequently)
     timeout_secs: 30
     retry_attempts: 3
