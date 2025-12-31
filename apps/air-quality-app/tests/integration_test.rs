@@ -127,6 +127,8 @@ async fn test_multi_location_partitioning() {
             location_id: format!("location-{}", i),
             value: i as f64 * 10.0,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
         store.write_batch(vec![point]).await.unwrap();
     }
