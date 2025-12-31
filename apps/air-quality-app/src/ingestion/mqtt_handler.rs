@@ -33,6 +33,25 @@ impl MqttHandler {
         config: MqttConfig,
         sender: mpsc::Sender<TimeSeriesPoint>,
     ) -> Result<Self, CoreError> {
+        Self::with_context(config, sender, None, None).await
+    }
+
+    /// Create a new MQTT handler with ndp_id and context (AIR-009)
+    ///
+    /// # Arguments
+    /// * `config` - MQTT configuration (broker, port, topic pattern, etc.)
+    /// * `sender` - Channel sender for forwarding points to storage pipeline
+    /// * `ndp_id` - Optional stable source identifier
+    /// * `context` - Optional mutable context attributes
+    ///
+    /// # Errors
+    /// Returns error if MQTT source fails to start
+    pub async fn with_context(
+        config: MqttConfig,
+        sender: mpsc::Sender<TimeSeriesPoint>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
+    ) -> Result<Self, CoreError> {
         info!(
             "Initializing MQTT handler with broker: {}:{}",
             config.broker_url, config.port
@@ -60,8 +79,8 @@ impl MqttHandler {
         let parser = create_parser_from_config(parser_config)
             .map_err(|e| CoreError::Config(format!("Failed to create parser: {}", e)))?;
 
-        // Start the MQTT source (connects and begins receiving messages)
-        let mut source = MqttSource::new(config, parser);
+        // Start the MQTT source with ndp_id and context (AIR-009)
+        let mut source = MqttSource::with_context(config, parser, ndp_id, context);
         source.start().await?;
 
         info!("MQTT handler started successfully");

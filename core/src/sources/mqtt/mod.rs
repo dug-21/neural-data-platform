@@ -27,7 +27,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
-use crate::parsers::Parser;
+use crate::parsers::{ParseContext, Parser};
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 
 /// Configuration for MQTT source
@@ -193,11 +193,25 @@ pub struct MqttSource {
     is_running: Arc<Mutex<bool>>,
     connection_healthy: Arc<Mutex<bool>>,
     cached_points: Arc<Mutex<Vec<TimeSeriesPoint>>>,
+    /// AIR-009: Stable source identifier
+    ndp_id: Option<String>,
+    /// AIR-009: Mutable context attributes
+    context: Option<serde_json::Value>,
 }
 
 impl MqttSource {
     /// Create a new MQTT source with injected parser
     pub fn new(config: MqttConfig, parser: Box<dyn Parser + Send + Sync>) -> Self {
+        Self::with_context(config, parser, None, None)
+    }
+
+    /// Create a new MQTT source with ndp_id and context (AIR-009)
+    pub fn with_context(
+        config: MqttConfig,
+        parser: Box<dyn Parser + Send + Sync>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
+    ) -> Self {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         Self {
@@ -209,6 +223,8 @@ impl MqttSource {
             is_running: Arc::new(Mutex::new(false)),
             connection_healthy: Arc::new(Mutex::new(false)),
             cached_points: Arc::new(Mutex::new(Vec::new())),
+            ndp_id,
+            context,
         }
     }
 
@@ -219,7 +235,8 @@ impl MqttSource {
             .map_err(|e| CoreError::Source(format!("Failed to parse MQTT payload: {}", e)))?;
 
         let timestamp = Utc::now();
-        self.parser.parse(&json, timestamp)
+        let parse_context = ParseContext::new(self.ndp_id.clone(), self.context.clone());
+        self.parser.parse_with_context(&json, timestamp, &parse_context)
     }
 
     /// Create a new connection and return the event loop
@@ -242,6 +259,8 @@ impl MqttSource {
         cached_points: Arc<Mutex<Vec<TimeSeriesPoint>>>,
         is_running: Arc<Mutex<bool>>,
         connection_healthy: Arc<Mutex<bool>>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
     ) -> CoreResult<()> {
         let mut reconnect_attempt = 0_u32;
 
@@ -262,11 +281,12 @@ impl MqttSource {
                     // Route topic to subscription
                     match router.route(&publish.topic) {
                         Some(route) => {
-                            // Parse payload using injected parser (future: use route.parser_config)
+                            // Parse payload using injected parser with context (AIR-009)
                             match serde_json::from_slice::<Value>(&publish.payload) {
                                 Ok(json) => {
                                     let timestamp = Utc::now();
-                                    match parser.parse(&json, timestamp) {
+                                    let parse_context = ParseContext::new(ndp_id.clone(), context.clone());
+                                    match parser.parse_with_context(&json, timestamp, &parse_context) {
                                         Ok(mut points) => {
                                             // Tag points with stream_id and topic
                                             for point in &mut points {
@@ -415,6 +435,10 @@ impl MqttSource {
         let is_running = self.is_running.clone();
         let connection_healthy = self.connection_healthy.clone();
 
+        // Clone AIR-009 context for background task
+        let ndp_id = self.ndp_id.clone();
+        let context = self.context.clone();
+
         // Spawn background task for event processing
         tokio::spawn(async move {
             if let Err(e) = Self::process_events(
@@ -426,6 +450,8 @@ impl MqttSource {
                 cached_points,
                 is_running,
                 connection_healthy,
+                ndp_id,
+                context,
             )
             .await
             {

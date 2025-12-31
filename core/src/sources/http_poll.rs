@@ -20,7 +20,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
-use crate::parsers::Parser;
+use crate::parsers::{ParseContext, Parser};
 use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
 
 /// Authentication method for HTTP endpoints
@@ -351,6 +351,10 @@ pub struct HttpPollingSource {
     sender: mpsc::Sender<TimeSeriesPoint>,
     is_running: Arc<Mutex<bool>>,
     last_successful_poll: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    /// AIR-009: Stable source identifier
+    ndp_id: Option<String>,
+    /// AIR-009: Mutable context attributes
+    context: Option<serde_json::Value>,
 }
 
 impl HttpPollingSource {
@@ -358,6 +362,16 @@ impl HttpPollingSource {
     pub fn new(
         config: HttpPollingConfig,
         parser: Box<dyn Parser + Send + Sync>,
+    ) -> CoreResult<Self> {
+        Self::with_context(config, parser, None, None)
+    }
+
+    /// Create a new HTTP polling source with ndp_id and context (AIR-009)
+    pub fn with_context(
+        config: HttpPollingConfig,
+        parser: Box<dyn Parser + Send + Sync>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
     ) -> CoreResult<Self> {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
@@ -374,6 +388,8 @@ impl HttpPollingSource {
             sender,
             is_running: Arc::new(Mutex::new(false)),
             last_successful_poll: Arc::new(Mutex::new(HashMap::new())),
+            ndp_id,
+            context,
         })
     }
 
@@ -404,7 +420,8 @@ impl HttpPollingSource {
             .map_err(|e| CoreError::Source(format!("Failed to parse JSON: {}", e)))?;
 
         let timestamp = Utc::now();
-        self.parser.parse(&json, timestamp)
+        let parse_context = ParseContext::new(self.ndp_id.clone(), self.context.clone());
+        self.parser.parse_with_context(&json, timestamp, &parse_context)
     }
 
     /// Poll all sensors
@@ -557,6 +574,8 @@ impl HttpPollingSource {
             sender: self.sender.clone(),
             is_running: self.is_running.clone(),
             last_successful_poll: self.last_successful_poll.clone(),
+            ndp_id: self.ndp_id.clone(),
+            context: self.context.clone(),
         };
 
         // Spawn background polling task
@@ -617,6 +636,10 @@ pub struct GenericHttpPollingSource {
     is_running: Arc<Mutex<bool>>,
     last_successful_poll: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     endpoint_retry_counts: Arc<Mutex<HashMap<String, u32>>>,
+    /// AIR-009: Stable source identifier
+    ndp_id: Option<String>,
+    /// AIR-009: Mutable context attributes
+    context: Option<serde_json::Value>,
 }
 
 impl GenericHttpPollingSource {
@@ -624,6 +647,16 @@ impl GenericHttpPollingSource {
     pub fn new(
         config: GenericHttpPollingConfig,
         parser: Box<dyn Parser + Send + Sync>,
+    ) -> CoreResult<Self> {
+        Self::with_context(config, parser, None, None)
+    }
+
+    /// Create a new generic HTTP polling source with ndp_id and context (AIR-009)
+    pub fn with_context(
+        config: GenericHttpPollingConfig,
+        parser: Box<dyn Parser + Send + Sync>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
     ) -> CoreResult<Self> {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
@@ -641,6 +674,8 @@ impl GenericHttpPollingSource {
             is_running: Arc::new(Mutex::new(false)),
             last_successful_poll: Arc::new(Mutex::new(HashMap::new())),
             endpoint_retry_counts: Arc::new(Mutex::new(HashMap::new())),
+            ndp_id,
+            context,
         })
     }
 
@@ -740,8 +775,9 @@ impl GenericHttpPollingSource {
 
                         let timestamp = Utc::now();
 
-                        // Use injected parser (Parser trait)
-                        let points = self.parser.parse(&json, timestamp).map_err(|e| {
+                        // Use injected parser with context (AIR-009)
+                        let parse_context = ParseContext::new(self.ndp_id.clone(), self.context.clone());
+                        let points = self.parser.parse_with_context(&json, timestamp, &parse_context).map_err(|e| {
                             PollingError::permanent(
                                 &endpoint.endpoint_id,
                                 format!("Failed to parse response: {}", e),
@@ -891,6 +927,8 @@ impl GenericHttpPollingSource {
             is_running: self.is_running.clone(),
             last_successful_poll: self.last_successful_poll.clone(),
             endpoint_retry_counts: self.endpoint_retry_counts.clone(),
+            ndp_id: self.ndp_id.clone(),
+            context: self.context.clone(),
         };
 
         tokio::spawn(async move {

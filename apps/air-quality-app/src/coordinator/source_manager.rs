@@ -185,6 +185,10 @@ impl SourceManager {
                 let source_id_clone = source_id.clone();
                 let cancel_clone = cancel_token.clone();
 
+                // AIR-009: Extract ndp_id and context from source config
+                let ndp_id = source_config.ndp_id.clone();
+                let context = source_config.context.clone();
+
                 if has_parser {
                     // Parse GenericHttpPollingConfig and ParserConfig for external APIs (NWS, OpenWeatherMap, etc.)
                     let (http_config, parser_config) =
@@ -198,6 +202,8 @@ impl SourceManager {
                             parser_config,
                             ingestion_sender,
                             cancel_clone,
+                            ndp_id,
+                            context,
                         )
                         .await
                         {
@@ -215,6 +221,8 @@ impl SourceManager {
                             config,
                             ingestion_sender,
                             cancel_clone,
+                            ndp_id,
+                            context,
                         )
                         .await
                         {
@@ -240,6 +248,10 @@ impl SourceManager {
                 let source_id_clone = source_id.clone();
                 let cancel_clone = cancel_token.clone();
 
+                // AIR-009: Extract ndp_id and context from source config
+                let ndp_id = source_config.ndp_id.clone();
+                let context = source_config.context.clone();
+
                 // Parse MQTT config from source params
                 let config = self.parse_mqtt_config(stream_id, source_config)?;
 
@@ -250,6 +262,8 @@ impl SourceManager {
                         config,
                         ingestion_sender,
                         cancel_clone,
+                        ndp_id,
+                        context,
                     )
                     .await
                     {
@@ -372,6 +386,8 @@ impl SourceManager {
         config: HttpPollingConfig,
         ingestion_sender: mpsc::Sender<(String, String, TimeSeriesPoint)>,
         cancel_token: CancellationToken,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
     ) -> Result<(), SourceManagerError> {
         info!("Starting HTTP polling source for stream {}", stream_id);
 
@@ -398,7 +414,8 @@ impl SourceManager {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
         })?;
 
-        let mut source = HttpPollingSource::new(config, parser)
+        // AIR-009: Create source with ndp_id and context
+        let mut source = HttpPollingSource::with_context(config, parser, ndp_id, context)
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
@@ -701,6 +718,8 @@ impl SourceManager {
         config: MqttConfig,
         ingestion_sender: mpsc::Sender<(String, String, TimeSeriesPoint)>,
         cancel_token: CancellationToken,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
     ) -> Result<(), SourceManagerError> {
         info!("Starting MQTT source for stream {}", stream_id);
 
@@ -727,7 +746,8 @@ impl SourceManager {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
         })?;
 
-        let mut source = MqttSource::new(config, parser);
+        // AIR-009: Create source with ndp_id and context
+        let mut source = MqttSource::with_context(config, parser, ndp_id, context);
         source
             .start()
             .await
@@ -777,6 +797,8 @@ impl SourceManager {
         parser_config: ParserConfig,
         ingestion_sender: mpsc::Sender<(String, String, TimeSeriesPoint)>,
         cancel_token: CancellationToken,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
     ) -> Result<(), SourceManagerError> {
         info!(
             "Starting generic HTTP polling source for stream {} with parser type {:?}",
@@ -788,7 +810,8 @@ impl SourceManager {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
         })?;
 
-        let mut source = GenericHttpPollingSource::new(config, parser)
+        // AIR-009: Create source with ndp_id and context
+        let mut source = GenericHttpPollingSource::with_context(config, parser, ndp_id, context)
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
