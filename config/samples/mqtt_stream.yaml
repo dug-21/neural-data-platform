@@ -1,0 +1,301 @@
+# =============================================================================
+# NDP Stream Configuration - MQTT Source Template
+# =============================================================================
+#
+# This template documents the complete structure for MQTT-based streams.
+# Copy this file to config/base/streams/{stream-id}/config.yaml and customize.
+#
+# Key Concepts:
+#   - stream_id: Unique identifier for the data stream (kebab-case)
+#   - ndp_id: Stable, NDP-assigned identifier for each source instance
+#   - metadata: Mutable attributes denormalized at write time
+#   - fields: Schema definition for the data records
+#   - entity_schemas: Data dictionary for device/entity types
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# STREAM IDENTIFICATION
+# -----------------------------------------------------------------------------
+
+# Unique identifier for this stream (kebab-case, immutable once created)
+stream_id: my-sensor-stream
+
+# Human-readable description of what this stream captures
+description: Indoor air quality sensors via MQTT
+
+# Semantic version for schema changes (major.minor.patch)
+version: "1.0.0"
+
+# Whether this stream is actively collecting data
+enabled: true
+
+# -----------------------------------------------------------------------------
+# DATA RETENTION
+# -----------------------------------------------------------------------------
+
+# How long to retain data before archival/deletion (days)
+retention_days: 365
+
+# When to apply compression to reduce storage (days after ingestion)
+compression_after_days: 7
+
+# How to partition data files: daily | hourly | monthly
+partitioning_strategy: daily
+
+# -----------------------------------------------------------------------------
+# SCHEMA DEFINITION (fields)
+# -----------------------------------------------------------------------------
+# Defines the structure of data records in this stream.
+# Two formats supported:
+#   - Dict format: { field_name: { type, unit, description, ... } }
+#   - List format: [ { name, type, unit, description, ... } ]
+#
+# Field properties:
+#   - type: string | int | float | bool | timestamp
+#   - unit: measurement unit (optional)
+#   - nullable: whether null values are allowed (default: true)
+#   - description: human-readable explanation
+#   - range: [min, max] for validation (optional)
+
+fields:
+  temperature:
+    type: float
+    unit: celsius
+    nullable: true
+    description: Ambient air temperature
+    range: [-40.0, 85.0]
+
+  humidity:
+    type: float
+    unit: percent
+    nullable: true
+    description: Relative humidity
+    range: [0.0, 100.0]
+
+  pm25:
+    type: float
+    unit: ug/m3
+    nullable: false
+    description: Particulate Matter 2.5 micrometers
+    range: [0.0, 1000.0]
+
+  co2:
+    type: int
+    unit: ppm
+    nullable: true
+    description: Carbon dioxide concentration
+    range: [400, 10000]
+
+# -----------------------------------------------------------------------------
+# DATA SOURCES
+# -----------------------------------------------------------------------------
+# Sources define where data comes from and how to connect.
+# Each source has:
+#   - ndp_id: Stable identifier assigned by NDP (never changes)
+#   - metadata: Mutable attributes (location, device info, etc.)
+#   - Connection-specific settings (broker, topics, etc.)
+#   - Parser configuration for data transformation
+
+sources:
+  # -------------------------------------------------------------------------
+  # Source: MQTT Subscription
+  # -------------------------------------------------------------------------
+  - type: mqtt
+    enabled: true
+
+    # -----------------------------------------------------------------------
+    # NDP IDENTIFIER (REQUIRED)
+    # -----------------------------------------------------------------------
+    # Stable, NDP-assigned identifier for this source instance.
+    # - Never changes, even if device moves or metadata updates
+    # - Used to link all data from this source across time
+    # - Format: lowercase alphanumeric with hyphens
+    ndp_id: airgradient-office-001
+
+    # -----------------------------------------------------------------------
+    # CONTEXT (OPTIONAL)
+    # -----------------------------------------------------------------------
+    # Context is written with every record from this source.
+    # Think of it like Amazon event envelopes - context travels with the data.
+    #
+    # When context changes (e.g., device moves rooms), new records get
+    # the new context while historical records retain point-in-time values.
+    #
+    # RULE: If it should be queryable on the record, put it in context.
+    #       If it's just for connecting/fetching, keep it outside.
+    #
+    # All fields are optional. Structure is flattened at ingestion
+    # (except coordinates, which stays as a tuple).
+
+    context:
+      # Location follows a standardized schema (all fields optional):
+      location:
+        # GPS coordinates as [latitude, longitude] tuple
+        # Stored as-is (not flattened) for geospatial queries
+        coordinates: [29.95838, -81.30878]
+
+        # Environment type: indoor | outdoor
+        type: indoor
+
+        # Hierarchical path: house/zone/room (flexible depth)
+        # Use forward slashes for hierarchy, supports any depth
+        path: home/upstairs/office
+
+      # Domain-specific context (examples - add whatever you need):
+      device_type: airgradient
+      model: ONE-V9
+
+      # Tags for filtering/grouping
+      tags:
+        - primary
+        - calibrated
+
+    # -----------------------------------------------------------------------
+    # MQTT CONNECTION SETTINGS
+    # -----------------------------------------------------------------------
+
+    # MQTT broker hostname or IP
+    broker_url: mosquitto
+
+    # MQTT broker port (default: 1883, TLS: 8883)
+    port: 1883
+
+    # Client ID for MQTT connection (must be unique per broker)
+    client_id: ndp-my-sensor-stream
+
+    # Topic pattern to subscribe to
+    # Wildcards: + (single level), # (multi-level)
+    topic_pattern: "sensors/+/readings"
+
+    # Quality of Service: 0 (at most once), 1 (at least once), 2 (exactly once)
+    qos: 1
+
+    # Reconnection settings
+    reconnect_delay_secs: 1
+    max_reconnect_delay_secs: 30
+
+    # Internal buffer for messages awaiting processing
+    buffer_capacity: 1000
+
+    # -----------------------------------------------------------------------
+    # PARSER CONFIGURATION
+    # -----------------------------------------------------------------------
+    # Transforms raw MQTT payloads into structured records.
+
+    parser:
+      # Parser type: flat_json | json_path | regex | custom
+      parser_type: flat_json
+
+      # Field in payload that identifies the specific device/location
+      # Used when one topic receives data from multiple devices
+      location_id_field: serial_number
+
+      # Fields to exclude from the parsed record
+      skip_fields:
+        - firmware
+        - model
+        - ledMode
+
+      # Default tags added to every record from this source
+      default_tags:
+        source: mqtt
+        stream_id: my-sensor-stream
+
+# -----------------------------------------------------------------------------
+# STORAGE CONFIGURATION
+# -----------------------------------------------------------------------------
+# Controls batching and buffering for writes to Bronze layer.
+
+storage:
+  # Number of records per write batch
+  batch_size: 100
+
+  # Maximum time to wait before flushing partial batch (seconds)
+  batch_timeout_secs: 5
+
+  # Internal buffer capacity for records awaiting batch write
+  buffer_capacity: 1000
+
+# -----------------------------------------------------------------------------
+# ENTITY SCHEMAS (Data Dictionary)
+# -----------------------------------------------------------------------------
+# Describes device types and their expected attributes.
+# Used for documentation, validation, and schema registry.
+# Separate from source metadata - describes data structure, not instances.
+
+entity_schemas:
+  - schema_name: airgradient
+    description: AirGradient indoor air quality monitors (ONE, Pro series)
+    device_class: air_quality
+    attributes:
+      - name: pm25
+        type: float
+        unit: ug/m3
+        description: Particulate Matter 2.5 micrometers
+        nullable: false
+        range: [0, 1000]
+
+      - name: pm10
+        type: float
+        unit: ug/m3
+        description: Particulate Matter 10 micrometers
+        nullable: true
+        range: [0, 1000]
+
+      - name: co2
+        type: int
+        unit: ppm
+        description: Carbon dioxide concentration
+        nullable: true
+        range: [400, 10000]
+
+      - name: temperature
+        type: float
+        unit: celsius
+        description: Ambient temperature
+        nullable: true
+        range: [-40, 85]
+
+      - name: humidity
+        type: float
+        unit: percent
+        description: Relative humidity
+        nullable: true
+        range: [0, 100]
+
+      - name: tvoc
+        type: int
+        unit: ppb
+        description: Total Volatile Organic Compounds index
+        nullable: true
+        range: [0, 60000]
+
+# -----------------------------------------------------------------------------
+# MULTI-SOURCE EXAMPLE
+# -----------------------------------------------------------------------------
+# A stream can have multiple sources. Each gets its own ndp_id and metadata.
+# Uncomment below to see multi-source pattern:
+
+# sources:
+#   - type: mqtt
+#     ndp_id: airgradient-office-001
+#     context:
+#       location:
+#         type: indoor
+#         path: home/upstairs/office
+#       device_type: airgradient
+#     broker_url: mosquitto
+#     topic_pattern: "airgradient/readings/+"
+#     # ... other settings
+#
+#   - type: mqtt
+#     ndp_id: airgradient-bedroom-002
+#     context:
+#       location:
+#         type: indoor
+#         path: home/upstairs/bedroom
+#       device_type: airgradient
+#     broker_url: mosquitto
+#     topic_pattern: "airgradient/readings/+"
+#     # ... other settings

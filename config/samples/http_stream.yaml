@@ -1,0 +1,349 @@
+# =============================================================================
+# NDP Stream Configuration - HTTP Polling Source Template
+# =============================================================================
+#
+# This template documents the complete structure for HTTP polling streams.
+# Copy this file to config/base/streams/{stream-id}/config.yaml and customize.
+#
+# HTTP polling is used for:
+#   - REST APIs (weather services, air quality APIs, etc.)
+#   - Periodic data fetches from external services
+#   - Any HTTP endpoint that returns JSON data
+#
+# Key Concepts:
+#   - ndp_id: Stable, NDP-assigned identifier for each source instance
+#   - endpoints: Multiple API endpoints can be polled by one source
+#   - field_mappings: JSON path expressions to extract nested data
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# STREAM IDENTIFICATION
+# -----------------------------------------------------------------------------
+
+stream_id: outdoor-weather-data
+
+description: Weather observations from external APIs
+
+version: "1.0.0"
+
+enabled: true
+
+# -----------------------------------------------------------------------------
+# DATA RETENTION
+# -----------------------------------------------------------------------------
+
+retention_days: 365
+
+compression_after_days: 7
+
+partitioning_strategy: daily
+
+# -----------------------------------------------------------------------------
+# SCHEMA DEFINITION (fields)
+# -----------------------------------------------------------------------------
+# List format shown here (dict format also supported, see mqtt_stream.yaml)
+
+fields:
+  - name: temperature
+    type: float
+    nullable: true
+    unit: celsius
+    range: [-50.0, 60.0]
+    description: Ambient air temperature
+
+  - name: humidity
+    type: float
+    nullable: true
+    unit: percent
+    range: [0.0, 100.0]
+    description: Relative humidity
+
+  - name: pressure
+    type: float
+    nullable: true
+    unit: hPa
+    range: [800.0, 1100.0]
+    description: Barometric pressure
+
+  - name: wind_speed
+    type: float
+    nullable: true
+    unit: m/s
+    range: [0.0, 150.0]
+    description: Wind speed
+
+  - name: wind_direction
+    type: float
+    nullable: true
+    unit: degrees
+    range: [0.0, 360.0]
+    description: Wind direction from north
+
+# -----------------------------------------------------------------------------
+# DATA SOURCES
+# -----------------------------------------------------------------------------
+
+sources:
+  # -------------------------------------------------------------------------
+  # Source: HTTP Polling
+  # -------------------------------------------------------------------------
+  - type: http_poll
+    enabled: true
+
+    # -----------------------------------------------------------------------
+    # NDP IDENTIFIER (REQUIRED)
+    # -----------------------------------------------------------------------
+    # Stable, NDP-assigned identifier for this source instance.
+    # For HTTP sources, this typically identifies the API + location combo.
+    ndp_id: nws-ksgj-observations
+
+    # -----------------------------------------------------------------------
+    # CONTEXT (OPTIONAL)
+    # -----------------------------------------------------------------------
+    # Context is written with every record from this source.
+    # ONLY include fields you want queryable on the stored records.
+    #
+    # RULE: If it should be queryable on the record, put it in context.
+    #       If it's just for connecting/fetching, keep it outside.
+
+    context:
+      # Location of the observation point (what the data describes)
+      location:
+        coordinates: [29.9592, -81.3392]
+        type: outdoor
+        path: st-augustine/ksgj
+
+      # Only include what you'll query on:
+      station_id: KSGJ
+
+    # -----------------------------------------------------------------------
+    # SOURCE CONFIGURATION (NOT written to records)
+    # -----------------------------------------------------------------------
+    # These describe the API/connection, not the data context.
+    # Keep them at source level, outside of context block.
+    provider: nws
+    station_name: St. Augustine Airport
+    update_frequency: hourly
+
+    # -----------------------------------------------------------------------
+    # HTTP POLLING SETTINGS
+    # -----------------------------------------------------------------------
+
+    # How often to poll the API (seconds)
+    # Respect API rate limits! NWS updates hourly, so 5 min is reasonable.
+    poll_interval_secs: 300
+
+    # Request timeout (seconds)
+    timeout_secs: 30
+
+    # Retry configuration
+    retry_attempts: 3
+    retry_delay_secs: 5
+
+    # Parser name (for routing to correct parser implementation)
+    parser_name: nws_observations
+
+    # -----------------------------------------------------------------------
+    # ENDPOINTS
+    # -----------------------------------------------------------------------
+    # Multiple endpoints can be defined for one source.
+    # Each endpoint is a separate URL to poll.
+
+    endpoints:
+      - endpoint_id: nws_ksgj_latest
+
+        # Full URL to poll
+        url: "https://api.weather.gov/stations/KSGJ/observations/latest"
+
+        # Authentication type: none | query_param | header | basic | bearer
+        auth_type: none
+
+        # Custom headers (many APIs require User-Agent)
+        headers:
+          User-Agent: "(neural-data-platform/1.0, your-email@example.com)"
+          Accept: "application/geo+json"
+
+    # -----------------------------------------------------------------------
+    # PARSER CONFIGURATION
+    # -----------------------------------------------------------------------
+    # For HTTP sources, the parser typically uses JSON path expressions
+    # to extract data from nested API responses.
+
+    parser:
+      # Parser type for structured JSON responses
+      parser_type: json_path
+
+      # Where to find the location/station identifier in the response
+      location_id_field: properties.station
+
+      # Fallback if location_id_field is missing
+      default_location_id: ksgj
+
+      # Timestamp extraction (use API's timestamp, not poll time)
+      timestamp_field: properties.timestamp
+      timestamp_format: iso8601
+
+      # Default tags for all records
+      default_tags:
+        source: nws
+        stream_id: outdoor-weather-data
+
+      # -----------------------------------------------------------------------
+      # FIELD MAPPINGS
+      # -----------------------------------------------------------------------
+      # Maps JSON paths in the API response to output field names.
+      # Syntax: JSONPath-like dot notation, array indexing with [n]
+
+      field_mappings:
+        - path: properties.temperature.value
+          metric_name: temperature
+          unit: celsius
+
+        - path: properties.relativeHumidity.value
+          metric_name: humidity
+          unit: percent
+
+        - path: properties.barometricPressure.value
+          metric_name: pressure
+          unit: pa
+          # Note: May need unit conversion (Pa to hPa)
+
+        - path: properties.windSpeed.value
+          metric_name: wind_speed
+          unit: km/h
+
+        - path: properties.windDirection.value
+          metric_name: wind_direction
+          unit: degrees
+
+# -----------------------------------------------------------------------------
+# STORAGE CONFIGURATION
+# -----------------------------------------------------------------------------
+
+storage:
+  batch_size: 50
+  batch_timeout_secs: 30
+  buffer_capacity: 500
+
+# -----------------------------------------------------------------------------
+# ENTITY SCHEMAS (Data Dictionary)
+# -----------------------------------------------------------------------------
+
+entity_schemas:
+  - schema_name: nws-observation
+    description: National Weather Service observation station data
+    attributes:
+      - name: temperature
+        type: float
+        unit: celsius
+        description: Ambient air temperature
+        nullable: true
+        range: [-50, 60]
+
+      - name: humidity
+        type: float
+        unit: percent
+        description: Relative humidity
+        nullable: true
+        range: [0, 100]
+
+      - name: pressure
+        type: float
+        unit: hPa
+        description: Barometric pressure
+        nullable: true
+        range: [800, 1100]
+
+      - name: wind_speed
+        type: float
+        unit: m/s
+        description: Wind speed
+        nullable: true
+        range: [0, 150]
+
+      - name: wind_direction
+        type: float
+        unit: degrees
+        description: Wind direction from north
+        nullable: true
+        range: [0, 360]
+
+# =============================================================================
+# MULTI-ENDPOINT EXAMPLE
+# =============================================================================
+# HTTP sources often poll multiple locations from the same API.
+# Each endpoint can have its own URL and auth settings.
+#
+# Option 1: Multiple endpoints in one source (same ndp_id, same metadata)
+# Option 2: Multiple sources (different ndp_id, different metadata per location)
+#
+# Use Option 2 when locations have different metadata (coordinates, etc.)
+
+# -----------------------------------------------------------------------------
+# EXAMPLE: Multiple Sources for Different Locations
+# -----------------------------------------------------------------------------
+# Uncomment to see multi-source pattern for HTTP:
+
+# sources:
+#   - type: http_poll
+#     ndp_id: owm-air-home
+#     context:                              # WRITTEN with records
+#       location:
+#         coordinates: [29.95838, -81.30878]
+#         type: outdoor
+#         path: home
+#     provider: openweathermap             # NOT written (just config)
+#     poll_interval_secs: 600
+#     endpoints:
+#       - endpoint_id: owm_home
+#         url: "https://api.openweathermap.org/data/2.5/air_pollution"
+#         auth_type: query_param
+#         auth_key: appid
+#         auth_value: "${OPENWEATHERMAP_API_KEY}"
+#     parser:
+#       # ... parser config
+#
+#   - type: http_poll
+#     ndp_id: owm-air-work
+#     context:                              # WRITTEN with records
+#       location:
+#         coordinates: [30.1234, -81.5678]
+#         type: outdoor
+#         path: work
+#     provider: openweathermap             # NOT written (just config)
+#     poll_interval_secs: 600
+#     endpoints:
+#       - endpoint_id: owm_work
+#         url: "https://api.openweathermap.org/data/2.5/air_pollution"
+#         auth_type: query_param
+#         auth_key: appid
+#         auth_value: "${OPENWEATHERMAP_API_KEY}"
+#     parser:
+#       # ... parser config
+
+# =============================================================================
+# AUTHENTICATION EXAMPLES
+# =============================================================================
+# Different APIs use different auth methods. Examples:
+#
+# Query Parameter (OpenWeatherMap):
+#   auth_type: query_param
+#   auth_key: appid
+#   auth_value: "${OPENWEATHERMAP_API_KEY}"
+#
+# Bearer Token:
+#   auth_type: bearer
+#   auth_value: "${API_TOKEN}"
+#
+# Basic Auth:
+#   auth_type: basic
+#   auth_user: "${API_USER}"
+#   auth_pass: "${API_PASS}"
+#
+# Header:
+#   auth_type: header
+#   auth_key: X-API-Key
+#   auth_value: "${API_KEY}"
+#
+# Environment variables (${VAR_NAME}) are resolved at runtime.
