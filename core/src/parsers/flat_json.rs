@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::error::{CoreError, CoreResult};
 use crate::traits::TimeSeriesPoint;
 
-use super::{ParseContext, Parser, ParserConfig};
+use super::{Parser, ParserConfig};
 
 pub struct FlatJsonParser {
     config: ParserConfig,
@@ -100,25 +100,7 @@ impl Parser for FlatJsonParser {
     fn config(&self) -> &ParserConfig {
         &self.config
     }
-
-    /// Parse with context for ndp_id and context injection (AIR-009)
-    fn parse_with_context(
-        &self,
-        payload: &Value,
-        timestamp: DateTime<Utc>,
-        context: &ParseContext,
-    ) -> CoreResult<Vec<TimeSeriesPoint>> {
-        // Get base points from existing parse method
-        let mut points = self.parse(payload, timestamp)?;
-
-        // Inject ndp_id and context into each point
-        for point in &mut points {
-            point.ndp_id = context.ndp_id.clone();
-            point.context = context.context.clone();
-        }
-
-        Ok(points)
-    }
+    // parse_with_context() uses default trait implementation (AIR-009)
 }
 
 #[cfg(test)]

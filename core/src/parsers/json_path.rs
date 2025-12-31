@@ -53,6 +53,7 @@ impl JsonPathParser {
     }
 
     /// Extract numeric value from JSON value
+    /// Handles native numbers and string representations (e.g., Home Assistant API)
     fn extract_numeric(value: &Value) -> Option<f64> {
         if let Some(num) = value.as_f64() {
             Some(num)
@@ -60,6 +61,9 @@ impl JsonPathParser {
             Some(num as f64)
         } else if let Some(num) = value.as_u64() {
             Some(num as f64)
+        } else if let Some(s) = value.as_str() {
+            // Handle string representations of numbers (common in Home Assistant API)
+            s.trim().parse::<f64>().ok()
         } else {
             None
         }
@@ -286,5 +290,76 @@ mod tests {
         if let Err(e) = result {
             assert!(e.to_string().contains("field_mappings"));
         }
+    }
+
+    #[test]
+    fn test_json_path_parser_handles_string_numbers() {
+        // Test for Home Assistant API which returns state as string
+        let mappings = vec![FieldMapping {
+            path: "state".to_string(),
+            metric_name: "temperature".to_string(),
+            unit: Some("celsius".to_string()),
+            transform: None,
+        }];
+
+        let config = create_test_config_with_mappings(mappings);
+        let parser = JsonPathParser::from_config(config).unwrap();
+
+        let payload = json!({
+            "name": "sensor.temperature",
+            "state": "22.5"
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+        assert_eq!(points.len(), 1);
+        assert!((points[0].value - 22.5).abs() < 0.001);
+        assert_eq!(
+            points[0].tags.get("metric"),
+            Some(&"temperature".to_string())
+        );
+    }
+
+    #[test]
+    fn test_json_path_parser_handles_string_numbers_with_whitespace() {
+        let mappings = vec![FieldMapping {
+            path: "state".to_string(),
+            metric_name: "humidity".to_string(),
+            unit: Some("percent".to_string()),
+            transform: None,
+        }];
+
+        let config = create_test_config_with_mappings(mappings);
+        let parser = JsonPathParser::from_config(config).unwrap();
+
+        let payload = json!({
+            "name": "sensor.humidity",
+            "state": "  65.3  "
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+        assert_eq!(points.len(), 1);
+        assert!((points[0].value - 65.3).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_json_path_parser_ignores_non_numeric_strings() {
+        let mappings = vec![FieldMapping {
+            path: "state".to_string(),
+            metric_name: "status".to_string(),
+            unit: None,
+            transform: None,
+        }];
+
+        let config = create_test_config_with_mappings(mappings);
+        let parser = JsonPathParser::from_config(config).unwrap();
+
+        // Home Assistant sometimes returns "unavailable" or "unknown"
+        let payload = json!({
+            "name": "sensor.status",
+            "state": "unavailable"
+        });
+
+        let points = parser.parse(&payload, Utc::now()).unwrap();
+        assert_eq!(points.len(), 0); // Non-numeric string should be skipped
     }
 }

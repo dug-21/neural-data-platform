@@ -12,7 +12,7 @@
 
 use crate::error::{CoreError, CoreResult};
 use crate::parsers::config::ParserConfig;
-use crate::parsers::traits::{ParseContext, Parser};
+use crate::parsers::traits::Parser;
 use crate::traits::TimeSeriesPoint;
 use chrono::{DateTime, Utc};
 use regex::Regex;
@@ -539,25 +539,7 @@ impl Parser for ArrayIteratorParser {
     fn config(&self) -> &ParserConfig {
         &self.config
     }
-
-    /// Parse with context for ndp_id and context injection (AIR-009)
-    fn parse_with_context(
-        &self,
-        payload: &Value,
-        timestamp: DateTime<Utc>,
-        context: &ParseContext,
-    ) -> CoreResult<Vec<TimeSeriesPoint>> {
-        // Get base points from existing parse method
-        let mut points = self.parse(payload, timestamp)?;
-
-        // Inject ndp_id and context into each point
-        for point in &mut points {
-            point.ndp_id = context.ndp_id.clone();
-            point.context = context.context.clone();
-        }
-
-        Ok(points)
-    }
+    // parse_with_context() uses default trait implementation (AIR-009)
 }
 
 #[cfg(test)]

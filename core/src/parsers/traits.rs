@@ -42,19 +42,29 @@ pub trait Parser: Send + Sync {
     /// Return parser configuration for introspection
     fn config(&self) -> &ParserConfig;
 
-    /// Parse with context for ndp_id and context injection
+    /// Parse with context for ndp_id and context injection (AIR-009)
     ///
-    /// This method allows parsers to receive stable identifiers and mutable
-    /// context that can be injected into the resulting TimeSeriesPoints.
-    /// Default implementation ignores context for backward compatibility.
+    /// This method injects stable identifiers and mutable context into the
+    /// resulting TimeSeriesPoints. The default implementation calls parse()
+    /// and then injects ndp_id/context into each point automatically.
+    ///
+    /// Parsers only need to override this if they need special context handling.
     fn parse_with_context(
         &self,
         payload: &Value,
         timestamp: DateTime<Utc>,
-        _context: &ParseContext,
+        context: &ParseContext,
     ) -> CoreResult<Vec<TimeSeriesPoint>> {
-        // Default implementation ignores context for backward compatibility
-        self.parse(payload, timestamp)
+        // Get base points from parse()
+        let mut points = self.parse(payload, timestamp)?;
+
+        // Inject ndp_id and context into each point
+        for point in &mut points {
+            point.ndp_id = context.ndp_id.clone();
+            point.context = context.context.clone();
+        }
+
+        Ok(points)
     }
 }
 
