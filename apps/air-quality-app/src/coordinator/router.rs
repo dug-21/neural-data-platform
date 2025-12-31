@@ -368,6 +368,8 @@ mod tests {
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: HashMap::new(),
             }],
             storage: None,
@@ -380,6 +382,8 @@ mod tests {
             location_id: "test-location".to_string(),
             value: 25.0,
             tags,
+            ndp_id: None,
+            context: None,
         }
     }
 

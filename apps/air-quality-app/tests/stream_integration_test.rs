@@ -50,6 +50,8 @@ fn create_test_stream_config() -> StreamConfig {
         sources: vec![SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: mqtt_params,
         }],
         storage: Some(StreamStorageConfig {
@@ -78,6 +80,8 @@ fn create_minimal_stream_config() -> StreamConfig {
         sources: vec![SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: mqtt_params,
         }],
         storage: None, // No storage config - should use defaults
@@ -105,6 +109,8 @@ fn create_http_stream_config() -> StreamConfig {
         sources: vec![SourceConfig {
             source_type: SourceType::HttpPoll,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: http_params,
         }],
         storage: None,
@@ -261,6 +267,8 @@ fn test_mqtt_source_uses_default_port_when_missing() {
         sources: vec![SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: mqtt_params,
         }],
         storage: None,
@@ -314,6 +322,8 @@ fn test_missing_broker_url_is_error() {
         sources: vec![SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: mqtt_params,
         }],
         storage: None,
@@ -350,6 +360,8 @@ fn test_invalid_qos_value_outside_range() {
         sources: vec![SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: mqtt_params,
         }],
         storage: None,
@@ -394,11 +406,15 @@ fn test_stream_with_multiple_sources_finds_mqtt() {
             SourceConfig {
                 source_type: SourceType::HttpPoll,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: http_params,
             },
             SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: mqtt_params,
             },
         ],

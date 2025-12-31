@@ -51,6 +51,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: co2 as f64,
                 tags: make_tags("co2"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -61,6 +63,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: pm01 as f64,
                 tags: make_tags("pm1"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(pm02) = reading.particles.pm02 {
@@ -69,6 +73,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: pm02 as f64,
                 tags: make_tags("pm25"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(pm10) = reading.particles.pm10 {
@@ -77,6 +83,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: pm10 as f64,
                 tags: make_tags("pm10"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -87,6 +95,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: pm02_comp as f64,
                 tags: make_tags("pm25_compensated"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -97,6 +107,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: temp as f64,
                 tags: make_tags("temperature"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(temp_comp) = reading.environment.atmp_compensated {
@@ -105,6 +117,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: temp_comp as f64,
                 tags: make_tags("temperature_compensated"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -115,6 +129,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: hum as f64,
                 tags: make_tags("humidity"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(hum_comp) = reading.environment.rhum_compensated {
@@ -123,6 +139,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: hum_comp as f64,
                 tags: make_tags("humidity_compensated"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -133,6 +151,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: tvoc_idx as f64,
                 tags: make_tags("tvoc_index"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(tvoc_raw) = reading.gases.tvoc_raw {
@@ -141,6 +161,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: tvoc_raw as f64,
                 tags: make_tags("tvoc_raw"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -151,6 +173,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: nox_idx as f64,
                 tags: make_tags("nox_index"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(nox_raw) = reading.gases.nox_raw {
@@ -159,6 +183,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: nox_raw as f64,
                 tags: make_tags("nox_raw"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -169,6 +195,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: wifi as f64,
                 tags: make_tags("wifi_signal"),
+                ndp_id: None,
+                context: None,
             });
         }
 
@@ -179,6 +207,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: count as f64,
                 tags: make_tags("pm003_count"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(count) = reading.particles.pm01_count {
@@ -187,6 +217,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: count as f64,
                 tags: make_tags("pm01_count"),
+                ndp_id: None,
+                context: None,
             });
         }
         if let Some(count) = reading.particles.pm02_count {
@@ -195,6 +227,8 @@ impl AirQualityAdapter {
                 location_id: location_id.clone(),
                 value: count as f64,
                 tags: make_tags("pm02_count"),
+                ndp_id: None,
+                context: None,
             });
         }
 

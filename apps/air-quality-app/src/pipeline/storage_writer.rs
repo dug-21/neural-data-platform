@@ -152,6 +152,8 @@ mod tests {
             location_id: location_id.to_string(),
             value,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         }
     }
 

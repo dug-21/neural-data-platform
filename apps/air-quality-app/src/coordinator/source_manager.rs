@@ -1028,6 +1028,8 @@ mod tests {
             sources: vec![SourceConfig {
                 source_type,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: HashMap::new(),
             }],
             storage: None,
@@ -1067,6 +1069,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1109,6 +1113,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::HttpPoll,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params,
         };
 
@@ -1134,6 +1140,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Webhook,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1162,6 +1170,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1219,6 +1229,8 @@ mod tests {
             let source_config = SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: HashMap::new(),
             };
             manager
@@ -1254,6 +1266,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1307,6 +1321,8 @@ mod tests {
             let source_config = SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: HashMap::new(),
             };
             manager
@@ -1345,6 +1361,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1403,6 +1421,8 @@ mod tests {
             let source_config = SourceConfig {
                 source_type: source_type.clone(),
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params,
             };
             manager
@@ -1439,6 +1459,8 @@ mod tests {
             let source_config = SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: HashMap::new(),
             };
             manager
@@ -1476,6 +1498,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: false, // Disabled
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1503,6 +1527,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1555,6 +1581,8 @@ mod tests {
             let source_config = SourceConfig {
                 source_type: source_type.clone(),
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params,
             };
             manager
@@ -1595,6 +1623,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -1645,6 +1675,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params,
         };
 
@@ -1695,6 +1727,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: params.clone(),
         };
 
@@ -1731,6 +1765,8 @@ mod tests {
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params,
         };
 

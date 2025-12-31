@@ -106,6 +106,13 @@ impl ParquetStore {
 
         let values: Vec<f64> = points.iter().map(|p| p.value).collect();
 
+        // AIR-009: ndp_id and context columns
+        let ndp_ids: Vec<Option<String>> = points.iter().map(|p| p.ndp_id.clone()).collect();
+        let contexts: Vec<Option<String>> = points
+            .iter()
+            .map(|p| p.context.as_ref().map(|c| c.to_string()))
+            .collect();
+
         let _tag_keys: Vec<Vec<String>> = points
             .iter()
             .map(|p| p.tags.keys().cloned().collect())
@@ -120,12 +127,16 @@ impl ParquetStore {
         let location_series = Series::new("location_id", location_ids);
         let metric_series = Series::new("metric", metrics);
         let value_series = Series::new("value", values);
+        let ndp_id_series = Series::new("ndp_id", ndp_ids);
+        let context_series = Series::new("context", contexts);
 
         let mut df = DataFrame::new(vec![
             timestamp_series,
             location_series,
             metric_series,
             value_series,
+            ndp_id_series,
+            context_series,
         ])
         .map_err(|e| CoreError::Storage(format!("Failed to create DataFrame: {}", e)))?;
 
@@ -171,6 +182,10 @@ impl ParquetStore {
                 .f64()
                 .map_err(|e| CoreError::Storage(format!("Invalid value type: {}", e)))?;
 
+            // AIR-009: Read ndp_id and context columns if they exist
+            let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
+            let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
+
             for i in 0..df.height() {
                 if let (Some(ts), Some(loc), Some(metric), Some(val)) = (
                     timestamps.get(i),
@@ -184,11 +199,18 @@ impl ParquetStore {
                     let mut tags = HashMap::new();
                     tags.insert("metric".to_string(), metric.to_string());
 
+                    // AIR-009: Extract ndp_id and context from columns
+                    let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
+                    let context = contexts
+                        .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+
                     all_points.push(TimeSeriesPoint {
                         timestamp,
                         location_id: loc.to_string(),
                         value: val,
                         tags,
+                        ndp_id,
+                        context,
                     });
                 }
             }
@@ -276,6 +298,10 @@ impl Store for ParquetStore {
                 let metrics = df.column("metric")?.utf8()?;
                 let values = df.column("value")?.f64()?;
 
+                // AIR-009: Read ndp_id and context columns if they exist
+                let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
+                let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
+
                 for i in 0..df.height() {
                     if let (Some(ts), Some(loc), Some(metric), Some(val)) = (
                         timestamps.get(i),
@@ -289,11 +315,18 @@ impl Store for ParquetStore {
                         let mut tags = HashMap::new();
                         tags.insert("metric".to_string(), metric.to_string());
 
+                        // AIR-009: Extract ndp_id and context from columns
+                        let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
+                        let context = contexts
+                            .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+
                         all_points.push(TimeSeriesPoint {
                             timestamp,
                             location_id: loc.to_string(),
                             value: val,
                             tags,
+                            ndp_id,
+                            context,
                         });
                     }
                 }
@@ -425,6 +458,8 @@ mod tests {
             location_id: location_id.to_string(),
             value,
             tags,
+            ndp_id: None,
+            context: None,
         }
     }
 
@@ -519,6 +554,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 25.5,
             tags,
+            ndp_id: None,
+            context: None,
         };
 
         store.write(point).await.unwrap();
@@ -718,6 +755,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
         temp_point
             .tags
@@ -729,6 +768,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 65.0,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
         humidity_point
             .tags
@@ -740,6 +781,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 12.3,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
         pm25_point
             .tags
@@ -788,6 +831,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 42.0,
             tags: HashMap::new(), // No metric tag
+            ndp_id: None,
+            context: None,
         };
 
         store.write(point).await.unwrap();
@@ -822,6 +867,8 @@ mod tests {
             location_id: "d83bda1cd074".to_string(), // Device MAC
             value: 25.5,
             tags,
+            ndp_id: None,
+            context: None,
         };
 
         // Act - write point
@@ -856,6 +903,8 @@ mod tests {
             location_id: "legacy-sensor-001".to_string(),
             value: 22.5,
             tags,
+            ndp_id: None,
+            context: None,
         };
 
         store.write(point.clone()).await.unwrap();
@@ -884,6 +933,8 @@ mod tests {
             location_id: "d83bda1cd074".to_string(), // Device MAC from MQTT
             value: 25.5,
             tags,
+            ndp_id: None,
+            context: None,
         };
 
         // Write point
@@ -933,6 +984,8 @@ mod tests {
             location_id: "d83bda1cd074".to_string(),
             value: 25.5,
             tags: tags1,
+            ndp_id: None,
+            context: None,
         };
         assert_eq!(ParquetStore::get_partition_key(&point1), "air-quality");
 
@@ -942,6 +995,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 22.0,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
         assert_eq!(ParquetStore::get_partition_key(&point2), "sensor-001");
 
@@ -953,7 +1008,139 @@ mod tests {
             location_id: "old-location".to_string(),
             value: 18.5,
             tags: tags3,
+            ndp_id: None,
+            context: None,
         };
         assert_eq!(ParquetStore::get_partition_key(&point3), "outdoor-weather");
+    }
+
+    // ========== AIR-009: NDP_ID AND CONTEXT COLUMN TESTS ==========
+
+    #[tokio::test]
+    async fn test_parquet_stores_ndp_id() {
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "temperature".to_string());
+
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "sensor-001".to_string(),
+            value: 23.5,
+            tags,
+            ndp_id: Some("air-quality-office-001".to_string()),
+            context: None,
+        };
+
+        store.write(point).await.unwrap();
+
+        // Query back and verify ndp_id is preserved
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store.query("sensor-001", start, end, None).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].ndp_id,
+            Some("air-quality-office-001".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parquet_stores_context() {
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        let context = serde_json::json!({
+            "room": "office",
+            "floor": 2,
+            "calibrated": true
+        });
+
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "temperature".to_string());
+
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "sensor-001".to_string(),
+            value: 23.5,
+            tags,
+            ndp_id: None,
+            context: Some(context.clone()),
+        };
+
+        store.write(point).await.unwrap();
+
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store.query("sensor-001", start, end, None).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].context, Some(context));
+    }
+
+    #[tokio::test]
+    async fn test_parquet_stores_both_ndp_id_and_context() {
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        let context = serde_json::json!({
+            "location": "Building A, Floor 2",
+            "sensor_model": "AirGradient ONE"
+        });
+
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "pm25".to_string());
+
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "sensor-001".to_string(),
+            value: 15.5,
+            tags,
+            ndp_id: Some("air-quality-office-001".to_string()),
+            context: Some(context.clone()),
+        };
+
+        store.write(point).await.unwrap();
+
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store.query("sensor-001", start, end, None).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].ndp_id,
+            Some("air-quality-office-001".to_string())
+        );
+        assert_eq!(results[0].context, Some(context));
+    }
+
+    #[tokio::test]
+    async fn test_parquet_handles_none_ndp_id_and_context() {
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "humidity".to_string());
+
+        let point = TimeSeriesPoint {
+            timestamp,
+            location_id: "sensor-001".to_string(),
+            value: 65.0,
+            tags,
+            ndp_id: None,
+            context: None,
+        };
+
+        store.write(point).await.unwrap();
+
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store.query("sensor-001", start, end, None).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].ndp_id, None);
+        assert_eq!(results[0].context, None);
     }
 }

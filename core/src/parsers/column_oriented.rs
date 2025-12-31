@@ -12,7 +12,7 @@
 
 use crate::error::{CoreError, CoreResult};
 use crate::parsers::config::{ColumnMapping, ColumnOrientedConfig, ParserConfig, TimestampFormat};
-use crate::parsers::traits::Parser;
+use crate::parsers::traits::{ParseContext, Parser};
 use crate::traits::TimeSeriesPoint;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -291,6 +291,8 @@ impl Parser for ColumnOrientedParser {
                     location_id: location_id.clone(),
                     value: converted_value,
                     tags,
+                    ndp_id: None,
+                    context: None,
                 });
 
                 debug!(
@@ -319,6 +321,25 @@ impl Parser for ColumnOrientedParser {
 
     fn config(&self) -> &ParserConfig {
         &self.config
+    }
+
+    /// Parse with context for ndp_id and context injection (AIR-009)
+    fn parse_with_context(
+        &self,
+        payload: &Value,
+        timestamp: DateTime<Utc>,
+        context: &ParseContext,
+    ) -> CoreResult<Vec<TimeSeriesPoint>> {
+        // Get base points from existing parse method
+        let mut points = self.parse(payload, timestamp)?;
+
+        // Inject ndp_id and context into each point
+        for point in &mut points {
+            point.ndp_id = context.ndp_id.clone();
+            point.context = context.context.clone();
+        }
+
+        Ok(points)
     }
 }
 
@@ -907,5 +928,91 @@ mod tests {
         assert_eq!(points.len(), 1);
         // 36 km/h = 10 m/s
         assert!((points[0].value - 10.0).abs() < 0.001);
+    }
+
+    // ========== AIR-009: parse_with_context TESTS (TDD Cycle 6) ==========
+
+    #[test]
+    fn test_column_oriented_parser_injects_ndp_id_and_context() {
+        use super::super::ParseContext;
+
+        let columns = vec![ColumnMapping {
+            metric_path: "temperature".to_string(),
+            field_name: "temperature".to_string(),
+            values_path: None,
+            timestamp_path: None,
+            value_path: None,
+        }];
+
+        let parser = create_test_parser("properties", columns);
+
+        let payload = json!({
+            "location": "grid-station",
+            "properties": {
+                "temperature": {
+                    "values": [
+                        {"validTime": "2025-12-24T00:00:00+00:00/PT1H", "value": 22.5},
+                        {"validTime": "2025-12-24T01:00:00+00:00/PT1H", "value": 23.0}
+                    ]
+                }
+            }
+        });
+
+        let context = ParseContext::new(
+            Some("nws-grid-001".to_string()),
+            Some(json!({"grid_x": 50, "grid_y": 75, "office": "SFO"})),
+        );
+
+        let points = parser
+            .parse_with_context(&payload, Utc::now(), &context)
+            .unwrap();
+
+        assert_eq!(points.len(), 2);
+
+        // All points should have ndp_id and context injected
+        for point in &points {
+            assert_eq!(point.ndp_id, Some("nws-grid-001".to_string()));
+            assert!(point.context.is_some());
+            let ctx = point.context.as_ref().unwrap();
+            assert_eq!(ctx["grid_x"], 50);
+            assert_eq!(ctx["grid_y"], 75);
+            assert_eq!(ctx["office"], "SFO");
+        }
+    }
+
+    #[test]
+    fn test_column_oriented_parser_empty_context_passthrough() {
+        use super::super::ParseContext;
+
+        let columns = vec![ColumnMapping {
+            metric_path: "temperature".to_string(),
+            field_name: "temperature".to_string(),
+            values_path: None,
+            timestamp_path: None,
+            value_path: None,
+        }];
+
+        let parser = create_test_parser("properties", columns);
+
+        let payload = json!({
+            "location": "test",
+            "properties": {
+                "temperature": {
+                    "values": [
+                        {"validTime": "2025-12-24T00:00:00+00:00/PT1H", "value": 20.0}
+                    ]
+                }
+            }
+        });
+
+        let context = ParseContext::default();
+
+        let points = parser
+            .parse_with_context(&payload, Utc::now(), &context)
+            .unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert!(points[0].ndp_id.is_none());
+        assert!(points[0].context.is_none());
     }
 }

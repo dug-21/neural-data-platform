@@ -357,6 +357,8 @@ mod tests {
             location_id: "test-location".to_string(),
             value: 25.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         }
     }
 

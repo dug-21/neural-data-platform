@@ -146,6 +146,8 @@ impl Parser for JsonPathParser {
                         location_id: location_id.clone(),
                         value: numeric_value,
                         tags,
+                        ndp_id: None,
+                        context: None,
                     });
 
                     debug!("Extracted {}: {}", mapping.metric_name, numeric_value);

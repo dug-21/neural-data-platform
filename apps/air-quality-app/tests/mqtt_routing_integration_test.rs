@@ -23,6 +23,8 @@ fn create_mqtt_point(device_mac: &str, value: f64) -> TimeSeriesPoint {
         location_id: device_mac.to_string(), // MQTT uses device MAC as location_id
         value,
         tags,
+        ndp_id: None,
+        context: None,
     }
 }
 
@@ -150,6 +152,8 @@ fn test_consistency_http_vs_mqtt_after_enrichment() {
         location_id: "sensor-001".to_string(),
         value: 25.5,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
     http_point
         .tags

@@ -162,6 +162,8 @@ mod tests {
             location_id: "loc-001".to_string(),
             value: 42.0,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
         let record = StreamRecord::new("test-stream".to_string(), point);
 
@@ -280,6 +282,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 15.5,
             tags,
+            ndp_id: None,
+            context: None,
         };
 
         let record = StreamRecord::new("air-quality".to_string(), point.clone());
@@ -316,6 +320,8 @@ mod tests {
             location_id: "test-location".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         }
     }
 }

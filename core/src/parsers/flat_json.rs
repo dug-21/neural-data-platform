@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::error::{CoreError, CoreResult};
 use crate::traits::TimeSeriesPoint;
 
-use super::{Parser, ParserConfig};
+use super::{ParseContext, Parser, ParserConfig};
 
 pub struct FlatJsonParser {
     config: ParserConfig,
@@ -84,6 +84,8 @@ impl Parser for FlatJsonParser {
                     location_id: location_id.clone(),
                     value: num,
                     tags,
+                    ndp_id: None,
+                    context: None,
                 });
             }
         }
@@ -97,6 +99,25 @@ impl Parser for FlatJsonParser {
 
     fn config(&self) -> &ParserConfig {
         &self.config
+    }
+
+    /// Parse with context for ndp_id and context injection (AIR-009)
+    fn parse_with_context(
+        &self,
+        payload: &Value,
+        timestamp: DateTime<Utc>,
+        context: &ParseContext,
+    ) -> CoreResult<Vec<TimeSeriesPoint>> {
+        // Get base points from existing parse method
+        let mut points = self.parse(payload, timestamp)?;
+
+        // Inject ndp_id and context into each point
+        for point in &mut points {
+            point.ndp_id = context.ndp_id.clone();
+            point.context = context.context.clone();
+        }
+
+        Ok(points)
     }
 }
 
@@ -226,5 +247,146 @@ mod tests {
             Some(&"test-stream".to_string())
         );
         assert_eq!(points[0].tags.get("metric"), Some(&"pm02".to_string()));
+    }
+
+    // ========== AIR-009: parse_with_context TESTS (TDD Cycle 5-6) ==========
+
+    #[test]
+    fn test_flat_json_parser_injects_ndp_id_and_context() {
+        use super::super::ParseContext;
+
+        let config = ParserConfig {
+            parser_type: super::super::ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: None,
+            skip_fields: vec!["serialno".to_string()],
+            field_mappings: None,
+            array_config: None,
+            column_config: None,
+            default_tags: HashMap::new(),
+        };
+
+        let parser = FlatJsonParser::new(config);
+
+        let payload = json!({
+            "serialno": "d83bda1cd074",
+            "pm02": 12.5
+        });
+
+        let context = ParseContext::new(
+            Some("air-quality-office-001".to_string()),
+            Some(json!({"room": "office", "floor": 2})),
+        );
+
+        let points = parser
+            .parse_with_context(&payload, Utc::now(), &context)
+            .unwrap();
+
+        assert!(!points.is_empty());
+        assert_eq!(points[0].ndp_id, Some("air-quality-office-001".to_string()));
+        assert!(points[0].context.is_some());
+
+        // Verify context content
+        let ctx = points[0].context.as_ref().unwrap();
+        assert_eq!(ctx["room"], "office");
+        assert_eq!(ctx["floor"], 2);
+    }
+
+    #[test]
+    fn test_flat_json_parser_injects_ndp_id_only() {
+        use super::super::ParseContext;
+
+        let config = ParserConfig {
+            parser_type: super::super::ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: Some("fallback".to_string()),
+            skip_fields: vec!["serialno".to_string()],
+            field_mappings: None,
+            array_config: None,
+            column_config: None,
+            default_tags: HashMap::new(),
+        };
+
+        let parser = FlatJsonParser::new(config);
+
+        let payload = json!({
+            "serialno": "test123",
+            "temperature": 22.5
+        });
+
+        let context = ParseContext::new(Some("sensor-123".to_string()), None);
+
+        let points = parser
+            .parse_with_context(&payload, Utc::now(), &context)
+            .unwrap();
+
+        assert!(!points.is_empty());
+        assert_eq!(points[0].ndp_id, Some("sensor-123".to_string()));
+        assert!(points[0].context.is_none());
+    }
+
+    #[test]
+    fn test_flat_json_parser_injects_context_only() {
+        use super::super::ParseContext;
+
+        let config = ParserConfig {
+            parser_type: super::super::ParserType::FlatJson,
+            location_id_field: "serialno".to_string(),
+            default_location_id: Some("fallback".to_string()),
+            skip_fields: vec!["serialno".to_string()],
+            field_mappings: None,
+            array_config: None,
+            column_config: None,
+            default_tags: HashMap::new(),
+        };
+
+        let parser = FlatJsonParser::new(config);
+
+        let payload = json!({
+            "serialno": "test123",
+            "humidity": 65.0
+        });
+
+        let context = ParseContext::new(None, Some(json!({"location": "basement"})));
+
+        let points = parser
+            .parse_with_context(&payload, Utc::now(), &context)
+            .unwrap();
+
+        assert!(!points.is_empty());
+        assert!(points[0].ndp_id.is_none());
+        assert!(points[0].context.is_some());
+        assert_eq!(points[0].context.as_ref().unwrap()["location"], "basement");
+    }
+
+    #[test]
+    fn test_flat_json_parser_empty_context_passthrough() {
+        use super::super::ParseContext;
+
+        let config = ParserConfig {
+            parser_type: super::super::ParserType::FlatJson,
+            location_id_field: "id".to_string(),
+            default_location_id: Some("test".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            array_config: None,
+            column_config: None,
+            default_tags: HashMap::new(),
+        };
+
+        let parser = FlatJsonParser::new(config);
+
+        let payload = json!({"value": 100.0});
+
+        // Empty context should result in None values
+        let context = ParseContext::default();
+
+        let points = parser
+            .parse_with_context(&payload, Utc::now(), &context)
+            .unwrap();
+
+        assert!(!points.is_empty());
+        assert!(points[0].ndp_id.is_none());
+        assert!(points[0].context.is_none());
     }
 }

@@ -27,12 +27,16 @@ async fn test_parquet_write_and_query() {
             location_id: "sensor-001".to_string(),
             value: 25.5,
             tags: HashMap::from([("metric".to_string(), "pm25".to_string())]),
+            ndp_id: None,
+            context: None,
         },
         TimeSeriesPoint {
             timestamp: now,
             location_id: "sensor-001".to_string(),
             value: 450.0,
             tags: HashMap::from([("metric".to_string(), "co2".to_string())]),
+            ndp_id: None,
+            context: None,
         },
     ];
 
@@ -68,6 +72,8 @@ async fn test_data_persistence_after_restart() {
             location_id: "persistence-test".to_string(),
             value: 100.0,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
         store.write_batch(vec![point]).await.unwrap();
     }
@@ -161,6 +167,8 @@ async fn test_batch_write_performance() {
             location_id: "batch-test".to_string(),
             value: i as f64,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -206,12 +214,16 @@ async fn test_wal_replay_correctness() {
                 location_id: "wal-test".to_string(),
                 value: 123.45,
                 tags: HashMap::new(),
+                ndp_id: None,
+                context: None,
             },
             TimeSeriesPoint {
                 timestamp: now + Duration::seconds(1),
                 location_id: "wal-test".to_string(),
                 value: 678.90,
                 tags: HashMap::new(),
+                ndp_id: None,
+                context: None,
             },
         ];
         store.write_batch(points).await.unwrap();
@@ -268,6 +280,8 @@ async fn test_aggregation_mean() {
             location_id: "agg-test".to_string(),
             value: v,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -305,6 +319,8 @@ async fn test_aggregation_sum() {
             location_id: "sum-test".to_string(),
             value: v,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -340,6 +356,8 @@ async fn test_aggregation_max() {
             location_id: "max-test".to_string(),
             value: v,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -375,6 +393,8 @@ async fn test_aggregation_min() {
             location_id: "min-test".to_string(),
             value: v,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -410,6 +430,8 @@ async fn test_time_range_exact_boundaries() {
             location_id: "time-test".to_string(),
             value: i as f64,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -449,6 +471,8 @@ async fn test_time_range_no_data() {
         location_id: "empty-test".to_string(),
         value: 42.0,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
     store.write_batch(vec![point]).await.unwrap();
 
@@ -479,6 +503,8 @@ async fn test_time_range_cross_day_boundaries() {
             location_id: "multiday-test".to_string(),
             value: i as f64 * 100.0,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -514,6 +540,8 @@ async fn test_invalid_empty_location_id() {
         location_id: "".to_string(),
         value: 42.0,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
 
     // Should handle empty location_id gracefully
@@ -533,6 +561,8 @@ async fn test_invalid_nan_values() {
         location_id: "nan-test".to_string(),
         value: f64::NAN,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
 
     // Should handle NaN values
@@ -552,6 +582,8 @@ async fn test_invalid_infinity_values() {
         location_id: "inf-test".to_string(),
         value: f64::INFINITY,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
 
     let result = store.write_batch(vec![point]).await;
@@ -571,6 +603,8 @@ async fn test_invalid_reversed_time_range() {
         location_id: "reverse-test".to_string(),
         value: 42.0,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
     store.write_batch(vec![point]).await.unwrap();
 
@@ -659,6 +693,8 @@ async fn test_concurrent_reads_same_location() {
         location_id: "read-test".to_string(),
         value: 42.0,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
     store.write_batch(vec![point]).await.unwrap();
 
@@ -704,6 +740,8 @@ async fn test_air002_batch_size() {
             location_id: "air002-test".to_string(),
             value: i as f64,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         })
         .collect();
 
@@ -745,6 +783,8 @@ async fn test_multiple_sequential_batches() {
                 location_id: "sequential-test".to_string(),
                 value: (batch_num * 100 + i) as f64,
                 tags: HashMap::new(),
+                ndp_id: None,
+                context: None,
             })
             .collect();
 
@@ -807,6 +847,8 @@ async fn test_long_location_id() {
         location_id: long_id.clone(),
         value: 42.0,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
 
     let result = store.write_batch(vec![point]).await;
@@ -845,6 +887,8 @@ async fn test_special_characters_in_location_id() {
             location_id: id.to_string(),
             value: 42.0,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
 
         let result = store.write_batch(vec![point]).await;
@@ -869,6 +913,8 @@ async fn test_extreme_timestamp_values() {
         location_id: "future-test".to_string(),
         value: 42.0,
         tags: HashMap::new(),
+        ndp_id: None,
+        context: None,
     };
 
     let result = store.write_batch(vec![point]).await;

@@ -196,6 +196,8 @@ mod tests {
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: HashMap::new(),
             }],
             storage: None,

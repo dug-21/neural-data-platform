@@ -10,6 +10,12 @@ pub struct TimeSeriesPoint {
     pub location_id: String,
     pub value: f64,
     pub tags: HashMap<String, String>,
+    /// Stable source identifier from config (AIR-009)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ndp_id: Option<String>,
+    /// Mutable attributes as JSON blob (AIR-009)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -221,6 +227,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 25.5,
             tags,
+            ndp_id: None,
+            context: None,
         };
 
         assert_eq!(point.location_id, "sensor-001");
@@ -236,6 +244,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 25.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
 
         let point2 = TimeSeriesPoint {
@@ -243,6 +253,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 25.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
 
         assert_eq!(point1, point2);
@@ -306,6 +318,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 25.5,
             tags: tags.clone(),
+            ndp_id: None,
+            context: None,
         };
 
         let json = serde_json::to_string(&point).unwrap();
@@ -313,6 +327,96 @@ mod tests {
 
         assert_eq!(deserialized.location_id, point.location_id);
         assert_eq!(deserialized.value, point.value);
+    }
+
+    #[test]
+    fn test_time_series_point_with_ndp_id() {
+        let point = TimeSeriesPoint {
+            timestamp: Utc::now(),
+            location_id: "sensor-001".to_string(),
+            value: 25.5,
+            tags: HashMap::new(),
+            ndp_id: Some("air-quality-office-001".to_string()),
+            context: None,
+        };
+
+        assert_eq!(point.ndp_id, Some("air-quality-office-001".to_string()));
+    }
+
+    #[test]
+    fn test_time_series_point_with_context() {
+        let context = serde_json::json!({
+            "room": "office",
+            "floor": 2
+        });
+
+        let point = TimeSeriesPoint {
+            timestamp: Utc::now(),
+            location_id: "sensor-001".to_string(),
+            value: 25.5,
+            tags: HashMap::new(),
+            ndp_id: None,
+            context: Some(context.clone()),
+        };
+
+        assert_eq!(point.context, Some(context));
+    }
+
+    #[test]
+    fn test_time_series_point_serde_with_new_fields() {
+        let context = serde_json::json!({"key": "value"});
+        let now = Utc::now();
+
+        let point = TimeSeriesPoint {
+            timestamp: now,
+            location_id: "sensor-001".to_string(),
+            value: 25.5,
+            tags: HashMap::new(),
+            ndp_id: Some("ndp-001".to_string()),
+            context: Some(context.clone()),
+        };
+
+        let json = serde_json::to_string(&point).unwrap();
+        let deserialized: TimeSeriesPoint = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.ndp_id, Some("ndp-001".to_string()));
+        assert_eq!(deserialized.context, Some(context));
+    }
+
+    #[test]
+    fn test_time_series_point_serde_skip_none_fields() {
+        let point = TimeSeriesPoint {
+            timestamp: Utc::now(),
+            location_id: "sensor-001".to_string(),
+            value: 25.5,
+            tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
+        };
+
+        let json = serde_json::to_string(&point).unwrap();
+
+        // When ndp_id and context are None, they should not appear in JSON
+        assert!(!json.contains("ndp_id"));
+        assert!(!json.contains("context"));
+    }
+
+    #[test]
+    fn test_time_series_point_backward_compatible_deserialization() {
+        // Old JSON format without ndp_id and context
+        let old_json = r#"{
+            "timestamp": "2024-01-15T10:30:00Z",
+            "location_id": "sensor-001",
+            "value": 25.5,
+            "tags": {}
+        }"#;
+
+        let deserialized: TimeSeriesPoint = serde_json::from_str(old_json).unwrap();
+
+        assert_eq!(deserialized.location_id, "sensor-001");
+        assert_eq!(deserialized.value, 25.5);
+        assert_eq!(deserialized.ndp_id, None);
+        assert_eq!(deserialized.context, None);
     }
 
     // ========== LONDON SCHOOL TDD: BEHAVIOR VERIFICATION TESTS ==========
@@ -328,6 +432,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
 
         mock_store.expect_write().times(1).returning(|_| Ok(()));
@@ -346,12 +452,16 @@ mod tests {
                 location_id: "sensor-001".to_string(),
                 value: 23.5,
                 tags: HashMap::new(),
+                ndp_id: None,
+                context: None,
             },
             TimeSeriesPoint {
                 timestamp: Utc::now(),
                 location_id: "sensor-002".to_string(),
                 value: 65.0,
                 tags: HashMap::new(),
+                ndp_id: None,
+                context: None,
             },
         ];
 
@@ -379,6 +489,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
 
         mock_store
@@ -554,6 +666,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
 
         let point_for_query = point.clone();
@@ -631,6 +745,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         }];
 
         mock_source
@@ -704,6 +820,8 @@ mod tests {
                     location_id: "sensor-001".to_string(),
                     value: 23.5,
                     tags: HashMap::new(),
+                    ndp_id: None,
+                    context: None,
                 }])
             });
 
@@ -726,6 +844,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         }];
 
         let expected_metrics = ModelMetrics {
@@ -810,6 +930,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         }];
 
         let expected_metrics = ModelMetrics {
@@ -838,6 +960,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         }];
 
         let expected_metrics_train = ModelMetrics {
@@ -907,6 +1031,8 @@ mod tests {
             location_id: "sensor-001".to_string(),
             value: 23.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         };
 
         mock_store

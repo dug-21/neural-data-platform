@@ -52,6 +52,11 @@ fields:
 sources:
   - type: mqtt
     enabled: true
+    ndp_id: "air-quality-mqtt-001"
+    context:
+      device_type: airgradient
+      location: home
+      environment: indoor
     broker_url: "mosquitto"
     port: 1883
     client_id: "air-quality-app"

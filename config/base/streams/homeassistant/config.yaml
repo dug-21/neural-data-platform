@@ -34,6 +34,12 @@ fields:
 sources:
   - type: mqtt
     enabled: true
+    ndp_id: "homeassistant-mqtt-001"
+    context:
+      provider: homeassistant
+      protocol: statestream
+      location: home
+      environment: indoor
     broker_url: "mosquitto"
     port: 1883
     client_id: "ndp-homeassistant"

@@ -66,6 +66,12 @@ fields:
 sources:
   - type: http_poll
     enabled: true
+    ndp_id: "outdoor-weather-http-001"
+    context:
+      provider: openweathermap
+      api: current_weather
+      location: home
+      environment: outdoor
     poll_interval_secs: 600
     timeout_secs: 30
     parser_name: openweathermap_current_weather

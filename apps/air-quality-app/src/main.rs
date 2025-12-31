@@ -52,13 +52,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             port: etcd_config.mqtt.port,
                             client_id: etcd_config.mqtt.client_id,
                             topic_pattern: etcd_config.mqtt.topic_pattern,
-                            subscriptions: etcd_config.mqtt.subscriptions.into_iter().map(|s| {
-                                air_quality_app::config::SubscriptionConfig {
+                            subscriptions: etcd_config
+                                .mqtt
+                                .subscriptions
+                                .into_iter()
+                                .map(|s| air_quality_app::config::SubscriptionConfig {
                                     stream_id: s.stream_id,
                                     topic_pattern: s.topic_pattern,
                                     enabled: s.enabled,
-                                }
-                            }).collect(),
+                                })
+                                .collect(),
                             qos: etcd_config.mqtt.qos,
                             reconnect_delay_secs: etcd_config.mqtt.reconnect_delay_secs,
                             max_reconnect_delay_secs: etcd_config.mqtt.max_reconnect_delay_secs,

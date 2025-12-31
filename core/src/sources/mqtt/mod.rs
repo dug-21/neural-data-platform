@@ -700,6 +700,8 @@ mod tests {
             location_id: "test".to_string(),
             value: 12.5,
             tags: HashMap::new(),
+            ndp_id: None,
+            context: None,
         });
         drop(cache);
 
@@ -1129,7 +1131,10 @@ mod tests {
         };
 
         let result = config.validate();
-        assert!(matches!(result, Err(ConfigError::InvalidSubscription { .. })));
+        assert!(matches!(
+            result,
+            Err(ConfigError::InvalidSubscription { .. })
+        ));
     }
 
     #[test]

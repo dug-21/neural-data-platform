@@ -281,6 +281,8 @@ mod tests {
                     location_id: "test-loc".to_string(),
                     value: 25.0,
                     tags: HashMap::new(),
+                    ndp_id: None,
+                    context: None,
                 }])
             });
 
@@ -339,12 +341,16 @@ mod tests {
                         location_id: "test-loc".to_string(),
                         value: 20.0,
                         tags: HashMap::new(),
+                        ndp_id: None,
+                        context: None,
                     },
                     TimeSeriesPoint {
                         timestamp: now - chrono::Duration::hours(1),
                         location_id: "test-loc".to_string(),
                         value: 25.0,
                         tags: HashMap::new(),
+                        ndp_id: None,
+                        context: None,
                     },
                 ])
             });

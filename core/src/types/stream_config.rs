@@ -197,6 +197,16 @@ pub struct SourceConfig {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
+    /// Stable source identifier (AIR-009)
+    /// Used to track data provenance through the pipeline (e.g., "sensor-office-001")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ndp_id: Option<String>,
+
+    /// Mutable context attributes (AIR-009)
+    /// User-defined metadata that can change (location, calibration, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
+
     /// Source-specific parameters
     #[serde(flatten)]
     pub params: HashMap<String, serde_json::Value>,
@@ -633,6 +643,85 @@ mod tests {
 
     // ========== HELPER FUNCTIONS ==========
 
+    // ========== AIR-009: ndp_id and context FIELD TESTS ==========
+
+    #[test]
+    fn test_source_config_with_ndp_id_deserializes() {
+        let json = r#"{
+            "type": "mqtt",
+            "enabled": true,
+            "ndp_id": "air-quality-office-001"
+        }"#;
+
+        let config: SourceConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.ndp_id, Some("air-quality-office-001".to_string()));
+    }
+
+    #[test]
+    fn test_source_config_with_context_deserializes() {
+        let json = r#"{
+            "type": "mqtt",
+            "enabled": true,
+            "context": {
+                "room": "office",
+                "floor": 2,
+                "calibrated": true
+            }
+        }"#;
+
+        let config: SourceConfig = serde_json::from_str(json).unwrap();
+        assert!(config.context.is_some());
+        let ctx = config.context.unwrap();
+        assert_eq!(ctx["room"], "office");
+        assert_eq!(ctx["floor"], 2);
+        assert_eq!(ctx["calibrated"], true);
+    }
+
+    #[test]
+    fn test_source_config_context_serialization_roundtrip() {
+        // Create a SourceConfig with nested context
+        let context = serde_json::json!({
+            "location": {
+                "type": "indoor",
+                "path": "home/office",
+                "coordinates": [29.958, -81.308]
+            },
+            "device_type": "airgradient",
+            "model": "ONE-V9",
+            "tags": ["primary", "calibrated"]
+        });
+
+        let original_config = SourceConfig {
+            source_type: SourceType::Mqtt,
+            enabled: true,
+            ndp_id: Some("test-sensor-001".to_string()),
+            context: Some(context.clone()),
+            params: HashMap::new(),
+        };
+
+        // Serialize to JSON
+        let serialized = serde_json::to_string(&original_config).unwrap();
+
+        // Deserialize back
+        let restored_config: SourceConfig = serde_json::from_str(&serialized).unwrap();
+
+        // Verify all fields survived the round-trip
+        assert_eq!(restored_config.source_type, SourceType::Mqtt);
+        assert_eq!(restored_config.enabled, true);
+        assert_eq!(restored_config.ndp_id, Some("test-sensor-001".to_string()));
+
+        // Verify context structure is preserved exactly
+        let restored_ctx = restored_config.context.unwrap();
+        assert_eq!(restored_ctx["location"]["type"], "indoor");
+        assert_eq!(restored_ctx["location"]["path"], "home/office");
+        assert_eq!(restored_ctx["location"]["coordinates"][0], 29.958);
+        assert_eq!(restored_ctx["location"]["coordinates"][1], -81.308);
+        assert_eq!(restored_ctx["device_type"], "airgradient");
+        assert_eq!(restored_ctx["model"], "ONE-V9");
+        assert_eq!(restored_ctx["tags"][0], "primary");
+        assert_eq!(restored_ctx["tags"][1], "calibrated");
+    }
+
     fn create_test_stream_config() -> StreamConfig {
         StreamConfig {
             stream_id: "test-stream".to_string(),
@@ -656,6 +745,8 @@ mod tests {
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
+                ndp_id: None,
+                context: None,
                 params: HashMap::new(),
             }],
             storage: None,

@@ -69,6 +69,8 @@ impl AirPollutionParser {
             location_id: location_id.to_string(),
             value,
             tags,
+            ndp_id: None,
+            context: None,
         }
     }
 }

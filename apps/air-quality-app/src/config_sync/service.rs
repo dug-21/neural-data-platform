@@ -305,6 +305,12 @@ struct SourceYaml {
     source_type: String,
     #[serde(default = "default_enabled")]
     enabled: bool,
+    /// Stable source identifier (AIR-009)
+    #[serde(default)]
+    ndp_id: Option<String>,
+    /// Mutable context attributes (AIR-009)
+    #[serde(default)]
+    context: Option<serde_yaml::Value>,
     #[serde(flatten)]
     params: std::collections::HashMap<String, serde_yaml::Value>,
 }
@@ -379,17 +385,28 @@ impl StreamConfigYaml {
         for source_yaml in &self.sources {
             let source_type = parse_source_type(&source_yaml.source_type)?;
 
-            // Convert YAML params to JSON params, filtering out 'enabled' to avoid duplicate field
+            // Convert YAML params to JSON params, filtering out fields handled explicitly
             let params: std::collections::HashMap<String, serde_json::Value> = source_yaml
                 .params
                 .iter()
-                .filter(|(k, _)| k.as_str() != "enabled") // Filter out enabled - handled by explicit field
+                .filter(|(k, _)| {
+                    // Filter out fields that have dedicated struct fields
+                    !matches!(k.as_str(), "enabled" | "ndp_id" | "context")
+                })
                 .filter_map(|(k, v)| yaml_to_json(v).ok().map(|json_v| (k.clone(), json_v)))
                 .collect();
+
+            // Convert context YAML to JSON (AIR-009)
+            let context = source_yaml
+                .context
+                .as_ref()
+                .and_then(|v| yaml_to_json(v).ok());
 
             sources.push(SourceConfig {
                 source_type,
                 enabled: source_yaml.enabled,
+                ndp_id: source_yaml.ndp_id.clone(),
+                context,
                 params,
             });
         }
@@ -412,13 +429,24 @@ impl StreamConfigYaml {
                             .and_then(|v| v.as_bool())
                             .unwrap_or(true);
 
-                        // Convert YAML mapping to JSON params, filtering out 'enabled'
+                        // Extract ndp_id from legacy format (AIR-009)
+                        let ndp_id = map
+                            .get(&serde_yaml::Value::String("ndp_id".to_string()))
+                            .and_then(|v| v.as_str())
+                            .map(String::from);
+
+                        // Extract context from legacy format (AIR-009)
+                        let context = map
+                            .get(&serde_yaml::Value::String("context".to_string()))
+                            .and_then(|v| yaml_to_json(v).ok());
+
+                        // Convert YAML mapping to JSON params, filtering out explicit fields
                         let params: std::collections::HashMap<String, serde_json::Value> = map
                             .iter()
                             .filter_map(|(k, v)| {
                                 if let serde_yaml::Value::String(key) = k {
-                                    // Filter out enabled - handled by explicit field
-                                    if key == "enabled" {
+                                    // Filter out fields handled explicitly
+                                    if matches!(key.as_str(), "enabled" | "ndp_id" | "context") {
                                         return None;
                                     }
                                     yaml_to_json(v).ok().map(|json_v| (key.clone(), json_v))
@@ -431,6 +459,8 @@ impl StreamConfigYaml {
                         sources.push(SourceConfig {
                             source_type,
                             enabled,
+                            ndp_id,
+                            context,
                             params,
                         });
                     }
@@ -1098,6 +1128,205 @@ sources: []
     }
 
     // ========== ERROR CONVERSION TESTS ==========
+
+    // ========== AIR-009 TDD CYCLE 10: ndp_id AND context PARSING TESTS ==========
+
+    /// Test that load_yaml_config correctly parses ndp_id from source configuration
+    /// Verifies the new AIR-009 stable source identifier field
+    #[tokio::test]
+    async fn test_load_yaml_config_parses_ndp_id() {
+        // Arrange: Create temp YAML with ndp_id
+        let yaml_content = r#"
+stream_id: "test-stream"
+description: "Test stream with ndp_id"
+version: "1.0.0"
+enabled: true
+fields:
+  - name: value
+    type: float
+    nullable: false
+sources:
+  - type: mqtt
+    enabled: true
+    ndp_id: "sensor-office-001"
+    broker_url: "localhost"
+"#;
+
+        // Write to temp file and load
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_ndp_id_config.yaml");
+        std::fs::write(&temp_file, yaml_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+        let result = service.load_yaml_config(&temp_file).await;
+
+        // Assert
+        assert!(result.is_ok(), "Failed to parse config: {:?}", result.err());
+        let config = result.unwrap();
+        assert_eq!(config.sources.len(), 1);
+        assert_eq!(
+            config.sources[0].ndp_id,
+            Some("sensor-office-001".to_string())
+        );
+
+        // Cleanup
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    /// Test that load_yaml_config correctly parses context from source configuration
+    /// Verifies the new AIR-009 mutable context attributes field
+    #[tokio::test]
+    async fn test_load_yaml_config_parses_context() {
+        // Arrange: Create temp YAML with context
+        let yaml_content = r#"
+stream_id: "test-stream"
+description: "Test stream with context"
+version: "1.0.0"
+enabled: true
+fields:
+  - name: value
+    type: float
+    nullable: false
+sources:
+  - type: mqtt
+    enabled: true
+    context:
+      room: office
+      floor: 2
+      calibrated: true
+    broker_url: "localhost"
+"#;
+
+        // Write to temp file and load
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_context_config.yaml");
+        std::fs::write(&temp_file, yaml_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+        let result = service.load_yaml_config(&temp_file).await;
+
+        // Assert
+        assert!(result.is_ok(), "Failed to parse config: {:?}", result.err());
+        let config = result.unwrap();
+        assert_eq!(config.sources.len(), 1);
+        assert!(config.sources[0].context.is_some());
+        let ctx = config.sources[0].context.as_ref().unwrap();
+        assert_eq!(ctx["room"], "office");
+        assert_eq!(ctx["floor"], 2);
+        assert_eq!(ctx["calibrated"], true);
+
+        // Cleanup
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    /// Test that load_yaml_config correctly parses both ndp_id and context together
+    /// Verifies that both AIR-009 fields work in combination
+    #[tokio::test]
+    async fn test_load_yaml_config_parses_ndp_id_and_context_together() {
+        // Arrange: Create temp YAML with both ndp_id and context
+        let yaml_content = r#"
+stream_id: "test-stream"
+description: "Test stream with both"
+version: "1.0.0"
+enabled: true
+fields:
+  - name: value
+    type: float
+    nullable: false
+sources:
+  - type: http_poll
+    enabled: true
+    ndp_id: "api-weather-home"
+    context:
+      location: backyard
+      sensor_model: BME280
+      installation_date: "2024-01-15"
+    poll_interval_secs: 300
+"#;
+
+        // Write to temp file and load
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_ndp_id_context_config.yaml");
+        std::fs::write(&temp_file, yaml_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+        let result = service.load_yaml_config(&temp_file).await;
+
+        // Assert
+        assert!(result.is_ok(), "Failed to parse config: {:?}", result.err());
+        let config = result.unwrap();
+        assert_eq!(config.sources.len(), 1);
+
+        let source = &config.sources[0];
+        assert_eq!(source.ndp_id, Some("api-weather-home".to_string()));
+        assert!(source.context.is_some());
+
+        let ctx = source.context.as_ref().unwrap();
+        assert_eq!(ctx["location"], "backyard");
+        assert_eq!(ctx["sensor_model"], "BME280");
+        assert_eq!(ctx["installation_date"], "2024-01-15");
+
+        // Verify poll_interval_secs is in params (not context)
+        assert!(source.params.contains_key("poll_interval_secs"));
+
+        // Cleanup
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    /// Test that ndp_id and context are NOT in params HashMap (they have dedicated fields)
+    /// Verifies proper field separation for AIR-009
+    #[tokio::test]
+    async fn test_ndp_id_and_context_not_in_params() {
+        // Arrange: Create temp YAML with ndp_id and context
+        let yaml_content = r#"
+stream_id: "test-stream"
+description: "Test stream"
+version: "1.0.0"
+enabled: true
+fields:
+  - name: value
+    type: float
+    nullable: false
+sources:
+  - type: mqtt
+    enabled: true
+    ndp_id: "sensor-001"
+    context:
+      room: kitchen
+    broker_url: "localhost"
+    topic: "sensors/kitchen"
+"#;
+
+        // Write to temp file and load
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_params_separation.yaml");
+        std::fs::write(&temp_file, yaml_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+        let result = service.load_yaml_config(&temp_file).await;
+
+        // Assert
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        let source = &config.sources[0];
+
+        // ndp_id and context should NOT be in params
+        assert!(
+            !source.params.contains_key("ndp_id"),
+            "ndp_id should not be in params"
+        );
+        assert!(
+            !source.params.contains_key("context"),
+            "context should not be in params"
+        );
+
+        // Other fields should be in params
+        assert!(source.params.contains_key("broker_url"));
+        assert!(source.params.contains_key("topic"));
+
+        // Cleanup
+        std::fs::remove_file(temp_file).ok();
+    }
 
     /// Test that ConfigSyncError properly converts from various error types
     #[test]

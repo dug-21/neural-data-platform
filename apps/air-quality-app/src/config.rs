@@ -265,7 +265,10 @@ storage:
         let config = AppConfig::from_yaml(&temp_file).unwrap();
         assert_eq!(config.mqtt.subscriptions.len(), 2);
         assert_eq!(config.mqtt.subscriptions[0].stream_id, "air-quality");
-        assert_eq!(config.mqtt.subscriptions[0].topic_pattern, "airgradient/readings/+");
+        assert_eq!(
+            config.mqtt.subscriptions[0].topic_pattern,
+            "airgradient/readings/+"
+        );
         assert!(config.mqtt.subscriptions[0].enabled);
         assert_eq!(config.mqtt.subscriptions[1].stream_id, "homeassistant");
         assert!(!config.mqtt.subscriptions[1].enabled);

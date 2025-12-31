@@ -437,6 +437,8 @@ mod tests {
         let config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: false,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -455,6 +457,8 @@ mod tests {
         let config = SourceConfig {
             source_type: SourceType::Mqtt,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -470,6 +474,8 @@ mod tests {
         let config = SourceConfig {
             source_type: SourceType::HttpPoll,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -485,6 +491,8 @@ mod tests {
         let config = SourceConfig {
             source_type: SourceType::Webhook,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params: HashMap::new(),
         };
 
@@ -558,6 +566,8 @@ mod tests {
         let config = SourceConfig {
             source_type: SourceType::HttpPoll,
             enabled: true,
+            ndp_id: None,
+            context: None,
             params,
         };
 

@@ -23,4 +23,4 @@ pub use config::{
 pub use factory::create_parser_from_config;
 pub use flat_json::FlatJsonParser;
 pub use json_path::JsonPathParser;
-pub use traits::Parser;
+pub use traits::{ParseContext, Parser};

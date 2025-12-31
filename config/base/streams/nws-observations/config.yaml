@@ -107,6 +107,13 @@ fields:
 sources:
   - type: http_poll
     enabled: true
+    ndp_id: "nws-observations-http-001"
+    context:
+      provider: nws
+      api: observations
+      station_id: KSGJ
+      location: ksgj
+      environment: outdoor
     poll_interval_secs: 300  # 5 minutes (NWS updates hourly but we check frequently)
     timeout_secs: 30
     retry_attempts: 3

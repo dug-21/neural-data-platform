@@ -56,6 +56,12 @@ fields:
 sources:
   - type: http_poll
     enabled: true
+    ndp_id: "outdoor-air-quality-http-001"
+    context:
+      provider: openweathermap
+      api: air_pollution
+      location: home
+      environment: outdoor
     poll_interval_secs: 600
     timeout_secs: 30
     parser_name: openweathermap_air_pollution
