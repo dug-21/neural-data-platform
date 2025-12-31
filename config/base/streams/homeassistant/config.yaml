@@ -1,5 +1,5 @@
 # HomeAssistant Stream Configuration
-# Converted from MQTT Statestream to HTTP polling for Govee H5103 sensor
+# HTTP polling for Govee H5103 temperature/humidity sensor via HA REST API
 stream_id: homeassistant
 description: Home Assistant entity states via REST API polling
 version: "2.0.0"
@@ -8,110 +8,71 @@ retention_days: 365
 compression_after_days: 7
 partitioning_strategy: daily
 
-# Schema for temperature/humidity sensor data
 fields:
   - name: temperature
     type: float
     nullable: true
     unit: celsius
     range: [-40.0, 85.0]
-    description: Temperature reading from H5103 sensor
-
   - name: humidity
     type: float
     nullable: true
     unit: percent
     range: [0.0, 100.0]
-    description: Humidity reading from H5103 sensor
 
 sources:
-  # -------------------------------------------------------------------------
-  # Source: HTTP Polling - Govee H5103 Temperature/Humidity Sensor
-  # -------------------------------------------------------------------------
   - type: http_poll
     enabled: true
-
-    # Stable NDP identifier for this source
     ndp_id: govee-h5103-560f
-
-    # Context written with every record
     context:
+      source_type:
+        provider: homeassistant
+        purpose: entity_state
       location:
         type: indoor
         path: home
-      device_type: govee
-      device_model: H5103
-      device_id: "560f"
-
-    # Source metadata (not written to records)
-    provider: homeassistant
-    protocol: rest_api
-
-    # Polling configuration
+      device:
+        manufacturer: govee
+        model: H5103
+        id: "560f"
     poll_interval_secs: 60
     timeout_secs: 30
-    retry_attempts: 3
-    retry_delay_secs: 5
-    buffer_capacity: 100
-
-    # Parser for HA REST API responses
     parser_name: homeassistant_entity
-
-    # Endpoints - one per entity
     endpoints:
       # Temperature sensor
       - endpoint_id: h5103_temperature
         location_id: h5103-560f
-        url: "${HASS_URL}/api/states/sensor.h5103_560f_temperature"
+        url: "http://192.168.52.123:8123/api/states/sensor.h5103_560f_temperature"
         auth_type: bearer
         auth_value: "${HASS_ACCESS_TOKEN}"
-        headers:
-          Content-Type: "application/json"
-
       # Humidity sensor
       - endpoint_id: h5103_humidity
         location_id: h5103-560f
-        url: "${HASS_URL}/api/states/sensor.h5103_560f_humidity"
+        url: "http://192.168.52.123:8123/api/states/sensor.h5103_560f_humidity"
         auth_type: bearer
         auth_value: "${HASS_ACCESS_TOKEN}"
-        headers:
-          Content-Type: "application/json"
-
-    # Parser configuration for Home Assistant entity state response
-    # HA returns: { "entity_id": "...", "state": "22.5", "attributes": {...}, "last_changed": "..." }
-    # The JsonPathParser handles string-to-float conversion automatically.
     parser:
       parser_type: json_path
-
-      # Use entity_id as location identifier
       location_id_field: entity_id
       default_location_id: h5103-560f
-
-      # Default tags for all records
       default_tags:
         source: homeassistant
         stream_id: homeassistant
         device: govee-h5103-560f
-
-      # Field mappings from HA response
-      # The "state" field contains the numeric value (as string in HA API)
       field_mappings:
-        # Extract the state value - this is the temperature or humidity reading
+        # HA returns state as string "22.5" - JsonPathParser handles string-to-float
         - path: state
           metric_name: value
-          unit: celsius  # or percent for humidity - depends on endpoint
+          unit: dynamic
 
-# Storage configuration
 storage:
   batch_size: 10
   batch_timeout_secs: 30
   buffer_capacity: 100
 
-# Entity schemas for the Data Dictionary
 entity_schemas:
   - schema_name: govee-h5103
     description: Govee H5103 Bluetooth Temperature/Humidity Sensor via Home Assistant
-    device_class: temperature_humidity
     attributes:
       - name: temperature
         type: float
@@ -119,17 +80,9 @@ entity_schemas:
         description: Ambient temperature reading
         nullable: true
         range: [-40, 85]
-
       - name: humidity
         type: float
         unit: percent
         description: Relative humidity reading
-        nullable: true
-        range: [0, 100]
-
-      - name: battery
-        type: int
-        unit: percent
-        description: Battery level (if reported)
         nullable: true
         range: [0, 100]
