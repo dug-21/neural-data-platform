@@ -26,11 +26,19 @@ Project-specific agents for the Neural Data Platform. These agents know the proj
 | `ndp-rust-dev` | General | Any Rust development following NDP patterns |
 | `ndp-tester` | Specialized | Testing strategy, integration tests, coverage |
 
+### Domain Scientists
+| Agent | Scope | When to Use |
+|-------|-------|-------------|
+| `ndp-meteorologist` | Specialized | NWS data interpretation, forecast evaluation, weather domain logic |
+| `ndp-air-quality-specialist` | Specialized | AQI calculations, sensor calibration, EPA standards, health thresholds |
+
 ### Data Engineering
 | Agent | Scope | When to Use |
 |-------|-------|-------------|
 | `ndp-parquet-dev` | Narrow | Bronze layer, Parquet operations, WAL, storage |
 | `ndp-timescale-dev` | Narrow | Silver layer, TimescaleDB, SQL queries |
+| `ndp-dq-engineer` | Specialized | Layered DQ strategy, transparency tables, quality monitoring |
+| `ndp-analytics-engineer` | Specialized | Silver→Gold transforms, domain logic in SQL, analytics views |
 
 ### ML & Predictions
 | Agent | Scope | When to Use |
@@ -112,17 +120,21 @@ Task("Design feature aggregations", "...", "ndp-feature-engineer")
 
 ```
 .claude/agents/ndp/
-├── README.md                 # This file
-├── ndp-scrum-master.md       # Feature lifecycle coordination
-├── ndp-architect.md          # Architecture decisions
-├── ndp-rust-dev.md           # General Rust development
-├── ndp-tester.md             # Testing specialist
-├── ndp-parquet-dev.md        # Bronze/Parquet layer
-├── ndp-timescale-dev.md      # Silver/TimescaleDB layer
-├── ndp-feature-engineer.md   # Feature engineering
-├── ndp-ml-engineer.md        # ML/ruv-FANN
-├── ndp-grafana-dev.md        # Grafana dashboards
-└── ndp-alert-engineer.md     # Alerts/triggers
+├── README.md                       # This file
+├── ndp-scrum-master.md             # Feature lifecycle coordination
+├── ndp-architect.md                # Architecture decisions
+├── ndp-rust-dev.md                 # General Rust development
+├── ndp-tester.md                   # Testing specialist
+├── ndp-meteorologist.md            # Weather domain scientist (NEW)
+├── ndp-air-quality-specialist.md   # Air quality domain scientist (NEW)
+├── ndp-parquet-dev.md              # Bronze/Parquet layer
+├── ndp-timescale-dev.md            # Silver/TimescaleDB layer
+├── ndp-dq-engineer.md              # Data quality engineering (NEW)
+├── ndp-analytics-engineer.md       # Analytics transformations (NEW)
+├── ndp-feature-engineer.md         # Feature engineering
+├── ndp-ml-engineer.md              # ML/ruv-FANN
+├── ndp-grafana-dev.md              # Grafana dashboards
+└── ndp-alert-engineer.md           # Alerts/triggers
 
 .claude/skills/
 ├── ndp-github-workflow/      # Git conventions (branches, commits, PRs)

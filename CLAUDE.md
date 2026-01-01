@@ -19,14 +19,37 @@
 | `ndp-architect` | Broad | Architecture decisions, ADRs, cross-cutting concerns |
 | `ndp-rust-dev` | General | Any Rust development following NDP patterns |
 | `ndp-tester` | Specialized | Testing strategy, integration tests, mocking |
+| `ndp-meteorologist` | Specialized | NWS data interpretation, forecast evaluation, weather domain |
+| `ndp-air-quality-specialist` | Specialized | AQI calculations, sensor calibration, EPA standards |
 | `ndp-parquet-dev` | Narrow | Bronze layer, Parquet storage, WAL |
 | `ndp-timescale-dev` | Narrow | Silver layer, TimescaleDB, continuous aggregates |
+| `ndp-dq-engineer` | Specialized | Layered DQ strategy, transparency tables, quality monitoring |
+| `ndp-analytics-engineer` | Specialized | Silver→Gold transforms, domain logic in SQL |
 | `ndp-feature-engineer` | Narrow | Time-series features, windowing, aggregations |
 | `ndp-ml-engineer` | Narrow | ruv-FANN models, training, inference |
 | `ndp-grafana-dev` | Narrow | Grafana dashboards, panels, data sources |
 | `ndp-alert-engineer` | Narrow | Rust-based triggers, thresholds, notifications |
 
 See: `.claude/agents/ndp/README.md` for full documentation.
+
+### Team Construction by Initiative Type
+
+**Select team composition based on the type of work:**
+
+| Initiative Type | Core Team | Domain Specialists | When to Use |
+|-----------------|-----------|-------------------|-------------|
+| **Schema/ETL Work** | `ndp-architect`, `ndp-timescale-dev`, `ndp-dq-engineer` | `ndp-meteorologist` or `ndp-air-quality-specialist` | Silver layer design, Bronze→Silver ETL |
+| **Analytics/Dashboards** | `ndp-analytics-engineer`, `ndp-grafana-dev` | Domain specialist for metrics | Forecast accuracy views, AQI dashboards |
+| **New Data Source** | `ndp-architect`, `ndp-rust-dev`, `ndp-parquet-dev` | Domain specialist for validation | Adding new streams to Bronze |
+| **ML/Predictions** | `ndp-feature-engineer`, `ndp-ml-engineer` | Domain specialist for feature logic | Feature engineering, model training |
+| **Alerts/Triggers** | `ndp-alert-engineer`, `ndp-rust-dev` | `ndp-air-quality-specialist` for thresholds | Health-based alerting |
+| **Research/Exploration** | Domain specialists + `ndp-analytics-engineer` | Primary focus | Domain modeling, DuckDB exploration |
+
+**Team Formation Rules:**
+1. **Always include domain specialist** when working with weather or air quality data
+2. **Always include `ndp-dq-engineer`** when schema or ETL changes affect data quality
+3. **Always include `ndp-architect`** for cross-cutting or schema changes
+4. **Consult domain specialists first** before implementing domain logic in code
 
 ---
 
