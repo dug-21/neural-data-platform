@@ -105,6 +105,12 @@ impl SourceManager {
                 .await
                 .map_err(|e| SourceManagerError::ConfigError(e.to_string()))?;
 
+            // Skip disabled streams entirely
+            if !config.enabled {
+                info!("Skipping disabled stream: {}", stream_id);
+                continue;
+            }
+
             // Start sources for this stream
             self.start_sources_for_stream(&config).await?;
         }
