@@ -43,7 +43,7 @@ COPY config-client ./config-client
 COPY config ./config
 
 # Build application
-RUN cargo build --release -p air-quality-app && \
+RUN cargo build --release -p air-quality-app -j 2 && \
     strip /app/target/release/air-quality-server
 
 # Stage 4: Runtime - minimal final image
