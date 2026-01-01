@@ -21,7 +21,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
 use crate::parsers::{ParseContext, Parser};
-use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
+use crate::traits::{HealthStatus, RawSource, Source, TimeSeriesPoint};
+use crate::types::raw_data_point::RawDataPoint;
 
 /// Authentication method for HTTP endpoints
 #[derive(Debug, Clone)]
@@ -351,6 +352,8 @@ pub struct HttpPollingSource {
     sender: mpsc::Sender<TimeSeriesPoint>,
     is_running: Arc<Mutex<bool>>,
     last_successful_poll: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    /// DP-004: Stream identifier for source_id generation
+    stream_id: Option<String>,
     /// AIR-009: Stable source identifier
     ndp_id: Option<String>,
     /// AIR-009: Mutable context attributes
@@ -373,6 +376,24 @@ impl HttpPollingSource {
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
     ) -> CoreResult<Self> {
+        Self::with_raw_config(config, parser, None, ndp_id, context)
+    }
+
+    /// Create a new HTTP polling source with full raw data configuration (DP-004)
+    ///
+    /// # Arguments
+    /// * `config` - HTTP polling configuration
+    /// * `parser` - Parser for TimeSeriesPoint extraction
+    /// * `stream_id` - Stream identifier for source_id generation (e.g., "air-quality")
+    /// * `ndp_id` - Stable source identifier from configuration
+    /// * `context` - Mutable context metadata
+    pub fn with_raw_config(
+        config: HttpPollingConfig,
+        parser: Box<dyn Parser + Send + Sync>,
+        stream_id: Option<String>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
+    ) -> CoreResult<Self> {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         let client = Client::builder()
@@ -388,9 +409,21 @@ impl HttpPollingSource {
             sender,
             is_running: Arc::new(Mutex::new(false)),
             last_successful_poll: Arc::new(Mutex::new(HashMap::new())),
+            stream_id,
             ndp_id,
             context,
         })
+    }
+
+    /// Get the generated source_id for this source
+    ///
+    /// Format: "{stream_id}-Http" or "unknown-Http" if stream_id not set
+    pub fn source_id(&self) -> String {
+        use crate::sources::generate_source_id;
+        use crate::types::stream_config::SourceType;
+
+        let stream_id = self.stream_id.as_deref().unwrap_or("unknown");
+        generate_source_id(stream_id, &SourceType::HttpPoll)
     }
 
     /// Poll a single sensor
@@ -421,7 +454,8 @@ impl HttpPollingSource {
 
         let timestamp = Utc::now();
         let parse_context = ParseContext::new(self.ndp_id.clone(), self.context.clone());
-        self.parser.parse_with_context(&json, timestamp, &parse_context)
+        self.parser
+            .parse_with_context(&json, timestamp, &parse_context)
     }
 
     /// Poll all sensors
@@ -554,6 +588,134 @@ impl Source for HttpPollingSource {
     }
 }
 
+/// RawSource implementation for HttpPollingSource (DP-004)
+///
+/// Fetches raw JSON from HTTP endpoints without parsing.
+/// The response is stored exactly as received in the raw_payload field.
+#[async_trait]
+impl RawSource for HttpPollingSource {
+    /// Fetch raw data from the first sensor endpoint.
+    ///
+    /// Returns a single RawDataPoint containing:
+    /// - `source_id`: Generated from stream_id + "Http"
+    /// - `ndp_id`: From source configuration
+    /// - `context`: Metadata from source configuration
+    /// - `raw_payload`: Exact HTTP response body as JSON
+    async fn fetch_raw(&self) -> CoreResult<RawDataPoint> {
+        // Use first sensor as primary endpoint
+        let sensor = self
+            .config
+            .sensors
+            .first()
+            .ok_or_else(|| CoreError::Source("No sensors configured".to_string()))?;
+
+        debug!("Fetching raw data from sensor: {}", sensor.serial_number);
+
+        let response = self
+            .client
+            .get(&sensor.url)
+            .send()
+            .await
+            .map_err(|e| CoreError::Source(format!("HTTP request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(CoreError::Source(format!(
+                "HTTP request failed with status: {}",
+                response.status()
+            )));
+        }
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| CoreError::Source(format!("Failed to read response body: {}", e)))?;
+
+        // Parse as JSON to ensure valid payload
+        let raw_payload: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| CoreError::Source(format!("Invalid JSON response: {}", e)))?;
+
+        // Build RawDataPoint with metadata
+        let mut point = RawDataPoint::new(self.source_id(), raw_payload);
+
+        if let Some(ref ndp_id) = self.ndp_id {
+            point = point.with_ndp_id(ndp_id.clone());
+        }
+
+        if let Some(ref context) = self.context {
+            point = point.with_context(context.clone());
+        }
+
+        Ok(point)
+    }
+
+    /// Fetch raw data from all configured sensors.
+    ///
+    /// Returns a RawDataPoint for each sensor endpoint.
+    async fn fetch_raw_batch(&self) -> CoreResult<Vec<RawDataPoint>> {
+        let mut points = Vec::with_capacity(self.config.sensors.len());
+
+        for (idx, sensor) in self.config.sensors.iter().enumerate() {
+            debug!(
+                "Fetching raw data from sensor {}: {}",
+                idx, sensor.serial_number
+            );
+
+            let response = self.client.get(&sensor.url).send().await.map_err(|e| {
+                CoreError::Source(format!(
+                    "HTTP request failed for {}: {}",
+                    sensor.serial_number, e
+                ))
+            })?;
+
+            if !response.status().is_success() {
+                warn!(
+                    "HTTP request failed for {} with status: {}",
+                    sensor.serial_number,
+                    response.status()
+                );
+                continue;
+            }
+
+            let body = response
+                .text()
+                .await
+                .map_err(|e| CoreError::Source(format!("Failed to read response body: {}", e)))?;
+
+            let raw_payload: serde_json::Value = match serde_json::from_str(&body) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Invalid JSON from {}: {}", sensor.serial_number, e);
+                    continue;
+                }
+            };
+
+            // Use indexed source_id for multi-sensor sources
+            let source_id = if self.config.sensors.len() > 1 {
+                use crate::sources::generate_source_id_indexed;
+                use crate::types::stream_config::SourceType;
+                let stream_id = self.stream_id.as_deref().unwrap_or("unknown");
+                generate_source_id_indexed(stream_id, &SourceType::HttpPoll, idx)
+            } else {
+                self.source_id()
+            };
+
+            let mut point = RawDataPoint::new(source_id, raw_payload);
+
+            if let Some(ref ndp_id) = self.ndp_id {
+                point = point.with_ndp_id(ndp_id.clone());
+            }
+
+            if let Some(ref context) = self.context {
+                point = point.with_context(context.clone());
+            }
+
+            points.push(point);
+        }
+
+        Ok(points)
+    }
+}
+
 impl HttpPollingSource {
     /// Start the HTTP polling source
     pub async fn start(&mut self) -> CoreResult<()> {
@@ -574,6 +736,7 @@ impl HttpPollingSource {
             sender: self.sender.clone(),
             is_running: self.is_running.clone(),
             last_successful_poll: self.last_successful_poll.clone(),
+            stream_id: self.stream_id.clone(),
             ndp_id: self.ndp_id.clone(),
             context: self.context.clone(),
         };
@@ -636,6 +799,8 @@ pub struct GenericHttpPollingSource {
     is_running: Arc<Mutex<bool>>,
     last_successful_poll: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     endpoint_retry_counts: Arc<Mutex<HashMap<String, u32>>>,
+    /// DP-004: Stream identifier for source_id generation
+    stream_id: Option<String>,
     /// AIR-009: Stable source identifier
     ndp_id: Option<String>,
     /// AIR-009: Mutable context attributes
@@ -658,6 +823,24 @@ impl GenericHttpPollingSource {
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
     ) -> CoreResult<Self> {
+        Self::with_raw_config(config, parser, None, ndp_id, context)
+    }
+
+    /// Create a new generic HTTP polling source with full raw data configuration (DP-004)
+    ///
+    /// # Arguments
+    /// * `config` - Generic HTTP polling configuration
+    /// * `parser` - Parser for TimeSeriesPoint extraction
+    /// * `stream_id` - Stream identifier for source_id generation (e.g., "air-quality")
+    /// * `ndp_id` - Stable source identifier from configuration
+    /// * `context` - Mutable context metadata
+    pub fn with_raw_config(
+        config: GenericHttpPollingConfig,
+        parser: Box<dyn Parser + Send + Sync>,
+        stream_id: Option<String>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
+    ) -> CoreResult<Self> {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         let client = Client::builder()
@@ -674,9 +857,21 @@ impl GenericHttpPollingSource {
             is_running: Arc::new(Mutex::new(false)),
             last_successful_poll: Arc::new(Mutex::new(HashMap::new())),
             endpoint_retry_counts: Arc::new(Mutex::new(HashMap::new())),
+            stream_id,
             ndp_id,
             context,
         })
+    }
+
+    /// Get the generated source_id for this source
+    ///
+    /// Format: "{stream_id}-Http" or "unknown-Http" if stream_id not set
+    pub fn source_id(&self) -> String {
+        use crate::sources::generate_source_id;
+        use crate::types::stream_config::SourceType;
+
+        let stream_id = self.stream_id.as_deref().unwrap_or("unknown");
+        generate_source_id(stream_id, &SourceType::HttpPoll)
     }
 
     /// Create with default parser registry (DEPRECATED - use new() with parser injection)
@@ -776,13 +971,17 @@ impl GenericHttpPollingSource {
                         let timestamp = Utc::now();
 
                         // Use injected parser with context (AIR-009)
-                        let parse_context = ParseContext::new(self.ndp_id.clone(), self.context.clone());
-                        let points = self.parser.parse_with_context(&json, timestamp, &parse_context).map_err(|e| {
-                            PollingError::permanent(
-                                &endpoint.endpoint_id,
-                                format!("Failed to parse response: {}", e),
-                            )
-                        })?;
+                        let parse_context =
+                            ParseContext::new(self.ndp_id.clone(), self.context.clone());
+                        let points = self
+                            .parser
+                            .parse_with_context(&json, timestamp, &parse_context)
+                            .map_err(|e| {
+                                PollingError::permanent(
+                                    &endpoint.endpoint_id,
+                                    format!("Failed to parse response: {}", e),
+                                )
+                            })?;
 
                         // Update successful poll time
                         let mut last_poll = self.last_successful_poll.lock().await;
@@ -927,6 +1126,7 @@ impl GenericHttpPollingSource {
             is_running: self.is_running.clone(),
             last_successful_poll: self.last_successful_poll.clone(),
             endpoint_retry_counts: self.endpoint_retry_counts.clone(),
+            stream_id: self.stream_id.clone(),
             ndp_id: self.ndp_id.clone(),
             context: self.context.clone(),
         };
@@ -1023,10 +1223,161 @@ impl Source for GenericHttpPollingSource {
     }
 }
 
+/// RawSource implementation for GenericHttpPollingSource (DP-004)
+///
+/// Fetches raw JSON from HTTP endpoints without parsing.
+/// The response is stored exactly as received in the raw_payload field.
+#[async_trait]
+impl RawSource for GenericHttpPollingSource {
+    /// Fetch raw data from the first enabled endpoint.
+    ///
+    /// Returns a single RawDataPoint containing:
+    /// - `source_id`: Generated from stream_id + "Http"
+    /// - `ndp_id`: From source configuration
+    /// - `context`: Metadata from source configuration
+    /// - `raw_payload`: Exact HTTP response body as JSON
+    async fn fetch_raw(&self) -> CoreResult<RawDataPoint> {
+        // Use first enabled endpoint
+        let endpoint = self
+            .config
+            .endpoints
+            .iter()
+            .find(|e| e.enabled)
+            .ok_or_else(|| CoreError::Source("No enabled endpoints configured".to_string()))?;
+
+        debug!("Fetching raw data from endpoint: {}", endpoint.endpoint_id);
+
+        let request = self.build_request(endpoint)?;
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| CoreError::Source(format!("HTTP request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(CoreError::Source(format!(
+                "HTTP request failed with status: {}",
+                response.status()
+            )));
+        }
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| CoreError::Source(format!("Failed to read response body: {}", e)))?;
+
+        // Parse as JSON to ensure valid payload
+        let raw_payload: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| CoreError::Source(format!("Invalid JSON response: {}", e)))?;
+
+        // Build RawDataPoint with metadata
+        let mut point = RawDataPoint::new(self.source_id(), raw_payload);
+
+        if let Some(ref ndp_id) = self.ndp_id {
+            point = point.with_ndp_id(ndp_id.clone());
+        }
+
+        if let Some(ref context) = self.context {
+            point = point.with_context(context.clone());
+        }
+
+        Ok(point)
+    }
+
+    /// Fetch raw data from all enabled endpoints.
+    ///
+    /// Returns a RawDataPoint for each enabled endpoint.
+    async fn fetch_raw_batch(&self) -> CoreResult<Vec<RawDataPoint>> {
+        let enabled_endpoints: Vec<_> =
+            self.config.endpoints.iter().filter(|e| e.enabled).collect();
+
+        let mut points = Vec::with_capacity(enabled_endpoints.len());
+
+        for (idx, endpoint) in enabled_endpoints.iter().enumerate() {
+            debug!(
+                "Fetching raw data from endpoint {}: {}",
+                idx, endpoint.endpoint_id
+            );
+
+            let request = match self.build_request(endpoint) {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!(
+                        "Failed to build request for {}: {}",
+                        endpoint.endpoint_id, e
+                    );
+                    continue;
+                }
+            };
+
+            let response = match request.send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!("HTTP request failed for {}: {}", endpoint.endpoint_id, e);
+                    continue;
+                }
+            };
+
+            if !response.status().is_success() {
+                warn!(
+                    "HTTP request failed for {} with status: {}",
+                    endpoint.endpoint_id,
+                    response.status()
+                );
+                continue;
+            }
+
+            let body = match response.text().await {
+                Ok(b) => b,
+                Err(e) => {
+                    warn!(
+                        "Failed to read response body for {}: {}",
+                        endpoint.endpoint_id, e
+                    );
+                    continue;
+                }
+            };
+
+            let raw_payload: serde_json::Value = match serde_json::from_str(&body) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Invalid JSON from {}: {}", endpoint.endpoint_id, e);
+                    continue;
+                }
+            };
+
+            // Use indexed source_id for multi-endpoint sources
+            let source_id = if enabled_endpoints.len() > 1 {
+                use crate::sources::generate_source_id_indexed;
+                use crate::types::stream_config::SourceType;
+                let stream_id = self.stream_id.as_deref().unwrap_or("unknown");
+                generate_source_id_indexed(stream_id, &SourceType::HttpPoll, idx)
+            } else {
+                self.source_id()
+            };
+
+            let mut point = RawDataPoint::new(source_id, raw_payload);
+
+            if let Some(ref ndp_id) = self.ndp_id {
+                point = point.with_ndp_id(ndp_id.clone());
+            }
+
+            if let Some(ref context) = self.context {
+                point = point.with_context(context.clone());
+            }
+
+            points.push(point);
+        }
+
+        Ok(points)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::parsers::{FlatJsonParser, ParserConfig, ParserType};
+    use crate::traits::RawSource;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -2075,5 +2426,507 @@ mod tests {
         let source = GenericHttpPollingSource::new(config, parser).unwrap();
 
         assert_eq!(source.sender.capacity(), 500);
+    }
+
+    // ========== DP-004 TDD CYCLE 8: RawSource fetch_raw Tests ==========
+
+    #[tokio::test]
+    async fn test_http_polling_source_fetch_raw_returns_raw_payload() {
+        let mock_server = MockServer::start().await;
+
+        let raw_response = serde_json::json!({
+            "pm25": 12.5,
+            "temperature": 23.0,
+            "humidity": 45,
+            "status": "active",
+            "nested": {"key": "value"}
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/measures/current"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&raw_response))
+            .mount(&mock_server)
+            .await;
+
+        let sensor = SensorConfig {
+            serial_number: "TEST123".to_string(),
+            url: format!("{}/measures/current", mock_server.uri()),
+        };
+
+        let config = HttpPollingConfig {
+            sensors: vec![sensor],
+            ..Default::default()
+        };
+
+        let source = HttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("air-quality".to_string()),
+            Some("sensor-001".to_string()),
+            Some(serde_json::json!({"room": "office"})),
+        )
+        .unwrap();
+
+        let point = source.fetch_raw().await.unwrap();
+
+        // Verify source_id is generated correctly
+        assert_eq!(point.source_id, "air-quality-Http");
+
+        // Verify ndp_id is set
+        assert_eq!(point.ndp_id, Some("sensor-001".to_string()));
+
+        // Verify context is set
+        assert_eq!(point.context, Some(serde_json::json!({"room": "office"})));
+
+        // Verify raw_payload matches EXACT response
+        assert_eq!(point.raw_payload["pm25"], 12.5);
+        assert_eq!(point.raw_payload["temperature"], 23.0);
+        assert_eq!(point.raw_payload["humidity"], 45);
+        assert_eq!(point.raw_payload["status"], "active");
+        assert_eq!(point.raw_payload["nested"]["key"], "value");
+    }
+
+    #[tokio::test]
+    async fn test_http_polling_source_fetch_raw_preserves_all_json_types() {
+        let mock_server = MockServer::start().await;
+
+        let raw_response = serde_json::json!({
+            "string": "hello world",
+            "integer": 42,
+            "float": 3.14159,
+            "boolean": true,
+            "null_value": null,
+            "array": [1, "two", 3.0, false],
+            "nested": {
+                "deep": {
+                    "value": "preserved"
+                }
+            }
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/data"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&raw_response))
+            .mount(&mock_server)
+            .await;
+
+        let sensor = SensorConfig {
+            serial_number: "TEST456".to_string(),
+            url: format!("{}/data", mock_server.uri()),
+        };
+
+        let config = HttpPollingConfig {
+            sensors: vec![sensor],
+            ..Default::default()
+        };
+
+        let source = HttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("test-stream".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let point = source.fetch_raw().await.unwrap();
+
+        // Verify all JSON types are preserved exactly
+        assert_eq!(point.raw_payload["string"], "hello world");
+        assert_eq!(point.raw_payload["integer"], 42);
+        assert_eq!(point.raw_payload["float"], 3.14159);
+        assert_eq!(point.raw_payload["boolean"], true);
+        assert!(point.raw_payload["null_value"].is_null());
+        assert_eq!(point.raw_payload["array"][0], 1);
+        assert_eq!(point.raw_payload["array"][1], "two");
+        assert_eq!(point.raw_payload["nested"]["deep"]["value"], "preserved");
+    }
+
+    #[tokio::test]
+    async fn test_http_polling_source_fetch_raw_error_on_http_failure() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/data"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let sensor = SensorConfig {
+            serial_number: "TEST789".to_string(),
+            url: format!("{}/data", mock_server.uri()),
+        };
+
+        let config = HttpPollingConfig {
+            sensors: vec![sensor],
+            ..Default::default()
+        };
+
+        let source = HttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("test-stream".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let result = source.fetch_raw().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_http_polling_source_fetch_raw_error_on_invalid_json() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/data"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not valid json"))
+            .mount(&mock_server)
+            .await;
+
+        let sensor = SensorConfig {
+            serial_number: "TEST789".to_string(),
+            url: format!("{}/data", mock_server.uri()),
+        };
+
+        let config = HttpPollingConfig {
+            sensors: vec![sensor],
+            ..Default::default()
+        };
+
+        let source = HttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("test-stream".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let result = source.fetch_raw().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_http_polling_source_fetch_raw_no_sensors_error() {
+        let config = HttpPollingConfig {
+            sensors: vec![],
+            ..Default::default()
+        };
+
+        let source = HttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("test-stream".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let result = source.fetch_raw().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_http_polling_source_fetch_raw_batch_multiple_sensors() {
+        let mock_server = MockServer::start().await;
+
+        let response1 = serde_json::json!({"sensor": 1, "value": 10});
+        let response2 = serde_json::json!({"sensor": 2, "value": 20});
+
+        Mock::given(method("GET"))
+            .and(path("/sensor1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response1))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sensor2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response2))
+            .mount(&mock_server)
+            .await;
+
+        let config = HttpPollingConfig {
+            sensors: vec![
+                SensorConfig {
+                    serial_number: "S1".to_string(),
+                    url: format!("{}/sensor1", mock_server.uri()),
+                },
+                SensorConfig {
+                    serial_number: "S2".to_string(),
+                    url: format!("{}/sensor2", mock_server.uri()),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let source = HttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("multi-sensor".to_string()),
+            Some("device-001".to_string()),
+            None,
+        )
+        .unwrap();
+
+        let points = source.fetch_raw_batch().await.unwrap();
+
+        assert_eq!(points.len(), 2);
+
+        // Multi-sensor should use indexed source_ids
+        assert_eq!(points[0].source_id, "multi-sensor-Http-0");
+        assert_eq!(points[1].source_id, "multi-sensor-Http-1");
+
+        // Both should have same ndp_id
+        assert_eq!(points[0].ndp_id, Some("device-001".to_string()));
+        assert_eq!(points[1].ndp_id, Some("device-001".to_string()));
+
+        // Verify payloads
+        assert_eq!(points[0].raw_payload["sensor"], 1);
+        assert_eq!(points[1].raw_payload["sensor"], 2);
+    }
+
+    #[tokio::test]
+    async fn test_http_polling_source_source_id_generation() {
+        let config = HttpPollingConfig::default();
+
+        // Without stream_id
+        let source1 = HttpPollingSource::with_raw_config(
+            config.clone(),
+            create_default_parser(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(source1.source_id(), "unknown-Http");
+
+        // With stream_id
+        let source2 = HttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("my-stream".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(source2.source_id(), "my-stream-Http");
+    }
+
+    // ========== GenericHttpPollingSource fetch_raw Tests ==========
+
+    #[tokio::test]
+    async fn test_generic_http_source_fetch_raw_returns_raw_payload() {
+        let mock_server = MockServer::start().await;
+
+        let raw_response = serde_json::json!({
+            "data": {
+                "pm25": 15.0,
+                "aqi": 45
+            },
+            "timestamp": "2026-01-01T12:00:00Z"
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/api/data"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&raw_response))
+            .mount(&mock_server)
+            .await;
+
+        let endpoint = EndpointConfig::new(
+            "test-endpoint",
+            &format!("{}/api/data", mock_server.uri()),
+            "location1",
+            "flat_json",
+        );
+
+        let config = GenericHttpPollingConfig {
+            endpoints: vec![endpoint],
+            ..Default::default()
+        };
+
+        let source = GenericHttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("weather".to_string()),
+            Some("weather-station-001".to_string()),
+            Some(serde_json::json!({"city": "New York"})),
+        )
+        .unwrap();
+
+        let point = source.fetch_raw().await.unwrap();
+
+        // Verify source_id
+        assert_eq!(point.source_id, "weather-Http");
+
+        // Verify ndp_id and context
+        assert_eq!(point.ndp_id, Some("weather-station-001".to_string()));
+        assert_eq!(point.context, Some(serde_json::json!({"city": "New York"})));
+
+        // Verify raw_payload matches EXACT response
+        assert_eq!(point.raw_payload["data"]["pm25"], 15.0);
+        assert_eq!(point.raw_payload["data"]["aqi"], 45);
+        assert_eq!(point.raw_payload["timestamp"], "2026-01-01T12:00:00Z");
+    }
+
+    #[tokio::test]
+    async fn test_generic_http_source_fetch_raw_batch_multiple_endpoints() {
+        let mock_server = MockServer::start().await;
+
+        let response1 = serde_json::json!({"endpoint": "one", "value": 100});
+        let response2 = serde_json::json!({"endpoint": "two", "value": 200});
+
+        Mock::given(method("GET"))
+            .and(path("/api/one"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response1))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/two"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response2))
+            .mount(&mock_server)
+            .await;
+
+        let config = GenericHttpPollingConfig {
+            endpoints: vec![
+                EndpointConfig::new(
+                    "endpoint-1",
+                    &format!("{}/api/one", mock_server.uri()),
+                    "loc1",
+                    "flat_json",
+                ),
+                EndpointConfig::new(
+                    "endpoint-2",
+                    &format!("{}/api/two", mock_server.uri()),
+                    "loc2",
+                    "flat_json",
+                ),
+            ],
+            ..Default::default()
+        };
+
+        let source = GenericHttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("multi-api".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let points = source.fetch_raw_batch().await.unwrap();
+
+        assert_eq!(points.len(), 2);
+
+        // Multi-endpoint should use indexed source_ids
+        assert_eq!(points[0].source_id, "multi-api-Http-0");
+        assert_eq!(points[1].source_id, "multi-api-Http-1");
+
+        // Verify payloads
+        assert_eq!(points[0].raw_payload["endpoint"], "one");
+        assert_eq!(points[1].raw_payload["endpoint"], "two");
+    }
+
+    #[tokio::test]
+    async fn test_generic_http_source_fetch_raw_skips_disabled_endpoints() {
+        let mock_server = MockServer::start().await;
+
+        let response = serde_json::json!({"active": true});
+
+        Mock::given(method("GET"))
+            .and(path("/api/active"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response))
+            .mount(&mock_server)
+            .await;
+
+        let mut enabled_endpoint = EndpointConfig::new(
+            "active-endpoint",
+            &format!("{}/api/active", mock_server.uri()),
+            "loc1",
+            "flat_json",
+        );
+        enabled_endpoint.enabled = true;
+
+        let mut disabled_endpoint = EndpointConfig::new(
+            "disabled-endpoint",
+            "http://should-not-be-called/api",
+            "loc2",
+            "flat_json",
+        );
+        disabled_endpoint.enabled = false;
+
+        let config = GenericHttpPollingConfig {
+            endpoints: vec![enabled_endpoint, disabled_endpoint],
+            ..Default::default()
+        };
+
+        let source = GenericHttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("filtered".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let points = source.fetch_raw_batch().await.unwrap();
+
+        // Only active endpoint should be fetched
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].source_id, "filtered-Http");
+        assert_eq!(points[0].raw_payload["active"], true);
+    }
+
+    #[tokio::test]
+    async fn test_generic_http_source_fetch_raw_no_enabled_endpoints_error() {
+        let mut disabled =
+            EndpointConfig::new("disabled", "http://example.com/api", "loc1", "flat_json");
+        disabled.enabled = false;
+
+        let config = GenericHttpPollingConfig {
+            endpoints: vec![disabled],
+            ..Default::default()
+        };
+
+        let source = GenericHttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("test".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let result = source.fetch_raw().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_generic_http_source_source_id_generation() {
+        let config = GenericHttpPollingConfig::default();
+
+        // Without stream_id
+        let source1 = GenericHttpPollingSource::with_raw_config(
+            config.clone(),
+            create_default_parser(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(source1.source_id(), "unknown-Http");
+
+        // With stream_id
+        let source2 = GenericHttpPollingSource::with_raw_config(
+            config,
+            create_default_parser(),
+            Some("my-api".to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(source2.source_id(), "my-api-Http");
     }
 }

@@ -236,7 +236,8 @@ impl MqttSource {
 
         let timestamp = Utc::now();
         let parse_context = ParseContext::new(self.ndp_id.clone(), self.context.clone());
-        self.parser.parse_with_context(&json, timestamp, &parse_context)
+        self.parser
+            .parse_with_context(&json, timestamp, &parse_context)
     }
 
     /// Create a new connection and return the event loop
@@ -285,8 +286,13 @@ impl MqttSource {
                             match serde_json::from_slice::<Value>(&publish.payload) {
                                 Ok(json) => {
                                     let timestamp = Utc::now();
-                                    let parse_context = ParseContext::new(ndp_id.clone(), context.clone());
-                                    match parser.parse_with_context(&json, timestamp, &parse_context) {
+                                    let parse_context =
+                                        ParseContext::new(ndp_id.clone(), context.clone());
+                                    match parser.parse_with_context(
+                                        &json,
+                                        timestamp,
+                                        &parse_context,
+                                    ) {
                                         Ok(mut points) => {
                                             // Tag points with stream_id and topic
                                             for point in &mut points {
