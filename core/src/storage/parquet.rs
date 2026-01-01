@@ -1,8 +1,11 @@
 use crate::error::{CoreError, CoreResult};
 use crate::storage::wal::WriteAheadLog;
-use crate::traits::{AggregatedPoint, AggregationType, HealthStatus, Store, TimeSeriesPoint};
+use crate::traits::{
+    AggregatedPoint, AggregationType, HealthStatus, RawStore, Store, TimeSeriesPoint,
+};
+use crate::types::RawDataPoint;
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use polars::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -430,6 +433,314 @@ impl Store for ParquetStore {
             },
             details,
         })
+    }
+}
+
+// ========== DP-004: RAW DATA STORAGE (BRONZE LAYER) ==========
+//
+// This implementation provides the 5-column schema for raw JSON storage:
+// - timestamp: i64 (microseconds since epoch)
+// - source_id: String (e.g., "air-quality-Http")
+// - ndp_id: String (nullable, platform-assigned identifier)
+// - context: String (nullable, JSON-serialized metadata)
+// - raw_payload: String (JSON-serialized source data)
+
+impl ParquetStore {
+    /// Build partition path for raw data storage using source_id
+    ///
+    /// Directory structure: {base_path}/raw/{source_id}/year={YYYY}/month={MM}/day={DD}/hour={HH}/data.parquet
+    pub fn raw_partition_path(&self, source_id: &str, timestamp: DateTime<Utc>) -> PathBuf {
+        self.base_path
+            .join("raw")
+            .join(source_id)
+            .join(format!("year={}", timestamp.year()))
+            .join(format!("month={:02}", timestamp.month()))
+            .join(format!("day={:02}", timestamp.day()))
+            .join(format!("hour={:02}", timestamp.hour()))
+            .join("data.parquet")
+    }
+
+    /// Write raw data points to Parquet file with 5-column schema
+    async fn write_raw_parquet(&self, points: Vec<RawDataPoint>, path: &Path) -> CoreResult<()> {
+        if points.is_empty() {
+            return Ok(());
+        }
+
+        let parent = path
+            .parent()
+            .ok_or_else(|| CoreError::Storage("Invalid path: no parent directory".to_string()))?;
+        std::fs::create_dir_all(parent)?;
+
+        // Build column arrays for 5-column schema
+        let timestamps: Vec<i64> = points
+            .iter()
+            .map(|p| p.timestamp.timestamp_micros())
+            .collect();
+
+        let source_ids: Vec<String> = points.iter().map(|p| p.source_id.clone()).collect();
+
+        let ndp_ids: Vec<Option<String>> = points.iter().map(|p| p.ndp_id.clone()).collect();
+
+        let contexts: Vec<Option<String>> = points
+            .iter()
+            .map(|p| p.context.as_ref().map(|c| c.to_string()))
+            .collect();
+
+        let raw_payloads: Vec<String> = points.iter().map(|p| p.raw_payload.to_string()).collect();
+
+        // Create Series for DataFrame
+        let timestamp_series = Series::new("timestamp", timestamps);
+        let source_id_series = Series::new("source_id", source_ids);
+        let ndp_id_series = Series::new("ndp_id", ndp_ids);
+        let context_series = Series::new("context", contexts);
+        let raw_payload_series = Series::new("raw_payload", raw_payloads);
+
+        let mut df = DataFrame::new(vec![
+            timestamp_series,
+            source_id_series,
+            ndp_id_series,
+            context_series,
+            raw_payload_series,
+        ])
+        .map_err(|e| CoreError::Storage(format!("Failed to create DataFrame: {}", e)))?;
+
+        let file = std::fs::File::create(path)?;
+        ParquetWriter::new(file)
+            .with_compression(ParquetCompression::Snappy)
+            .finish(&mut df)
+            .map_err(|e| CoreError::Storage(format!("Failed to write Parquet: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Append raw data points to an existing Parquet file or create new one
+    async fn append_to_raw_parquet(
+        &self,
+        points: Vec<RawDataPoint>,
+        path: &Path,
+    ) -> CoreResult<()> {
+        let mut all_points = points;
+
+        if path.exists() {
+            let file = std::fs::File::open(path)?;
+            let df = ParquetReader::new(file).finish().map_err(|e| {
+                CoreError::Storage(format!("Failed to read existing Parquet: {}", e))
+            })?;
+
+            // Read existing data and convert back to RawDataPoint
+            let timestamps = df
+                .column("timestamp")
+                .map_err(|e| CoreError::Storage(format!("Missing timestamp column: {}", e)))?
+                .i64()
+                .map_err(|e| CoreError::Storage(format!("Invalid timestamp type: {}", e)))?;
+
+            let source_ids = df
+                .column("source_id")
+                .map_err(|e| CoreError::Storage(format!("Missing source_id column: {}", e)))?
+                .utf8()
+                .map_err(|e| CoreError::Storage(format!("Invalid source_id type: {}", e)))?;
+
+            let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
+            let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
+            let raw_payloads = df
+                .column("raw_payload")
+                .map_err(|e| CoreError::Storage(format!("Missing raw_payload column: {}", e)))?
+                .utf8()
+                .map_err(|e| CoreError::Storage(format!("Invalid raw_payload type: {}", e)))?;
+
+            for i in 0..df.height() {
+                if let (Some(ts), Some(source_id), Some(payload_str)) =
+                    (timestamps.get(i), source_ids.get(i), raw_payloads.get(i))
+                {
+                    let timestamp = DateTime::from_timestamp_micros(ts)
+                        .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
+
+                    let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
+                    let context = contexts
+                        .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+                    let raw_payload: serde_json::Value = serde_json::from_str(payload_str)
+                        .map_err(|e| CoreError::Storage(format!("Invalid JSON payload: {}", e)))?;
+
+                    all_points.push(RawDataPoint {
+                        timestamp,
+                        source_id: source_id.to_string(),
+                        ndp_id,
+                        context,
+                        raw_payload,
+                    });
+                }
+            }
+        }
+
+        self.write_raw_parquet(all_points, path).await
+    }
+
+    /// Find raw partition files within a time range
+    fn find_raw_partitions(
+        &self,
+        _start: DateTime<Utc>,
+        _end: DateTime<Utc>,
+        source_filter: Option<&str>,
+    ) -> CoreResult<Vec<PathBuf>> {
+        let raw_path = self.base_path.join("raw");
+        if !raw_path.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut paths = Vec::new();
+
+        // Iterate through source directories
+        for source_entry in std::fs::read_dir(&raw_path)? {
+            let source_entry = source_entry?;
+            let source_path = source_entry.path();
+
+            if !source_path.is_dir() {
+                continue;
+            }
+
+            // Apply source filter if provided
+            if let Some(filter) = source_filter {
+                if let Some(name) = source_path.file_name().and_then(|n| n.to_str()) {
+                    if name != filter {
+                        continue;
+                    }
+                }
+            }
+
+            // Walk the partition structure
+            self.collect_partition_files(&source_path, &mut paths)?;
+        }
+
+        Ok(paths)
+    }
+
+    /// Recursively collect partition files
+    fn collect_partition_files(&self, dir: &Path, paths: &mut Vec<PathBuf>) -> CoreResult<()> {
+        if !dir.exists() || !dir.is_dir() {
+            return Ok(());
+        }
+
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() && path.extension().map(|e| e == "parquet").unwrap_or(false) {
+                paths.push(path);
+            } else if path.is_dir() {
+                self.collect_partition_files(&path, paths)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl RawStore for ParquetStore {
+    async fn write_raw(&self, point: RawDataPoint) -> CoreResult<()> {
+        // Append to WAL first
+        let mut wal = self.wal.lock().await;
+        let entry = serde_json::to_vec(&point)
+            .map_err(|e| CoreError::Storage(format!("Failed to serialize raw point: {}", e)))?;
+        wal.append(&entry)?;
+        drop(wal);
+
+        // Write to partition path based on source_id
+        let path = self.raw_partition_path(&point.source_id, point.timestamp);
+        self.append_to_raw_parquet(vec![point], &path).await
+    }
+
+    async fn write_raw_batch(&self, points: Vec<RawDataPoint>) -> CoreResult<()> {
+        if points.is_empty() {
+            return Ok(());
+        }
+
+        // Append all to WAL first
+        let mut wal = self.wal.lock().await;
+        for point in &points {
+            let entry = serde_json::to_vec(point)
+                .map_err(|e| CoreError::Storage(format!("Failed to serialize raw point: {}", e)))?;
+            wal.append(&entry)?;
+        }
+        drop(wal);
+
+        // Group points by partition path
+        let mut grouped: HashMap<PathBuf, Vec<RawDataPoint>> = HashMap::new();
+        for point in points {
+            let path = self.raw_partition_path(&point.source_id, point.timestamp);
+            grouped.entry(path).or_default().push(point);
+        }
+
+        // Write each partition
+        for (path, partition_points) in grouped {
+            self.append_to_raw_parquet(partition_points, &path).await?;
+        }
+
+        // Commit WAL
+        let mut wal = self.wal.lock().await;
+        wal.commit()?;
+
+        Ok(())
+    }
+
+    async fn query_raw(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        source_filter: Option<String>,
+    ) -> CoreResult<Vec<RawDataPoint>> {
+        let partition_files = self.find_raw_partitions(start, end, source_filter.as_deref())?;
+        let mut all_points = Vec::new();
+
+        for path in partition_files {
+            let file = std::fs::File::open(&path)?;
+            let df = ParquetReader::new(file)
+                .finish()
+                .map_err(|e| CoreError::Storage(format!("Failed to read Parquet: {}", e)))?;
+
+            let timestamps = df.column("timestamp")?.i64()?;
+            let source_ids = df.column("source_id")?.utf8()?;
+            let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
+            let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
+            let raw_payloads = df.column("raw_payload")?.utf8()?;
+
+            for i in 0..df.height() {
+                if let (Some(ts), Some(source_id), Some(payload_str)) =
+                    (timestamps.get(i), source_ids.get(i), raw_payloads.get(i))
+                {
+                    let timestamp = DateTime::from_timestamp_micros(ts)
+                        .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
+
+                    // Apply time filter
+                    if timestamp < start || timestamp > end {
+                        continue;
+                    }
+
+                    // Apply source filter
+                    if let Some(ref filter) = source_filter {
+                        if source_id != filter {
+                            continue;
+                        }
+                    }
+
+                    let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
+                    let context = contexts
+                        .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+                    let raw_payload: serde_json::Value = serde_json::from_str(payload_str)
+                        .map_err(|e| CoreError::Storage(format!("Invalid JSON payload: {}", e)))?;
+
+                    all_points.push(RawDataPoint {
+                        timestamp,
+                        source_id: source_id.to_string(),
+                        ndp_id,
+                        context,
+                        raw_payload,
+                    });
+                }
+            }
+        }
+
+        Ok(all_points)
     }
 }
 
@@ -1142,5 +1453,395 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].ndp_id, None);
         assert_eq!(results[0].context, None);
+    }
+
+    // ========== DP-004: RAW DATA STORAGE TESTS (BRONZE LAYER) ==========
+    //
+    // TDD Cycle 4-6: ParquetStore RawStore implementation tests
+    // These tests verify the 5-column schema for raw JSON storage.
+
+    use crate::traits::RawStore;
+
+    // ========== TDD CYCLE 4: ParquetStore writes RawDataPoint ==========
+
+    #[tokio::test]
+    async fn test_raw_partition_path_uses_source_id() {
+        // TC-030: Verify partition path structure uses source_id
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let path = store.raw_partition_path("air-quality-Http", timestamp);
+
+        assert!(path.to_string_lossy().contains("raw"));
+        assert!(path.to_string_lossy().contains("air-quality-Http"));
+        assert!(path.to_string_lossy().contains("year=2026"));
+        assert!(path.to_string_lossy().contains("month=01"));
+        assert!(path.to_string_lossy().contains("day=15"));
+        assert!(path.to_string_lossy().contains("hour=10"));
+        assert!(path.to_string_lossy().ends_with("data.parquet"));
+    }
+
+    #[tokio::test]
+    async fn test_raw_parquet_schema_has_5_columns() {
+        // TC-031: Verify the 5-column schema is created correctly
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let point = RawDataPoint::new("test-Http", serde_json::json!({"value": 42}))
+            .with_timestamp(timestamp)
+            .with_ndp_id("test-001")
+            .with_context(serde_json::json!({"room": "lab"}));
+
+        store.write_raw(point).await.unwrap();
+
+        // Read back the parquet file and verify schema
+        let path = store.raw_partition_path("test-Http", timestamp);
+        assert!(path.exists(), "Parquet file should exist");
+
+        let file = std::fs::File::open(&path).unwrap();
+        let df = ParquetReader::new(file).finish().unwrap();
+
+        // Verify 5 columns exist
+        let column_names: Vec<&str> = df.get_column_names();
+        assert_eq!(column_names.len(), 5, "Should have exactly 5 columns");
+        assert!(column_names.contains(&"timestamp"));
+        assert!(column_names.contains(&"source_id"));
+        assert!(column_names.contains(&"ndp_id"));
+        assert!(column_names.contains(&"context"));
+        assert!(column_names.contains(&"raw_payload"));
+    }
+
+    #[tokio::test]
+    async fn test_write_raw_single_point() {
+        // TC-032: Write single RawDataPoint and verify storage
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let point = RawDataPoint::new(
+            "air-quality-Http",
+            serde_json::json!({
+                "pm25": 12.5,
+                "status": "active",
+                "firmware": "v2.1"
+            }),
+        )
+        .with_timestamp(timestamp)
+        .with_ndp_id("sensor-001")
+        .with_context(serde_json::json!({"room": "office", "floor": 2}));
+
+        let result = store.write_raw(point).await;
+        assert!(result.is_ok());
+
+        // Verify file was created
+        let path = store.raw_partition_path("air-quality-Http", timestamp);
+        assert!(path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_write_and_query_raw_round_trip() {
+        // TC-032: Write and read back RawDataPoint
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let original = RawDataPoint::new(
+            "roundtrip-Http",
+            serde_json::json!({
+                "value": 42,
+                "nested": {"a": 1, "b": "two"}
+            }),
+        )
+        .with_timestamp(timestamp)
+        .with_ndp_id("roundtrip-001")
+        .with_context(serde_json::json!({"test": true}));
+
+        store.write_raw(original.clone()).await.unwrap();
+
+        // Query back
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store
+            .query_raw(start, end, Some("roundtrip-Http".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].source_id, "roundtrip-Http");
+        assert_eq!(results[0].ndp_id, Some("roundtrip-001".to_string()));
+        assert_eq!(results[0].raw_payload["value"], 42);
+        assert_eq!(results[0].raw_payload["nested"]["a"], 1);
+        assert_eq!(results[0].raw_payload["nested"]["b"], "two");
+    }
+
+    #[tokio::test]
+    async fn test_raw_handles_nullable_fields() {
+        // TC-033: Verify nullable ndp_id and context are handled
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let point = RawDataPoint::new("minimal-Http", serde_json::json!({"data": 1}))
+            .with_timestamp(timestamp);
+        // ndp_id and context are None
+
+        store.write_raw(point).await.unwrap();
+
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store
+            .query_raw(start, end, Some("minimal-Http".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].ndp_id.is_none());
+        assert!(results[0].context.is_none());
+        assert_eq!(results[0].raw_payload["data"], 1);
+    }
+
+    // ========== TDD CYCLE 5: Batch Writes ==========
+
+    #[tokio::test]
+    async fn test_write_raw_batch() {
+        // TC-034: Write batch of RawDataPoints
+        let (store, _temp) = create_test_store();
+        let base_time = Utc.with_ymd_and_hms(2026, 1, 15, 10, 0, 0).unwrap();
+
+        let points: Vec<RawDataPoint> = (0..5)
+            .map(|i| {
+                RawDataPoint::new(
+                    "batch-test-Http",
+                    serde_json::json!({"index": i, "value": i * 10}),
+                )
+                .with_timestamp(base_time + chrono::Duration::minutes(i))
+            })
+            .collect();
+
+        let result = store.write_raw_batch(points).await;
+        assert!(result.is_ok());
+
+        // Query back
+        let start = base_time - chrono::Duration::hours(1);
+        let end = base_time + chrono::Duration::hours(1);
+        let results = store
+            .query_raw(start, end, Some("batch-test-Http".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_write_raw_batch_empty_succeeds() {
+        // TC-034: Empty batch should succeed without error
+        let (store, _temp) = create_test_store();
+
+        let result = store.write_raw_batch(vec![]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_write_raw_batch_multiple_sources() {
+        // TC-034: Batch with multiple sources partitions correctly
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let points = vec![
+            RawDataPoint::new("source-a-Http", serde_json::json!({"from": "a"}))
+                .with_timestamp(timestamp),
+            RawDataPoint::new("source-b-Mqtt", serde_json::json!({"from": "b"}))
+                .with_timestamp(timestamp),
+            RawDataPoint::new("source-a-Http", serde_json::json!({"from": "a2"}))
+                .with_timestamp(timestamp),
+        ];
+
+        store.write_raw_batch(points).await.unwrap();
+
+        // Verify partition paths
+        let path_a = store.raw_partition_path("source-a-Http", timestamp);
+        let path_b = store.raw_partition_path("source-b-Mqtt", timestamp);
+
+        assert!(path_a.exists(), "Source A partition should exist");
+        assert!(path_b.exists(), "Source B partition should exist");
+
+        // Verify source filtering
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+
+        let results_a = store
+            .query_raw(start, end, Some("source-a-Http".to_string()))
+            .await
+            .unwrap();
+        let results_b = store
+            .query_raw(start, end, Some("source-b-Mqtt".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(results_a.len(), 2);
+        assert_eq!(results_b.len(), 1);
+    }
+
+    // ========== TDD CYCLE 6: Partition Path Uses source_id ==========
+
+    #[tokio::test]
+    async fn test_partition_path_structure() {
+        // Verify directory structure: raw/{source_id}/year=YYYY/month=MM/day=DD/hour=HH/data.parquet
+        let (store, temp_dir) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 6, 15, 14, 30, 0).unwrap();
+
+        let point = RawDataPoint::new("my-source-Http", serde_json::json!({"test": 1}))
+            .with_timestamp(timestamp);
+
+        store.write_raw(point).await.unwrap();
+
+        // Check directory structure exists
+        let expected_dir = temp_dir
+            .path()
+            .join("raw")
+            .join("my-source-Http")
+            .join("year=2026")
+            .join("month=06")
+            .join("day=15")
+            .join("hour=14");
+
+        assert!(expected_dir.exists(), "Partition directory should exist");
+        assert!(
+            expected_dir.join("data.parquet").exists(),
+            "Data file should exist"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_source_filter_in_query() {
+        // Verify source filtering works correctly
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        // Write points from different sources
+        store
+            .write_raw(
+                RawDataPoint::new("source-1-Http", serde_json::json!({"from": 1}))
+                    .with_timestamp(timestamp),
+            )
+            .await
+            .unwrap();
+
+        store
+            .write_raw(
+                RawDataPoint::new("source-2-Mqtt", serde_json::json!({"from": 2}))
+                    .with_timestamp(timestamp),
+            )
+            .await
+            .unwrap();
+
+        store
+            .write_raw(
+                RawDataPoint::new("source-3-Webhook", serde_json::json!({"from": 3}))
+                    .with_timestamp(timestamp),
+            )
+            .await
+            .unwrap();
+
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+
+        // Query with filter
+        let filtered = store
+            .query_raw(start, end, Some("source-2-Mqtt".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].source_id, "source-2-Mqtt");
+
+        // Query without filter
+        let all = store.query_raw(start, end, None).await.unwrap();
+        assert_eq!(all.len(), 3);
+    }
+
+    // ========== RAW DATA TYPE PRESERVATION TESTS ==========
+
+    #[tokio::test]
+    async fn test_raw_preserves_all_json_types() {
+        // Verify non-numeric types are preserved in raw_payload
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let complex_payload = serde_json::json!({
+            "string": "hello world",
+            "integer": 42,
+            "float": 3.14159,
+            "boolean": true,
+            "null": null,
+            "array": [1, "two", false, null],
+            "nested": {
+                "deep": {
+                    "value": "found"
+                }
+            }
+        });
+
+        let point =
+            RawDataPoint::new("types-test-Http", complex_payload.clone()).with_timestamp(timestamp);
+
+        store.write_raw(point).await.unwrap();
+
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store
+            .query_raw(start, end, Some("types-test-Http".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        let payload = &results[0].raw_payload;
+
+        // Verify all types preserved
+        assert_eq!(payload["string"], "hello world");
+        assert_eq!(payload["integer"], 42);
+        assert_eq!(payload["float"], 3.14159);
+        assert_eq!(payload["boolean"], true);
+        assert!(payload["null"].is_null());
+        assert_eq!(payload["array"][0], 1);
+        assert_eq!(payload["array"][1], "two");
+        assert_eq!(payload["array"][2], false);
+        assert!(payload["array"][3].is_null());
+        assert_eq!(payload["nested"]["deep"]["value"], "found");
+    }
+
+    #[tokio::test]
+    async fn test_raw_context_metadata_preserved() {
+        // Verify context metadata is preserved
+        let (store, _temp) = create_test_store();
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+
+        let context = serde_json::json!({
+            "room": "Office 201",
+            "floor": 2,
+            "building": "A",
+            "sensors": ["pm25", "co2", "temperature"],
+            "calibration": {
+                "date": "2026-01-01",
+                "technician": "John"
+            }
+        });
+
+        let point = RawDataPoint::new("context-test-Http", serde_json::json!({"value": 1}))
+            .with_timestamp(timestamp)
+            .with_context(context.clone());
+
+        store.write_raw(point).await.unwrap();
+
+        let start = timestamp - chrono::Duration::hours(1);
+        let end = timestamp + chrono::Duration::hours(1);
+        let results = store
+            .query_raw(start, end, Some("context-test-Http".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        let stored_context = results[0].context.as_ref().unwrap();
+
+        assert_eq!(stored_context["room"], "Office 201");
+        assert_eq!(stored_context["floor"], 2);
+        assert_eq!(stored_context["sensors"][0], "pm25");
+        assert_eq!(stored_context["calibration"]["technician"], "John");
     }
 }
