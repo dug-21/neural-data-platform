@@ -434,8 +434,9 @@ impl SourceManager {
         })?;
 
         // DP-004: Create source with stream_id for proper source_id generation
-        let mut source = HttpPollingSource::with_raw_config(
-            config,
+        // AIR-011: Source is NOT started - we only use fetch_raw_batch() to avoid double-polling
+        let source = HttpPollingSource::with_raw_config(
+            config.clone(),
             parser,
             Some(stream_id.clone()),
             ndp_id.clone(),
@@ -443,21 +444,21 @@ impl SourceManager {
         )
         .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
-        // Start the source
-        source
-            .start()
-            .await
-            .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
+        // AIR-011: Removed source.start() - it spawned a background polling_loop that:
+        // 1. Polled HTTP endpoints and parsed JSON into TimeSeriesPoints
+        // 2. Sent points to internal channel that was NEVER consumed
+        // 3. Caused memory pressure and Pi lockups after hours of operation
+        // We only use fetch_raw_batch() which returns raw JSON without parsing.
 
         // Poll loop - fetch data and send to ingestion channel
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+        // AIR-011: Use config.poll_interval instead of hardcoded 1 second
+        let mut interval = tokio::time::interval(config.poll_interval);
 
         loop {
             tokio::select! {
                 _ = cancel_token.cancelled() => {
                     info!("HTTP polling source for stream {} received cancellation", stream_id);
-                    source.stop().await
-                        .map_err(|e| SourceManagerError::StopError(e.to_string()))?;
+                    // AIR-011: Removed source.stop() - no background polling_loop to stop
                     break;
                 }
                 _ = interval.tick() => {
@@ -835,8 +836,9 @@ impl SourceManager {
         })?;
 
         // DP-004: Create source with stream_id for proper source_id generation
-        let mut source = GenericHttpPollingSource::with_raw_config(
-            config,
+        // AIR-011: Source is NOT started - we only use fetch_raw_batch() to avoid double-polling
+        let source = GenericHttpPollingSource::with_raw_config(
+            config.clone(),
             parser,
             Some(stream_id.clone()),
             ndp_id.clone(),
@@ -844,21 +846,21 @@ impl SourceManager {
         )
         .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
-        // Start the source
-        source
-            .start()
-            .await
-            .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
+        // AIR-011: Removed source.start() - it spawned a background polling_loop that:
+        // 1. Polled HTTP endpoints and parsed JSON into TimeSeriesPoints
+        // 2. Sent points to internal channel that was NEVER consumed
+        // 3. Caused memory pressure and Pi lockups after hours of operation
+        // We only use fetch_raw_batch() which returns raw JSON without parsing.
 
         // Poll loop - fetch data and send to ingestion channel
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+        // AIR-011: Use config.poll_interval instead of hardcoded 1 second
+        let mut interval = tokio::time::interval(config.poll_interval);
 
         loop {
             tokio::select! {
                 _ = cancel_token.cancelled() => {
                     info!("Generic HTTP polling source for stream {} received cancellation", stream_id);
-                    source.stop().await
-                        .map_err(|e| SourceManagerError::StopError(e.to_string()))?;
+                    // AIR-011: Removed source.stop() - no background polling_loop to stop
                     break;
                 }
                 _ = interval.tick() => {
