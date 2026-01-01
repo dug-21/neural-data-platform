@@ -7,7 +7,7 @@ use air_quality_app::{
 };
 use config_client::StreamRegistry;
 use neural_core::types::raw_data_point::RawDataPoint;
-use neural_core::{ParquetStore, Store, TimeSeriesPoint};
+use neural_core::ParquetStore;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
@@ -270,118 +270,35 @@ async fn initialize_multi_stream_coordinator(
         }
     });
 
-    // Create ingestion router
+    // Create ingestion router (for dead letter handling)
     let router = Arc::new(IngestionRouter::new(registry.clone(), dead_letter_tx));
 
-    // Create storage channel for all streams (MQTT + HTTP)
-    let (storage_tx, mut storage_rx) = mpsc::channel::<TimeSeriesPoint>(1000);
+    // ==========================================================================
+    // DP-004: Bronze Layer Storage Pipeline
+    // ==========================================================================
+    // Single ingestion path using RawDataPoint with 5-column schema:
+    // timestamp, source_id, ndp_id, context, raw_payload
+    let (storage_tx, storage_rx) = mpsc::channel::<RawDataPoint>(1000);
 
-    // Register storage channels dynamically from StreamRegistry (config-driven)
-    // Streams are loaded from etcd, which is populated from YAML configs via deploy.sh sync
-    match router
-        .register_all_streams_from_registry(storage_tx.clone())
-        .await
-    {
-        Ok(count) => {
-            tracing::info!(
-                "Config-driven: Registered {} storage channels from StreamRegistry",
-                count
-            );
-        }
-        Err(e) => {
-            tracing::warn!(
-                "Failed to register streams from registry: {}. \
-                Falling back to YAML directory scan.",
-                e
-            );
-            // Fallback: scan config/base/streams/ directory for stream IDs
-            let stream_config_dir = std::env::var("STREAM_CONFIG_DIR").unwrap_or_else(|_| {
-                "/workspaces/neural-data-platform/config/base/streams".to_string()
-            });
-
-            if let Ok(entries) = std::fs::read_dir(&stream_config_dir) {
-                for entry in entries.flatten() {
-                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                        let stream_id = entry.file_name().to_string_lossy().to_string();
-                        router
-                            .register_storage_channel(stream_id.clone(), storage_tx.clone())
-                            .await;
-                        tracing::info!("Fallback: Registered storage channel for {}", stream_id);
-                    }
-                }
-            } else {
-                tracing::error!(
-                    "YAML fallback failed: Cannot read {}. No storage channels registered!",
-                    stream_config_dir
-                );
-            }
-        }
-    }
-
-    // Spawn storage writer for all data (MQTT + HTTP)
+    // Spawn storage writer
     let store_clone = store.clone();
     tokio::spawn(async move {
-        let mut batch = Vec::new();
-        let batch_size = 50;
-        let mut interval = tokio::time::interval(Duration::from_secs(30));
-
-        loop {
-            tokio::select! {
-                Some(point) = storage_rx.recv() => {
-                    let stream_id = point.tags.get("stream_id").cloned().unwrap_or_else(|| "unknown".to_string());
-                    batch.push(point);
-                    if batch.len() >= batch_size {
-                        let write_batch = std::mem::take(&mut batch);
-                        let count = write_batch.len();
-                        if let Err(e) = store_clone.write_batch(write_batch).await {
-                            tracing::error!("Failed to write data batch: {}", e);
-                        } else {
-                            tracing::info!("Wrote {} data points (last: {})", count, stream_id);
-                        }
-                    }
-                }
-                _ = interval.tick() => {
-                    // Flush any remaining points
-                    if !batch.is_empty() {
-                        let write_batch = std::mem::take(&mut batch);
-                        let count = write_batch.len();
-                        if let Err(e) = store_clone.write_batch(write_batch).await {
-                            tracing::error!("Failed to flush data batch: {}", e);
-                        } else {
-                            tracing::info!("Flushed {} data points", count);
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // ==========================================================================
-    // DP-004: Raw Storage Pipeline (Bronze Layer)
-    // ==========================================================================
-    // Create raw data channel for Bronze layer storage
-    // This uses the 5-column schema: timestamp, source_id, ndp_id, context, raw_payload
-    let (raw_storage_tx, raw_storage_rx) = mpsc::channel::<RawDataPoint>(1000);
-
-    // Spawn raw storage writer for Bronze layer
-    let raw_store_clone = store.clone();
-    tokio::spawn(async move {
         let writer = RawStorageWriter::new(
-            raw_store_clone,
-            raw_storage_rx,
+            store_clone,
+            storage_rx,
             Some(50),                           // batch_size
             Some(Duration::from_secs(30)),      // batch_timeout
         );
         if let Err(e) = writer.run().await {
-            tracing::error!("Raw storage writer failed: {}", e);
+            tracing::error!("Storage writer failed: {}", e);
         }
     });
 
-    tracing::info!("DP-004: Raw storage pipeline initialized (Bronze layer)");
+    tracing::info!("Storage pipeline initialized (Bronze layer - raw JSON schema)");
 
-    // Create source manager with raw ingestion sender
+    // Create source manager with storage sender
     let mut source_manager_inner = SourceManager::new(registry.clone());
-    source_manager_inner.set_raw_ingestion_sender(raw_storage_tx);
+    source_manager_inner.set_ingestion_sender(storage_tx);
     let source_manager = Arc::new(RwLock::new(source_manager_inner));
 
     // Create coordinator

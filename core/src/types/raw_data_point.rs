@@ -84,6 +84,18 @@ impl RawDataPoint {
         self.context = Some(context);
         self
     }
+
+    /// Set ndp_id if Some (builder pattern for Option values)
+    pub fn with_ndp_id_opt(mut self, ndp_id: Option<String>) -> Self {
+        self.ndp_id = ndp_id;
+        self
+    }
+
+    /// Set context if Some (builder pattern for Option values)
+    pub fn with_context_opt(mut self, context: Option<Value>) -> Self {
+        self.context = context;
+        self
+    }
 }
 
 #[cfg(test)]

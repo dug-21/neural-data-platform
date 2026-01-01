@@ -159,11 +159,11 @@ async fn test_full_pipeline_source_to_storage() {
 // This test verifies SourceManager integration.
 
 #[tokio::test]
-async fn test_source_manager_uses_raw_sender() {
+async fn test_source_manager_uses_ingestion_sender() {
     use air_quality_app::coordinator::SourceManager;
     use config_client::StreamRegistry;
 
-    // GIVEN: SourceManager with raw sender
+    // GIVEN: SourceManager with ingestion sender
     let registry = Arc::new(
         StreamRegistry::new(&["http://localhost:2379"])
             .await
@@ -171,45 +171,13 @@ async fn test_source_manager_uses_raw_sender() {
     );
     let mut manager = SourceManager::new(registry);
 
-    // Set up RAW ingestion sender (dp-004)
-    let (raw_tx, _raw_rx) = mpsc::channel::<RawDataPoint>(100);
-    manager.set_raw_ingestion_sender(raw_tx);
+    // Set up ingestion sender (dp-004 Bronze layer)
+    let (tx, _rx) = mpsc::channel::<RawDataPoint>(100);
+    manager.set_ingestion_sender(tx);
 
-    // THEN: Manager should have raw sender configured
+    // THEN: Manager should have ingestion sender configured
     // The actual spawning would require mock HTTP server, so we verify setup
-    assert!(true, "SourceManager accepted raw_ingestion_sender");
-}
-
-// ============================================================================
-// AT-PIPELINE-007: SourceManager has is_raw_mode_enabled method
-// ============================================================================
-//
-// GIVEN: SourceManager with raw_ingestion_sender configured
-// WHEN: We check if raw mode is enabled
-// THEN: It returns true (indicating dp-004 raw pipeline is active)
-//
-// This test will FAIL until we implement is_raw_mode_enabled.
-
-#[tokio::test]
-async fn test_source_manager_raw_mode_enabled() {
-    use air_quality_app::coordinator::SourceManager;
-    use config_client::StreamRegistry;
-
-    // GIVEN: SourceManager with raw sender configured
-    let registry = Arc::new(
-        StreamRegistry::new(&["http://localhost:2379"])
-            .await
-            .unwrap(),
-    );
-    let mut manager = SourceManager::new(registry);
-
-    let (raw_tx, _raw_rx) = mpsc::channel::<RawDataPoint>(100);
-    manager.set_raw_ingestion_sender(raw_tx);
-
-    // WHEN: We check if raw mode is enabled
-    // THEN: It should return true (dp-004 mode active)
-    // This test will FAIL TO COMPILE until we add is_raw_mode_enabled
-    assert!(manager.is_raw_mode_enabled(), "Raw mode should be enabled when raw_sender is set");
+    assert!(true, "SourceManager accepted ingestion_sender");
 }
 
 // ============================================================================
@@ -294,7 +262,7 @@ async fn test_main_uses_raw_data_point_channel() {
     // Check that main.rs has dp-004 raw storage pipeline
     let has_raw_pipeline = main_rs.contains("DP-004")
         && main_rs.contains("RawStorageWriter")
-        && main_rs.contains("set_raw_ingestion_sender");
+        && main_rs.contains("set_ingestion_sender");
 
     assert!(
         has_raw_pipeline,

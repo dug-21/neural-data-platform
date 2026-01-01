@@ -1,12 +1,12 @@
 //! Ingestion Coordinator
 //!
-//! Coordinates multiple data sources and routes data to storage
+//! Coordinates multiple data sources and manages their lifecycle.
+//! DP-004: Data flows directly from sources to RawStorageWriter via ingestion channel.
 
-use neural_core::TimeSeriesPoint;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use super::router::IngestionRouter;
 use super::source_manager::{SourceHealth, SourceManager};
@@ -28,43 +28,44 @@ pub enum CoordinatorError {
 }
 
 /// Coordinates multi-stream data ingestion
+///
+/// DP-004: The coordinator manages source lifecycle. Data flows directly from
+/// sources to RawStorageWriter via the ingestion channel set by the caller.
 pub struct IngestionCoordinator {
+    #[allow(dead_code)]
     router: Arc<IngestionRouter>,
     source_manager: Arc<RwLock<SourceManager>>,
-    ingestion_tx: mpsc::Sender<(String, String, TimeSeriesPoint)>,
-    ingestion_rx: Arc<RwLock<mpsc::Receiver<(String, String, TimeSeriesPoint)>>>,
     shutdown_tx: mpsc::Sender<()>,
+    #[allow(dead_code)]
     shutdown_rx: Arc<RwLock<mpsc::Receiver<()>>>,
     is_running: Arc<RwLock<bool>>,
 }
 
 impl IngestionCoordinator {
     /// Create a new ingestion coordinator
+    ///
+    /// NOTE: The caller must set the ingestion sender on SourceManager BEFORE
+    /// calling start(). This coordinator manages source lifecycle only.
     pub fn new(
         router: Arc<IngestionRouter>,
         source_manager: Arc<RwLock<SourceManager>>,
-        buffer_size: usize,
+        _buffer_size: usize,
     ) -> Self {
-        let (ingestion_tx, ingestion_rx) = mpsc::channel(buffer_size);
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
 
         Self {
             router,
             source_manager,
-            ingestion_tx,
-            ingestion_rx: Arc::new(RwLock::new(ingestion_rx)),
             shutdown_tx,
             shutdown_rx: Arc::new(RwLock::new(shutdown_rx)),
             is_running: Arc::new(RwLock::new(false)),
         }
     }
 
-    /// Get the ingestion channel sender (for sources to send data)
-    pub fn get_ingestion_sender(&self) -> mpsc::Sender<(String, String, TimeSeriesPoint)> {
-        self.ingestion_tx.clone()
-    }
-
     /// Start the coordinator
+    ///
+    /// IMPORTANT: The ingestion sender must be set on SourceManager before calling this.
+    /// Data flows directly from sources to the storage writer via that sender.
     pub async fn start(&self) -> Result<(), CoordinatorError> {
         info!("Starting ingestion coordinator");
 
@@ -77,64 +78,18 @@ impl IngestionCoordinator {
         *is_running = true;
         drop(is_running);
 
-        // Set ingestion sender in source manager
-        let mut sm = self.source_manager.write().await;
-        sm.set_ingestion_sender(self.ingestion_tx.clone());
+        // DP-004: Don't overwrite the ingestion sender - it's already set by main.rs
+        // to point to the RawStorageWriter channel.
 
-        // Start source manager
+        // Start source manager (sources will send to the pre-configured channel)
+        let mut sm = self.source_manager.write().await;
         sm.start_all_sources()
             .await
             .map_err(|e| CoordinatorError::SourceManagerError(e.to_string()))?;
         drop(sm);
 
-        // Spawn ingestion loop
-        let router = self.router.clone();
-        let ingestion_rx = self.ingestion_rx.clone();
-        let shutdown_rx = self.shutdown_rx.clone();
-        let is_running = self.is_running.clone();
-
-        tokio::spawn(async move {
-            Self::ingestion_loop(router, ingestion_rx, shutdown_rx, is_running).await;
-        });
-
-        info!("Ingestion coordinator started");
+        info!("Ingestion coordinator started (sources sending to pre-configured channel)");
         Ok(())
-    }
-
-    /// Ingestion loop - receives from sources and routes to storage
-    async fn ingestion_loop(
-        router: Arc<IngestionRouter>,
-        ingestion_rx: Arc<RwLock<mpsc::Receiver<(String, String, TimeSeriesPoint)>>>,
-        shutdown_rx: Arc<RwLock<mpsc::Receiver<()>>>,
-        is_running: Arc<RwLock<bool>>,
-    ) {
-        let mut rx = ingestion_rx.write().await;
-        let mut shutdown = shutdown_rx.write().await;
-
-        loop {
-            tokio::select! {
-                Some((source_id, stream_id, point)) = rx.recv() => {
-                    debug!("Received point from source {} for stream {}", source_id, stream_id);
-
-                    if let Err(e) = router.route_point(&source_id, &stream_id, point).await {
-                        error!("Failed to route point from {} to {}: {}", source_id, stream_id, e);
-                    }
-                }
-
-                Some(_) = shutdown.recv() => {
-                    info!("Shutdown signal received, stopping ingestion loop");
-                    break;
-                }
-
-                else => {
-                    warn!("All channels closed, stopping ingestion loop");
-                    break;
-                }
-            }
-        }
-
-        *is_running.write().await = false;
-        info!("Ingestion loop stopped");
     }
 
     /// Stop the coordinator
