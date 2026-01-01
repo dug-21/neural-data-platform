@@ -2,9 +2,11 @@ use air_quality_app::{
     api::create_router,
     config::AppConfig,
     coordinator::{IngestionCoordinator, IngestionRouter, SourceManager},
+    pipeline::RawStorageWriter,
     stream_integration::load_from_stream_config,
 };
 use config_client::StreamRegistry;
+use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::{ParquetStore, Store, TimeSeriesPoint};
 use std::sync::Arc;
 use std::time::Duration;
@@ -354,8 +356,33 @@ async fn initialize_multi_stream_coordinator(
         }
     });
 
-    // Create source manager
-    let source_manager = Arc::new(RwLock::new(SourceManager::new(registry.clone())));
+    // ==========================================================================
+    // DP-004: Raw Storage Pipeline (Bronze Layer)
+    // ==========================================================================
+    // Create raw data channel for Bronze layer storage
+    // This uses the 5-column schema: timestamp, source_id, ndp_id, context, raw_payload
+    let (raw_storage_tx, raw_storage_rx) = mpsc::channel::<RawDataPoint>(1000);
+
+    // Spawn raw storage writer for Bronze layer
+    let raw_store_clone = store.clone();
+    tokio::spawn(async move {
+        let writer = RawStorageWriter::new(
+            raw_store_clone,
+            raw_storage_rx,
+            Some(50),                           // batch_size
+            Some(Duration::from_secs(30)),      // batch_timeout
+        );
+        if let Err(e) = writer.run().await {
+            tracing::error!("Raw storage writer failed: {}", e);
+        }
+    });
+
+    tracing::info!("DP-004: Raw storage pipeline initialized (Bronze layer)");
+
+    // Create source manager with raw ingestion sender
+    let mut source_manager_inner = SourceManager::new(registry.clone());
+    source_manager_inner.set_raw_ingestion_sender(raw_storage_tx);
+    let source_manager = Arc::new(RwLock::new(source_manager_inner));
 
     // Create coordinator
     let coordinator = Arc::new(IngestionCoordinator::new(

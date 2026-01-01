@@ -7,6 +7,7 @@ use neural_core::parsers::{create_parser_from_config, ParserConfig, ParserType};
 use neural_core::sources::{
     AuthMethod, EndpointConfig, GenericHttpPollingConfig, GenericHttpPollingSource, RetryConfig,
 };
+use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::{
     HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, SensorConfig, Source,
     SourceConfig, SourceType, StreamConfig, TimeSeriesPoint,
@@ -60,6 +61,8 @@ pub struct SourceManager {
     registry: Arc<StreamRegistry>,
     sources: Arc<RwLock<HashMap<String, SourceInfo>>>,
     ingestion_sender: Option<mpsc::Sender<(String, String, TimeSeriesPoint)>>,
+    /// DP-004: Raw data point sender for Bronze layer storage
+    raw_ingestion_sender: Option<mpsc::Sender<RawDataPoint>>,
 }
 
 impl SourceManager {
@@ -69,6 +72,7 @@ impl SourceManager {
             registry,
             sources: Arc::new(RwLock::new(HashMap::new())),
             ingestion_sender: None,
+            raw_ingestion_sender: None,
         }
     }
 
@@ -78,6 +82,22 @@ impl SourceManager {
         sender: mpsc::Sender<(String, String, TimeSeriesPoint)>,
     ) {
         self.ingestion_sender = Some(sender);
+    }
+
+    /// DP-004: Set the raw ingestion sender for Bronze layer storage
+    ///
+    /// When set, sources will send raw data points through this channel
+    /// instead of the parsed TimeSeriesPoint channel.
+    pub fn set_raw_ingestion_sender(&mut self, sender: mpsc::Sender<RawDataPoint>) {
+        self.raw_ingestion_sender = Some(sender);
+    }
+
+    /// DP-004: Check if raw mode is enabled
+    ///
+    /// Returns true if raw_ingestion_sender is configured, meaning the pipeline
+    /// should use RawDataPoint instead of TimeSeriesPoint.
+    pub fn is_raw_mode_enabled(&self) -> bool {
+        self.raw_ingestion_sender.is_some()
     }
 
     /// Start all configured sources
