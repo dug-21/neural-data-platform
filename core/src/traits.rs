@@ -1,4 +1,5 @@
 use crate::error::CoreResult;
+use crate::types::RawDataPoint;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -91,6 +92,88 @@ pub trait Source: Send + Sync {
     async fn health_check(&self) -> CoreResult<HealthStatus>;
 }
 
+/// Source trait for raw JSON data (Bronze layer)
+///
+/// This trait defines the interface for fetching raw, untransformed data
+/// from sources. The raw payload is stored exactly as received without
+/// any parsing or field extraction.
+///
+/// # Design Rationale (DP-004 / ADR-001)
+///
+/// Sources implementing RawSource return RawDataPoint containing:
+/// - `source_id`: Generated from stream_id + source type (e.g., "air-quality-Http")
+/// - `ndp_id`: Stable identifier from source configuration
+/// - `context`: Mutable metadata from source configuration
+/// - `raw_payload`: Exact JSON response from the source
+///
+/// # Example
+///
+/// ```ignore
+/// let source = HttpPollingSource::with_raw_config(...);
+/// let raw_point = source.fetch_raw().await?;
+/// println!("Source: {}, Payload: {}", raw_point.source_id, raw_point.raw_payload);
+/// ```
+#[async_trait]
+pub trait RawSource: Send + Sync {
+    /// Fetch raw data from source, returning unmodified payload.
+    ///
+    /// Returns a single RawDataPoint with the exact JSON response.
+    /// For batch operations, use `fetch_raw_batch`.
+    async fn fetch_raw(&self) -> CoreResult<RawDataPoint>;
+
+    /// Fetch raw data from source as a batch of points.
+    ///
+    /// Default implementation calls fetch_raw once and wraps in Vec.
+    /// Override for sources that naturally produce multiple points.
+    async fn fetch_raw_batch(&self) -> CoreResult<Vec<RawDataPoint>> {
+        let point = self.fetch_raw().await?;
+        Ok(vec![point])
+    }
+}
+
+/// Store trait for raw JSON data (Bronze layer)
+///
+/// This trait defines the interface for storing raw, untransformed data
+/// from sources before any parsing or field extraction occurs.
+///
+/// # Design Rationale (ADR-001)
+///
+/// The Bronze layer stores exact source payloads as JSON blobs. This enables:
+/// - Schema evolution without data loss
+/// - Reprocessing historical data with new parsers
+/// - Debugging and auditing source data
+///
+/// # Example
+///
+/// ```ignore
+/// let store: Arc<dyn RawStore> = /* ... */;
+/// let point = RawDataPoint::new("air-quality-Http", json!({"pm25": 12.5}))
+///     .with_ndp_id("sensor-001")
+///     .with_context(json!({"room": "office"}));
+/// store.write_raw(point).await?;
+/// ```
+#[async_trait]
+pub trait RawStore: Send + Sync {
+    /// Write a single raw data point to Bronze storage
+    async fn write_raw(&self, point: RawDataPoint) -> CoreResult<()>;
+
+    /// Write a batch of raw data points to Bronze storage
+    ///
+    /// Implementations should optimize for batch writes (e.g., single Parquet file).
+    async fn write_raw_batch(&self, points: Vec<RawDataPoint>) -> CoreResult<()>;
+
+    /// Query raw data points by time range and optional source filter
+    ///
+    /// Returns all raw data points within the specified time range.
+    /// If source_filter is provided, only returns points from that source.
+    async fn query_raw(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        source_filter: Option<String>,
+    ) -> CoreResult<Vec<RawDataPoint>>;
+}
+
 #[async_trait]
 pub trait Forecast: Send + Sync {
     async fn train(&mut self, data: Vec<TimeSeriesPoint>) -> CoreResult<ModelMetrics>;
@@ -157,6 +240,32 @@ mod tests {
                 horizon: usize,
             ) -> CoreResult<Vec<ForecastedPoint>>;
             async fn evaluate(&self, actual: Vec<TimeSeriesPoint>) -> CoreResult<ModelMetrics>;
+        }
+    }
+
+    mock! {
+        pub RawStore {}
+
+        #[async_trait]
+        impl RawStore for RawStore {
+            async fn write_raw(&self, point: RawDataPoint) -> CoreResult<()>;
+            async fn write_raw_batch(&self, points: Vec<RawDataPoint>) -> CoreResult<()>;
+            async fn query_raw(
+                &self,
+                start: DateTime<Utc>,
+                end: DateTime<Utc>,
+                source_filter: Option<String>,
+            ) -> CoreResult<Vec<RawDataPoint>>;
+        }
+    }
+
+    mock! {
+        pub RawSource {}
+
+        #[async_trait]
+        impl RawSource for RawSource {
+            async fn fetch_raw(&self) -> CoreResult<RawDataPoint>;
+            async fn fetch_raw_batch(&self) -> CoreResult<Vec<RawDataPoint>>;
         }
     }
 
@@ -1168,5 +1277,294 @@ mod tests {
         assert!(result.is_ok());
         let forecasts = result.unwrap();
         assert_eq!(forecasts.len(), horizon);
+    }
+
+    // ========== RAW STORE BEHAVIOR TESTS (DP-004) ==========
+
+    #[tokio::test]
+    async fn test_raw_store_write_single_point_interaction() {
+        let mut mock_store = MockRawStore::new();
+
+        let point = RawDataPoint::new("test-Http", serde_json::json!({"pm25": 12.5}))
+            .with_ndp_id("sensor-001")
+            .with_context(serde_json::json!({"room": "office"}));
+
+        mock_store.expect_write_raw().times(1).returning(|_| Ok(()));
+
+        let result = mock_store.write_raw(point).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_raw_store_write_batch_interaction() {
+        let mut mock_store = MockRawStore::new();
+
+        let points = vec![
+            RawDataPoint::new("source-1-Http", serde_json::json!({"value": 1})),
+            RawDataPoint::new("source-2-Http", serde_json::json!({"value": 2})),
+            RawDataPoint::new("source-3-Http", serde_json::json!({"value": 3})),
+        ];
+
+        mock_store
+            .expect_write_raw_batch()
+            .times(1)
+            .withf(|points| points.len() == 3)
+            .returning(|_| Ok(()));
+
+        let result = mock_store.write_raw_batch(points).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_raw_store_write_error_handling() {
+        let mut mock_store = MockRawStore::new();
+
+        let point = RawDataPoint::new("test-Http", serde_json::json!({"value": 1}));
+
+        mock_store
+            .expect_write_raw()
+            .times(1)
+            .returning(|_| Err(CoreError::Storage("Disk full".to_string())));
+
+        let result = mock_store.write_raw(point).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_raw_store_batch_write_error_handling() {
+        let mut mock_store = MockRawStore::new();
+
+        let points = vec![RawDataPoint::new(
+            "test-Http",
+            serde_json::json!({"value": 1}),
+        )];
+
+        mock_store
+            .expect_write_raw_batch()
+            .times(1)
+            .returning(|_| Err(CoreError::Storage("Write failed".to_string())));
+
+        let result = mock_store.write_raw_batch(points).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_raw_store_preserves_point_data() {
+        use std::sync::{Arc, Mutex};
+
+        let mut mock_store = MockRawStore::new();
+        let captured_point: Arc<Mutex<Option<RawDataPoint>>> = Arc::new(Mutex::new(None));
+        let captured_clone = captured_point.clone();
+
+        let point = RawDataPoint::new(
+            "capture-test-Http",
+            serde_json::json!({
+                "pm25": 12.5,
+                "status": "active",
+                "nested": {"key": "value"}
+            }),
+        )
+        .with_ndp_id("capture-001")
+        .with_context(serde_json::json!({"room": "lab"}));
+
+        let expected_source_id = point.source_id.clone();
+        let expected_ndp_id = point.ndp_id.clone();
+
+        mock_store.expect_write_raw().times(1).returning(move |p| {
+            *captured_clone.lock().unwrap() = Some(p);
+            Ok(())
+        });
+
+        mock_store.write_raw(point).await.unwrap();
+
+        let captured = captured_point.lock().unwrap();
+        let captured_ref = captured.as_ref().unwrap();
+        assert_eq!(captured_ref.source_id, expected_source_id);
+        assert_eq!(captured_ref.ndp_id, expected_ndp_id);
+        assert_eq!(captured_ref.raw_payload["pm25"], 12.5);
+        assert_eq!(captured_ref.raw_payload["status"], "active");
+        assert_eq!(captured_ref.raw_payload["nested"]["key"], "value");
+    }
+
+    #[tokio::test]
+    async fn test_raw_store_workflow_single_then_batch() {
+        let mut mock_store = MockRawStore::new();
+
+        let mut seq = mockall::Sequence::new();
+
+        // First: single write
+        mock_store
+            .expect_write_raw()
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|_| Ok(()));
+
+        // Then: batch write
+        mock_store
+            .expect_write_raw_batch()
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|_| Ok(()));
+
+        // Execute workflow
+        let single_point = RawDataPoint::new("single-Http", serde_json::json!({"value": 1}));
+        mock_store.write_raw(single_point).await.unwrap();
+
+        let batch_points = vec![
+            RawDataPoint::new("batch-1-Http", serde_json::json!({"value": 2})),
+            RawDataPoint::new("batch-2-Http", serde_json::json!({"value": 3})),
+        ];
+        mock_store.write_raw_batch(batch_points).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_raw_store_empty_batch_succeeds() {
+        let mut mock_store = MockRawStore::new();
+
+        mock_store
+            .expect_write_raw_batch()
+            .times(1)
+            .withf(|points| points.is_empty())
+            .returning(|_| Ok(()));
+
+        let result = mock_store.write_raw_batch(vec![]).await;
+        assert!(result.is_ok());
+    }
+
+    // ========== RAW SOURCE BEHAVIOR TESTS (DP-004 Cycle 8) ==========
+
+    #[tokio::test]
+    async fn test_raw_source_fetch_raw_interaction() {
+        let mut mock_source = MockRawSource::new();
+
+        let expected_point = RawDataPoint::new(
+            "test-stream-Http",
+            serde_json::json!({"pm25": 12.5, "status": "active"}),
+        )
+        .with_ndp_id("sensor-001")
+        .with_context(serde_json::json!({"room": "office"}));
+
+        mock_source.expect_fetch_raw().times(1).returning(move || {
+            Ok(RawDataPoint::new(
+                "test-stream-Http",
+                serde_json::json!({"pm25": 12.5, "status": "active"}),
+            )
+            .with_ndp_id("sensor-001")
+            .with_context(serde_json::json!({"room": "office"})))
+        });
+
+        let result = mock_source.fetch_raw().await;
+        assert!(result.is_ok());
+
+        let point = result.unwrap();
+        assert_eq!(point.source_id, expected_point.source_id);
+        assert_eq!(point.ndp_id, expected_point.ndp_id);
+        assert_eq!(point.raw_payload["pm25"], 12.5);
+        assert_eq!(point.raw_payload["status"], "active");
+    }
+
+    #[tokio::test]
+    async fn test_raw_source_fetch_raw_batch_interaction() {
+        let mut mock_source = MockRawSource::new();
+
+        mock_source.expect_fetch_raw_batch().times(1).returning(|| {
+            Ok(vec![
+                RawDataPoint::new("source-1-Http", serde_json::json!({"value": 1})),
+                RawDataPoint::new("source-2-Http", serde_json::json!({"value": 2})),
+            ])
+        });
+
+        let result = mock_source.fetch_raw_batch().await;
+        assert!(result.is_ok());
+
+        let points = result.unwrap();
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].source_id, "source-1-Http");
+        assert_eq!(points[1].source_id, "source-2-Http");
+    }
+
+    #[tokio::test]
+    async fn test_raw_source_fetch_raw_error_handling() {
+        let mut mock_source = MockRawSource::new();
+
+        mock_source
+            .expect_fetch_raw()
+            .times(1)
+            .returning(|| Err(CoreError::Source("Connection timeout".to_string())));
+
+        let result = mock_source.fetch_raw().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_raw_source_preserves_all_json_types() {
+        let mut mock_source = MockRawSource::new();
+
+        // Test that complex JSON payloads are preserved
+        let complex_payload = serde_json::json!({
+            "string": "hello",
+            "number": 42,
+            "float": 3.14159,
+            "boolean": true,
+            "null": null,
+            "array": [1, "two", false, null],
+            "nested": {
+                "deep": {
+                    "value": "preserved"
+                }
+            }
+        });
+
+        let expected_payload = complex_payload.clone();
+
+        mock_source
+            .expect_fetch_raw()
+            .times(1)
+            .returning(move || Ok(RawDataPoint::new("complex-Http", complex_payload.clone())));
+
+        let result = mock_source.fetch_raw().await.unwrap();
+
+        assert_eq!(result.raw_payload["string"], expected_payload["string"]);
+        assert_eq!(result.raw_payload["number"], expected_payload["number"]);
+        assert_eq!(result.raw_payload["float"], expected_payload["float"]);
+        assert_eq!(result.raw_payload["boolean"], expected_payload["boolean"]);
+        assert!(result.raw_payload["null"].is_null());
+        assert_eq!(result.raw_payload["array"][1], "two");
+        assert_eq!(
+            result.raw_payload["nested"]["deep"]["value"],
+            expected_payload["nested"]["deep"]["value"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_raw_source_workflow_fetch_then_store() {
+        let mut mock_source = MockRawSource::new();
+        let mut mock_store = MockRawStore::new();
+
+        let mut seq = mockall::Sequence::new();
+
+        // Fetch from source
+        mock_source
+            .expect_fetch_raw()
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|| {
+                Ok(RawDataPoint::new(
+                    "workflow-test-Http",
+                    serde_json::json!({"value": 42}),
+                ))
+            });
+
+        // Store the fetched point
+        mock_store
+            .expect_write_raw()
+            .times(1)
+            .in_sequence(&mut seq)
+            .withf(|point| point.source_id == "workflow-test-Http")
+            .returning(|_| Ok(()));
+
+        // Execute workflow
+        let fetched = mock_source.fetch_raw().await.unwrap();
+        mock_store.write_raw(fetched).await.unwrap();
     }
 }
