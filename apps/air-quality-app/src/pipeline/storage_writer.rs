@@ -486,7 +486,10 @@ mod tests {
     use neural_core::traits::RawStore;
 
     fn create_test_raw_point(source_id: &str, value: i32) -> RawDataPoint {
-        RawDataPoint::new(source_id, serde_json::json!({"value": value, "source": source_id}))
+        RawDataPoint::new(
+            source_id,
+            serde_json::json!({"value": value, "source": source_id}),
+        )
     }
 
     #[tokio::test]
@@ -648,7 +651,10 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].raw_payload, complex_payload);
         assert_eq!(results[0].ndp_id, Some("test-ndp-001".to_string()));
-        assert_eq!(results[0].context, Some(serde_json::json!({"room": "office"})));
+        assert_eq!(
+            results[0].context,
+            Some(serde_json::json!({"room": "office"}))
+        );
     }
 
     #[tokio::test]

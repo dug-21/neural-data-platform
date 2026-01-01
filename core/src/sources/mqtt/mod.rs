@@ -28,7 +28,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::error::{CoreError, CoreResult};
 use crate::parsers::{ParseContext, Parser};
-use crate::traits::{HealthStatus, Source, TimeSeriesPoint};
+use crate::traits::{HealthStatus, RawSource, Source, TimeSeriesPoint};
+use crate::types::raw_data_point::RawDataPoint;
 
 /// Configuration for MQTT source
 ///
@@ -193,6 +194,10 @@ pub struct MqttSource {
     is_running: Arc<Mutex<bool>>,
     connection_healthy: Arc<Mutex<bool>>,
     cached_points: Arc<Mutex<Vec<TimeSeriesPoint>>>,
+    /// DP-004: Cache for raw JSON payloads (Bronze layer)
+    cached_raw_points: Arc<Mutex<Vec<RawDataPoint>>>,
+    /// DP-004: Stream identifier for source_id generation
+    stream_id: Option<String>,
     /// AIR-009: Stable source identifier
     ndp_id: Option<String>,
     /// AIR-009: Mutable context attributes
@@ -212,6 +217,24 @@ impl MqttSource {
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
     ) -> Self {
+        Self::with_raw_config(config, parser, None, ndp_id, context)
+    }
+
+    /// Create a new MQTT source with full raw data configuration (DP-004)
+    ///
+    /// # Arguments
+    /// * `config` - MQTT configuration
+    /// * `parser` - Parser for TimeSeriesPoint extraction
+    /// * `stream_id` - Stream identifier for source_id generation (e.g., "air-quality")
+    /// * `ndp_id` - Stable source identifier from configuration
+    /// * `context` - Mutable context metadata
+    pub fn with_raw_config(
+        config: MqttConfig,
+        parser: Box<dyn Parser + Send + Sync>,
+        stream_id: Option<String>,
+        ndp_id: Option<String>,
+        context: Option<serde_json::Value>,
+    ) -> Self {
         let (sender, receiver) = mpsc::channel(config.buffer_capacity);
 
         Self {
@@ -223,9 +246,22 @@ impl MqttSource {
             is_running: Arc::new(Mutex::new(false)),
             connection_healthy: Arc::new(Mutex::new(false)),
             cached_points: Arc::new(Mutex::new(Vec::new())),
+            cached_raw_points: Arc::new(Mutex::new(Vec::new())),
+            stream_id,
             ndp_id,
             context,
         }
+    }
+
+    /// Get the generated source_id for this source (DP-004)
+    ///
+    /// Format: "{stream_id}-Mqtt" or "unknown-Mqtt" if stream_id not set
+    pub fn source_id(&self) -> String {
+        use crate::sources::generate_source_id;
+        use crate::types::stream_config::SourceType;
+
+        let stream_id = self.stream_id.as_deref().unwrap_or("unknown");
+        generate_source_id(stream_id, &SourceType::Mqtt)
     }
 
     /// Parse MQTT payload into time series points using injected parser
@@ -258,8 +294,10 @@ impl MqttSource {
         mut event_loop: EventLoop,
         client: AsyncClient,
         cached_points: Arc<Mutex<Vec<TimeSeriesPoint>>>,
+        cached_raw_points: Arc<Mutex<Vec<RawDataPoint>>>,
         is_running: Arc<Mutex<bool>>,
         connection_healthy: Arc<Mutex<bool>>,
+        source_id: String,
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
     ) -> CoreResult<()> {
@@ -286,6 +324,25 @@ impl MqttSource {
                             match serde_json::from_slice::<Value>(&publish.payload) {
                                 Ok(json) => {
                                     let timestamp = Utc::now();
+
+                                    // DP-004: Cache raw payload for Bronze layer (RawSource)
+                                    {
+                                        let mut raw_point =
+                                            RawDataPoint::new(source_id.clone(), json.clone())
+                                                .with_timestamp(timestamp);
+
+                                        if let Some(ref id) = ndp_id {
+                                            raw_point = raw_point.with_ndp_id(id.clone());
+                                        }
+                                        if let Some(ref ctx) = context {
+                                            raw_point = raw_point.with_context(ctx.clone());
+                                        }
+
+                                        let mut raw_cache = cached_raw_points.lock().await;
+                                        raw_cache.push(raw_point);
+                                    }
+
+                                    // Parse for Silver layer (legacy Source trait)
                                     let parse_context =
                                         ParseContext::new(ndp_id.clone(), context.clone());
                                     match parser.parse_with_context(
@@ -438,8 +495,10 @@ impl MqttSource {
         let config = self.config.clone();
         let parser = self.parser.clone();
         let cached_points = self.cached_points.clone();
+        let cached_raw_points = self.cached_raw_points.clone();
         let is_running = self.is_running.clone();
         let connection_healthy = self.connection_healthy.clone();
+        let source_id = self.source_id();
 
         // Clone AIR-009 context for background task
         let ndp_id = self.ndp_id.clone();
@@ -454,8 +513,10 @@ impl MqttSource {
                 event_loop,
                 client,
                 cached_points,
+                cached_raw_points,
                 is_running,
                 connection_healthy,
+                source_id,
                 ndp_id,
                 context,
             )
@@ -516,6 +577,34 @@ impl Source for MqttSource {
                 details: HashMap::new(),
             })
         }
+    }
+}
+
+/// RawSource implementation for MqttSource (DP-004)
+///
+/// Returns raw JSON payloads as received from MQTT broker.
+/// The payloads are cached during event processing and returned in batch.
+#[async_trait]
+impl RawSource for MqttSource {
+    /// Fetch single raw data point from cache.
+    ///
+    /// Returns the first cached raw point, or error if cache is empty.
+    /// For batch retrieval, use `fetch_raw_batch`.
+    async fn fetch_raw(&self) -> CoreResult<RawDataPoint> {
+        let mut cache = self.cached_raw_points.lock().await;
+        cache
+            .pop()
+            .ok_or_else(|| CoreError::Source("No raw data points available in cache".to_string()))
+    }
+
+    /// Fetch all cached raw data points.
+    ///
+    /// Drains the entire raw payload cache and returns all points.
+    /// Each point contains the exact JSON payload from the MQTT broker.
+    async fn fetch_raw_batch(&self) -> CoreResult<Vec<RawDataPoint>> {
+        let mut cache = self.cached_raw_points.lock().await;
+        let points = cache.drain(..).collect();
+        Ok(points)
     }
 }
 

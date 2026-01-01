@@ -18,7 +18,7 @@ pub use sources::{
 pub use storage::{ParquetStore, WriteAheadLog};
 pub use traits::{
     AggregatedPoint, AggregationType, Forecast, ForecastedPoint, HealthStatus, ModelMetrics,
-    Source, Store, TimeSeriesPoint,
+    RawSource, Source, Store, TimeSeriesPoint,
 };
 
 // Existing types (backward compatibility)

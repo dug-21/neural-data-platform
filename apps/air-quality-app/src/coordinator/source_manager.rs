@@ -9,7 +9,7 @@ use neural_core::sources::{
 };
 use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::{
-    HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, SensorConfig, Source,
+    HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, RawSource, SensorConfig,
     SourceConfig, SourceType, StreamConfig,
 };
 use std::collections::HashMap;
@@ -306,7 +306,10 @@ impl SourceManager {
         let mut sources = self.sources.write().await;
         sources.insert(internal_id.clone(), source_info);
 
-        debug!("Source {} spawned successfully (storage: {})", internal_id, storage_id);
+        debug!(
+            "Source {} spawned successfully (storage: {})",
+            internal_id, storage_id
+        );
         Ok(internal_id)
     }
 
@@ -419,8 +422,9 @@ impl SourceManager {
         })?;
 
         // AIR-009: Create source with ndp_id and context
-        let mut source = HttpPollingSource::with_context(config, parser, ndp_id.clone(), context.clone())
-            .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
+        let mut source =
+            HttpPollingSource::with_context(config, parser, ndp_id.clone(), context.clone())
+                .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
         source
@@ -440,23 +444,10 @@ impl SourceManager {
                     break;
                 }
                 _ = interval.tick() => {
-                    // Fetch points from the source's internal buffer
-                    match source.fetch().await {
-                        Ok(points) => {
-                            for point in points {
-                                // DP-004: Convert TimeSeriesPoint to RawDataPoint for Bronze layer
-                                let raw_point = RawDataPoint::new(
-                                    &source_id,
-                                    serde_json::json!({
-                                        "value": point.value,
-                                        "location_id": point.location_id,
-                                        "tags": point.tags,
-                                    }),
-                                )
-                                .with_timestamp(point.timestamp)
-                                .with_ndp_id_opt(ndp_id.clone())
-                                .with_context_opt(context.clone());
-
+                    // DP-004: Fetch raw data points directly from source (ADR-001 compliance)
+                    match source.fetch_raw_batch().await {
+                        Ok(raw_points) => {
+                            for raw_point in raw_points {
                                 if let Err(e) = ingestion_sender.send(raw_point).await {
                                     error!("Failed to send point to ingestion channel: {}", e);
                                 }
@@ -778,22 +769,10 @@ impl SourceManager {
                     break;
                 }
                 _ = interval.tick() => {
-                    match source.fetch().await {
-                        Ok(points) => {
-                            for point in points {
-                                // DP-004: Convert TimeSeriesPoint to RawDataPoint for Bronze layer
-                                let raw_point = RawDataPoint::new(
-                                    &source_id,
-                                    serde_json::json!({
-                                        "value": point.value,
-                                        "location_id": point.location_id,
-                                        "tags": point.tags,
-                                    }),
-                                )
-                                .with_timestamp(point.timestamp)
-                                .with_ndp_id_opt(ndp_id.clone())
-                                .with_context_opt(context.clone());
-
+                    // DP-004: Fetch raw data points directly from source (ADR-001 compliance)
+                    match source.fetch_raw_batch().await {
+                        Ok(raw_points) => {
+                            for raw_point in raw_points {
                                 if let Err(e) = ingestion_sender.send(raw_point).await {
                                     error!("Failed to send MQTT point to ingestion channel: {}", e);
                                 }
@@ -832,8 +811,9 @@ impl SourceManager {
         })?;
 
         // AIR-009: Create source with ndp_id and context
-        let mut source = GenericHttpPollingSource::with_context(config, parser, ndp_id.clone(), context.clone())
-            .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
+        let mut source =
+            GenericHttpPollingSource::with_context(config, parser, ndp_id.clone(), context.clone())
+                .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
         source
@@ -853,23 +833,10 @@ impl SourceManager {
                     break;
                 }
                 _ = interval.tick() => {
-                    // Fetch points from the source's internal buffer
-                    match source.fetch().await {
-                        Ok(points) => {
-                            for point in points {
-                                // DP-004: Convert TimeSeriesPoint to RawDataPoint for Bronze layer
-                                let raw_point = RawDataPoint::new(
-                                    &source_id,
-                                    serde_json::json!({
-                                        "value": point.value,
-                                        "location_id": point.location_id,
-                                        "tags": point.tags,
-                                    }),
-                                )
-                                .with_timestamp(point.timestamp)
-                                .with_ndp_id_opt(ndp_id.clone())
-                                .with_context_opt(context.clone());
-
+                    // DP-004: Fetch raw data points directly from source (ADR-001 compliance)
+                    match source.fetch_raw_batch().await {
+                        Ok(raw_points) => {
+                            for raw_point in raw_points {
                                 if let Err(e) = ingestion_sender.send(raw_point).await {
                                     error!("Failed to send point to ingestion channel: {}", e);
                                 }

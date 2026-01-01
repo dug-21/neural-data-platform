@@ -286,8 +286,8 @@ async fn initialize_multi_stream_coordinator(
         let writer = RawStorageWriter::new(
             store_clone,
             storage_rx,
-            Some(50),                           // batch_size
-            Some(Duration::from_secs(30)),      // batch_timeout
+            Some(50),                      // batch_size
+            Some(Duration::from_secs(30)), // batch_timeout
         );
         if let Err(e) = writer.run().await {
             tracing::error!("Storage writer failed: {}", e);

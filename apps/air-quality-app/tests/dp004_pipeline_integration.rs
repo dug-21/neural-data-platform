@@ -8,8 +8,8 @@
 //! - Implementation changes make them pass (Green phase)
 //! - These are acceptance tests for the full system integration
 
-use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::traits::RawStore;
+use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::ParquetStore;
 use serde_json::json;
 use std::sync::Arc;
@@ -71,7 +71,10 @@ async fn test_storage_writes_to_raw_path_not_data_path() {
     assert!(raw_path.exists(), "Expected /raw/ directory to exist");
 
     let source_path = raw_path.join("air-quality-Http");
-    assert!(source_path.exists(), "Expected /raw/air-quality-Http/ directory to exist");
+    assert!(
+        source_path.exists(),
+        "Expected /raw/air-quality-Http/ directory to exist"
+    );
 
     // AND: Data is NOT in old /data/ path
     let old_data_path = temp_dir.path().join("data");
@@ -84,8 +87,10 @@ async fn test_storage_writes_to_raw_path_not_data_path() {
         false
     };
 
-    assert!(!has_parquet_in_old_path,
-        "Expected NO parquet files in old /data/ path - dp-004 requires /raw/ path");
+    assert!(
+        !has_parquet_in_old_path,
+        "Expected NO parquet files in old /data/ path - dp-004 requires /raw/ path"
+    );
 }
 
 // ============================================================================
@@ -119,11 +124,14 @@ async fn test_full_pipeline_source_to_storage() {
     });
 
     // WHEN: Source emits RawDataPoint
-    let point = RawDataPoint::new("nws-observations-Http", json!({
-        "temperature": 22.5,
-        "humidity": 65,
-        "station": "KJAX"
-    }))
+    let point = RawDataPoint::new(
+        "nws-observations-Http",
+        json!({
+            "temperature": 22.5,
+            "humidity": 65,
+            "station": "KJAX"
+        }),
+    )
     .with_ndp_id("nws-station-001")
     .with_context(json!({"source": "NWS", "region": "florida"}));
 
@@ -136,7 +144,10 @@ async fn test_full_pipeline_source_to_storage() {
     let start = chrono::Utc::now() - chrono::Duration::hours(1);
     let end = chrono::Utc::now() + chrono::Duration::hours(1);
 
-    let results = store.query_raw(start, end, Some("nws-observations-Http".to_string())).await.unwrap();
+    let results = store
+        .query_raw(start, end, Some("nws-observations-Http".to_string()))
+        .await
+        .unwrap();
 
     assert_eq!(results.len(), 1, "Expected 1 record");
 
@@ -229,8 +240,14 @@ async fn test_production_data_path_is_raw() {
         false
     };
 
-    assert!(has_raw_data, "Expected parquet files in /data/raw/ (dp-004 path)");
-    assert!(!has_old_data, "Found recently written parquet files in /data/data/ - pipeline still using old path!");
+    assert!(
+        has_raw_data,
+        "Expected parquet files in /data/raw/ (dp-004 path)"
+    );
+    assert!(
+        !has_old_data,
+        "Found recently written parquet files in /data/data/ - pipeline still using old path!"
+    );
 }
 
 // ============================================================================
@@ -247,8 +264,9 @@ async fn test_production_data_path_is_raw() {
 async fn test_main_uses_raw_data_point_channel() {
     // Read the main.rs file and check for RawDataPoint channel
     let main_rs = std::fs::read_to_string(
-        "/workspaces/neural-data-platform/apps/air-quality-app/src/main.rs"
-    ).expect("Failed to read main.rs");
+        "/workspaces/neural-data-platform/apps/air-quality-app/src/main.rs",
+    )
+    .expect("Failed to read main.rs");
 
     // Check that main.rs uses RawDataPoint channel
     let uses_raw_channel = main_rs.contains("mpsc::channel::<RawDataPoint>")
@@ -283,8 +301,9 @@ async fn test_main_uses_raw_data_point_channel() {
 #[tokio::test]
 async fn test_main_uses_raw_store() {
     let main_rs = std::fs::read_to_string(
-        "/workspaces/neural-data-platform/apps/air-quality-app/src/main.rs"
-    ).expect("Failed to read main.rs");
+        "/workspaces/neural-data-platform/apps/air-quality-app/src/main.rs",
+    )
+    .expect("Failed to read main.rs");
 
     // Check that main.rs uses RawStorageWriter (which uses write_raw_batch internally)
     let uses_raw_storage_writer = main_rs.contains("RawStorageWriter");
@@ -295,8 +314,8 @@ async fn test_main_uses_raw_store() {
     );
 
     // Verify the RawStorageWriter is actually spawned
-    let raw_writer_spawned = main_rs.contains("RawStorageWriter::new")
-        && main_rs.contains("writer.run()");
+    let raw_writer_spawned =
+        main_rs.contains("RawStorageWriter::new") && main_rs.contains("writer.run()");
 
     assert!(
         raw_writer_spawned,
@@ -338,9 +357,11 @@ async fn test_old_time_series_point_path_not_used() {
             .filter(|e| e.path().extension().map_or(false, |ext| ext == "parquet"))
             .count();
 
-        assert_eq!(parquet_count, 0,
+        assert_eq!(
+            parquet_count, 0,
             "Found {} parquet files in deprecated /data/ path - dp-004 requires /raw/ only",
-            parquet_count);
+            parquet_count
+        );
     }
 }
 
@@ -373,7 +394,10 @@ async fn test_parquet_schema_has_5_columns() {
         .filter(|e| e.path().extension().map_or(false, |ext| ext == "parquet"))
         .collect();
 
-    assert!(!parquet_files.is_empty(), "Expected at least one parquet file");
+    assert!(
+        !parquet_files.is_empty(),
+        "Expected at least one parquet file"
+    );
 
     let file = std::fs::File::open(parquet_files[0].path()).unwrap();
     let df = ParquetReader::new(file).finish().unwrap();
@@ -385,13 +409,27 @@ async fn test_parquet_schema_has_5_columns() {
     assert!(columns.contains(&"source_id"), "Missing source_id column");
     assert!(columns.contains(&"ndp_id"), "Missing ndp_id column");
     assert!(columns.contains(&"context"), "Missing context column");
-    assert!(columns.contains(&"raw_payload"), "Missing raw_payload column");
+    assert!(
+        columns.contains(&"raw_payload"),
+        "Missing raw_payload column"
+    );
 
     // Old columns should NOT exist
-    assert!(!columns.contains(&"location_id"), "Found deprecated location_id column");
-    assert!(!columns.contains(&"metric"), "Found deprecated metric column");
+    assert!(
+        !columns.contains(&"location_id"),
+        "Found deprecated location_id column"
+    );
+    assert!(
+        !columns.contains(&"metric"),
+        "Found deprecated metric column"
+    );
     assert!(!columns.contains(&"value"), "Found deprecated value column");
 
-    assert_eq!(columns.len(), 5,
-        "Expected 5 columns, found {}: {:?}", columns.len(), columns);
+    assert_eq!(
+        columns.len(),
+        5,
+        "Expected 5 columns, found {}: {:?}",
+        columns.len(),
+        columns
+    );
 }
