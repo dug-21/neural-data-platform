@@ -13,7 +13,6 @@ COPY Cargo.toml Cargo.lock ./
 COPY core ./core
 COPY apps ./apps
 COPY domains ./domains
-COPY config-store ./config-store
 COPY config-client ./config-client
 
 RUN cargo chef prepare --recipe-path recipe.json
@@ -38,7 +37,6 @@ COPY Cargo.toml Cargo.lock ./
 COPY core ./core
 COPY apps ./apps
 COPY domains ./domains
-COPY config-store ./config-store
 COPY config-client ./config-client
 COPY config ./config
 
