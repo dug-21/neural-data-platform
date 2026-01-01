@@ -131,27 +131,31 @@ impl SourceManager {
         stream_id: &str,
         source_config: &SourceConfig,
     ) -> Result<String, SourceManagerError> {
-        let source_id = format!("{}-{:?}", stream_id, source_config.source_type);
+        // Internal tracking ID includes source type (for HashMap uniqueness)
+        // But storage path uses stream_id only (config-driven)
+        let internal_id = format!("{}-{:?}", stream_id, source_config.source_type);
+        // Storage path uses just stream_id: /data/raw/{stream_id}/year=.../...
+        let storage_id = stream_id.to_string();
 
         // Stop any existing source with the same ID to prevent duplicates
         // This is defensive - normally sources should only be spawned once
         {
             let sources = self.sources.read().await;
-            if sources.contains_key(&source_id) {
+            if sources.contains_key(&internal_id) {
                 drop(sources); // Release read lock before acquiring write lock
                 warn!(
                     "Source {} already exists, stopping before respawn",
-                    source_id
+                    internal_id
                 );
-                if let Err(e) = self.stop_source(&source_id).await {
-                    warn!("Failed to stop existing source {}: {}", source_id, e);
+                if let Err(e) = self.stop_source(&internal_id).await {
+                    warn!("Failed to stop existing source {}: {}", internal_id, e);
                 }
             }
         }
 
         info!(
-            "Spawning source {} ({:?}) for stream {}",
-            source_id, source_config.source_type, stream_id
+            "Spawning source {} ({:?}) for stream {} (storage path: {})",
+            internal_id, source_config.source_type, stream_id, storage_id
         );
 
         // Create cancellation token for this source
@@ -181,7 +185,7 @@ impl SourceManager {
                     .is_some();
 
                 let stream_id_clone = stream_id.to_string();
-                let source_id_clone = source_id.clone();
+                let storage_id_clone = storage_id.clone();
                 let cancel_clone = cancel_token.clone();
 
                 // AIR-009: Extract ndp_id and context from source config
@@ -196,7 +200,7 @@ impl SourceManager {
                     Some(tokio::spawn(async move {
                         if let Err(e) = Self::run_generic_http_polling_source(
                             stream_id_clone,
-                            source_id_clone,
+                            storage_id_clone,
                             http_config,
                             parser_config,
                             ingestion_sender,
@@ -212,11 +216,12 @@ impl SourceManager {
                 } else {
                     // Parse HttpPollingConfig for AirGradient sensors
                     let config = self.parse_http_polling_config(stream_id, source_config)?;
+                    let storage_id_clone2 = storage_id.clone();
 
                     Some(tokio::spawn(async move {
                         if let Err(e) = Self::run_http_polling_source(
                             stream_id_clone,
-                            source_id_clone,
+                            storage_id_clone2,
                             config,
                             ingestion_sender,
                             cancel_clone,
@@ -244,7 +249,7 @@ impl SourceManager {
                     .clone();
 
                 let stream_id_clone = stream_id.to_string();
-                let source_id_clone = source_id.clone();
+                let storage_id_clone = storage_id.clone();
                 let cancel_clone = cancel_token.clone();
 
                 // AIR-009: Extract ndp_id and context from source config
@@ -257,7 +262,7 @@ impl SourceManager {
                 Some(tokio::spawn(async move {
                     if let Err(e) = Self::run_mqtt_source(
                         stream_id_clone,
-                        source_id_clone,
+                        storage_id_clone,
                         config,
                         ingestion_sender,
                         cancel_clone,
@@ -284,7 +289,7 @@ impl SourceManager {
 
         // Create source info
         let source_info = SourceInfo {
-            source_id: source_id.clone(),
+            source_id: internal_id.clone(),
             stream_id: stream_id.to_string(),
             source_type: source_config.source_type.clone(),
             enabled: source_config.enabled,
@@ -297,12 +302,12 @@ impl SourceManager {
             task_handle,
         };
 
-        // Store source info
+        // Store source info (keyed by internal_id for uniqueness)
         let mut sources = self.sources.write().await;
-        sources.insert(source_id.clone(), source_info);
+        sources.insert(internal_id.clone(), source_info);
 
-        debug!("Source {} spawned successfully", source_id);
-        Ok(source_id)
+        debug!("Source {} spawned successfully (storage: {})", internal_id, storage_id);
+        Ok(internal_id)
     }
 
     /// Parse HTTP polling configuration from source params
@@ -1128,6 +1133,7 @@ mod tests {
         // Assert
         assert!(result.is_ok());
         let source_id = result.unwrap();
+        // internal_id includes source type for HashMap uniqueness
         assert!(source_id.contains("test-stream"));
         assert!(source_id.contains("Mqtt"));
 
@@ -1172,6 +1178,7 @@ mod tests {
         // Assert
         assert!(result.is_ok());
         let source_id = result.unwrap();
+        // internal_id includes source type for HashMap uniqueness
         assert!(source_id.contains("HttpPoll"));
     }
 
@@ -1520,7 +1527,7 @@ mod tests {
         // Assert
         assert_eq!(manager.active_source_count().await, 5);
 
-        // Stop one source
+        // Stop one source (internal_id includes source type)
         let source_id = format!("stream-0-{:?}", SourceType::Mqtt);
         manager.stop_source(&source_id).await.unwrap();
 
@@ -1738,6 +1745,7 @@ mod tests {
         // 3. NOT write directly to ParquetStore
         assert!(result.is_ok());
         let source_id = result.unwrap();
+        // internal_id includes source type, but storage uses stream_id
         assert!(source_id.contains("air-quality"));
         assert!(source_id.contains("Mqtt"));
     }
