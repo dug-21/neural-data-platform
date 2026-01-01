@@ -22,7 +22,7 @@ fields:
 
 sources:
   - type: http_poll
-    enabled: true
+    enabled: false
     ndp_id: govee-h5103-560f
     context:
       source_type:
