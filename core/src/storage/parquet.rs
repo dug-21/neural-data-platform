@@ -5,7 +5,7 @@ use crate::traits::{
 };
 use crate::types::RawDataPoint;
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use polars::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -472,12 +472,17 @@ fn extract_stream_id(source_id: &str) -> &str {
 impl ParquetStore {
     /// Build partition path for raw data storage using stream_id (extracted from source_id)
     ///
-    /// Directory structure: {base_path}/raw/{stream_id}/year={YYYY}/month={MM}/day={DD}/hour={HH}/data.parquet
+    /// Directory structure: {base_path}/raw/{stream_id}/year={YYYY}/month={MM}/day={DD}/data.parquet
     ///
     /// Note: Uses stream_id (e.g., "air-quality") not full source_id (e.g., "air-quality-Mqtt")
     /// to ensure all data from a stream goes to the same directory regardless of source type.
     ///
-    /// P2-06: Uses push() instead of chained join() to reduce allocations from 7 to 1
+    /// Daily partitioning chosen over hourly to:
+    /// - Reduce small file proliferation (sensors produce ~15KB/hour)
+    /// - Improve Parquet compression efficiency with larger row groups
+    /// - Reduce DuckDB/Polars query overhead from file-per-hour
+    ///
+    /// P2-06: Uses push() instead of chained join() to reduce allocations
     pub fn raw_partition_path(&self, source_id: &str, timestamp: DateTime<Utc>) -> PathBuf {
         let stream_id = extract_stream_id(source_id);
         let mut path = self.base_path.clone();
@@ -486,7 +491,6 @@ impl ParquetStore {
         path.push(format!("year={}", timestamp.year()));
         path.push(format!("month={:02}", timestamp.month()));
         path.push(format!("day={:02}", timestamp.day()));
-        path.push(format!("hour={:02}", timestamp.hour()));
         path.push("data.parquet");
         path
     }
@@ -1534,7 +1538,7 @@ mod tests {
         assert!(path.to_string_lossy().contains("year=2026"));
         assert!(path.to_string_lossy().contains("month=01"));
         assert!(path.to_string_lossy().contains("day=15"));
-        assert!(path.to_string_lossy().contains("hour=10"));
+        assert!(!path.to_string_lossy().contains("hour=")); // Daily partitions, no hour
         assert!(path.to_string_lossy().ends_with("data.parquet"));
     }
 
@@ -1759,8 +1763,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_partition_path_structure() {
-        // Verify directory structure: raw/{stream_id}/year=YYYY/month=MM/day=DD/hour=HH/data.parquet
+        // Verify directory structure: raw/{stream_id}/year=YYYY/month=MM/day=DD/data.parquet
         // Note: Uses stream_id (extracted from source_id) for directory naming
+        // Daily partitioning for better file compaction (vs hourly which creates many small files)
         let (store, temp_dir) = create_test_store();
         let timestamp = Utc.with_ymd_and_hms(2026, 6, 15, 14, 30, 0).unwrap();
 
@@ -1776,8 +1781,7 @@ mod tests {
             .join("my-source") // stream_id extracted from "my-source-Http"
             .join("year=2026")
             .join("month=06")
-            .join("day=15")
-            .join("hour=14");
+            .join("day=15"); // Daily partition (no hour subdirectory)
 
         assert!(expected_dir.exists(), "Partition directory should exist");
         assert!(
