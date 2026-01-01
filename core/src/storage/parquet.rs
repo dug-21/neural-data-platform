@@ -445,14 +445,34 @@ impl Store for ParquetStore {
 // - context: String (nullable, JSON-serialized metadata)
 // - raw_payload: String (JSON-serialized source data)
 
+/// Extract stream_id from source_id by removing the protocol suffix
+///
+/// source_id format: "{stream_id}-{SourceType}" (e.g., "air-quality-Mqtt", "nws-forecast-Http")
+/// Returns just the stream_id part for directory naming
+fn extract_stream_id(source_id: &str) -> &str {
+    // Known protocol suffixes (ordered by specificity)
+    const SUFFIXES: &[&str] = &["-FileWatch", "-Webhook", "-HttpPoll", "-Http", "-Mqtt"];
+
+    for suffix in SUFFIXES {
+        if source_id.ends_with(suffix) {
+            return &source_id[..source_id.len() - suffix.len()];
+        }
+    }
+    source_id // Return as-is if no known suffix
+}
+
 impl ParquetStore {
-    /// Build partition path for raw data storage using source_id
+    /// Build partition path for raw data storage using stream_id (extracted from source_id)
     ///
-    /// Directory structure: {base_path}/raw/{source_id}/year={YYYY}/month={MM}/day={DD}/hour={HH}/data.parquet
+    /// Directory structure: {base_path}/raw/{stream_id}/year={YYYY}/month={MM}/day={DD}/hour={HH}/data.parquet
+    ///
+    /// Note: Uses stream_id (e.g., "air-quality") not full source_id (e.g., "air-quality-Mqtt")
+    /// to ensure all data from a stream goes to the same directory regardless of source type.
     pub fn raw_partition_path(&self, source_id: &str, timestamp: DateTime<Utc>) -> PathBuf {
+        let stream_id = extract_stream_id(source_id);
         self.base_path
             .join("raw")
-            .join(source_id)
+            .join(stream_id)
             .join(format!("year={}", timestamp.year()))
             .join(format!("month={:02}", timestamp.month()))
             .join(format!("day={:02}", timestamp.day()))
@@ -1465,20 +1485,42 @@ mod tests {
     // ========== TDD CYCLE 4: ParquetStore writes RawDataPoint ==========
 
     #[tokio::test]
-    async fn test_raw_partition_path_uses_source_id() {
-        // TC-030: Verify partition path structure uses source_id
+    async fn test_raw_partition_path_uses_stream_id() {
+        // TC-030: Verify partition path structure uses stream_id (extracted from source_id)
+        // DP-004: Directory named by stream, not source_id with protocol suffix
         let (store, _temp) = create_test_store();
         let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
 
+        // Pass source_id with suffix, but path should use stream_id without suffix
         let path = store.raw_partition_path("air-quality-Http", timestamp);
 
         assert!(path.to_string_lossy().contains("raw"));
-        assert!(path.to_string_lossy().contains("air-quality-Http"));
+        assert!(path.to_string_lossy().contains("air-quality")); // Stream name only
+        assert!(!path.to_string_lossy().contains("-Http")); // No protocol suffix
         assert!(path.to_string_lossy().contains("year=2026"));
         assert!(path.to_string_lossy().contains("month=01"));
         assert!(path.to_string_lossy().contains("day=15"));
         assert!(path.to_string_lossy().contains("hour=10"));
         assert!(path.to_string_lossy().ends_with("data.parquet"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_stream_id_from_source_id() {
+        // Test protocol suffix extraction
+        assert_eq!(super::extract_stream_id("air-quality-Mqtt"), "air-quality");
+        assert_eq!(super::extract_stream_id("air-quality-Http"), "air-quality");
+        assert_eq!(
+            super::extract_stream_id("nws-forecast-HttpPoll"),
+            "nws-forecast"
+        );
+        assert_eq!(
+            super::extract_stream_id("outdoor-weather-Webhook"),
+            "outdoor-weather"
+        );
+        assert_eq!(super::extract_stream_id("file-data-FileWatch"), "file-data");
+        // No suffix - return as-is
+        assert_eq!(super::extract_stream_id("air-quality"), "air-quality");
+        assert_eq!(super::extract_stream_id("unknown"), "unknown");
     }
 
     #[tokio::test]

@@ -421,10 +421,15 @@ impl SourceManager {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
         })?;
 
-        // AIR-009: Create source with ndp_id and context
-        let mut source =
-            HttpPollingSource::with_context(config, parser, ndp_id.clone(), context.clone())
-                .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
+        // DP-004: Create source with stream_id for proper source_id generation
+        let mut source = HttpPollingSource::with_raw_config(
+            config,
+            parser,
+            Some(stream_id.clone()),
+            ndp_id.clone(),
+            context.clone(),
+        )
+        .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
         source
@@ -750,8 +755,14 @@ impl SourceManager {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
         })?;
 
-        // AIR-009: Create source with ndp_id and context
-        let mut source = MqttSource::with_context(config, parser, ndp_id.clone(), context.clone());
+        // DP-004: Create source with stream_id for proper source_id generation
+        let mut source = MqttSource::with_raw_config(
+            config,
+            parser,
+            Some(stream_id.clone()),
+            ndp_id.clone(),
+            context.clone(),
+        );
         source
             .start()
             .await
@@ -810,10 +821,15 @@ impl SourceManager {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
         })?;
 
-        // AIR-009: Create source with ndp_id and context
-        let mut source =
-            GenericHttpPollingSource::with_context(config, parser, ndp_id.clone(), context.clone())
-                .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
+        // DP-004: Create source with stream_id for proper source_id generation
+        let mut source = GenericHttpPollingSource::with_raw_config(
+            config,
+            parser,
+            Some(stream_id.clone()),
+            ndp_id.clone(),
+            context.clone(),
+        )
+        .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
         // Start the source
         source
