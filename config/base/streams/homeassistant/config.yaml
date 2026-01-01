@@ -3,7 +3,7 @@
 stream_id: homeassistant
 description: Home Assistant entity states via REST API polling
 version: "2.0.0"
-enabled: true
+enabled: false
 retention_days: 365
 compression_after_days: 7
 partitioning_strategy: daily
