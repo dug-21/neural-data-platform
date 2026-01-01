@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "config-store",
     "config-client",
     "core",
     "domains/air-quality",
@@ -10,7 +9,7 @@ resolver = "2"
 
 [workspace.dependencies]
 # Shared dependencies across all services
-tokio = { version = "1.40", features = ["full"] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "signal", "net", "io-util"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tonic = "0.12"
@@ -22,10 +21,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
-sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres", "macros", "chrono"] }
 rumqttc = "0.24"
-reqwest = { version = "0.12", features = ["json"] }
-polars = { version = "0.35", features = ["parquet", "lazy", "dtype-datetime", "dtype-duration"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+polars = { version = "0.35", features = ["parquet", "lazy", "dtype-datetime"] }
 
 # Note: NO [package] section
 # Note: NO [[bin]] sections

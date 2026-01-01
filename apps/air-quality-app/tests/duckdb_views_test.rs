@@ -22,9 +22,11 @@
 //! - Ubuntu/Debian: `apt-get install libduckdb-dev`
 //! - Or download from: https://github.com/duckdb/duckdb/releases
 //!
-//! Run with: `cargo test --package air-quality-app --test duckdb_views_test`
+//! Run with: `cargo test --package air-quality-app --test duckdb_views_test --features duckdb-tests`
 
-#[cfg(feature = "duckdb-tests")]
+// This entire module requires duckdb-tests feature
+#![cfg(feature = "duckdb-tests")]
+
 use duckdb::{Connection, Result as DuckDbResult};
 
 // ========== TEST FIXTURES ==========
@@ -41,6 +43,7 @@ fn setup_test_db() -> () {
     ()
 }
 
+#[cfg(feature = "duckdb-tests")]
 /// Create test tables mimicking Parquet data structure
 fn create_mock_parquet_tables(conn: &Connection) -> DuckDbResult<()> {
     // Indoor air quality table
@@ -76,6 +79,7 @@ fn create_mock_parquet_tables(conn: &Connection) -> DuckDbResult<()> {
     Ok(())
 }
 
+#[cfg(feature = "duckdb-tests")]
 /// Insert test data with known values
 fn insert_indoor_air_test_data(conn: &Connection) -> DuckDbResult<()> {
     conn.execute_batch(
@@ -100,6 +104,7 @@ fn insert_indoor_air_test_data(conn: &Connection) -> DuckDbResult<()> {
     )
 }
 
+#[cfg(feature = "duckdb-tests")]
 /// Insert outdoor air test data
 fn insert_outdoor_air_test_data(conn: &Connection) -> DuckDbResult<()> {
     conn.execute_batch(
@@ -120,6 +125,7 @@ fn insert_outdoor_air_test_data(conn: &Connection) -> DuckDbResult<()> {
     )
 }
 
+#[cfg(feature = "duckdb-tests")]
 /// Create Silver views adapted from production SQL files
 fn create_silver_views(conn: &Connection) -> DuckDbResult<()> {
     // Silver indoor air view (adapted for mock tables)

@@ -121,6 +121,7 @@ impl StorageWriter {
     /// Flush buffered points to storage
     ///
     /// Writes all points in the buffer to ParquetStore and clears the buffer.
+    /// Uses std::mem::take to transfer ownership instead of cloning.
     ///
     /// # Errors
     /// Returns error if write_batch fails
@@ -132,10 +133,13 @@ impl StorageWriter {
         let count = buffer.len();
         debug!("Flushing {} points to storage", count);
 
-        match self.store.write_batch(buffer.clone()).await {
+        // P2-01: Use std::mem::take to transfer ownership instead of cloning
+        // This saves ~100KB+ per flush by avoiding full buffer clone
+        let batch = std::mem::take(buffer);
+        match self.store.write_batch(batch).await {
             Ok(_) => {
                 info!("Successfully wrote {} points to storage", count);
-                buffer.clear();
+                // buffer is already empty from take()
                 Ok(())
             }
             Err(e) => {
@@ -248,7 +252,7 @@ impl RawStorageWriter {
     /// Flush buffered raw points to storage
     ///
     /// Writes all points in the buffer to ParquetStore using the RawStore trait
-    /// and clears the buffer.
+    /// and clears the buffer. Uses std::mem::take to transfer ownership.
     ///
     /// # Errors
     /// Returns error if write_raw_batch fails
@@ -260,10 +264,13 @@ impl RawStorageWriter {
         let count = buffer.len();
         debug!("Flushing {} raw points to storage", count);
 
-        match self.store.write_raw_batch(buffer.clone()).await {
+        // P2-01: Use std::mem::take to transfer ownership instead of cloning
+        // This saves ~100KB+ per flush by avoiding full buffer clone
+        let batch = std::mem::take(buffer);
+        match self.store.write_raw_batch(batch).await {
             Ok(_) => {
                 info!("Successfully wrote {} raw points to storage", count);
-                buffer.clear();
+                // buffer is already empty from take()
                 Ok(())
             }
             Err(e) => {

@@ -65,7 +65,24 @@
 
 ## Blockers
 
-None - ready to implement.
+**CRITICAL: Build Broken** (2026-01-01)
+
+The codebase currently does not compile due to 3 errors in `core/src/sources/http_poll.rs`:
+
+1. **Lifetime/async issue at line 674** - `fetch_raw_batch()` function has closure lifetime mismatch
+2. **Lifetime/async issue at line 792** - `tokio::spawn` has `Send` bound not satisfied
+3. **FnOnce implementation not general enough** - Related to sensor config iteration
+
+**Root Cause**: Recent changes (likely dp-004 implementation) introduced async lifetime issues when iterating over `&SensorConfig` references within async closures.
+
+**Impact**: All development blocked until resolved.
+
+**Resolution Path**:
+- Clone sensor configs before async boundary
+- Fix lifetime bounds on iterator closures
+- Ensure `Mutex<bool>` reference doesn't cross await points
+
+**Assigned**: ndp-rust-dev (P0)
 
 ## Risks
 
@@ -96,4 +113,4 @@ None - ready to implement.
 
 ## Last Updated
 
-2026-01-01 by ndp-scrum-master (Completion planning documents created)
+2026-01-01 15:30 by ndp-scrum-master (Build blocker identified, STATUS updated)

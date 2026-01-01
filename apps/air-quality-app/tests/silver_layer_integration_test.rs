@@ -14,6 +14,13 @@
 //! - Test end-to-end data flow (Parquet → DuckDB → Views)
 //! - Performance benchmarks (7-day query < 5s)
 //! - Mark as #[ignore] for CI flexibility
+//!
+//! Prerequisites:
+//! - Run with: cargo test --features duckdb-tests
+//! - Requires libduckdb-dev installed
+
+// This entire module requires duckdb-tests feature
+#![cfg(feature = "duckdb-tests")]
 
 use duckdb::{Connection, Result as DuckDbResult};
 use std::path::{Path, PathBuf};

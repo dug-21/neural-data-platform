@@ -1,5 +1,5 @@
 use crate::{ConfigClient, ConfigError};
-use neural_core::{StreamConfig, StreamConfigError};
+use neural_core::StreamConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
@@ -174,7 +174,7 @@ impl StreamRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neural_core::{FieldType, SchemaField, SourceConfig, SourceType};
+    use neural_core::{FieldType, SchemaField, SourceConfig, SourceType, StreamConfigError};
     use std::collections::HashMap;
 
     // ========== LONDON SCHOOL TDD: UNIT TESTS ==========

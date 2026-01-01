@@ -458,20 +458,25 @@ impl HttpPollingSource {
             .parse_with_context(&json, timestamp, &parse_context)
     }
 
-    /// Poll all sensors
+    /// Poll all sensors sequentially
+    ///
+    /// Note: AIR-010 attempted parallel polling but encountered lifetime issues.
+    /// Sequential polling maintained for stability. Consider Arc<Self> refactor for future parallel version.
     async fn poll_all_sensors(&self) -> CoreResult<()> {
         for sensor in &self.config.sensors {
+            let serial_number = sensor.serial_number.clone();
             match self.poll_sensor(sensor).await {
                 Ok(points) => {
                     debug!(
                         "Successfully polled sensor {} - got {} points",
-                        sensor.serial_number,
+                        serial_number,
                         points.len()
                     );
 
                     // Update last successful poll time
                     let mut last_poll = self.last_successful_poll.lock().await;
-                    last_poll.insert(sensor.serial_number.clone(), Utc::now());
+                    last_poll.insert(serial_number.clone(), Utc::now());
+                    drop(last_poll);
 
                     // Send points to channel
                     for point in points {
@@ -481,7 +486,7 @@ impl HttpPollingSource {
                     }
                 }
                 Err(e) => {
-                    error!("Failed to poll sensor {}: {}", sensor.serial_number, e);
+                    error!("Failed to poll sensor {}: {}", serial_number, e);
                 }
             }
         }
@@ -648,69 +653,100 @@ impl RawSource for HttpPollingSource {
         Ok(point)
     }
 
-    /// Fetch raw data from all configured sensors.
+    /// Fetch raw data from all configured sensors concurrently.
     ///
-    /// Returns a RawDataPoint for each sensor endpoint.
+    /// AIR-010: Parallelized raw batch fetching using buffer_unordered for improved throughput.
+    /// Returns a RawDataPoint for each sensor endpoint that successfully responds.
     async fn fetch_raw_batch(&self) -> CoreResult<Vec<RawDataPoint>> {
-        let mut points = Vec::with_capacity(self.config.sensors.len());
+        use futures::stream::{self, StreamExt};
 
-        for (idx, sensor) in self.config.sensors.iter().enumerate() {
-            debug!(
-                "Fetching raw data from sensor {}: {}",
-                idx, sensor.serial_number
-            );
+        // Maximum concurrent sensor fetches
+        const MAX_CONCURRENT_FETCHES: usize = 10;
 
-            let response = self.client.get(&sensor.url).send().await.map_err(|e| {
-                CoreError::Source(format!(
-                    "HTTP request failed for {}: {}",
-                    sensor.serial_number, e
-                ))
-            })?;
+        let sensor_count = self.config.sensors.len();
+        let stream_id = self.stream_id.clone();
+        let ndp_id = self.ndp_id.clone();
+        let context = self.context.clone();
 
-            if !response.status().is_success() {
-                warn!(
-                    "HTTP request failed for {} with status: {}",
-                    sensor.serial_number,
-                    response.status()
-                );
-                continue;
-            }
+        // Clone sensors for parallel iteration to avoid lifetime issues
+        let sensors: Vec<_> = self.config.sensors.iter().cloned().collect();
 
-            let body = response
-                .text()
-                .await
-                .map_err(|e| CoreError::Source(format!("Failed to read response body: {}", e)))?;
+        // Create futures for all sensor fetches
+        let fetch_futures = stream::iter(sensors.into_iter().enumerate())
+            .map(|(idx, sensor)| {
+                let client = self.client.clone();
+                let serial_number = sensor.serial_number.clone();
+                let url = sensor.url.clone();
+                let stream_id = stream_id.clone();
+                let ndp_id = ndp_id.clone();
+                let context = context.clone();
 
-            let raw_payload: serde_json::Value = match serde_json::from_str(&body) {
-                Ok(v) => v,
-                Err(e) => {
-                    warn!("Invalid JSON from {}: {}", sensor.serial_number, e);
-                    continue;
+                async move {
+                    debug!("Fetching raw data from sensor {}: {}", idx, serial_number);
+
+                    let response = match client.get(&url).send().await {
+                        Ok(r) => r,
+                        Err(e) => {
+                            warn!("HTTP request failed for {}: {}", serial_number, e);
+                            return None;
+                        }
+                    };
+
+                    if !response.status().is_success() {
+                        warn!(
+                            "HTTP request failed for {} with status: {}",
+                            serial_number,
+                            response.status()
+                        );
+                        return None;
+                    }
+
+                    let body = match response.text().await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            warn!("Failed to read response body from {}: {}", serial_number, e);
+                            return None;
+                        }
+                    };
+
+                    let raw_payload: serde_json::Value = match serde_json::from_str(&body) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            warn!("Invalid JSON from {}: {}", serial_number, e);
+                            return None;
+                        }
+                    };
+
+                    // Use indexed source_id for multi-sensor sources
+                    let source_id = if sensor_count > 1 {
+                        use crate::sources::generate_source_id_indexed;
+                        use crate::types::stream_config::SourceType;
+                        let sid = stream_id.as_deref().unwrap_or("unknown");
+                        generate_source_id_indexed(sid, &SourceType::HttpPoll, idx)
+                    } else {
+                        use crate::sources::generate_source_id;
+                        use crate::types::stream_config::SourceType;
+                        let sid = stream_id.as_deref().unwrap_or("unknown");
+                        generate_source_id(sid, &SourceType::HttpPoll)
+                    };
+
+                    let mut point = RawDataPoint::new(source_id, raw_payload);
+
+                    if let Some(ref id) = ndp_id {
+                        point = point.with_ndp_id(id.clone());
+                    }
+
+                    if let Some(ref ctx) = context {
+                        point = point.with_context(ctx.clone());
+                    }
+
+                    Some(point)
                 }
-            };
+            })
+            .buffer_unordered(MAX_CONCURRENT_FETCHES.min(sensor_count));
 
-            // Use indexed source_id for multi-sensor sources
-            let source_id = if self.config.sensors.len() > 1 {
-                use crate::sources::generate_source_id_indexed;
-                use crate::types::stream_config::SourceType;
-                let stream_id = self.stream_id.as_deref().unwrap_or("unknown");
-                generate_source_id_indexed(stream_id, &SourceType::HttpPoll, idx)
-            } else {
-                self.source_id()
-            };
-
-            let mut point = RawDataPoint::new(source_id, raw_payload);
-
-            if let Some(ref ndp_id) = self.ndp_id {
-                point = point.with_ndp_id(ndp_id.clone());
-            }
-
-            if let Some(ref context) = self.context {
-                point = point.with_context(context.clone());
-            }
-
-            points.push(point);
-        }
+        // Collect successful results
+        let points: Vec<RawDataPoint> = fetch_futures.filter_map(|opt| async { opt }).collect().await;
 
         Ok(points)
     }

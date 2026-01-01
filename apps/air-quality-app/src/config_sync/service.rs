@@ -346,7 +346,7 @@ fn default_partitioning() -> String {
 impl StreamConfigYaml {
     /// Convert YAML structure to StreamConfig
     fn to_stream_config(&self) -> Result<StreamConfig, ConfigSyncError> {
-        use neural_core::{FieldType, SchemaField, SourceConfig, SourceType, StorageConfig};
+        use neural_core::{SchemaField, SourceConfig, SourceType, StorageConfig};
 
         // Convert fields - handle both map and array formats
         let mut fields = Vec::new();

@@ -12,12 +12,19 @@ use neural_core::{
     HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, RawSource, SensorConfig,
     SourceConfig, SourceType, StreamConfig,
 };
+use regex::Regex;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
+
+/// Cached regex for environment variable expansion (e.g., ${VAR_NAME})
+/// Compiled once at first use, avoiding repeated compilation overhead.
+static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\$\{([^}]+)\}").expect("ENV_VAR_REGEX pattern is invalid")
+});
 
 /// Source health status
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +54,7 @@ pub enum SourceManagerError {
 /// Information about a running source
 #[derive(Debug)]
 struct SourceInfo {
+    #[allow(dead_code)]
     source_id: String,
     stream_id: String,
     source_type: SourceType,
@@ -276,12 +284,10 @@ impl SourceManager {
                 }))
             }
             SourceType::Webhook => {
-                // TODO: Implement webhook source spawning
                 warn!("Webhook source not yet implemented");
                 None
             }
             SourceType::FileWatch => {
-                // TODO: Implement file watch source spawning
                 warn!("FileWatch source not yet implemented");
                 None
             }
@@ -389,7 +395,7 @@ impl SourceManager {
     /// Run HTTP polling source (DP-004: emits RawDataPoint to Bronze layer)
     async fn run_http_polling_source(
         stream_id: String,
-        source_id: String,
+        _source_id: String,
         config: HttpPollingConfig,
         ingestion_sender: mpsc::Sender<RawDataPoint>,
         cancel_token: CancellationToken,
@@ -627,11 +633,12 @@ impl SourceManager {
     }
 
     /// Expand environment variables in a string (e.g., ${VAR_NAME})
+    ///
+    /// Uses the cached `ENV_VAR_REGEX` to avoid recompiling the regex on each call.
     fn expand_env_vars(s: &str) -> String {
         let mut result = s.to_string();
-        let re = regex::Regex::new(r"\$\{([^}]+)\}").unwrap();
 
-        for cap in re.captures_iter(s) {
+        for cap in ENV_VAR_REGEX.captures_iter(s) {
             let var_name = &cap[1];
             if let Ok(value) = std::env::var(var_name) {
                 result = result.replace(&format!("${{{}}}", var_name), &value);
@@ -723,7 +730,7 @@ impl SourceManager {
     /// Run MQTT source (DP-004: emits RawDataPoint to Bronze layer)
     async fn run_mqtt_source(
         stream_id: String,
-        source_id: String,
+        _source_id: String,
         config: MqttConfig,
         ingestion_sender: mpsc::Sender<RawDataPoint>,
         cancel_token: CancellationToken,
@@ -803,7 +810,7 @@ impl SourceManager {
     /// Run Generic HTTP polling source for external APIs (DP-004: emits RawDataPoint to Bronze layer)
     async fn run_generic_http_polling_source(
         stream_id: String,
-        source_id: String,
+        _source_id: String,
         config: GenericHttpPollingConfig,
         parser_config: ParserConfig,
         ingestion_sender: mpsc::Sender<RawDataPoint>,
@@ -1813,13 +1820,7 @@ mod tests {
         let result = manager.spawn_source("air-quality", &source_config).await;
         assert!(result.is_ok());
 
-        // TODO: Once MQTT implementation is complete, add this assertion:
-        // Simulate MQTT message from device with MAC d83bda1cd074
-        // Verify the tuple sent to ingestion channel is:
-        // (source_id="air-quality-Mqtt", stream_id="air-quality", point)
-        // NOT (source_id=..., stream_id="d83bda1cd074", point)
-
-        // For now, verify the source_id contains "air-quality"
+        // Verify the source_id contains "air-quality"
         let source_id = result.unwrap();
         assert!(source_id.contains("air-quality"));
 

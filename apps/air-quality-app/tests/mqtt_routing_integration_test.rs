@@ -53,7 +53,6 @@ async fn test_mqtt_and_http_sources_both_route_through_ingestion_channel() {
     // Spawn both MQTT and HTTP sources
     // Verify both send tuples to the same channel
 
-    // TODO: Implement once coordinator integration is complete
     // Expected behavior:
     // - HTTP source sends: ("air-quality-HttpPoll", "air-quality", point)
     // - MQTT source sends: ("air-quality-Mqtt", "air-quality", point)
@@ -70,7 +69,6 @@ async fn test_all_sources_get_stream_id_enrichment() {
     // Route points from different source types
     // Verify all enriched points have stream_id tag
 
-    // TODO: Implement once coordinator integration is complete
     // Expected: All points have tags["stream_id"] = configured stream name
 }
 

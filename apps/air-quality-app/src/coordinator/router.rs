@@ -3,10 +3,10 @@
 //! Routes time series points to appropriate storage channels after schema validation
 
 use config_client::StreamRegistry;
+use dashmap::DashMap;
 use neural_core::{FieldType, SchemaField, StreamConfig, TimeSeriesPoint};
-use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 
 /// Dead letter item for invalid points
@@ -46,7 +46,7 @@ pub enum ValidationError {
 /// Routes incoming time series points to storage writers
 pub struct IngestionRouter {
     registry: Arc<StreamRegistry>,
-    storage_channels: Arc<RwLock<HashMap<String, mpsc::Sender<TimeSeriesPoint>>>>,
+    storage_channels: Arc<DashMap<String, mpsc::Sender<TimeSeriesPoint>>>,
     dead_letter_tx: mpsc::Sender<DeadLetterItem>,
     strict_validation: bool,
 }
@@ -59,7 +59,7 @@ impl IngestionRouter {
     ) -> Self {
         Self {
             registry,
-            storage_channels: Arc::new(RwLock::new(HashMap::new())),
+            storage_channels: Arc::new(DashMap::new()),
             dead_letter_tx,
             strict_validation: false, // Lenient by default for backward compatibility
         }
@@ -77,28 +77,24 @@ impl IngestionRouter {
         stream_id: String,
         sender: mpsc::Sender<TimeSeriesPoint>,
     ) {
-        let mut channels = self.storage_channels.write().await;
-        channels.insert(stream_id.clone(), sender);
+        self.storage_channels.insert(stream_id.clone(), sender);
         debug!("Registered storage channel for stream: {}", stream_id);
     }
 
     /// Unregister a storage channel
     pub async fn unregister_storage_channel(&self, stream_id: &str) {
-        let mut channels = self.storage_channels.write().await;
-        channels.remove(stream_id);
+        self.storage_channels.remove(stream_id);
         debug!("Unregistered storage channel for stream: {}", stream_id);
     }
 
     /// Check if a storage channel is registered for a stream
     pub async fn has_storage_channel(&self, stream_id: &str) -> bool {
-        let channels = self.storage_channels.read().await;
-        channels.contains_key(stream_id)
+        self.storage_channels.contains_key(stream_id)
     }
 
     /// Get the count of registered storage channels
     pub async fn registered_stream_count(&self) -> usize {
-        let channels = self.storage_channels.read().await;
-        channels.len()
+        self.storage_channels.len()
     }
 
     /// Register storage channels for all streams in the registry
@@ -186,8 +182,7 @@ impl IngestionRouter {
             .insert("source_id".to_string(), source_id.to_string());
 
         // Route to storage writer
-        let channels = self.storage_channels.read().await;
-        if let Some(tx) = channels.get(stream_id) {
+        if let Some(tx) = self.storage_channels.get(stream_id) {
             if let Err(e) = tx.send(enriched).await {
                 error!("Failed to send to storage channel for {}: {}", stream_id, e);
                 return Err(Box::new(e));
@@ -344,6 +339,7 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use neural_core::{FieldType, SchemaField, SourceConfig, SourceType};
+    use std::collections::HashMap;
     use tokio::sync::mpsc;
 
     // ========== LONDON SCHOOL TDD: UNIT TESTS WITH MOCKS ==========
@@ -524,15 +520,12 @@ mod tests {
             .register_storage_channel("test-stream".to_string(), storage_tx)
             .await;
 
-        let channels = router.storage_channels.read().await;
-        assert!(channels.contains_key("test-stream"));
-        drop(channels);
+        assert!(router.storage_channels.contains_key("test-stream"));
 
         // Unregister
         router.unregister_storage_channel("test-stream").await;
 
-        let channels = router.storage_channels.read().await;
-        assert!(!channels.contains_key("test-stream"));
+        assert!(!router.storage_channels.contains_key("test-stream"));
     }
 
     // ========== MQTT ROUTING ENRICHMENT TESTS ==========

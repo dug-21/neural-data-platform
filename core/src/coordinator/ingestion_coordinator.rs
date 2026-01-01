@@ -4,6 +4,7 @@
 //! multiple sources to storage writers.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot, RwLock};
@@ -81,7 +82,7 @@ struct StorageChannel {
     stream_id: String,
 }
 
-/// Coordinator statistics
+/// Coordinator statistics (snapshot for reporting)
 #[derive(Debug, Clone, Default)]
 pub struct CoordinatorStats {
     pub records_received: u64,
@@ -91,15 +92,50 @@ pub struct CoordinatorStats {
     pub active_storage_channels: usize,
 }
 
+/// Atomic counters for coordinator statistics
+/// Uses relaxed ordering for performance - these are counters for monitoring only
+struct AtomicStats {
+    records_received: AtomicU64,
+    records_routed: AtomicU64,
+    records_dropped: AtomicU64,
+    active_sources: AtomicUsize,
+    active_storage_channels: AtomicUsize,
+}
+
+impl Default for AtomicStats {
+    fn default() -> Self {
+        Self {
+            records_received: AtomicU64::new(0),
+            records_routed: AtomicU64::new(0),
+            records_dropped: AtomicU64::new(0),
+            active_sources: AtomicUsize::new(0),
+            active_storage_channels: AtomicUsize::new(0),
+        }
+    }
+}
+
+impl AtomicStats {
+    /// Create a snapshot of current stats
+    fn snapshot(&self) -> CoordinatorStats {
+        CoordinatorStats {
+            records_received: self.records_received.load(Ordering::Relaxed),
+            records_routed: self.records_routed.load(Ordering::Relaxed),
+            records_dropped: self.records_dropped.load(Ordering::Relaxed),
+            active_sources: self.active_sources.load(Ordering::Relaxed),
+            active_storage_channels: self.active_storage_channels.load(Ordering::Relaxed),
+        }
+    }
+}
+
 /// Central ingestion coordinator that owns the main channel
 pub struct IngestionCoordinator {
     config: IngestionCoordinatorConfig,
     receiver: Arc<RwLock<Option<mpsc::Receiver<StreamRecord>>>>,
     sender: mpsc::Sender<StreamRecord>,
     storage_channels: Arc<RwLock<HashMap<String, StorageChannel>>>,
-    is_running: Arc<RwLock<bool>>,
+    is_running: Arc<AtomicBool>,
     shutdown_tx: Arc<RwLock<Option<oneshot::Sender<()>>>>,
-    stats: Arc<RwLock<CoordinatorStats>>,
+    stats: Arc<AtomicStats>,
     source_handles: Arc<RwLock<HashMap<String, IngestionHandle>>>,
 }
 
@@ -113,9 +149,9 @@ impl IngestionCoordinator {
             receiver: Arc::new(RwLock::new(Some(receiver))),
             sender,
             storage_channels: Arc::new(RwLock::new(HashMap::new())),
-            is_running: Arc::new(RwLock::new(false)),
+            is_running: Arc::new(AtomicBool::new(false)),
             shutdown_tx: Arc::new(RwLock::new(None)),
-            stats: Arc::new(RwLock::new(CoordinatorStats::default())),
+            stats: Arc::new(AtomicStats::default()),
             source_handles: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -155,8 +191,9 @@ impl IngestionCoordinator {
         );
         debug!("Registered storage channel for stream: {}", stream_id);
 
-        let mut stats = self.stats.write().await;
-        stats.active_storage_channels = channels.len();
+        self.stats
+            .active_storage_channels
+            .store(channels.len(), Ordering::Relaxed);
     }
 
     /// Unregister a storage channel
@@ -165,8 +202,9 @@ impl IngestionCoordinator {
         channels.remove(stream_id);
         debug!("Unregistered storage channel for stream: {}", stream_id);
 
-        let mut stats = self.stats.write().await;
-        stats.active_storage_channels = channels.len();
+        self.stats
+            .active_storage_channels
+            .store(channels.len(), Ordering::Relaxed);
     }
 
     /// Start the coordinator's routing loop
@@ -183,7 +221,7 @@ impl IngestionCoordinator {
             CoreError::Config("Coordinator already started or receiver taken".to_string())
         })?;
 
-        *self.is_running.write().await = true;
+        self.is_running.store(true, Ordering::SeqCst);
 
         // Create shutdown channel
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
@@ -210,11 +248,8 @@ impl IngestionCoordinator {
 
                     // Process incoming records
                     Some(record) = receiver.recv() => {
-                        // Update stats
-                        {
-                            let mut s = stats.write().await;
-                            s.records_received += 1;
-                        }
+                        // Update stats (atomic, no lock needed)
+                        stats.records_received.fetch_add(1, Ordering::Relaxed);
 
                         // Route to appropriate storage channel
                         let channels = storage_channels.read().await;
@@ -227,12 +262,10 @@ impl IngestionCoordinator {
                                     "Failed to send to storage channel for {}: {}",
                                     record.stream_id, e
                                 );
-                                let mut s = stats.write().await;
-                                s.records_dropped += 1;
+                                stats.records_dropped.fetch_add(1, Ordering::Relaxed);
                             } else {
                                 debug!("Routed record to stream: {}", record.stream_id);
-                                let mut s = stats.write().await;
-                                s.records_routed += 1;
+                                stats.records_routed.fetch_add(1, Ordering::Relaxed);
                             }
                         } else {
                             // No storage channel registered for this stream
@@ -240,8 +273,7 @@ impl IngestionCoordinator {
                                 "No storage channel for stream: {}. Dropping record.",
                                 record.stream_id
                             );
-                            let mut s = stats.write().await;
-                            s.records_dropped += 1;
+                            stats.records_dropped.fetch_add(1, Ordering::Relaxed);
                         }
                     }
 
@@ -252,8 +284,8 @@ impl IngestionCoordinator {
                     }
                 }
 
-                // Check if we should still be running
-                if !*is_running.read().await {
+                // Check if we should still be running (atomic, no lock needed)
+                if !is_running.load(Ordering::SeqCst) {
                     break;
                 }
             }
@@ -268,7 +300,7 @@ impl IngestionCoordinator {
     pub async fn stop(&self) -> CoreResult<()> {
         info!("Stopping IngestionCoordinator");
 
-        *self.is_running.write().await = false;
+        self.is_running.store(false, Ordering::SeqCst);
 
         // Send shutdown signal
         if let Some(tx) = self.shutdown_tx.write().await.take() {
@@ -285,18 +317,18 @@ impl IngestionCoordinator {
 
     /// Check if the coordinator is running
     pub async fn is_running(&self) -> bool {
-        *self.is_running.read().await
+        self.is_running.load(Ordering::SeqCst)
     }
 
     /// Get coordinator statistics
     pub async fn stats(&self) -> CoordinatorStats {
-        self.stats.read().await.clone()
+        self.stats.snapshot()
     }
 
     /// Get health status
     pub async fn health_check(&self) -> HealthStatus {
-        let is_running = *self.is_running.read().await;
-        let stats = self.stats.read().await;
+        let is_running = self.is_running.load(Ordering::SeqCst);
+        let stats = self.stats.snapshot();
 
         let mut details = HashMap::new();
         details.insert(
