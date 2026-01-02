@@ -223,11 +223,10 @@ npx agentdb reflexion store \
   "Pattern missing required retention field"
 
 # 2. Update the pattern (save-pattern skill)
-npx agentdb store-pattern \
-  --type "development" \
-  --domain "ndp-patterns" \
-  --pattern '{"name": "add-stream", "approach": "# Add Stream (v2.0)...", "version": "2.0"}' \
-  --confidence 0.85
+npx agentdb skill create \
+  "add-stream-v2" \
+  "Add Data Stream (v2.0): Now requires retention field. Steps: 1) Create config.yaml, 2) Add retention field (required), 3) Run sync..." \
+  "tags: streams, config, updated"
 ```
 
 ---

@@ -1,13 +1,13 @@
 ---
 name: "get-pattern"
-description: "Retrieve APPLICATION patterns (architecture, procedures, conventions) via semantic search. Use BEFORE implementing to ensure consistency."
+description: "Retrieve APPLICATION patterns (architecture, procedures, conventions) from AgentDB skills table. Use BEFORE implementing to ensure consistency."
 ---
 
 # Get Pattern - Retrieve Application Knowledge
 
 ## What This Skill Does
 
-Retrieves established **application patterns** (architecture, procedures, conventions) for the Neural Data Platform using AgentDB's semantic vector search.
+Retrieves established **application patterns** (architecture, procedures, conventions) for the Neural Data Platform using AgentDB's semantic skill search.
 
 **Use this BEFORE implementing anything** to ensure you follow project standards.
 
@@ -16,106 +16,150 @@ Retrieves established **application patterns** (architecture, procedures, conven
 ## Quick Reference
 
 ```bash
-# Search reasoning patterns
-npx agentdb query --query "your search" --k 5 --min-confidence 0.6
+# Search for patterns by description
+npx agentdb skill search "domain adapter pattern" 5
 
-# Search past successful experiences
-npx agentdb reflexion retrieve "your search" --k 5 --only-successes
+# Fallback: search reflexion episodes for past experiences
+npx agentdb reflexion retrieve "how to add a stream" --k 5 --only-successes
 
-# Check what patterns exist
+# View all stored patterns
 npx agentdb db stats
 ```
 
 ---
 
-## Primary Method: Search Reasoning Patterns
+## Primary Method: Skill Search
 
 ```bash
-npx agentdb query \
-  --query "domain adapter pattern hexagonal architecture" \
-  --k 5 \
-  --min-confidence 0.6
-```
-
-### Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `--query` | Search text (semantic match) | required |
-| `--k` | Number of results | 5 |
-| `--min-confidence` | Minimum similarity threshold (0-1) | 0.0 |
-| `--domain` | Filter by category | none |
-| `--synthesize-context` | Generate summary | false |
-
-### Examples
-
-**Find architecture patterns:**
-```bash
-npx agentdb query --query "domain adapter pattern" --k 5 --min-confidence 0.7
-```
-
-**Find deployment procedures:**
-```bash
-npx agentdb query --query "deploy raspberry pi docker" --domain "deployment" --k 3
-```
-
-**Get synthesized summary:**
-```bash
-npx agentdb query --query "add new data stream" --k 5 --synthesize-context
-```
-
----
-
-## Secondary Method: Search Past Experiences
-
-If no patterns exist, search reflexion episodes for similar past work:
-
-```bash
-npx agentdb reflexion retrieve "MQTT source implementation" \
-  --k 5 \
-  --only-successes \
-  --min-reward 0.7
+npx agentdb skill search "<query>" <k>
 ```
 
 ### Parameters
 
 | Parameter | Description |
 |-----------|-------------|
+| `<query>` | What you're looking for (semantic search) |
+| `<k>` | Number of results (default: 5) |
+
+### Examples
+
+```bash
+# Find architecture patterns
+npx agentdb skill search "domain adapter pattern" 5
+
+# Find deployment procedures
+npx agentdb skill search "deploy to raspberry pi" 3
+
+# Find naming conventions
+npx agentdb skill search "naming conventions streams fields" 3
+
+# Find troubleshooting guides
+npx agentdb skill search "mqtt data not appearing" 5
+```
+
+---
+
+## Fallback Method: Reflexion Retrieve
+
+If no skill patterns exist, search past experiences:
+
+```bash
+npx agentdb reflexion retrieve "<query>" --k 5 --only-successes --synthesize-context
+```
+
+### Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `<query>` | Task description to find similar work |
 | `--k` | Number of results |
 | `--only-successes` | Only successful episodes |
-| `--only-failures` | Only failed episodes |
-| `--min-reward` | Minimum reward threshold |
-| `--synthesize-context` | Generate summary |
+| `--min-reward` | Minimum success score (0-1) |
+| `--synthesize-context` | Generate coherent summary |
+
+### Examples
+
+```bash
+# Find successful similar work
+npx agentdb reflexion retrieve "HTTP source implementation" \
+  --k 5 \
+  --only-successes \
+  --min-reward 0.7
+
+# Get synthesized context
+npx agentdb reflexion retrieve "timescaledb schema" \
+  --k 10 \
+  --synthesize-context
+```
 
 ---
 
 ## Pattern Categories
 
-| Category | --domain Value | What It Contains |
-|----------|----------------|------------------|
-| Architecture | `architecture` | System design, ADRs, traits, schemas |
-| Data Flow | `data-flow` | Pipeline patterns, ETL approaches |
-| Development | `development` | Implementation procedures, guides |
-| Deployment | `deployment` | Operational procedures, infrastructure |
-| Troubleshooting | `troubleshooting` | Checklists, common issues |
-| Conventions | `conventions` | Naming rules, style guides |
-| Streams | `streams` | Data stream documentation |
-| Silver | `silver` | Silver layer, SQL, data dictionary |
+| Category | Example Queries |
+|----------|-----------------|
+| Architecture | "domain adapter pattern", "hexagonal architecture" |
+| Data Flow | "ingestion pipeline", "bronze silver gold" |
+| Development | "add new stream", "implement source trait" |
+| Deployment | "docker deployment", "raspberry pi setup" |
+| Troubleshooting | "mqtt not working", "parquet write errors" |
+| Conventions | "naming conventions", "code organization" |
 
 ---
 
 ## Interpreting Results
 
-Results include:
+Results from `skill search` include:
 
 | Field | Meaning |
 |-------|---------|
-| `taskType` | Pattern category |
-| `approach` | The actual pattern content (markdown) |
-| `successRate` | How often this pattern succeeded (0-1) |
-| `similarity` | How relevant to your query (0-1) |
+| `Name` | Pattern identifier |
+| `Description` | The pattern content |
+| `Success Rate` | How often this pattern succeeded (0-100%) |
+| `Uses` | Number of times used |
 
-**High-value patterns**: successRate > 0.8 AND similarity > 0.6
+**High-value patterns**: Success Rate > 80% AND Uses > 3
+
+---
+
+## Typical Workflow
+
+```bash
+# 1. Search for existing patterns
+npx agentdb skill search "what I'm about to implement" 5
+
+# 2. If found: Follow the pattern
+# 3. If not found: Check reflexion for past experiences
+npx agentdb reflexion retrieve "similar task" --k 5 --only-successes
+
+# 4. After work: Record feedback
+npx agentdb reflexion store "feature-id" "task" 0.9 true "Pattern worked well"
+
+# 5. If you discovered something new: Save it
+npx agentdb skill create "pattern-name" "description" "optional-details"
+```
+
+---
+
+## CRITICAL: Record Pattern Usage
+
+After using a pattern, **always use the `reflexion` skill** to record whether it helped:
+
+```bash
+# Pattern worked well
+npx agentdb reflexion store "dp-004" \
+  "Used domain-adapter pattern for new HTTP source" \
+  1.0 true \
+  "Pattern was complete - followed steps exactly, tests passed"
+
+# Pattern needed fixes
+npx agentdb reflexion store "dp-004" \
+  "Used add-stream pattern but needed adjustment" \
+  0.6 true \
+  "Pattern missing retention field - should update via save-pattern"
+```
+
+Without feedback, the system can't learn which patterns work.
 
 ---
 
@@ -128,7 +172,7 @@ Results include:
 
 2. **Search reflexion episodes:**
    ```bash
-   npx agentdb reflexion retrieve "your query" --k 10
+   npx agentdb reflexion retrieve "your query" --k 10 --synthesize-context
    ```
 
 3. **Check file-based documentation:**
@@ -156,7 +200,7 @@ Results include:
 
 - **`save-pattern`** - Store NEW patterns after discovering reusable approaches
 - **`reflexion`** - Record feedback on pattern effectiveness (REQUIRED after using patterns)
-- **`learner`** - Auto-discover patterns from successful episodes
+- **`learner`** - Auto-discover patterns from successful episodes (user-invoked)
 
 ---
 
