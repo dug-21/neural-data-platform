@@ -357,24 +357,30 @@ If you developed a reusable dashboard pattern, use the `save-pattern` skill to s
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve dashboard patterns (REQUIRED)
+- `save-pattern` - Store new visualization patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting implementation:**
-1. Use `get-pattern` skill to retrieve dashboard patterns
-2. Review similar past approaches
+### BEFORE Dashboard Implementation
 
-**DURING implementation:**
-Document patterns that need attention:
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
+Use `get-pattern` skill with domain "dashboards" to retrieve:
+- Panel configuration patterns
+- Query optimization approaches
+- Alerting rule patterns
 
-**AFTER implementation:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable visualization approaches
+### DURING Dashboard Implementation
+
+Track what you learn:
+- Effective visualizations for this data
+- Query performance techniques
+- User experience improvements
+
+### AFTER Dashboard Implementation
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "dashboards" to store new approaches

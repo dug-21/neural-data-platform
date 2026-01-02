@@ -2,6 +2,8 @@
 
 Project-specific agents for the Neural Data Platform. These agents know the project's patterns, conventions, and architecture.
 
+**Creating a new agent?** See [AGENT-CREATION-GUIDE.md](./AGENT-CREATION-GUIDE.md) for requirements and best practices.
+
 ## When to Use NDP Agents
 
 **ALWAYS use NDP agents instead of generic agents for this project.**
@@ -57,35 +59,29 @@ Project-specific agents for the Neural Data Platform. These agents know the proj
 All NDP agents follow this protocol:
 
 ### Before Implementation
-```
-1. Use get-pattern skill to find relevant patterns
-2. Check .claude/patterns/INDEX.yaml for file references
-3. Read referenced documentation files
-4. Understand existing conventions before writing code
-```
+
+1. Use `get-pattern` skill to find relevant patterns for your domain
+2. Read referenced architecture and procedure documents
+3. Understand existing conventions before writing code
 
 ### During Implementation
-```
-1. Follow established patterns (Domain Adapter, channel pipeline, etc.)
-2. Use correct naming conventions (kebab-case streams, snake_case fields)
-3. Implement traits correctly (Source, Store, ResponseParser)
-4. Add appropriate error handling (CoreError, tracing)
-```
+
+1. Apply design principles from your agent definition
+2. Follow established conventions (naming, error handling, etc.)
+3. Track what you learn - gaps in patterns, new approaches that work
 
 ### After Implementation
-```
-1. If you discovered a new reusable pattern, use save-pattern skill
-2. Update INDEX.yaml if adding new pattern references
+
+1. Use `reflexion` skill to record whether patterns helped (REQUIRED)
+2. Use `save-pattern` skill if you discovered a reusable approach
 3. Ensure tests follow project patterns
-```
 
 ### Git Operations (REQUIRED)
-```
-ALL git operations MUST use ndp-github-workflow skill:
-- Branch naming: feature/{feature-id}
-- Commits: {type}({scope}): {description}
+
+ALL git operations MUST use `ndp-github-workflow` skill:
+- Branch naming: `feature/{phase}-{NNN}`
+- Commits: `{type}({scope}): {description}`
 - PRs: Use project template
-```
 
 ## Key Project Patterns
 
@@ -110,27 +106,30 @@ Task("Design feature aggregations", "...", "ndp-feature-engineer")
 
 ## Related Skills
 
-| Skill | Purpose |
-|-------|---------|
-| `ndp-github-workflow` | **REQUIRED** Branch, commit, PR conventions |
-| `get-pattern` | Retrieve project patterns before implementation |
-| `save-pattern` | Store new patterns after discoveries |
+| Skill | Purpose | When |
+|-------|---------|------|
+| `ndp-github-workflow` | Branch, commit, PR conventions | ALL git operations (REQUIRED) |
+| `get-pattern` | Retrieve project patterns | BEFORE implementation (REQUIRED) |
+| `reflexion` | Record pattern feedback | AFTER implementation (REQUIRED) |
+| `save-pattern` | Store new patterns | AFTER discoveries |
+| `learner` | Auto-discover patterns from history | User-invoked after feature completion |
 
 ## Directory
 
 ```
 .claude/agents/ndp/
 ├── README.md                       # This file
+├── AGENT-CREATION-GUIDE.md         # How to create new NDP agents
 ├── ndp-scrum-master.md             # Feature lifecycle coordination
 ├── ndp-architect.md                # Architecture decisions
 ├── ndp-rust-dev.md                 # General Rust development
 ├── ndp-tester.md                   # Testing specialist
-├── ndp-meteorologist.md            # Weather domain scientist (NEW)
-├── ndp-air-quality-specialist.md   # Air quality domain scientist (NEW)
+├── ndp-meteorologist.md            # Weather domain scientist
+├── ndp-air-quality-specialist.md   # Air quality domain scientist
 ├── ndp-parquet-dev.md              # Bronze/Parquet layer
 ├── ndp-timescale-dev.md            # Silver/TimescaleDB layer
-├── ndp-dq-engineer.md              # Data quality engineering (NEW)
-├── ndp-analytics-engineer.md       # Analytics transformations (NEW)
+├── ndp-dq-engineer.md              # Data quality engineering
+├── ndp-analytics-engineer.md       # Analytics transformations
 ├── ndp-feature-engineer.md         # Feature engineering
 ├── ndp-ml-engineer.md              # ML/ruv-FANN
 ├── ndp-grafana-dev.md              # Grafana dashboards
@@ -138,6 +137,8 @@ Task("Design feature aggregations", "...", "ndp-feature-engineer")
 
 .claude/skills/
 ├── ndp-github-workflow/      # Git conventions (branches, commits, PRs)
-├── get-pattern/              # Pattern retrieval
-└── save-pattern/             # Pattern storage
+├── get-pattern/              # Pattern retrieval (BEFORE work)
+├── reflexion/                # Pattern feedback (AFTER work)
+├── save-pattern/             # Pattern storage (new discoveries)
+└── learner/                  # Auto-discovery (user-invoked)
 ```

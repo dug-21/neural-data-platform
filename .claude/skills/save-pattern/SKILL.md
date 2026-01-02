@@ -1,130 +1,179 @@
 ---
 name: "save-pattern"
-description: "Store, update, or deprecate APPLICATION patterns (architecture, procedures, conventions) in AgentDB. NOT for swarm/transient memory."
+description: "Store, update, or deprecate APPLICATION patterns (architecture, procedures, conventions) in AgentDB's Reasoning Patterns table. NOT for swarm/transient memory."
 ---
 
 # Save Pattern - Store Application Knowledge
 
 ## What This Skill Does
 
-Manages the full lifecycle of **application patterns** in AgentDB:
-- **Store** - Create new patterns with semantic embeddings
-- **Update** - Replace patterns (AgentDB tracks versions)
-- **Deprecate** - Mark patterns as outdated with replacement guidance
-- **Delete** - Remove patterns entirely
+Stores **application patterns** to AgentDB's **Reasoning Patterns** table with semantic embeddings. Patterns are versioned and searchable via `get-pattern`.
 
-## CRITICAL: What This Skill IS and IS NOT For
-
-### USE FOR (Application Knowledge)
-
-| Type | Examples |
-|------|----------|
-| **Architecture** | System design, ADRs, schemas, trait patterns |
-| **Procedures** | "How to add a stream", "How to deploy", step-by-step guides |
-| **Conventions** | Naming rules, code style, organization standards |
-| **Data Flow** | Pipeline patterns, ETL approaches, transformation logic |
-| **Troubleshooting** | Common issues and solutions, debugging checklists |
-
-### DO NOT USE FOR (Transient/Swarm Memory)
-
-| Type | Use Instead |
-|------|-------------|
-| Swarm coordination state | claude-flow memory tools |
-| Agent task status | claude-flow task tools |
-| Temporary working memory | claude-flow memory tools |
-| Inter-agent messages | claude-flow DAA tools |
-| Session-specific context | claude-flow memory with TTL |
-
-**Patterns are PERMANENT application knowledge, not transient swarm state.**
+**Use this AFTER completing work** to share reusable knowledge with future agents.
 
 ---
 
-## The Pattern Workflow
+## Quick Reference
 
-```
-1. BEFORE work:  get-pattern  → Check existing patterns first
-2. DURING work:  Discover new approaches
-3. AFTER work:   save-pattern → Store reusable discoveries (THIS SKILL)
-                 reflexion    → Evaluate if get-pattern results helped
+```bash
+# Store a new pattern
+npx agentdb store-pattern --type "category" --domain "ndp-patterns" \
+  --pattern '{"name": "...", "approach": "..."}' --confidence 0.9
+
+# Check existing patterns
+npx agentdb db stats
+
+# Search before creating (avoid duplicates)
+npx agentdb query --query "pattern name" --k 3
 ```
 
 ---
 
-## Quick Usage
+## Primary Method: Store Pattern
 
-### Store New Pattern
+```bash
+npx agentdb store-pattern \
+  --type "architecture" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "pattern-name",
+    "approach": "# Pattern Name\n\n## Context\n...",
+    "version": "1.0",
+    "tags": ["tag1", "tag2"],
+    "related_files": ["path/to/file.rs"]
+  }' \
+  --confidence 0.9
+```
+
+### Parameters
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `--type` | Category (see table below) | Yes |
+| `--domain` | Namespace (use `ndp-patterns`) | Yes |
+| `--pattern` | JSON with pattern content | Yes |
+| `--confidence` | Success rate 0-1 | Yes |
+
+---
+
+## Pattern JSON Structure
+
+```json
+{
+  "name": "pattern-name",
+  "approach": "# Pattern Name\n\n## Context\nWhen to use...\n\n## Steps\n1. First...\n2. Second...\n\n## Example\n...",
+  "version": "1.0",
+  "tags": ["category", "topic1", "topic2"],
+  "related_files": ["path/to/file.rs", "docs/relevant.md"],
+  "last_verified": "2025-01-02"
+}
+```
+
+### Approach Template (Markdown)
+
+```markdown
+# Pattern Name
+
+## Context
+When and why to use this pattern.
+
+## Prerequisites
+- Required setup or conditions
+
+## Steps
+1. First step with details
+2. Second step with details
+3. Verification step
+
+## Example
+Concrete usage example with file references.
+
+## Related Files
+- `path/to/relevant/file.rs`
+
+## Changelog
+- v1.0 (2025-01-02): Initial version
+```
+
+---
+
+## Examples
+
+### Store Architecture Pattern
+
+```bash
+npx agentdb store-pattern \
+  --type "architecture" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "domain-adapter-source",
+    "approach": "# Domain Adapter Pattern\n\n## Context\nAll data sources implement the Source trait for uniform handling.\n\n## Steps\n1. Create struct implementing Source trait\n2. Implement fetch() -> Vec<TimeSeriesPoint>\n3. Implement health_check() -> HealthStatus\n\n## Related Files\n- core/src/traits.rs\n- core/src/sources/http_poll.rs",
+    "version": "1.0",
+    "tags": ["hexagonal", "traits", "source"]
+  }' \
+  --confidence 0.95
+```
+
+### Store Development Procedure
 
 ```bash
 npx agentdb store-pattern \
   --type "development" \
   --domain "ndp-patterns" \
   --pattern '{
-    "name": "pattern-name",
-    "approach": "# Pattern Name\n\n## Context\nWhen/why to use this.\n\n## Prerequisites\n- Required setup\n\n## Steps\n1. First step\n2. Second step\n\n## Example\nConcrete usage.\n\n## Verification\nHow to confirm it worked.",
+    "name": "add-data-stream",
+    "approach": "# Add New Data Stream\n\n## Prerequisites\n- Stream config YAML ready\n- etcd running\n\n## Steps\n1. Create config/base/streams/{stream-id}/config.yaml\n2. Define fields array with name, source_path, unit\n3. Run ./deploy.sh sync\n4. Verify: etcdctl get /streams/{id}/config",
     "version": "1.0",
-    "related_files": ["path/to/related/file.md"],
-    "last_verified": "2025-12-22"
+    "tags": ["streams", "config", "etcd"]
   }' \
   --confidence 0.9
 ```
 
-### Pattern Content Template
+### Store Troubleshooting Pattern
 
-```markdown
-# Pattern Name
-
-## Context
-When/why you would use this pattern.
-
-## Prerequisites
-What must be in place before starting.
-
-## Steps
-1. First step
-2. Second step
-3. ...
-
-## Example
-Concrete usage example or file reference.
-
-## Verification
-How to confirm it worked.
-
-## Related
-- Related patterns or files
+```bash
+npx agentdb store-pattern \
+  --type "troubleshooting" \
+  --domain "ndp-patterns" \
+  --pattern '{
+    "name": "mqtt-data-not-appearing",
+    "approach": "# MQTT Data Not Appearing\n\n## Symptoms\n- Sensor data not in Parquet files\n- No errors in logs\n\n## Root Causes\n1. Topic mismatch\n2. Missing stream_id in routing\n\n## Solution\n1. Check mosquitto_sub -t # for actual topics\n2. Verify config.yaml source.topics matches\n3. Ensure IngestionRouter tags stream_id",
+    "version": "1.0",
+    "tags": ["mqtt", "debugging", "parquet"]
+  }' \
+  --confidence 0.85
 ```
 
 ---
 
 ## Pattern Categories
 
-| Category | Use For | Example Tags |
-|----------|---------|--------------|
-| `architecture` | System design, ADRs, schemas | `adr`, `design`, `schema`, `traits` |
-| `data-flow` | Pipeline patterns, transformations | `pipeline`, `etl`, `channel`, `ingestion` |
-| `development` | Implementation procedures | `procedure`, `howto`, `coding`, `rust` |
-| `deployment` | Operational procedures | `docker`, `deploy`, `infrastructure`, `pi` |
-| `troubleshooting` | Common issues and solutions | `debug`, `fix`, `checklist`, `errors` |
-| `conventions` | Naming rules, style guides | `naming`, `style`, `organization` |
-| `procedures` | Multi-component changes | `stream`, `source`, `parser`, `dashboard` |
-| `streams` | Active stream documentation | `mqtt`, `http`, `sensor`, `weather` |
+| Category | --type Value | Use For |
+|----------|--------------|---------|
+| Architecture | `architecture` | System design, ADRs, traits, schemas |
+| Data Flow | `data-flow` | Pipeline patterns, ETL approaches |
+| Development | `development` | Implementation procedures, guides |
+| Deployment | `deployment` | Operational procedures, infrastructure |
+| Troubleshooting | `troubleshooting` | Debug checklists, common issues |
+| Conventions | `conventions` | Naming rules, style guides |
+| Streams | `streams` | Data stream documentation |
+| Silver | `silver` | Silver layer, SQL, data dictionary |
 
 ---
 
 ## Update Existing Pattern
 
-Store with the same pattern name - AgentDB handles versioning:
+Store with same name, increment version:
 
 ```bash
 npx agentdb store-pattern \
   --type "development" \
   --domain "ndp-patterns" \
   --pattern '{
-    "name": "add-stream",
-    "approach": "# Add New Data Stream (Updated)\n\n## Steps\n1. Create config...\n2. NEW: Add retention field (required since v2.0)\n3. ...",
+    "name": "add-data-stream",
+    "approach": "# Add Data Stream (v2.0)\n\n## Changelog\n- v2.0: Added retention field requirement\n- v1.0: Initial version\n\n## Steps\n1. Create config.yaml\n2. NEW: Add retention field (required)\n3. ...",
     "version": "2.0",
-    "last_verified": "2025-12-22",
-    "changelog": "Added required retention field"
+    "tags": ["streams", "config", "updated"]
   }' \
   --confidence 0.85
 ```
@@ -133,7 +182,7 @@ npx agentdb store-pattern \
 
 ## Deprecate Pattern
 
-When a pattern is replaced by a better approach:
+Set confidence to 0 and mark as deprecated:
 
 ```bash
 npx agentdb store-pattern \
@@ -141,81 +190,68 @@ npx agentdb store-pattern \
   --domain "ndp-patterns" \
   --pattern '{
     "name": "manual-config-sync",
-    "approach": "# DEPRECATED: Manual Config Sync\n\n## Status\nDEPRECATED as of 2025-12-22\n\n## Replacement\nUse deployment:automated-config-sync instead.\n\n## Migration\n1. Stop using manual etcdctl put commands\n2. Edit YAML files in config/streams/\n3. Run: ./deploy.sh sync\n\n## Reason\nManual sync was error-prone.",
+    "approach": "# DEPRECATED: Manual Config Sync\n\n## Status\nDEPRECATED as of 2025-01-02\n\n## Replacement\nUse automated-config-sync instead.\n\n## Migration\n1. Stop manual etcdctl commands\n2. Edit YAML in config/streams/\n3. Run ./deploy.sh sync",
     "status": "deprecated",
-    "replacement": "automated-config-sync",
-    "deprecation_date": "2025-12-22"
+    "replacement": "automated-config-sync"
   }' \
   --confidence 0.0
 ```
 
-**Prefer Deprecation over Deletion** - deprecated patterns serve as historical reference.
+**Prefer deprecation over deletion** - preserves historical context.
 
 ---
 
-## Real Examples
+## Confidence Guidelines
 
-### Architecture Pattern
-
-```bash
-npx agentdb store-pattern \
-  --type "architecture" \
-  --domain "ndp-patterns" \
-  --pattern '{
-    "name": "domain-adapter-source",
-    "approach": "# Domain Adapter Pattern\n\n## Context\nAll data sources implement the Source trait for uniform handling.\n\n## Implementation\n1. Create struct implementing Source trait\n2. Implement fetch() -> Vec<TimeSeriesPoint>\n3. Implement health_check() -> HealthStatus\n\n## Example\nSee: core/src/sources/http_poll.rs",
-    "tags": ["architecture", "traits", "hexagonal", "source"],
-    "related_files": ["core/src/sources/http_poll.rs", "core/src/traits.rs"]
-  }' \
-  --confidence 0.95
-```
-
-### Procedure Pattern
-
-```bash
-npx agentdb store-pattern \
-  --type "procedures" \
-  --domain "ndp-patterns" \
-  --pattern '{
-    "name": "add-grafana-dashboard",
-    "approach": "# Add Grafana Dashboard\n\n## Prerequisites\n- DuckDB datasource configured (uid: duckdb-ndp)\n- Stream data in Parquet bronze layer\n\n## Steps\n1. Create JSON in config/grafana/dashboards/\n2. Use time_bucket() for aggregation\n3. Filter by stream_id in WHERE clause\n4. Handle unit conversions in SQL\n\n## Verification\nRestart Grafana, check dashboard loads without errors",
-    "tags": ["procedures", "grafana", "dashboard", "visualization"],
-    "related_files": ["config/grafana/dashboards/indoor-vs-outdoor.json"]
-  }' \
-  --confidence 0.9
-```
+| Score | When to Use |
+|-------|-------------|
+| 0.95+ | Proven pattern, used successfully multiple times |
+| 0.85 | Works well, minor edge cases |
+| 0.70 | Generally works, some adjustments needed |
+| 0.50 | Experimental, needs validation |
+| 0.0 | Deprecated or superseded |
 
 ---
 
-## Check Pattern Health
+## The Pattern Workflow
 
-```bash
-npx agentdb db stats
 ```
-
-Returns: total patterns, average success rates, top task types, patterns needing review.
+1. BEFORE work:  get-pattern  → Search for existing patterns
+2. DURING work:  Note gaps, discover new approaches
+3. AFTER work:   save-pattern → Store NEW discoveries (THIS SKILL)
+                 reflexion    → Record if existing patterns helped
+                 learner      → Auto-discover patterns from episodes
+```
 
 ---
 
 ## Best Practices
 
-1. **Be Specific** - Include concrete examples, not just theory
-2. **Include Context** - Explain when/why to use the pattern
-3. **Reference Files** - Link to actual code that implements the pattern
-4. **Use Consistent Tags** - Category + descriptive tags (kebab-case)
-5. **Deprecate Don't Delete** - Preserve knowledge unless harmful
-6. **Set Realistic Success Rates** - Start at 0.8-0.9, let feedback adjust
-7. **Include Verification Steps** - How to confirm the pattern worked
-8. **Store Only Reusable Knowledge** - Not one-off solutions
+1. **Check first** - Use `get-pattern` before creating duplicates
+2. **Be specific** - Include concrete examples, not just theory
+3. **Reference files** - Link to actual code that implements the pattern
+4. **Use consistent tags** - Category + descriptive tags (kebab-case)
+5. **Include verification** - How to confirm the pattern worked
+6. **Store only reusable knowledge** - Not one-off solutions
+7. **Update, don't duplicate** - Increment version instead of new pattern
 
 ---
 
 ## Related Skills
 
-- **`get-pattern`** - Retrieve patterns BEFORE work (always check first)
-- **`reflexion`** - Record feedback on whether `get-pattern` results helped
+- **`get-pattern`** - Search patterns BEFORE work (always check first)
+- **`reflexion`** - Record feedback on pattern effectiveness
+- **`learner`** - Auto-discover patterns from successful episodes
 
-**NOT related to:**
-- Swarm coordination (use claude-flow tools)
-- Transient task memory (use claude-flow memory with TTL)
-- Agent state management (use claude-flow tools)
+---
+
+## What NOT to Use This For
+
+| Don't Store | Use Instead |
+|-------------|-------------|
+| Swarm coordination state | claude-flow memory tools |
+| Agent task status | claude-flow task tools |
+| Temporary working memory | claude-flow memory with TTL |
+| Session-specific context | claude-flow memory tools |
+
+**Patterns are PERMANENT application knowledge, not transient swarm state.**

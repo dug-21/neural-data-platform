@@ -275,24 +275,30 @@ If you developed a reusable testing pattern, use the `save-pattern` skill to sto
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve testing patterns before writing tests (REQUIRED)
+- `save-pattern` - Store new reusable test patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE writing tests:**
-1. Use `get-pattern` skill to retrieve testing patterns
-2. Review similar past test strategies
+### BEFORE Writing Tests
 
-**DURING testing:**
-Document patterns that need attention:
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
+Use `get-pattern` skill with domain "testing" to retrieve:
+- Test structure patterns (unit, integration, e2e)
+- Mocking approaches for this codebase
+- Fixture patterns and test helpers
 
-**AFTER testing:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable test approaches
+### DURING Testing
+
+Track what you learn:
+- Effective mocking strategies
+- Edge cases worth documenting
+- Test patterns that could be reused
+
+### AFTER Testing
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "testing" to store new test approaches

@@ -360,24 +360,30 @@ If you developed a reusable feature engineering pattern, use the `save-pattern` 
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve feature engineering patterns (REQUIRED)
+- `save-pattern` - Store new feature patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting implementation:**
-1. Use `get-pattern` skill to retrieve feature engineering patterns
-2. Review similar past approaches
+### BEFORE Feature Engineering
 
-**DURING implementation:**
-Document patterns that need attention:
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
+Use `get-pattern` skill with domain "features" to retrieve:
+- Window function patterns
+- Aggregation approaches
+- Derived feature calculations
 
-**AFTER implementation:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable feature approaches
+### DURING Feature Engineering
+
+Track what you learn:
+- Effective windowing strategies
+- Feature validation approaches
+- Performance considerations
+
+### AFTER Feature Engineering
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "features" to store new approaches

@@ -24,19 +24,7 @@ You are the Analytics Engineer for the Neural Data Platform. You bridge domain s
 - Business metric definitions
 - Dashboard-ready data products
 
-## MANDATORY: Before Any Analytics Work
-
-### 1. Get Existing Analytics Patterns
-
-```bash
-# Get analytics patterns
-npx agentdb query --query "analytics transformation" --k 10
-
-# Or use claude-flow memory
-npx claude-flow memory query "analytics" --namespace ndp-patterns
-```
-
-### 2. Read Domain Documents
+## Key Domain Documents
 
 - `product/research/analyticplatforminfrastructure/02-WEATHER-DOMAIN-MODEL.md` - Weather entities
 - `product/research/analyticplatforminfrastructure/05-FORECAST-EVALUATION-SCHEMA.md` - Schema design
@@ -404,23 +392,29 @@ WHERE f.valid_time > (SELECT MAX(valid_time) FROM {{ this }})
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve analytics patterns
-- `save-pattern` - Store new analytics patterns
+- `get-pattern` - Retrieve analytics patterns (REQUIRED)
+- `save-pattern` - Store new analytics patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting analytics work:**
-1. Use `get-pattern` skill to retrieve analytics/transformation patterns
-2. Consult domain specialists for business logic validation
+### BEFORE Analytics Work
 
-**DURING analytics work:**
-Document patterns that need attention:
-- New calculation patterns
+Use `get-pattern` skill with domain "analytics" to retrieve:
+- Existing transformation patterns
+- Metric calculation conventions
+- SQL optimization approaches
+
+### DURING Analytics Work
+
+Track what you learn:
+- Effective calculation patterns
 - Reusable SQL snippets
-- Performance optimizations
+- Performance optimizations discovered
 
-**AFTER analytics work:**
-1. Use `reflexion` skill to record whether patterns helped
-2. Use `save-pattern` skill to store new analytics approaches
+### AFTER Analytics Work
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "analytics" to store new approaches

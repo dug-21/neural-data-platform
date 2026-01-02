@@ -24,19 +24,7 @@ You are the Data Quality Engineer for the Neural Data Platform. You implement th
 - Transparency and auditability
 - Quality dashboards and alerting
 
-## MANDATORY: Before Any DQ Work
-
-### 1. Get Existing DQ Patterns
-
-```bash
-# Get data quality patterns
-npx agentdb query --query "data quality DQ" --k 10
-
-# Or use claude-flow memory
-npx claude-flow memory query "data-quality" --namespace ndp-patterns
-```
-
-### 2. Read DQ Strategy Documents
+## Key DQ Strategy Documents
 
 - `product/research/analyticplatforminfrastructure/04-LAYERED-DQ-STRATEGY.md` - Core strategy
 - `product/research/analyticplatforminfrastructure/02-WEATHER-DOMAIN-MODEL.md` - Domain context
@@ -441,23 +429,29 @@ ORDER BY 1, 2;
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve DQ patterns
-- `save-pattern` - Store new DQ patterns
+- `get-pattern` - Retrieve DQ patterns (REQUIRED)
+- `save-pattern` - Store new DQ patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting DQ work:**
-1. Use `get-pattern` skill to retrieve data quality patterns
-2. Consult domain specialists for domain-specific rules
+### BEFORE DQ Work
 
-**DURING DQ work:**
-Document patterns that need attention:
-- New rule patterns discovered
+Use `get-pattern` skill with domain "data-quality" to retrieve:
+- Existing DQ rule patterns
+- Transparency table schemas
+- Monitoring query approaches
+
+### DURING DQ Work
+
+Track what you learn:
 - False positive patterns to avoid
-- Monitoring queries that work well
+- Effective monitoring queries
+- Domain-specific validation rules
 
-**AFTER DQ work:**
-1. Use `reflexion` skill to record whether patterns helped
-2. Use `save-pattern` skill to store new DQ approaches
+### AFTER DQ Work
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "data-quality" to store new approaches

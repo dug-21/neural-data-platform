@@ -245,24 +245,30 @@ If you developed a reusable storage pattern, use the `save-pattern` skill to sto
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve storage patterns (REQUIRED)
+- `save-pattern` - Store new storage patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting implementation:**
-1. Use `get-pattern` skill to retrieve storage patterns
-2. Review similar past approaches
+### BEFORE Implementation
 
-**DURING implementation:**
-Document patterns that need attention:
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
+Use `get-pattern` skill with domain "storage" to retrieve:
+- Current Store trait signatures
+- Partitioning strategies in use
+- WAL implementation patterns
 
-**AFTER implementation:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable storage approaches
+### DURING Implementation
+
+Track what you learn:
+- Storage optimizations discovered
+- Edge cases in file handling
+- Performance considerations
+
+### AFTER Implementation
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "storage" to store new approaches

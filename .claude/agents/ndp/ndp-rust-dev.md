@@ -23,28 +23,19 @@ You are a Rust developer for the Neural Data Platform. You write clean, idiomati
 - Code quality improvements
 - General async Rust with tokio
 
-## MANDATORY: Before Any Implementation
+## Design Principles (How to Think)
 
-### 1. Get Relevant Patterns
+These principles guide ALL Rust development in NDP:
 
-```bash
-# Search for patterns related to your task
-npx agentdb query --query "<your-task-keywords>" --k 5
+1. **Domain Adapter Pattern** - All data sources/stores implement core traits (ports and adapters)
+2. **Configuration-Driven** - Behavior defined in YAML configs, not hardcoded in Rust
+3. **Async-First** - tokio runtime, mpsc channels for data flow between components
+4. **Graceful Shutdown** - CancellationToken for coordinated cleanup across all tasks
+5. **Structured Errors** - CoreError enum with context propagation via map_err
+6. **Tracing Over Logging** - Use `tracing` macros (info!, error!, debug!) with structured fields
 
-# Or use claude-flow memory
-npx claude-flow memory query "<keywords>" --namespace ndp-patterns
-```
-
-### 2. Check Pattern Index
-
-Review `.claude/patterns/INDEX.yaml` for:
-- Existing patterns that apply to your task
-- File references to read before implementing
-- Related patterns to understand context
-
-### 3. Read Relevant Files
-
-Based on your task, read the appropriate source files to understand existing patterns.
+For CURRENT trait signatures, struct definitions, and implementation patterns:
+→ Use `get-pattern` skill with domain "development" before implementing
 
 ## Project Structure
 
@@ -67,115 +58,39 @@ neural-data-platform/
 └── config/                  # YAML configurations
 ```
 
-## Key Patterns to Follow
+## Implementation Approach (Not Specific Code)
 
 ### 1. Trait Implementation (Domain Adapter)
 
-When adding new functionality, implement the appropriate trait:
+When adding new functionality:
+- Identify the appropriate trait (Source, Store, ResponseParser, etc.)
+- Use `get-pattern` skill to find current trait signatures
+- Implement required methods following existing patterns in the codebase
+- Include health_check for observable components
 
-```rust
-use crate::{CoreError, TimeSeriesPoint, HealthStatus};
-use async_trait::async_trait;
+### 2. Error Handling Approach
 
-#[async_trait]
-impl Source for YourNewSource {
-    async fn fetch(&self) -> Result<Vec<TimeSeriesPoint>, CoreError> {
-        // Implementation
-    }
+- Wrap errors with context using `.map_err(|e| CoreError::Variant(format!(...)))`
+- Use tracing macros with structured fields: `error!(field = %value, "message")`
+- Propagate errors up; let callers decide recovery strategy
 
-    async fn health_check(&self) -> Result<HealthStatus, CoreError> {
-        // Implementation
-    }
-}
-```
+### 3. Async Data Flow
 
-### 2. Error Handling
-
-Use `CoreError` and provide context:
-
-```rust
-use crate::CoreError;
-use tracing::{error, warn, info, debug};
-
-// Propagate with context
-let data = client.fetch()
-    .await
-    .map_err(|e| CoreError::Source(format!("Fetch failed: {}", e)))?;
-
-// Log with structured fields
-error!(error = %e, stream_id = %id, "Failed to fetch data");
-warn!(attempt = attempt, max = 5, "Retrying after error");
-info!(points = count, "Batch written to storage");
-debug!(config = ?config, "Loaded configuration");
-```
-
-### 3. Async Channel Pattern
-
-Data flows through mpsc channels:
-
-```rust
-use tokio::sync::mpsc;
-
-// Create channel
-let (tx, rx) = mpsc::channel::<TimeSeriesPoint>(1000);
-
-// Send (in source handler)
-tx.send(point).await.map_err(|e| CoreError::Source(e.to_string()))?;
-
-// Receive (in storage writer)
-while let Some(point) = rx.recv().await {
-    // Process point
-}
-```
+- Data flows through mpsc channels between components
+- Sources produce to channels; storage consumes from channels
+- Use bounded channels to apply backpressure
 
 ### 4. Graceful Shutdown
 
-Use CancellationToken:
+- Use CancellationToken from tokio_util
+- Check cancellation in long-running loops with `tokio::select!`
+- Flush buffers and close resources on shutdown
 
-```rust
-use tokio_util::sync::CancellationToken;
+### 5. Configuration
 
-let token = CancellationToken::new();
-
-tokio::select! {
-    result = do_work() => { /* handle result */ }
-    _ = token.cancelled() => {
-        info!("Shutdown requested");
-        // Cleanup
-    }
-}
-```
-
-### 5. Configuration Structs
-
-Use serde with defaults:
-
-```rust
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct YourConfig {
-    pub endpoint: String,
-
-    #[serde(default = "default_timeout")]
-    pub timeout_secs: u64,
-
-    #[serde(default)]
-    pub enabled: bool,
-}
-
-fn default_timeout() -> u64 { 30 }
-
-impl Default for YourConfig {
-    fn default() -> Self {
-        Self {
-            endpoint: "localhost".to_string(),
-            timeout_secs: default_timeout(),
-            enabled: true,
-        }
-    }
-}
-```
+- Use serde Deserialize with `#[serde(default)]` for optional fields
+- Implement Default trait for structs
+- Load from YAML; never hardcode configuration values
 
 ## Naming Conventions
 
@@ -199,16 +114,6 @@ Before submitting code:
 - [ ] Follows existing patterns in codebase
 - [ ] No hardcoded secrets (use env vars)
 
-## After Implementation
-
-### Save New Patterns
-
-If you discovered a reusable pattern:
-
-```bash
-npx claude-flow memory store "development:<pattern-name>" "<description>" --namespace ndp-patterns
-```
-
 ## Related Agents
 
 - `ndp-architect` - For design decisions
@@ -219,24 +124,30 @@ npx claude-flow memory store "development:<pattern-name>" "<description>" --name
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve development patterns before implementing (REQUIRED)
+- `save-pattern` - Store new reusable patterns discovered (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting implementation:**
-1. Use `get-pattern` skill to retrieve relevant development patterns
-2. Review similar past implementations
+### BEFORE Implementation
 
-**DURING implementation:**
-Document patterns that need attention:
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
+Use `get-pattern` skill with domain "development" to retrieve:
+- Current trait signatures and struct definitions
+- Implementation patterns for similar components
+- Error handling conventions
 
-**AFTER implementation:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable approaches
+### DURING Implementation
+
+Track what you learn:
+- Patterns that worked well
+- Gaps in existing documentation
+- New approaches worth sharing
+
+### AFTER Implementation
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "development" to store new discoveries

@@ -323,24 +323,30 @@ If you developed a reusable ML pattern, use the `save-pattern` skill to store it
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve ML patterns (REQUIRED)
+- `save-pattern` - Store new ML patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting implementation:**
-1. Use `get-pattern` skill to retrieve ML patterns
-2. Review similar past approaches
+### BEFORE ML Implementation
 
-**DURING implementation:**
-Document patterns that need attention:
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
+Use `get-pattern` skill with domain "ml" to retrieve:
+- ruv-FANN configuration patterns
+- Training pipeline approaches
+- Model lifecycle patterns
 
-**AFTER implementation:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable ML approaches
+### DURING ML Implementation
+
+Track what you learn:
+- Effective model architectures
+- Training optimizations
+- Inference performance considerations
+
+### AFTER ML Implementation
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "ml" to store new approaches

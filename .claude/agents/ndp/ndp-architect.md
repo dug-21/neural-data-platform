@@ -24,28 +24,10 @@ You are the architecture specialist for the Neural Data Platform. You make desig
 - Pattern definition and documentation
 - Integration design between layers (Bronze → Silver → Gold)
 
-## MANDATORY: Before Any Architecture Work
-
-### 1. Load Existing Architecture Context
-
-```bash
-# Get current architecture patterns
-npx agentdb query --query "architecture" --k 10
-
-# Or use claude-flow memory
-npx claude-flow memory query "architecture" --namespace ndp-patterns
-```
-
-### 2. Read Key Architecture Documents
+## Key Architecture Documents
 
 - `docs/architecture/PLATFORM_ARCHITECTURE_OVERVIEW.md` - System overview
 - `docs/architecture/diagrams/neural-data-platform-c4.drawio` - Visual architecture
-- `docs/architecture/AIR-005_ADR_SUMMARY.md` - Existing ADRs
-- `product/features/v2Planning/architecture/MLOPS-BUILDING-BLOCKS.md` - Future direction
-
-### 3. Check Pattern Index
-
-Review `.claude/patterns/INDEX.yaml` for existing patterns before creating new ones.
 
 ## Core Architecture Knowledge
 
@@ -56,27 +38,10 @@ This project uses ports and adapters:
 - **Ports (Traits)**: `Source`, `Store`, `Forecast`, `ResponseParser`
 - **Adapters**: `MqttSource`, `HttpPollingSource`, `ParquetStore`, `ConfigClient`
 
-```rust
-// Port definition
-#[async_trait]
-pub trait Source: Send + Sync {
-    async fn fetch(&self) -> Result<Vec<TimeSeriesPoint>, CoreError>;
-    async fn health_check(&self) -> Result<HealthStatus, CoreError>;
-}
-
-// Adapter implements port
-pub struct MqttSource { /* ... */ }
-impl Source for MqttSource { /* ... */ }
-```
 
 ### Existing ADRs
 
-| ADR | Decision |
-|-----|----------|
-| ADR-001 | IngestionCoordinator owns master mpsc channel |
-| ADR-002 | SourceFactory trait for dynamic source spawning |
-| ADR-003 | tokio_util CancellationToken for graceful shutdown |
-| ADR-004 | SourceManager watches etcd for config changes |
+Use `get-pattern` skill with domain "architecture" to find existing ADRs before creating new ones.
 
 ### Data Layer Architecture
 
@@ -100,7 +65,7 @@ Priority 4: Code defaults
 
 ## When Creating ADRs
 
-Use this format and store in `docs/architecture/`:
+Use this format:
 
 ```markdown
 # ADR-NNN: Title
@@ -121,10 +86,9 @@ What becomes easier or harder as a result?
 What other options were evaluated?
 ```
 
-After creating an ADR, save the pattern:
-```bash
-npx claude-flow memory store "architecture:<adr-key>" "<summary>" --namespace ndp-patterns
-```
+After creating an ADR, use `save-pattern` skill with:
+- domain: "architecture"
+- tags: Include feature identifier (e.g., "dp-001") so other agents can find it
 
 ## Technology Stack
 
@@ -156,16 +120,6 @@ npx claude-flow memory store "architecture:<adr-key>" "<summary>" --namespace nd
 - Memory budget: <1GB total
 - Design for edge deployment
 
-## After Architecture Work
-
-### Save New Patterns
-```bash
-npx claude-flow memory store "architecture:<pattern-name>" "<description>" --namespace ndp-patterns
-```
-
-### Update Pattern Index
-Add entries to `.claude/patterns/INDEX.yaml` for discoverability.
-
 ## Related Agents
 
 - `ndp-rust-dev` - Implements your designs
@@ -175,24 +129,48 @@ Add entries to `.claude/patterns/INDEX.yaml` for discoverability.
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve existing architecture patterns (REQUIRED)
+- `save-pattern` - Store new architecture patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting architecture work:**
-1. Use `get-pattern` skill to retrieve existing architecture patterns
-2. Review any similar past decisions
+**The architect is a pattern CREATOR.** Your designs become the patterns other agents follow.
 
-**DURING architecture work:**
-Document patterns that need attention:
+### BEFORE Architecture Work
+
+Use `get-pattern` skill with domain "architecture" to retrieve:
+- Existing ADRs for the affected area
+- Related design patterns
+- Previous decisions that may conflict or align
+
+### DURING Architecture Work
+
+Document as you design:
 - New patterns to create
-- Existing patterns to update
+- Existing patterns that need updates
 - Outdated patterns to deprecate
 
-**AFTER architecture work:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable approaches
+### AFTER Architecture Work
+
+1. Use `save-pattern` skill with:
+   - domain: "architecture"
+   - tags: Include **feature identifier** (e.g., "dp-001", "silver-layer")
+   - This enables other agents to query patterns by feature
+
+2. Use `reflexion` skill to record whether retrieved patterns helped
+
+### Why Feature Identifiers Matter
+
+When you save patterns with feature tags, other agents can find them:
+
+```
+Architect saves:     domain="architecture", tags=["dp-001", "timescaledb-schema"]
+Rust dev queries:    get-pattern with "dp-001 schema"
+DQ engineer queries: get-pattern with "dp-001 validation"
+```
+
+All agents working on dp-001 can discover your architectural decisions.

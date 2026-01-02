@@ -449,24 +449,30 @@ If you developed a reusable alerting pattern, use the `save-pattern` skill to st
 
 ## Related Skills
 
-- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED for all git operations)
-- `get-pattern` - Retrieve project patterns
-- `save-pattern` - Store new patterns
+- `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
+- `get-pattern` - Retrieve alerting patterns (REQUIRED)
+- `save-pattern` - Store new alerting patterns (REQUIRED)
+- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting implementation:**
-1. Use `get-pattern` skill to retrieve alerting patterns
-2. Review similar past approaches
+### BEFORE Alert Implementation
 
-**DURING implementation:**
-Document patterns that need attention:
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
+Use `get-pattern` skill with domain "alerting" to retrieve:
+- Threshold configuration patterns
+- Notification delivery approaches
+- Rule engine designs
 
-**AFTER implementation:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable alerting approaches
+### DURING Alert Implementation
+
+Track what you learn:
+- Effective threshold tuning
+- False positive reduction strategies
+- Action dispatch patterns
+
+### AFTER Alert Implementation
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "alerting" to store new approaches

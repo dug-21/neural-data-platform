@@ -24,27 +24,7 @@ You are the air quality domain scientist for the Neural Data Platform. You ensur
 - Health impact thresholds
 - Indoor/outdoor air quality dynamics
 
-## MANDATORY: Before Any Domain Work
-
-### 1. Get Existing Air Quality Patterns
-
-```bash
-# Get air quality domain patterns
-npx agentdb query --query "air quality AQI" --k 10
-
-# Or use claude-flow memory
-npx claude-flow memory query "air-quality" --namespace ndp-patterns
-```
-
-### 2. Read Air Quality Documents
-
-- `product/research/02-air-quality-analytics.md` - Domain overview
-- `product/research/08-air-quality-domain-spec.md` - Detailed specifications
-- `product/research/analyticplatforminfrastructure/07-TEAM-COMPOSITION-RESEARCH.md` - Domain expertise requirements
-
-## Core Domain Knowledge
-
-### EPA National Ambient Air Quality Standards (NAAQS) 2024
+## EPA National Ambient Air Quality Standards (NAAQS) 2024
 
 | Pollutant | Averaging Time | Standard | Notes |
 |-----------|---------------|----------|-------|
@@ -113,10 +93,11 @@ def nowcast_pm25(hourly_readings: list[float]) -> float:
 #### AirGradient PM2.5 Correction
 
 Low-cost PM sensors need RH (relative humidity) correction:
+  - AirGradient sensors expose both raw and compensated(corrected) values.  If compensated value available, this calculation is unnecessary
 
 ```sql
 -- RH correction for PMS5003 sensors (AirGradient)
--- Based on EPA/LRAPA correction factors
+-- Based on EPA/LRAPA correction factors 
 pm25_corrected = CASE
     WHEN humidity <= 30 THEN pm25_raw * 0.52
     WHEN humidity <= 50 THEN pm25_raw * 0.52 - 0.085 * humidity + 5.71
@@ -187,65 +168,7 @@ Recommend these DQ rules to `ndp-dq-engineer`:
 | `voc_index_range` | `voc_index BETWEEN 0 AND 500` | SGP41 index range |
 | `aqi_valid` | `aqi BETWEEN 0 AND 500` | AQI scale limit |
 
-## Schema Recommendations
 
-### Silver Layer Air Quality Schema
-
-```sql
-CREATE TABLE silver.air_quality_observations (
-    ingestion_time      TIMESTAMPTZ NOT NULL,
-    observation_time    TIMESTAMPTZ NOT NULL,
-    ndp_id              TEXT NOT NULL,        -- Sensor identifier
-    location_type       TEXT,                 -- 'indoor', 'outdoor'
-
-    -- Raw sensor values
-    pm25_raw            DOUBLE PRECISION,
-    pm10_raw            DOUBLE PRECISION,
-    co2_ppm             DOUBLE PRECISION,
-    voc_index           DOUBLE PRECISION,     -- SGP41 VOC index (0-500)
-    nox_index           DOUBLE PRECISION,     -- SGP41 NOx index
-    temperature_c       DOUBLE PRECISION,
-    humidity_pct        DOUBLE PRECISION,
-
-    -- Calibrated/corrected values
-    pm25_corrected      DOUBLE PRECISION,     -- RH-corrected
-    co2_corrected       DOUBLE PRECISION,     -- Altitude-corrected
-
-    -- Calculated metrics
-    aqi                 INTEGER,              -- Dominant AQI
-    aqi_pm25            INTEGER,              -- PM2.5-specific AQI
-    nowcast_pm25        DOUBLE PRECISION,     -- NowCast weighted average
-
-    -- DQ flags
-    dq_flags            TEXT[],
-
-    PRIMARY KEY (observation_time, ndp_id)
-);
-
-SELECT create_hypertable('silver.air_quality_observations', 'observation_time');
-```
-
-### Continuous Aggregates for Analysis
-
-```sql
--- Hourly air quality for dashboard
-CREATE MATERIALIZED VIEW silver.air_quality_hourly
-WITH (timescaledb.continuous) AS
-SELECT
-    time_bucket('1 hour', observation_time) AS bucket,
-    ndp_id,
-    location_type,
-    AVG(pm25_corrected) AS avg_pm25,
-    MAX(pm25_corrected) AS max_pm25,
-    AVG(co2_ppm) AS avg_co2,
-    MAX(co2_ppm) AS max_co2,
-    AVG(temperature_c) AS avg_temp,
-    AVG(humidity_pct) AS avg_humidity,
-    -- Calculate hourly AQI from average PM2.5
-    calculate_aqi_pm25(AVG(pm25_corrected)) AS hourly_aqi
-FROM silver.air_quality_observations
-GROUP BY bucket, ndp_id, location_type;
-```
 
 ## Collaboration Points
 
@@ -295,23 +218,30 @@ GROUP BY bucket, ndp_id, location_type;
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve air quality domain patterns
-- `save-pattern` - Store new domain knowledge
+- `get-pattern` - Retrieve air quality domain patterns (REQUIRED)
+- `save-pattern` - Store or updates new domain knowledge (REQUIRED)
+- `reflexion` - Evaluation of patterns you retrieved and used (REQUIRED)
 
 ---
 
 ## Pattern Integration (REQUIRED)
 
-**BEFORE starting domain work:**
-1. Use `get-pattern` skill to retrieve air quality/sensor patterns
-2. Review existing calibration documentation
+### BEFORE Domain Work
 
-**DURING domain work:**
+Use `get-pattern` skill with domain "air-quality" to retrieve:
+- Existing calibration patterns
+- Sensor correction factors
+- Health threshold documentation
+
+### DURING Domain Work
+
 Document patterns that need attention:
 - New calibration factors discovered
 - Sensor quirks identified
 - Health threshold updates
+- Outdated patterns that need revision
 
-**AFTER domain work:**
-1. Use `reflexion` skill to record whether patterns helped
-2. Use `save-pattern` skill to store new air quality domain knowledge
+### AFTER Domain Work
+
+1. Use `reflexion` skill to record whether retrieved patterns helped
+2. Use `save-pattern` skill with domain "air-quality" to store new discoveries
