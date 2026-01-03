@@ -1,0 +1,146 @@
+# SPARC Kickoff: dp-005 Bronze MCP Server
+
+**Date**: 2026-01-03
+**Author**: ndp-scrum-master
+**Feature**: dp-005
+
+## Summary
+
+Initiated SPARC documentation sprint for the Bronze MCP Server feature. This is a coordinated effort with 6 parallel agents working on Specification, Pseudocode, and Architecture phases simultaneously.
+
+## Swarm Configuration
+
+### Topology
+- **Type**: Hierarchical
+- **Max Agents**: 6
+- **Strategy**: Specialized parallel execution
+
+### Agents Deployed
+
+| Agent | Type | Role | Assignment |
+|-------|------|------|------------|
+| ndp-scrum-master | Coordinator | Feature lifecycle | STATUS.md, reports, coordination |
+| ndp-architect | Architect | System design | ADRs, trait design, MCP protocol |
+| specification-agent | Analyst | Requirements | SPECIFICATION.md formal requirements |
+| pseudocode-agent | Analyst | Algorithm design | PSEUDOCODE.md for 4 tools |
+| ndp-tester | Tester | Quality assurance | Test strategy, acceptance criteria |
+| refinement-agent | Developer | Implementation prep | TDD plan, code structure |
+
+## Key Decisions from SCOPE.md
+
+The scope document resolves all major technical questions. Key decisions captured:
+
+### Transport and Protocol
+- **Transport**: HTTP POST (cloud-portable, standard)
+- **Protocol**: MCP (Model Context Protocol) specification compliant
+- **Endpoint**: `/mcp` for JSON-RPC, `/health` for monitoring
+
+### Data Sources
+| Domain | Source of Truth | Location |
+|--------|-----------------|----------|
+| Bronze structure | Parquet introspection | `/data/raw/{stream_id}/...` |
+| Field mappings | Parser config | etcd: `sources[].parser.field_mappings` |
+| Target schema | Entity schemas | etcd: `entity_schemas[].attributes` |
+
+### Storage and Configuration
+- **Storage abstraction**: Trait-based (enable S3/GCS later)
+- **Config source**: etcd (validates full sync pipeline)
+- **etcd unavailability**: Fail fast (no stale config)
+
+### MVP Tool Set
+1. `list_streams` - Enumerate Bronze streams with metadata
+2. `describe_schema` - Schema info with modes: source/target/all
+3. `validate_config` - Compare etcd config vs Bronze schema
+4. `sample_data` - Get N recent rows from a stream
+
+### Non-Goals (Deferred)
+- Query execution (SELECT statements) - Phase 2
+- Silver layer access - Phase 2
+- Type validation - Phase 2
+- Authentication - Design now, implement later
+
+## Patterns Retrieved from AgentDB
+
+The following patterns were queried before starting the swarm:
+
+### Architecture Patterns
+- `architecture:domain-adapter-pattern` - Hexagonal architecture with traits
+- `architecture:data-layers` - Bronze/Silver/Gold layer design
+- `architecture:channel-ownership-adr-001` - Channel ownership patterns
+
+### Procedure Patterns
+- `procedures:sparc-workflow` - SPARC phase transitions
+- `procedures:feature-lifecycle` - Feature directory structure
+
+### Convention Patterns
+- `conventions:naming` - Stream IDs (kebab-case), fields (snake_case)
+- `conventions:rust-style` - Error handling, async patterns
+
+## Artifacts Being Created
+
+### Specification Phase
+| Artifact | Purpose |
+|----------|---------|
+| `specification/SPECIFICATION.md` | Formal functional and non-functional requirements |
+
+### Pseudocode Phase
+| Artifact | Purpose |
+|----------|---------|
+| `pseudocode/PSEUDOCODE.md` | Algorithm design for all 4 tools |
+
+### Architecture Phase
+| Artifact | Purpose |
+|----------|---------|
+| `architecture/ARCHITECTURE.md` | Component design, data flow |
+| `architecture/ADR-001-storage-traits.md` | BronzeStorage trait abstraction |
+| `architecture/ADR-002-mcp-protocol.md` | MCP protocol handler design |
+
+### Refinement Phase (Preparation)
+| Artifact | Purpose |
+|----------|---------|
+| `refinement/TEST-STRATEGY.md` | TDD approach, test categories |
+
+## Dependencies
+
+### Existing Infrastructure
+- etcd for stream configuration (already deployed)
+- Bronze layer Parquet files (already collecting data)
+- Hive-style partitioning (already implemented)
+
+### Rust Crates Required
+```toml
+axum = "0.7"           # HTTP framework
+tokio = "1"            # Async runtime
+etcd-client = "0.14"   # etcd access
+parquet = "53"         # Parquet reading
+arrow = "53"           # Arrow for schema
+serde_json = "1"       # JSON handling
+tracing = "0.1"        # Observability
+```
+
+## Risk Assessment
+
+| Risk | Mitigation |
+|------|------------|
+| etcd schema variations | Resilient parsing, skip unknown keys |
+| Large Parquet files | Read only metadata/schema, not full data |
+| Network latency (Mac to Pi) | Reasonable timeouts, health checks |
+| Memory constraints on Pi | Target <50MB overhead |
+
+## Success Criteria
+
+- All SPARC documentation artifacts complete
+- ADRs reviewed and approved
+- Test strategy defined with clear acceptance criteria
+- Ready for TDD implementation in Refinement phase
+
+## Next Steps
+
+1. Complete parallel documentation work
+2. Review and integrate artifacts
+3. Conduct architecture review
+4. Transition to Refinement phase for TDD implementation
+
+---
+
+*Generated by ndp-scrum-master during dp-005 SPARC kickoff*
