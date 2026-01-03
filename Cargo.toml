@@ -2,6 +2,7 @@
 members = [
     "config-client",
     "core",
+    "core/ndp-mcp-server",
     "domains/air-quality",
     "apps/air-quality-app"
 ]

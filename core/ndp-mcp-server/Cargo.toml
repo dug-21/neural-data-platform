@@ -1,0 +1,57 @@
+[package]
+name = "ndp-mcp-server"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neural Data Platform Team"]
+description = "Bronze MCP Server - Exposes Bronze layer data exploration tools via MCP protocol"
+
+[[bin]]
+name = "ndp-mcp-server"
+path = "src/main.rs"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["macros", "json"] }
+tower = { version = "0.4", features = ["util", "timeout", "limit"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Async runtime
+tokio = { workspace = true }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging and tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# etcd client
+etcd-client = "0.14"
+
+# Parquet/Arrow for Bronze layer reading
+parquet = "57"
+arrow = "57"
+
+# Utilities
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = "0.1"
+
+[dev-dependencies]
+axum-test = "14.0"
+tokio-test = "0.4"
+tempfile = "3.8"
+mockall = "0.12"
+
+[[test]]
+name = "health_test"
+path = "tests/integration/health_test.rs"
+
+[[test]]
+name = "mcp_protocol_test"
+path = "tests/integration/mcp_protocol_test.rs"

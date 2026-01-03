@@ -19,6 +19,9 @@ tokio-stream = "0.1"
 rand = "0.8"
 regex = "1.10"
 
+# etcd configuration store (dp-005)
+etcd-client = "0.14"
+
 [dev-dependencies]
 mockall = "0.13"
 tokio-test = "0.4"

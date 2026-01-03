@@ -129,6 +129,41 @@ services:
         reservations:
           memory: 128M
 
+  # NDP MCP Server - Bronze Layer MCP Interface (DP-005)
+  # Provides Model Context Protocol access to Parquet data
+  # Memory target: <50MB runtime (64MB limit with buffer)
+  ndp-mcp-server:
+    build:
+      context: ../..
+      dockerfile: core/ndp-mcp-server/Dockerfile
+    image: neural-data-platform/ndp-mcp-server:latest
+    container_name: ndp-mcp-server
+    ports:
+      - "9100:9100"     # MCP HTTP endpoint
+    volumes:
+      - air-quality-data:/data:ro    # Read-only access to Bronze Parquet files
+    environment:
+      - RUST_LOG=info
+      - NDP_RAW_PATH=/data
+      - NDP_ETCD_ENDPOINTS=http://etcd:2379
+      - NDP_MCP_LISTEN=0.0.0.0:9100
+    depends_on:
+      etcd:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    networks:
+      - neural-network
+
   # Grafana - Data Visualization & Dashboards (DP-001, DP-002)
   # Uses DuckDB plugin for Bronze layer Parquet queries
   # Uses PostgreSQL datasource for TimescaleDB Silver layer
