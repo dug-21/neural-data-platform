@@ -161,8 +161,6 @@ services:
       resources:
         limits:
           memory: 64M
-    networks:
-      - neural-network
 
   # Grafana - Data Visualization & Dashboards (DP-001, DP-002)
   # Uses DuckDB plugin for Bronze layer Parquet queries
