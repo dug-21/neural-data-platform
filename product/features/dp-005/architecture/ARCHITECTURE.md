@@ -87,6 +87,7 @@ Enable AI development agents to:
 | [ADR-003](./ADR-003-config-source.md) | etcd as config source | Accepted | Validates sync pipeline, matches running apps |
 | [ADR-004](./ADR-004-schema-discovery.md) | Parquet introspection | Accepted | Always accurate, zero maintenance, evolution-proof |
 | [ADR-005](./ADR-005-response-format.md) | JSON with success flag | Accepted | MCP compliant, parseable, actionable errors |
+| [ADR-006](./ADR-006-deployment-strategy.md) | Docker Compose integration | Accepted | Pi resource constraints, stateless, minimal footprint |
 
 ---
 
@@ -252,21 +253,191 @@ Claude Code                          MCP Server                    Data Layer
 
 ## 6. Deployment Architecture
 
-### Pi Deployment (Current)
+### 6.1 Docker Compose Service Definition
+
+The MCP server integrates into the existing NDP Docker Compose stack:
+
+```yaml
+ndp-mcp-server:
+  build:
+    context: ../..
+    dockerfile: core/ndp-mcp-server/Dockerfile
+  image: neural-data-platform/ndp-mcp-server:latest
+  container_name: ndp-mcp-server
+  ports:
+    - "9100:9100"
+  volumes:
+    - air-quality-data:/data/raw:ro
+  environment:
+    - RUST_LOG=info
+    - NDP_RAW_PATH=/data/raw
+    - NDP_ETCD_ENDPOINTS=http://etcd:2379
+    - NDP_MCP_LISTEN=0.0.0.0:9100
+  depends_on:
+    etcd:
+      condition: service_healthy
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 30s
+  deploy:
+    resources:
+      limits:
+        memory: 64M
+  networks:
+    - neural-network
+```
+
+**Key Configuration Notes:**
+- **Read-only volume mount** (`ro`) - MCP server only reads Bronze data
+- **etcd dependency** - Waits for etcd health check before starting
+- **Memory limit** - 64MB hard cap for Pi resource constraints
+- **Stateless** - No persistent state, safe to restart/replace
+
+### 6.2 deploy.sh Integration
+
+The MCP server integrates into the existing `deploy/pi/deploy.sh` script:
+
+**Startup Sequence:**
+```
+1. etcd (config store) - must be healthy first
+2. mosquitto (MQTT broker)
+3. air-quality-app (ingestion)
+4. timescaledb (Silver layer)
+5. ndp-mcp-server (Bronze access) <- NEW
+6. grafana (dashboards)
+```
+
+**Health Check Addition to status() Function:**
+```bash
+status() {
+    echo "=== NDP Service Status ==="
+
+    # ... existing service checks ...
+
+    # MCP Server health
+    echo -n "ndp-mcp-server: "
+    if curl -sf http://localhost:9100/health > /dev/null 2>&1; then
+        echo "healthy"
+    else
+        echo "unhealthy"
+    fi
+}
+```
+
+**No Special Init Scripts Needed:**
+- MCP server is stateless (no database migrations)
+- Configuration comes from environment variables
+- Bronze data already exists from air-quality-app
+- etcd configuration already synced by existing pipeline
+
+### 6.3 Dockerfile Requirements
+
+Multi-stage build optimized for ARM64 (Pi) deployment:
+
+```dockerfile
+# Stage 1: Build
+FROM rust:1.75-slim-bookworm AS builder
+
+WORKDIR /build
+RUN apt-get update && apt-get install -y \
+    pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy workspace
+COPY Cargo.toml Cargo.lock ./
+COPY core/ core/
+
+# Build release binary
+RUN cargo build --release --package ndp-mcp-server
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates libssl3 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -r -u 1000 -s /sbin/nologin ndp
+USER ndp
+
+COPY --from=builder /build/target/release/ndp-mcp-server /usr/local/bin/
+
+EXPOSE 9100
+ENTRYPOINT ["/usr/local/bin/ndp-mcp-server"]
+```
+
+**Runtime Dependencies:**
+- `libssl3` - TLS support for future HTTPS
+- `ca-certificates` - Certificate validation
+- `curl` - Health check command
+
+**Build Targets:**
+- Development: `x86_64-unknown-linux-gnu`
+- Production (Pi): `aarch64-unknown-linux-gnu`
+
+### 6.4 Resource Budget
+
+Updated total memory allocation with MCP server:
+
+| Service | Memory Limit | Purpose |
+|---------|-------------|---------|
+| mosquitto | 128 MB | MQTT broker |
+| etcd | 256 MB | Configuration store |
+| air-quality-app | 512 MB | Ingestion, Parquet writes |
+| timescaledb | 256 MB | Silver layer storage |
+| grafana | 256 MB | Dashboards |
+| **ndp-mcp-server** | **64 MB** | **Bronze MCP access** |
+| **TOTAL** | **1472 MB** | |
+
+**Pi 5 Capacity:** 8GB RAM available, 1.5GB allocated (18% utilization)
+
+**MCP Server Memory Profile:**
+- Base process: ~10 MB
+- Per-request overhead: ~1-5 MB (Parquet reads)
+- Peak (large sample): ~30 MB
+- 64 MB limit provides 2x headroom
+
+### 6.5 Network Topology
+
+All services communicate via Docker internal network:
 
 ```
-Docker Compose Stack:
-  ndp-mcp-server (port 9100)
-    |
-    +-- /data/raw (volume mount)
-    +-- etcd:2379 (network)
-
-Resource Budget:
-  Memory: < 50MB
-  CPU: Minimal (I/O bound)
++------------------------------------------------------------------+
+|                     neural-network (bridge)                       |
+|                                                                    |
+|  +------------+     +------------+     +------------------+       |
+|  | mosquitto  |     |    etcd    |     | air-quality-app  |       |
+|  | :1883      |     | :2379      |     | (ingestion)      |       |
+|  +------------+     +------------+     +------------------+       |
+|        |                  |                    |                   |
+|        |                  +--------------------+                   |
+|        |                  |                                        |
+|  +------------+     +------------------+     +----------------+   |
+|  | timescaledb|     | ndp-mcp-server   |     |    grafana     |   |
+|  | :5432      |     | :9100            |     | :3000          |   |
+|  +------------+     +------------------+     +----------------+   |
++------------------------------------------------------------------+
+                              |
+                         Host Network
+                              |
+                    +------------------+
+                    | External Access  |
+                    | pi:9100 -> MCP   |
+                    | pi:3000 -> Grafana|
+                    +------------------+
 ```
 
-### Cloud Deployment (Future)
+**Service Discovery:**
+- All services use Docker DNS (`etcd:2379`, `timescaledb:5432`)
+- Host port mapping only for external access
+- MCP server accessible from development Mac via `http://pi:9100/mcp`
+
+### 6.6 Cloud Deployment (Future)
 
 | Aspect | Pi (Today) | Cloud (Tomorrow) |
 |--------|------------|------------------|
@@ -377,6 +548,7 @@ The introspection approach handles schema evolution automatically:
 | [ADR-003-config-source.md](./ADR-003-config-source.md) | etcd as Configuration Source | Accepted |
 | [ADR-004-schema-discovery.md](./ADR-004-schema-discovery.md) | Dynamic Schema Discovery via Parquet Introspection | Accepted |
 | [ADR-005-response-format.md](./ADR-005-response-format.md) | MCP Response Format | Accepted |
+| [ADR-006-deployment-strategy.md](./ADR-006-deployment-strategy.md) | Deployment Strategy | Accepted |
 
 ---
 

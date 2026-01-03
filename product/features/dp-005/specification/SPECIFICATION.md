@@ -29,6 +29,7 @@ The MVP delivers four essential tools (list_streams, describe_schema, validate_c
 | Cloud Portability | Same server works on Pi today, cloud tomorrow |
 | Minimal Footprint | <50MB memory overhead on edge deployment |
 | Standards Compliance | Follow MCP specification for Claude Code integration |
+| Deployment Ready | Dockerfile and docker-compose integration for Pi deployment |
 
 **Non-Goals (MVP)**: SQL query execution, Silver layer access, authentication, write operations, type/value constraint validation.
 
@@ -194,6 +195,40 @@ See: [test-plan.md](test-plan.md), [test-cases.md](test-cases.md), [test-fixture
 
 ---
 
+## Deployment Requirements Summary
+
+### Container Configuration
+
+| Aspect | Specification |
+|--------|---------------|
+| Build | Multi-stage Dockerfile |
+| Base (runtime) | debian:bookworm-slim |
+| Port | 9100 |
+| Memory limit | 64MB |
+| Image size | < 50MB |
+
+### Docker Compose Integration
+
+| Service | ndp-mcp-server |
+|---------|----------------|
+| Dependencies | etcd (healthy) |
+| Volume | air-quality-data:/data/raw:ro |
+| Network | neural-network |
+| Health check | GET /health |
+
+### Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| NDP_RAW_PATH | /data/raw | Bronze data directory |
+| NDP_ETCD_ENDPOINTS | http://etcd:2379 | Config store |
+| NDP_MCP_LISTEN | 0.0.0.0:9100 | Server bind address |
+| RUST_LOG | info | Log verbosity |
+
+See: [deployment-requirements.md](deployment-requirements.md) for complete deployment specifications.
+
+---
+
 ## Design Patterns
 
 Key patterns adopted from MCP reference implementations:
@@ -221,6 +256,10 @@ See: [mcp-design-patterns.md](mcp-design-patterns.md) for Rust translation of re
 - [ ] Health endpoint returns server status
 - [ ] Server runs on Pi with <50MB memory idle
 - [ ] Claude Code can connect and use tools via mcp.json
+- [ ] Dockerfile created and builds on ARM64
+- [ ] Docker Compose service defined
+- [ ] deploy.sh status shows MCP server health
+- [ ] Container runs within 64MB memory limit
 
 ### Should Have
 
@@ -252,6 +291,7 @@ See: [mcp-design-patterns.md](mcp-design-patterns.md) for Rust translation of re
 | [test-cases.md](test-cases.md) | Detailed test case specifications |
 | [test-fixtures.md](test-fixtures.md) | Test data and mock definitions |
 | [mcp-design-patterns.md](mcp-design-patterns.md) | Reference implementation patterns |
+| [deployment-requirements.md](deployment-requirements.md) | Container, Docker Compose, and deploy.sh integration requirements |
 
 ---
 

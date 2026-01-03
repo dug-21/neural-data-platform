@@ -192,13 +192,44 @@ This checklist defines the complete set of acceptance criteria that must be sati
 
 ### Pi Deployment
 
-- [ ] Dockerfile created
-- [ ] docker-compose service defined
+#### Dockerfile
+- [ ] Multi-stage build defined
+- [ ] Builder stage uses rust:1.75 or later
+- [ ] Runtime stage uses debian:bookworm-slim or equivalent
+- [ ] Binary copied to /usr/local/bin/ndp-mcp-server
+- [ ] Runtime dependencies installed (ca-certificates, libssl3)
+- [ ] Final image size < 50MB compressed
+- [ ] ARM64 architecture builds successfully
+
+#### Docker Compose Service
+- [ ] Service named `ndp-mcp-server`
+- [ ] Build context points to repository root
+- [ ] Dockerfile path: `core/ndp-mcp-server/Dockerfile`
+- [ ] Port 9100:9100 exposed
+- [ ] Volume mount: air-quality-data:/data/raw:ro
+- [ ] Environment variables configured:
+  - [ ] RUST_LOG
+  - [ ] NDP_RAW_PATH
+  - [ ] NDP_ETCD_ENDPOINTS
+  - [ ] NDP_MCP_LISTEN
+- [ ] Depends on etcd with condition: service_healthy
+- [ ] Health check configured (curl /health)
+- [ ] Memory limit: 64M
+- [ ] restart: unless-stopped
+
+#### deploy.sh Integration
+- [ ] status() function includes MCP server health check
+- [ ] Logs viewable via `deploy.sh logs`
+- [ ] Service starts with `deploy.sh start`
+- [ ] Service stops cleanly with `deploy.sh stop`
+
+#### Verification
 - [ ] Container builds on Pi (ARM64)
-- [ ] Container starts successfully
-- [ ] Logs accessible via `docker logs`
-- [ ] Persists across container restarts
-- [ ] Health check in docker-compose
+- [ ] Container starts and becomes healthy
+- [ ] Health endpoint responds: `curl http://localhost:9100/health`
+- [ ] MCP endpoint responds: `curl -X POST http://localhost:9100/mcp -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'`
+- [ ] Memory usage under 64MB limit
+- [ ] Logs show successful startup
 
 ### etcd Integration
 
@@ -286,6 +317,14 @@ This checklist defines the complete set of acceptance criteria that must be sati
 - [ ] Memory stable under sustained load
 - [ ] No error rate spikes
 - [ ] Deployment documentation reviewed
+
+### Deployment Verification
+
+- [ ] Full deploy.sh deploy cycle succeeds
+- [ ] All services healthy including ndp-mcp-server
+- [ ] MCP server accessible from Mac development machine
+- [ ] Network connectivity to etcd working
+- [ ] Volume mount providing data access
 
 ---
 

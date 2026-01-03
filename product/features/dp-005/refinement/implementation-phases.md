@@ -298,11 +298,11 @@ pub struct FieldAnalysis {
 
 ---
 
-## Phase 4: Performance Optimization
+## Phase 4: Performance Optimization & Deployment
 
 ### Objective
 
-Ensure production-ready performance and observability.
+Ensure production-ready performance, observability, and containerized deployment.
 
 ### Deliverables
 
@@ -326,6 +326,11 @@ Ensure production-ready performance and observability.
    - Deployment guide
    - CLAUDE.md integration
 
+5. **Containerized Deployment**
+   - Dockerfile creation (multi-stage build)
+   - docker-compose.yml service definition
+   - deploy.sh integration for health monitoring
+
 ### Entry Criteria
 
 - Phases 1-3 complete
@@ -338,22 +343,28 @@ Ensure production-ready performance and observability.
 - [ ] 24-hour soak test passes (no memory growth)
 - [ ] Graceful shutdown works
 - [ ] Deployment documentation complete
+- [ ] Dockerfile builds successfully
+- [ ] Container runs on Pi ARM64
+- [ ] docker-compose service starts with dependencies
+- [ ] Health check passes in docker-compose
+- [ ] deploy.sh status shows MCP server health
 
 ### Files Created/Modified
 
 ```
-src/observability/       # New module
+src/observability/                    # New module
 ├── mod.rs
 ├── logging.rs
 └── tracing.rs
 
-src/server.rs            # Add middleware, timeouts
+src/server.rs                         # Add middleware, timeouts
 
 docs/dp-005/
 ├── deployment.md
 └── api.md
 
-deploy/pi/docker-compose.yml  # Add mcp-server service
+core/ndp-mcp-server/Dockerfile        # Multi-stage build
+deploy/pi/docker-compose.yml          # Add ndp-mcp-server service
 ```
 
 ### Key Implementation Notes
@@ -378,6 +389,28 @@ axum::serve(listener, app)
 // etcd client is already connection-pooled
 // For Parquet, we open files on-demand (no persistent connections)
 // Consider caching file handles for frequently accessed streams
+```
+
+**Dockerfile Strategy**:
+- Multi-stage build: builder (rust:1.75) -> runtime (debian:bookworm-slim)
+- Copy only binary to runtime stage
+- Install minimal runtime deps (ca-certificates, libssl3)
+- Target: < 50MB final image size
+
+```dockerfile
+# Stage 1: Build
+FROM rust:1.75 AS builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release --bin ndp-mcp-server
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/target/release/ndp-mcp-server /usr/local/bin/
+EXPOSE 3002
+HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:3002/health || exit 1
+CMD ["ndp-mcp-server"]
 ```
 
 ---
@@ -438,21 +471,31 @@ Phase 1 (Core + list_streams + sample_data)
 
 ## Rollout Plan
 
-1. **Development Environment**
-   - Deploy each phase locally first
-   - Full integration test suite
+### Stage 1: Development
+- Local docker build and test
+- Deploy each phase locally first
+- Full integration test suite
+- Verify Dockerfile builds: `docker build -t ndp-mcp-server:dev .`
+- Run local container: `docker run -p 3002:3002 ndp-mcp-server:dev`
 
-2. **Pi Staging**
-   - Deploy to Pi with test data
-   - Validate memory/performance targets
+### Stage 2: Pi Staging
+- Deploy to Pi, validate ARM64 build
+- Build on Pi: `docker build --platform linux/arm64 -t ndp-mcp-server:arm64 .`
+- Validate memory/performance targets (< 50MB, < 100ms P95)
+- Test etcd connectivity from container
+- Verify Parquet volume mounts work correctly
 
-3. **Production**
-   - Enable in docker-compose
-   - Monitor initial usage patterns
+### Stage 3: Production
+- Enable in docker-compose with full service definition
+- Verify with deploy.sh: `./deploy/pi/deploy.sh status`
+- Monitor initial usage patterns
+- Confirm health check passes: `curl http://localhost:3002/health`
 
-4. **Claude Code Integration**
-   - Add to `.claude/mcp.json`
-   - Update CLAUDE.md with usage guidance
+### Stage 4: Integration
+- Add to Claude Code `.claude/mcp.json`
+- Update CLAUDE.md with MCP server usage guidance
+- Validate Claude Code can connect to MCP server
+- Document available tools and example usage
 
 ---
 

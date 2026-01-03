@@ -243,6 +243,38 @@ fn benchmark_list_streams(c: &mut Criterion) {
 
 ---
 
+## Deployment Tests
+
+### Container Build Tests
+
+| Test | Description | Pass Criteria |
+|------|-------------|---------------|
+| DT-001 | Dockerfile builds | `docker build` succeeds |
+| DT-002 | ARM64 cross-compile | Image runs on Pi |
+| DT-003 | Image size | < 50MB compressed |
+| DT-004 | Container starts | Exits 0 on startup |
+
+### Docker Compose Integration Tests
+
+| Test | Description | Pass Criteria |
+|------|-------------|---------------|
+| DT-010 | Service starts with deps | ndp-mcp-server waits for etcd |
+| DT-011 | Volume mount works | /data/raw accessible |
+| DT-012 | Port mapping | localhost:9100 responds |
+| DT-013 | Health check passes | docker ps shows healthy |
+| DT-014 | Resource limits | Memory < 64MB limit |
+
+### deploy.sh Integration Tests
+
+| Test | Description | Pass Criteria |
+|------|-------------|---------------|
+| DT-020 | Status includes MCP | deploy.sh status shows MCP health |
+| DT-021 | Logs accessible | deploy.sh logs shows MCP output |
+| DT-022 | Restart recovery | Service restarts on failure |
+| DT-023 | Stop/start cycle | Clean stop and restart |
+
+---
+
 ## Test Environment
 
 ### Local Development
@@ -318,6 +350,16 @@ coverage:
 # Deploy to Pi
 ./deploy/pi/deploy.sh deploy ndp-mcp-server
 
+# Verify MCP server health check
+./deploy/pi/deploy.sh status
+# Expected: ndp-mcp-server shows "healthy" status
+
+# Verify MCP tools/list endpoint
+curl -X POST http://pi:9100/rpc \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# Expected: JSON response with list_streams, describe_schema, validate_config, sample_data
+
 # Run system tests
 ./scripts/system-tests/run-mcp-tests.sh
 
@@ -327,6 +369,15 @@ coverage:
 # Memory monitoring
 ssh pi "while true; do ps aux | grep ndp-mcp; sleep 5; done"
 ```
+
+**MCP Server Verification Checklist**:
+
+| Step | Command | Expected Result |
+|------|---------|-----------------|
+| Health check | `deploy.sh status` | MCP server shows "healthy" |
+| Tools available | `tools/list` RPC call | 4 tools returned |
+| etcd connectivity | `list_streams` call | Returns stream list or empty array |
+| Parquet access | `sample_data` call | Returns data or STREAM_NOT_FOUND |
 
 ---
 
@@ -486,7 +537,74 @@ cargo tarpaulin --package ndp-mcp-server --fail-under 85
 | Pre-commit | Unit | Manual/hook | < 30s |
 | CI | Unit + Integration | Push | < 5m |
 | PR Merge | Full suite | PR merge | < 10m |
-| Release | E2E + Pi | Manual | < 30m |
+| Release | E2E + Pi + Deployment (DT-001 to DT-023) | Manual | < 30m |
+
+### Deployment Test Execution
+
+**Container Build Tests** (DT-001 to DT-004):
+
+```bash
+# DT-001: Dockerfile builds
+docker build -t ndp-mcp-server:test -f deploy/docker/Dockerfile.mcp-server .
+
+# DT-002: ARM64 cross-compile
+cross build --release --target aarch64-unknown-linux-gnu --package ndp-mcp-server
+docker buildx build --platform linux/arm64 -t ndp-mcp-server:arm64-test .
+
+# DT-003: Image size check
+docker images ndp-mcp-server:test --format "{{.Size}}"
+# Must be < 50MB compressed
+
+# DT-004: Container starts
+docker run --rm ndp-mcp-server:test --version
+# Must exit 0
+```
+
+**Docker Compose Tests** (DT-010 to DT-014):
+
+```bash
+# Start services
+docker-compose -f deploy/docker/docker-compose.yml up -d
+
+# DT-010: Service dependency check
+docker-compose logs ndp-mcp-server | grep "Connected to etcd"
+
+# DT-011: Volume mount
+docker exec ndp-mcp-server ls /data/raw
+
+# DT-012: Port mapping
+curl -s http://localhost:9100/health
+
+# DT-013: Health check
+docker ps --filter "name=ndp-mcp-server" --format "{{.Status}}"
+# Must show "healthy"
+
+# DT-014: Resource limits
+docker stats ndp-mcp-server --no-stream --format "{{.MemUsage}}"
+# Must be < 64MB
+
+docker-compose down
+```
+
+**deploy.sh Tests** (DT-020 to DT-023):
+
+```bash
+# DT-020: Status includes MCP
+./deploy/pi/deploy.sh status | grep -q "ndp-mcp-server"
+
+# DT-021: Logs accessible
+./deploy/pi/deploy.sh logs ndp-mcp-server | head -20
+
+# DT-022: Restart recovery
+docker kill ndp-mcp-server
+sleep 10
+./deploy/pi/deploy.sh status | grep -q "healthy"
+
+# DT-023: Stop/start cycle
+./deploy/pi/deploy.sh stop
+./deploy/pi/deploy.sh start
+./deploy/pi/deploy.sh status
+```
 
 ### Running Tests
 
@@ -556,7 +674,9 @@ testcontainers-modules = { version = "0.3", features = ["etcd"] }
 |------|---------|--------------|
 | cargo-tarpaulin | Coverage | `cargo install cargo-tarpaulin` |
 | criterion | Benchmarks | dev-dependency |
-| Docker | testcontainers | System install |
+| Docker | testcontainers, container build tests | System install |
+| docker-compose | Compose integration tests (DT-010 to DT-014) | System install |
+| cross | ARM64 cross-compilation (DT-002) | `cargo install cross` |
 
 ---
 

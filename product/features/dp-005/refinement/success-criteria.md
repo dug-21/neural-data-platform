@@ -156,6 +156,41 @@ NDP_AUTH_ENABLED=false              # Future: enable auth
 
 ---
 
+## Deployment Criteria
+
+### Dockerfile Requirements
+
+| Requirement | Target |
+|-------------|--------|
+| Base image (builder) | rust:1.75 or later |
+| Base image (runtime) | debian:bookworm-slim |
+| Binary location | /usr/local/bin/ndp-mcp-server |
+| Runtime deps | ca-certificates, libssl3 |
+| Final image size | < 50MB compressed |
+
+### Service Configuration
+
+| Setting | Value |
+|---------|-------|
+| Container name | ndp-mcp-server |
+| Port | 9100:9100 |
+| Memory limit | 64MB |
+| Restart policy | unless-stopped |
+| Network | neural-network |
+| Volume | air-quality-data:/data/raw:ro |
+
+### Health Check Configuration
+
+| Setting | Value |
+|---------|-------|
+| Endpoint | GET /health |
+| Interval | 30 seconds |
+| Timeout | 10 seconds |
+| Retries | 3 |
+| Start period | 30 seconds |
+
+---
+
 ## MCP Protocol Compliance
 
 ### Required Endpoints
@@ -195,12 +230,35 @@ Each tool must include:
 
 ### Pi Deployment
 
+#### Container Build Success
+
 | Requirement | Verification |
 |-------------|--------------|
-| Docker container builds | `docker build` succeeds on Pi |
-| Container starts successfully | `docker-compose up` works |
-| Persists across restarts | Data accessible after container restart |
-| Logs accessible | `docker logs ndp-mcp-server` shows output |
+| Dockerfile builds | `docker build` succeeds with no errors |
+| ARM64 support | Image runs on Raspberry Pi 5 |
+| Image size | < 50MB compressed layer size |
+| Multi-stage build | Runtime image has no build tools |
+
+#### Docker Compose Integration
+
+| Requirement | Verification |
+|-------------|--------------|
+| Service starts | `docker-compose up ndp-mcp-server` succeeds |
+| Dependencies respected | Waits for etcd to be healthy |
+| Port accessible | `curl localhost:9100/health` responds |
+| Volume mounted | Service can read /data/raw |
+| Resource limits enforced | Memory stays under 64MB |
+| Health check passes | `docker ps` shows healthy status |
+| Auto-restart works | Container restarts on failure |
+
+#### deploy.sh Integration
+
+| Requirement | Verification |
+|-------------|--------------|
+| Status reported | `deploy.sh status` shows MCP server health |
+| Logs accessible | `deploy.sh logs` includes MCP output |
+| Start/stop works | `deploy.sh start/stop` manages service |
+| Full deploy works | `deploy.sh deploy` includes MCP server |
 
 ---
 
@@ -255,6 +313,11 @@ Each tool must include:
 - [ ] Integration tests passing (90%+ coverage)
 - [ ] Claude Code can connect and use all tools
 - [ ] Pi deployment successful
+- [ ] Dockerfile created and builds
+- [ ] Docker Compose service definition added
+- [ ] deploy.sh integration complete
+- [ ] Container runs on Pi ARM64
+- [ ] Health check passes in docker-compose
 
 ### Quality Gates
 
