@@ -9,14 +9,14 @@
 //!
 //! - **Core**: MCP protocol handling, tool orchestration
 //! - **Ports (Traits)**: `BronzeStorage`, `ConfigStore`
-//! - **Adapters**: `LocalParquetStorage`, `EtcdConfigStore`
+//! - **Adapters**: `LocalParquetStorage`, `StreamRegistryAdapter` (via config-client)
 //!
 //! # Modules
 //!
 //! - [`config`]: Environment-based configuration
 //! - [`error`]: Error types with MCP error codes
 //! - [`server`]: HTTP server with axum
-//! - [`etcd`]: etcd configuration client
+//! - [`etcd`]: etcd configuration via config-client
 //! - [`mcp`]: MCP protocol types and handlers
 //! - [`storage`]: Bronze layer storage abstraction
 
@@ -30,7 +30,7 @@ pub mod storage;
 // Re-export commonly used types
 pub use config::AppConfig;
 pub use error::{McpError, McpResult};
-pub use etcd::{ConfigStore, EtcdConfigStore};
+pub use etcd::{ConfigStore, StreamRegistryAdapter};
 pub use mcp::McpHandler;
 pub use server::{create_router, AppState};
 pub use storage::{BronzeStorage, LocalParquetStorage};

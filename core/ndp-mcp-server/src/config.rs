@@ -1,9 +1,18 @@
 //! Application configuration for the Bronze MCP Server.
 //!
 //! Configuration follows the NDP pattern: Environment variables take precedence
-//! with sensible defaults for local development.
+//! with sensible defaults for local development. When available, configuration
+//! is also read from etcd via the config-client crate.
+//!
+//! # Configuration Hierarchy
+//!
+//! 1. Environment variables (highest priority)
+//! 2. etcd values (via ConfigClient)
+//! 3. Defaults (lowest priority)
 
 use crate::error::{McpError, McpResult};
+use config_client::{ConfigClient, StreamRegistry};
+use tracing::{debug, info, warn};
 
 /// Application configuration loaded from environment variables.
 ///
@@ -95,6 +104,71 @@ impl AppConfig {
             .nth(1)
             .and_then(|p| p.parse().ok())
             .unwrap_or(9100)
+    }
+
+    /// Create a ConfigClient from the configured etcd endpoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::EtcdUnavailable` if connection fails.
+    pub async fn create_config_client(&self) -> McpResult<ConfigClient> {
+        let endpoints: Vec<&str> = self.etcd_endpoints.iter().map(|s| s.as_str()).collect();
+        info!(endpoints = ?endpoints, "Creating ConfigClient");
+
+        ConfigClient::new(&endpoints)
+            .await
+            .map_err(|e| McpError::EtcdUnavailable(format!("Failed to create ConfigClient: {}", e)))
+    }
+
+    /// Create a StreamRegistry from the configured etcd endpoints.
+    ///
+    /// StreamRegistry provides cached access to stream configurations.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::EtcdUnavailable` if connection fails.
+    pub async fn create_stream_registry(&self) -> McpResult<StreamRegistry> {
+        let endpoints: Vec<&str> = self.etcd_endpoints.iter().map(|s| s.as_str()).collect();
+        info!(endpoints = ?endpoints, "Creating StreamRegistry");
+
+        StreamRegistry::new(&endpoints)
+            .await
+            .map_err(|e| McpError::EtcdUnavailable(format!("Failed to create StreamRegistry: {}", e)))
+    }
+
+    /// Get the storage base path, with etcd fallback.
+    ///
+    /// Order of precedence:
+    /// 1. NDP_RAW_PATH environment variable
+    /// 2. etcd `/storage/base_path` key (if ConfigClient provided)
+    /// 3. Default value "/data/raw"
+    ///
+    /// # Arguments
+    ///
+    /// * `config_client` - Optional ConfigClient for etcd lookup
+    pub async fn get_raw_path_with_etcd(&self, config_client: Option<&ConfigClient>) -> String {
+        // Environment variable takes precedence
+        if let Ok(env_path) = std::env::var("NDP_RAW_PATH") {
+            debug!(path = %env_path, "Using NDP_RAW_PATH from environment");
+            return env_path;
+        }
+
+        // Try etcd if client provided
+        if let Some(client) = config_client {
+            match client.get::<String>("/storage/base_path").await {
+                Ok(etcd_path) => {
+                    info!(path = %etcd_path, "Using base_path from etcd");
+                    return etcd_path;
+                }
+                Err(e) => {
+                    warn!(error = %e, "Failed to read /storage/base_path from etcd, using default");
+                }
+            }
+        }
+
+        // Fall back to default
+        debug!(path = %self.raw_path, "Using default raw_path");
+        self.raw_path.clone()
     }
 }
 

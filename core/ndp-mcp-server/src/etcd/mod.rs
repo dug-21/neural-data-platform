@@ -6,7 +6,7 @@
 //! # Architecture
 //!
 //! - **Port**: `ConfigStore` trait defines the interface
-//! - **Adapter**: `EtcdConfigStore` implements for etcd client
+//! - **Adapter**: `StreamRegistryAdapter` - Wraps config-client's StreamRegistry
 //!
 //! # etcd Schema
 //!
@@ -17,9 +17,9 @@
 //! /streams/air-quality/parser/field_mappings/0/source = "pm25"
 //! ```
 
-mod client;
+mod registry_adapter;
 
-pub use client::EtcdConfigStore;
+pub use registry_adapter::StreamRegistryAdapter;
 
 use crate::error::McpResult;
 use async_trait::async_trait;

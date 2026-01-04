@@ -59,8 +59,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Starting NDP Bronze MCP Server"
     );
 
-    // Create application state (initializes handler with real dependencies)
-    let state = Arc::new(AppState::new(config.clone()));
+    // Create StreamRegistry via config-client (preferred approach)
+    tracing::info!("Connecting to etcd via config-client...");
+    let registry = config.create_stream_registry().await?;
+    tracing::info!("StreamRegistry connected successfully");
+
+    // Create application state with StreamRegistry adapter
+    let state = Arc::new(AppState::with_registry(config.clone(), registry));
 
     tracing::debug!(
         raw_path = %config.raw_path,
@@ -68,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     tracing::debug!(
         etcd_endpoints = ?config.etcd_endpoints,
-        "Initialized EtcdConfigStore"
+        "Initialized StreamRegistryAdapter"
     );
 
     // Create router with all routes

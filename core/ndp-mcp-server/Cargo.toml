@@ -30,8 +30,14 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-# etcd client
+# etcd client (for direct etcd access when needed)
 etcd-client = "0.14"
+
+# Configuration client (wraps etcd with StreamRegistry)
+config-client = { path = "../../config-client" }
+
+# Core platform types
+neural_core = { path = "../../core", package = "platform-core" }
 
 # Parquet/Arrow for Bronze layer reading
 parquet = "57"

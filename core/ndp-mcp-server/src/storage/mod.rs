@@ -27,7 +27,7 @@ mod types;
 
 pub use local::LocalParquetStorage;
 pub use traits::BronzeStorage;
-pub use types::{FieldInfo, JsonStructure, ParquetSchemaInfo, RawPayloadStructure, StreamStorageInfo};
+pub use types::{ParquetSchemaInfo, StreamStorageInfo};
 
 // Re-export mock for testing
 #[cfg(test)]

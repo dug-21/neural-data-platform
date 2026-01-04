@@ -4,6 +4,13 @@
 //! Routes:
 //! - POST /mcp: MCP JSON-RPC endpoint
 //! - GET /health: Health check endpoint
+//!
+//! # Configuration Store
+//!
+//! The server uses `StreamRegistryAdapter` which wraps config-client's StreamRegistry
+//! for accessing stream configurations from etcd.
+//!
+//! Use `AppState::with_registry()` to create the application state.
 
 use axum::{
     extract::State,
@@ -12,12 +19,13 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use config_client::StreamRegistry;
 use serde::Serialize;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
 use crate::config::AppConfig;
-use crate::etcd::{ConfigStore, EtcdConfigStore};
+use crate::etcd::{ConfigStore, StreamRegistryAdapter};
 use crate::mcp::{JsonRpcRequest, McpHandler};
 use crate::storage::{BronzeStorage, LocalParquetStorage};
 
@@ -25,7 +33,7 @@ use crate::storage::{BronzeStorage, LocalParquetStorage};
 ///
 /// Contains references to configuration and storage/config clients.
 /// Wrapped in Arc for thread-safe sharing.
-pub struct AppState<S = LocalParquetStorage, C = EtcdConfigStore>
+pub struct AppState<S = LocalParquetStorage, C = StreamRegistryAdapter>
 where
     S: BronzeStorage + Send + Sync + 'static,
     C: ConfigStore + Send + Sync + 'static,
@@ -49,13 +57,27 @@ where
     }
 }
 
-impl AppState<LocalParquetStorage, EtcdConfigStore> {
-    /// Create new application state with real implementations.
+impl AppState<LocalParquetStorage, StreamRegistryAdapter> {
+    /// Create new application state with StreamRegistry from config-client.
     ///
-    /// Initializes LocalParquetStorage and EtcdConfigStore from configuration.
-    pub fn new(config: AppConfig) -> Self {
+    /// Uses the shared config-client crate for etcd access.
+    /// The StreamRegistry provides cached access to stream configurations.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Application configuration
+    /// * `registry` - StreamRegistry instance from config-client
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let config = AppConfig::from_env()?;
+    /// let registry = config.create_stream_registry().await?;
+    /// let state = AppState::with_registry(config, registry);
+    /// ```
+    pub fn with_registry(config: AppConfig, registry: StreamRegistry) -> Self {
         let storage = Arc::new(LocalParquetStorage::new(&config.raw_path));
-        let config_store = Arc::new(EtcdConfigStore::new(config.etcd_endpoints.clone()));
+        let config_store = Arc::new(StreamRegistryAdapter::new(registry));
         let handler = Arc::new(McpHandler::new(storage, config_store));
 
         Self { config, handler }
