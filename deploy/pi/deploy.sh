@@ -2,13 +2,15 @@
 # Neural Data Platform - Pi Deployment Script
 # Raspberry Pi 5 with Ubuntu 25.04
 #
-# Usage: ./deploy.sh [command]
-#   ./deploy.sh         - Full deploy (build + start)
-#   ./deploy.sh start   - Start services
-#   ./deploy.sh stop    - Stop services
-#   ./deploy.sh logs    - View logs
-#   ./deploy.sh status  - Check status
-#   ./deploy.sh update  - Pull latest and rebuild
+# Usage: ./deploy.sh [command] [options]
+#   ./deploy.sh            - Full deploy (build + start)
+#   ./deploy.sh start      - Start services
+#   ./deploy.sh stop       - Stop services
+#   ./deploy.sh logs       - View logs
+#   ./deploy.sh status     - Check status
+#   ./deploy.sh update     - Pull latest and rebuild all
+#   ./deploy.sh update mcp - Pull latest and rebuild MCP server only (~15 min)
+#   ./deploy.sh update app - Pull latest and rebuild air-quality-app only (~15 min)
 
 set -e
 
@@ -343,6 +345,7 @@ status() {
     echo "  MQTT Broker: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:1883 2>/dev/null || echo 'N/A (TCP only)')"
     echo "  etcd:        $(docker exec etcd etcdctl endpoint health 2>/dev/null || echo 'Not running')"
     echo "  Air Quality: $(curl -s http://localhost:8080/health 2>/dev/null || echo 'Not running')"
+    echo "  MCP Server:  $(curl -sf http://localhost:9100/health 2>/dev/null && echo 'Running' || echo 'Not running')"
     echo "  TimescaleDB: $(docker exec pi5-timescaledb pg_isready -U postgres -d ndp 2>/dev/null && echo 'Running' || echo 'Not running')"
     echo "  Grafana:     $(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health 2>/dev/null || echo 'Not running')"
     echo ""
@@ -362,13 +365,16 @@ status() {
     log "Useful URLs:"
     PI_IP=$(hostname -I | awk '{print $1}')
     echo "  Air Quality API: http://${PI_IP}:8080"
+    echo "  MCP Server:      http://${PI_IP}:9100"
     echo "  Grafana UI:      http://${PI_IP}:3000"
     echo "  MQTT Broker:     mqtt://${PI_IP}:1883"
     echo "  etcd:            http://${PI_IP}:2379"
 }
 
 update() {
-    log "Updating deployment..."
+    local target="${1:-all}"
+
+    log "Updating deployment (target: $target)..."
 
     # Fetch latest from origin
     git -C "$REPO_ROOT" fetch origin
@@ -386,10 +392,24 @@ update() {
     git -C "$REPO_ROOT" reset --hard origin/main
 
     # Rebuild with --no-cache to ensure source changes are picked up
-    log "Rebuilding with fresh cache..."
-    dc build --no-cache --progress=plain
+    case "$target" in
+        mcp)
+            log "Rebuilding ndp-mcp-server only..."
+            dc build --no-cache --progress=plain ndp-mcp-server
+            dc up -d ndp-mcp-server
+            ;;
+        app)
+            log "Rebuilding air-quality-app only..."
+            dc build --no-cache --progress=plain air-quality-app
+            dc up -d air-quality-app
+            ;;
+        all|*)
+            log "Rebuilding all services..."
+            dc build --no-cache --progress=plain
+            dc up -d
+            ;;
+    esac
 
-    dc up -d
     sync_config
     init_streams
 
@@ -454,7 +474,7 @@ case "${1:-deploy}" in
         ;;
     update)
         check_prereqs
-        update
+        update "$2"
         ;;
     refresh)
         refresh
@@ -504,7 +524,8 @@ case "${1:-deploy}" in
         echo "  stop            - Stop all services"
         echo "  logs            - View logs"
         echo "  status          - Check service health and URLs"
-        echo "  update          - Pull latest and rebuild (for code changes)"
+        echo "  update [target] - Pull latest and rebuild (for code changes)"
+        echo "                    Targets: mcp (MCP server only), app (air-quality only), all (default)"
         echo "  refresh         - Pull latest configs only (no rebuild)"
         echo "  build           - Build Docker images"
         echo "  sync            - Sync configuration to etcd"

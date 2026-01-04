@@ -66,35 +66,54 @@ See: `.claude/agents/ndp/README.md` for full documentation.
 
 ---
 
-## 🧠 Pattern Memory for Project Knowledge
+## 🧠 Memory Systems - When to Use What
 
-**Pattern skills store APPLICATION knowledge - not swarm/transient state.**
+### Two Memory Systems
 
-### What Patterns Are For
+| System | Purpose | Persistence | Use For |
+|--------|---------|-------------|---------|
+| **AgentDB Skills** | Application knowledge | Permanent | Patterns, procedures, architecture |
+| **Claude-Flow Memory** | Swarm/session state | Transient | Coordination, task progress, working memory |
 
-This is intended to be a definitive source to maintain consistency of development across many different agents over developing many different features.
-Patterns capture **permanent, reusable project knowledge**:
+### AgentDB Skills (Persistent Patterns)
+
+**Use these skills for permanent, reusable project knowledge:**
+
+| Skill | When | What |
+|-------|------|------|
+| `/get-pattern` | BEFORE work | Search existing patterns and approaches |
+| `/save-pattern` | AFTER discoveries | Store NEW reusable knowledge |
+| `/reflexion` | AFTER work | Record if patterns helped (required) |
+| `/learner` | Post-feature | Auto-discover patterns from episodes |
+
+**Patterns capture:**
 - Architecture decisions and ADRs
 - Implementation procedures ("how to add a stream")
 - Naming conventions and code organization
 - Troubleshooting guides and checklists
-- Data flow and pipeline designs
 
-### What Patterns Are NOT For
+### Claude-Flow Memory (Transient State)
 
-Do NOT use pattern skills for:
-- Swarm coordination state (use claude-flow memory tools)
-- Agent task progress (use claude-flow task tools)
-- Session-specific working memory (use MCP memory with TTL)
-- Inter-agent communication (use claude-flow DAA tools)
+**Use claude-flow memory for swarm coordination and session state:**
+```bash
+npx claude-flow memory store "<key>" "<value>" --namespace <ns>
+npx claude-flow memory query "<pattern>" --namespace <ns>
+```
+
+**Transient memory is for:**
+- Swarm coordination state
+- Agent task progress
+- Session-specific working memory
+- Inter-agent communication
 
 ### The Pattern Workflow
 
 ```
-BEFORE work:  get-pattern   → Research existing project approaches
+BEFORE work:  /get-pattern  → Research existing project approaches
 DURING work:  Apply patterns, note gaps or new discoveries
-AFTER work:   reflexion     → Rate if get-pattern results helped
-              save-pattern  → Store NEW reusable knowledge (if any)
+AFTER work:   /reflexion    → Rate if get-pattern results helped (required)
+              /save-pattern → Store NEW reusable knowledge (if any)
+              /learner      → Auto-discover patterns (periodic)
 ```
 
 ### Why This Matters
@@ -104,7 +123,7 @@ AFTER work:   reflexion     → Rate if get-pattern results helped
 3. **Knowledge Capture** - New discoveries become available to future sessions
 4. **Project Memory** - The codebase evolves; patterns document the "why" and "how"
 
-**See skill files in `.claude/skills/` for usage details.**
+**See skill files in `.claude/skills/` for full documentation.**
 
 ---
 
@@ -299,13 +318,15 @@ npx claude-flow task orchestrate --task "<task>" --strategy adaptive
 npx claude-flow task results --task-id "<id>"
 ```
 
-### AgentDB CLI (Pattern Memory):
-All pattern operations use `npx agentdb` commands:
-```bash
-npx agentdb query --query "<search>" --k 5
-npx agentdb reflexion store "<session>" "<task>" <reward> <success> "<critique>"
-npx agentdb reflexion retrieve "<task>" --k 5
+### Persistent Pattern Memory (AgentDB Skills):
+**Use skills for persistent application knowledge** - architecture, procedures, conventions:
 ```
+/get-pattern    → Search patterns BEFORE implementing
+/save-pattern   → Store NEW patterns AFTER discovering
+/reflexion      → Record feedback on pattern effectiveness
+/learner        → Auto-discover patterns from episodes (periodic)
+```
+See `.claude/skills/` for full documentation. Skills wrap `agentdb` CLI commands.
 
 **KEY**: If you initialize a swarm, USE IT - orchestrate tasks to swarm agents, don't spawn separate Task agents.
 
@@ -329,18 +350,21 @@ npx claude-flow task status --task-id "<id>"
 npx claude-flow task results --task-id "<id>" --format detailed
 ```
 
-### Memory Operations
+### Transient Memory (Claude-Flow) - Swarms & Sessions
 ```bash
 npx claude-flow memory store "<key>" "<value>" --namespace <ns>
 npx claude-flow memory query "<pattern>" --namespace <ns>
 ```
+Use for: swarm coordination state, agent task progress, session-specific working memory.
 
-### AgentDB (Pattern Storage)
-```bash
-npx agentdb query --query "<search>" --k 5
-npx agentdb reflexion store "<session>" "<task>" <reward> <success> "<critique>"
-npx agentdb reflexion retrieve "<task>" --k 5
+### Persistent Memory (AgentDB Skills) - Application Knowledge
 ```
+/get-pattern    → Search patterns BEFORE work
+/save-pattern   → Store NEW patterns AFTER discoveries
+/reflexion      → Record feedback on pattern effectiveness
+/learner        → Auto-discover patterns (post-feature)
+```
+Use for: architecture decisions, implementation procedures, naming conventions, troubleshooting guides.
 
 ---
 
@@ -459,6 +483,47 @@ NDP agents should know these patterns (use `get-pattern` for details):
 | `data-flow:ingestion-pipeline` | Source → Channel → Router → Storage |
 | `deployment:docker-minimal-changes` | Extend Docker without restructuring |
 | `conventions:naming` | Stream IDs (kebab-case), fields (snake_case) |
+
+---
+
+## NDP Data Exploration (MCP)
+
+The `ndp-bronze` MCP server provides tools for exploring Bronze layer data and validating configuration.
+
+### Available Tools
+
+| Tool | When to Use |
+|------|-------------|
+| `list_streams` | Discover available data streams and their status |
+| `describe_schema(stream, mode)` | Understand data structure for ETL development |
+| `validate_config(stream)` | Check if config matches actual data |
+| `sample_data(stream, n)` | See actual records for debugging/exploration |
+
+### describe_schema Modes
+
+| Mode | Use When |
+|------|----------|
+| `source` | Building ETL - need to see raw data + mappings |
+| `target` | Defining Silver schema - need entity_schemas |
+| `all` | Complete picture - gap analysis for missing mappings |
+
+### Example Workflows
+
+**"What data do we have?"**
+-> `list_streams` -> shows all streams with enabled status and latest data
+
+**"Help me build ETL for outdoor-weather"**
+-> `describe_schema("outdoor-weather", mode="source")` -> raw structure + existing mappings
+-> `describe_schema("outdoor-weather", mode="target")` -> what Silver expects
+-> Identify gaps, write transformation code
+
+**"Why is temperature missing in Silver?"**
+-> `describe_schema("outdoor-weather", mode="all")` -> gap_analysis shows unmapped fields
+-> `sample_data("outdoor-weather", 5)` -> verify raw data has the field
+-> Check if mapping exists in parser config
+
+**"Is config synced correctly?"**
+-> `validate_config("outdoor-weather")` -> compare etcd config vs actual Parquet
 
 ---
 

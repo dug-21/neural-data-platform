@@ -206,10 +206,11 @@ where
             }
             _ => {
                 warn!(tool = %call_params.name, "Unknown tool");
-                Ok(McpToolResult::error(
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::INVALID_PARAMS,
                     format!("Unknown tool: {}", call_params.name),
-                    "UNKNOWN_TOOL",
-                ))
+                );
             }
         };
 

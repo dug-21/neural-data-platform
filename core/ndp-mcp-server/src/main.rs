@@ -25,7 +25,10 @@
 
 mod config;
 mod error;
+mod etcd;
+mod mcp;
 mod server;
+mod storage;
 
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -56,8 +59,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Starting NDP Bronze MCP Server"
     );
 
-    // Create application state
+    // Create application state (initializes handler with real dependencies)
     let state = Arc::new(AppState::new(config.clone()));
+
+    tracing::debug!(
+        raw_path = %config.raw_path,
+        "Initialized LocalParquetStorage"
+    );
+    tracing::debug!(
+        etcd_endpoints = ?config.etcd_endpoints,
+        "Initialized EtcdConfigStore"
+    );
 
     // Create router with all routes
     let app = create_router(state);
