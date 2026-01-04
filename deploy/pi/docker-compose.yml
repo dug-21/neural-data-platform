@@ -144,7 +144,7 @@ services:
       - air-quality-data:/data:ro    # Read-only access to Bronze Parquet files
     environment:
       - RUST_LOG=info
-      - NDP_RAW_PATH=/data
+      - NDP_RAW_PATH=/data/raw
       - NDP_ETCD_ENDPOINTS=http://etcd:2379
       - NDP_MCP_LISTEN=0.0.0.0:9100
     depends_on:
