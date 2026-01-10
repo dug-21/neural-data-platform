@@ -1,0 +1,140 @@
+# Air Quality Stream - Silver ETL Configuration
+# apps/silver-etl/tests/fixtures/air_quality_config.yaml
+#
+# Complete silver_etl config for the air-quality stream from AirGradient sensors.
+# Based on TDD_IMPLEMENTATION_GUIDE.md Section 9.2
+
+enabled: true
+target_table: silver.air_quality_observations
+target_schema: air_quality_observations_v1
+
+timestamp:
+  source_field: timestamp
+  target_field: observation_time
+  transform: microseconds_to_timestamp
+
+identity_fields:
+  - source: ndp_id
+    target: ndp_id
+  - source: context.location.path
+    target: location_path
+
+field_mappings:
+  # PM2.5 - Primary air quality metric
+  - source_path: raw_payload.pm02
+    target_column: pm25
+    type: double_precision
+    nullable: false
+    dq_rules:
+      - rule: range_check
+        min: 0.0
+        max: 1000.0
+        action: flag
+
+  # PM10 - Larger particulate matter
+  - source_path: raw_payload.pm10
+    target_column: pm10
+    type: double_precision
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 0.0
+        max: 1000.0
+        action: flag
+
+  # CO2 concentration (ppm)
+  - source_path: raw_payload.rco2
+    target_column: co2
+    type: smallint
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 380
+        max: 10000
+        action: flag
+
+  # Temperature (Celsius)
+  - source_path: raw_payload.atmp
+    target_column: temperature_c
+    type: double_precision
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: -40.0
+        max: 85.0
+        action: flag
+
+  # Relative Humidity (%)
+  - source_path: raw_payload.rhum
+    target_column: humidity_pct
+    type: double_precision
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 0.0
+        max: 100.0
+        action: clamp
+        clamp_to_bounds: true
+
+  # TVOC - Total Volatile Organic Compounds (ppb)
+  - source_path: raw_payload.tvoc
+    target_column: tvoc_ppb
+    type: integer
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 0
+        max: 60000
+        action: flag
+
+  # NOx index
+  - source_path: raw_payload.nox
+    target_column: nox_index
+    type: integer
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 1
+        max: 500
+        action: flag
+
+# Global DQ rules applied to all rows
+dq_rules:
+  # Observation time must not be null
+  - rule: null_check
+    field: observation_time
+    action: reject
+
+  # PM10 should be >= PM2.5 (larger particles include smaller)
+  - rule: cross_field_check
+    name: pm10_gte_pm25
+    expression: "pm10 IS NULL OR pm25 IS NULL OR pm10 >= pm25"
+    message: pm10_less_than_pm25
+    action: flag
+
+  # Freshness check - data should not be older than 2 hours
+  - rule: freshness_check
+    field: observation_time
+    max_age: "2 hours"
+    max_future: "10 minutes"
+    reference: ingestion_time
+    action: flag
+
+# DQ output configuration
+dq_output:
+  enabled: true
+  target_column: dq_flags
+  include_rules: true
+  include_values: false
+
+# Deduplication settings
+deduplication:
+  enabled: true
+  key_columns: [observation_time, ndp_id]
+  strategy: upsert
+
+# Incremental load settings
+incremental:
+  enabled: true
+  watermark_column: observation_time
+  lag_interval: 5 minutes

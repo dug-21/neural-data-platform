@@ -4,7 +4,8 @@ members = [
     "core",
     "core/ndp-mcp-server",
     "domains/air-quality",
-    "apps/air-quality-app"
+    "apps/air-quality-app",
+    "apps/silver-etl"
 ]
 resolver = "2"
 

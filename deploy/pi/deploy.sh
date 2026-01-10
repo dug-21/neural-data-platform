@@ -350,6 +350,22 @@ status() {
     echo "  Grafana:     $(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health 2>/dev/null || echo 'Not running')"
     echo ""
 
+    log "Silver Layer Status:"
+    if docker exec pi5-timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; then
+        # Check if silver schema exists
+        if docker exec pi5-timescaledb psql -U postgres -d ndp -tAc "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'silver'" 2>/dev/null | grep -q "1"; then
+            echo "  Schema:      silver schema exists"
+            # Count hypertables
+            hypertable_count=$(docker exec pi5-timescaledb psql -U postgres -d ndp -tAc "SELECT COUNT(*) FROM timescaledb_information.hypertables WHERE hypertable_schema = 'silver'" 2>/dev/null || echo "0")
+            echo "  Hypertables: $hypertable_count"
+        else
+            echo "  Schema:      silver schema not created (run: ./deploy.sh silver-migrate)"
+        fi
+    else
+        echo "  TimescaleDB not running"
+    fi
+    echo ""
+
     log "Data Volume:"
     docker exec air-quality-app du -sh /data 2>/dev/null || echo "  Not available"
     echo ""
@@ -515,8 +531,30 @@ case "${1:-deploy}" in
         warn "DuckDB and Grafana stopped. Data volumes preserved."
         warn "To remove data: docker volume rm pi_duckdb_data pi_grafana_data"
         ;;
+    silver-etl)
+        log "Running Silver ETL (Bronze -> TimescaleDB)..."
+        # Ensure TimescaleDB is ready
+        until docker exec pi5-timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+            warn "Waiting for TimescaleDB to be ready..."
+            sleep 2
+        done
+        # Run silver-etl with the silver profile
+        dc --profile silver run --rm silver-etl run
+        log "Silver ETL complete"
+        ;;
+    silver-migrate)
+        log "Running Silver Layer migrations..."
+        # Ensure TimescaleDB is ready
+        until docker exec pi5-timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+            warn "Waiting for TimescaleDB to be ready..."
+            sleep 2
+        done
+        # Run migrations via silver-etl migrate command
+        dc --profile silver run --rm silver-etl migrate
+        log "Silver migrations complete"
+        ;;
     *)
-        echo "Usage: $0 {deploy|start|stop|logs|status|update|refresh|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback}"
+        echo "Usage: $0 {deploy|start|stop|logs|status|update|refresh|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback|silver-etl|silver-migrate}"
         echo ""
         echo "Commands:"
         echo "  deploy          - Full deploy (build + start all services)"
@@ -534,6 +572,8 @@ case "${1:-deploy}" in
         echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
         echo "  analytics       - Start DuckDB + Grafana analytics stack"
         echo "  rollback        - Stop and remove analytics stack"
+        echo "  silver-etl      - Run Silver ETL once (Bronze -> TimescaleDB)"
+        echo "  silver-migrate  - Run Silver Layer TimescaleDB migrations"
         exit 1
         ;;
 esac

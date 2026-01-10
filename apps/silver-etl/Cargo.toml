@@ -1,0 +1,56 @@
+[package]
+name = "silver-etl"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neural Data Platform Team"]
+description = "Silver layer ETL for Neural Data Platform - config-driven Bronze to Silver transformation"
+
+[[bin]]
+name = "silver-etl"
+path = "src/main.rs"
+
+[lib]
+name = "silver_etl"
+path = "src/lib.rs"
+
+[dependencies]
+# Project dependencies
+neural-core = { path = "../../core", package = "platform-core" }
+config-client = { path = "../../config-client" }
+
+# DuckDB for Parquet reading and PostgreSQL writing
+duckdb = { version = "1.1", features = ["bundled"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Logging and tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Time handling
+chrono = { workspace = true }
+
+# File system
+glob = "0.3"
+
+# Metrics
+prometheus = "0.13"
+
+[dev-dependencies]
+# Testing
+tempfile = "3"
+polars = { workspace = true }
+tokio-test = "0.4"

@@ -1,0 +1,10 @@
+[Unit]
+Description=Silver ETL Timer - Hourly Bronze to Silver transformation
+
+[Timer]
+OnCalendar=*-*-* *:05:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

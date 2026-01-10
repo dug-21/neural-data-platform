@@ -1,0 +1,20 @@
+[Unit]
+Description=Silver ETL - Bronze to TimescaleDB transformation
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/silver-etl run
+Environment=RUST_LOG=info
+Environment=ETCD_ENDPOINT=http://localhost:2379
+Environment=BRONZE_DATA_DIR=/data/raw
+Environment=TIMESCALE_URL=postgresql://postgres:ndp_secure_password@localhost:5432/ndp
+WorkingDirectory=/opt/ndp
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

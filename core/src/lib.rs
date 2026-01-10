@@ -1,6 +1,8 @@
+pub mod config;
 pub mod coordinator;
 pub mod error;
 // pub mod forecast;
+pub mod mcp;
 pub mod parsers;
 pub mod sources;
 pub mod storage;
@@ -28,4 +30,11 @@ pub use types::GenericTimeSeriesPoint;
 pub use types::{
     FieldType, RecordMetadata, SchemaField, SourceConfig, SourceType, StorageConfig, StreamConfig,
     StreamConfigError, StreamRecord,
+};
+
+// Silver ETL config types (DP-006)
+pub use config::{
+    ConversionFormula, DeduplicationConfig, DeduplicationStrategy, DqAction, DqOutputConfig,
+    DqRule, IdentityField, IncrementalConfig, SilverConfigError, SilverEtlConfig,
+    SilverFieldMapping, TimestampMapping, TimestampTransform, TransformConfig,
 };

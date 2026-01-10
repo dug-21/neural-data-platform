@@ -203,6 +203,34 @@ services:
         limits:
           memory: 256M
 
+  # Silver ETL - Bronze to Silver Layer Transformation (DP-006)
+  # Reads Parquet files from Bronze, writes to TimescaleDB Silver layer
+  # Memory target: <200MB runtime (256MB limit with buffer)
+  silver-etl:
+    build:
+      context: ../..
+      dockerfile: apps/silver-etl/Dockerfile
+    image: neural-data-platform/silver-etl:latest
+    container_name: silver-etl
+    volumes:
+      - air-quality-data:/data:ro    # Read-only access to Bronze Parquet files
+    environment:
+      - RUST_LOG=info
+      - ETCD_ENDPOINT=http://etcd:2379
+      - BRONZE_DATA_DIR=/data/raw
+      - TIMESCALE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-ndp_secure_password}@timescaledb:5432/ndp
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    profiles:
+      - silver
+
 volumes:
   mosquitto-data:
     driver: local

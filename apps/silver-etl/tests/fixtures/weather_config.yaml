@@ -1,0 +1,206 @@
+# Outdoor Weather Stream - Silver ETL Configuration
+# apps/silver-etl/tests/fixtures/weather_config.yaml
+#
+# Config for outdoor-weather stream (OpenWeatherMap) with unit conversions.
+# Demonstrates Kelvin->Celsius and m/s->km/h transformations.
+
+enabled: true
+target_table: silver.outdoor_weather_observations
+target_schema: outdoor_weather_observations_v1
+
+timestamp:
+  source_field: timestamp
+  target_field: observation_time
+  transform: microseconds_to_timestamp
+
+identity_fields:
+  - source: ndp_id
+    target: ndp_id
+  - source: context.coordinates.lat
+    target: latitude
+  - source: context.coordinates.lon
+    target: longitude
+
+field_mappings:
+  # Temperature - Kelvin to Celsius conversion
+  - source_path: raw_payload.main.temp
+    target_column: temperature_c
+    type: double_precision
+    nullable: true
+    transform:
+      type: unit_conversion
+      from: kelvin
+      to: celsius
+      formula:
+        type: linear
+        scale: 1.0
+        offset: -273.15
+    dq_rules:
+      - rule: range_check
+        min: -60.0
+        max: 60.0
+        action: flag
+
+  # Feels Like Temperature - Kelvin to Celsius
+  - source_path: raw_payload.main.feels_like
+    target_column: feels_like_c
+    type: double_precision
+    nullable: true
+    transform:
+      type: unit_conversion
+      from: kelvin
+      to: celsius
+      formula:
+        type: linear
+        scale: 1.0
+        offset: -273.15
+
+  # Humidity (%)
+  - source_path: raw_payload.main.humidity
+    target_column: humidity_pct
+    type: double_precision
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 0.0
+        max: 100.0
+        action: clamp
+        clamp_to_bounds: true
+
+  # Pressure (hPa)
+  - source_path: raw_payload.main.pressure
+    target_column: pressure_hpa
+    type: double_precision
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 800.0
+        max: 1100.0
+        action: flag
+
+  # Wind Speed - m/s to km/h conversion
+  - source_path: raw_payload.wind.speed
+    target_column: wind_speed_kmh
+    type: double_precision
+    nullable: true
+    transform:
+      type: unit_conversion
+      from: m_s
+      to: km_h
+      formula:
+        type: linear
+        scale: 3.6
+        offset: 0.0
+    dq_rules:
+      - rule: range_check
+        min: 0.0
+        max: 150.0
+        action: flag
+
+  # Wind Direction (degrees)
+  - source_path: raw_payload.wind.deg
+    target_column: wind_direction_deg
+    type: double_precision
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 0.0
+        max: 360.0
+        action: clamp
+        clamp_to_bounds: true
+
+  # Wind Gust - m/s to km/h conversion
+  - source_path: raw_payload.wind.gust
+    target_column: wind_gust_kmh
+    type: double_precision
+    nullable: true
+    transform:
+      type: unit_conversion
+      from: m_s
+      to: km_h
+      formula:
+        type: linear
+        scale: 3.6
+        offset: 0.0
+
+  # Cloud coverage (%)
+  - source_path: raw_payload.clouds.all
+    target_column: cloud_coverage_pct
+    type: double_precision
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 0.0
+        max: 100.0
+        action: clamp
+        clamp_to_bounds: true
+
+  # Visibility (meters)
+  - source_path: raw_payload.visibility
+    target_column: visibility_m
+    type: integer
+    nullable: true
+    dq_rules:
+      - rule: range_check
+        min: 0
+        max: 100000
+        action: flag
+
+  # Weather description
+  - source_path: raw_payload.weather[0].description
+    target_column: weather_description
+    type: text
+    nullable: true
+    transform:
+      type: json_extract
+      path: "$.weather[0].description"
+
+  # Weather condition ID
+  - source_path: raw_payload.weather[0].id
+    target_column: weather_condition_id
+    type: integer
+    nullable: true
+    transform:
+      type: json_extract
+      path: "$.weather[0].id"
+
+# Global DQ rules
+dq_rules:
+  # Observation time must not be null
+  - rule: null_check
+    field: observation_time
+    action: reject
+
+  # Dew point should be less than or equal to temperature
+  - rule: cross_field_check
+    name: dew_point_le_temp
+    expression: "feels_like_c IS NULL OR temperature_c IS NULL OR feels_like_c <= temperature_c + 10"
+    message: feels_like_unreasonable
+    action: flag
+
+  # Freshness check
+  - rule: freshness_check
+    field: observation_time
+    max_age: "3 hours"
+    max_future: "15 minutes"
+    reference: ingestion_time
+    action: flag
+
+# DQ output configuration
+dq_output:
+  enabled: true
+  target_column: dq_flags
+  include_rules: true
+  include_values: false
+
+# Deduplication settings
+deduplication:
+  enabled: true
+  key_columns: [observation_time, ndp_id, latitude, longitude]
+  strategy: upsert
+
+# Incremental load settings
+incremental:
+  enabled: true
+  watermark_column: observation_time
+  lag_interval: 10 minutes
