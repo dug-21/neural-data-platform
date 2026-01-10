@@ -21,6 +21,9 @@ config-client = { path = "../../config-client" }
 # DuckDB for Parquet reading and PostgreSQL writing
 duckdb = { version = "1.1", features = ["bundled"] }
 
+# PostgreSQL for schema migrations
+tokio-postgres = "0.7"
+
 # Async runtime
 tokio = { workspace = true }
 

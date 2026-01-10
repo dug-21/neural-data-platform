@@ -26,11 +26,12 @@
 //! - `etl`: ETL execution engine
 //! - `metrics`: Prometheus metrics
 
-// Module declarations (stubs for now, implemented in later phases)
+// Module declarations
 pub mod config;
 pub mod dq;
 pub mod etl;
 pub mod metrics;
+pub mod schema_gen;
 pub mod sql_gen;
 
 // Re-export main types for library consumers
@@ -38,4 +39,5 @@ pub use config::ConfigLoader;
 pub use dq::DqSqlGenerator;
 pub use etl::{EtlError, EtlRunner, EtlStats};
 pub use metrics::EtlMetrics;
+pub use schema_gen::{SchemaError, SchemaGenerator};
 pub use sql_gen::{SqlGenError, SqlGenerator};

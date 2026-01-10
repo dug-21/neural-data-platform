@@ -5,6 +5,13 @@
 //! ## Usage
 //!
 //! ```bash
+//! # Migrate schema from config (creates tables, hypertables, indexes)
+//! silver-etl migrate --stream air-quality
+//! silver-etl migrate  # all enabled streams
+//!
+//! # Dry-run migration: show DDL without executing
+//! silver-etl migrate --stream air-quality --dry-run
+//!
 //! # Run ETL for all enabled streams
 //! silver-etl run
 //!
@@ -29,7 +36,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use prometheus::{Encoder, Registry, TextEncoder};
-use silver_etl::{ConfigLoader, EtlMetrics, EtlRunner, EtlStats};
+use silver_etl::{ConfigLoader, EtlMetrics, EtlRunner, EtlStats, SchemaGenerator};
 use std::io::Write;
 use std::time::Instant;
 use tracing::{debug, error, info, warn, Level};
@@ -125,6 +132,21 @@ enum Commands {
 
     /// Export Prometheus metrics
     Metrics,
+
+    /// Create/update TimescaleDB schema from config (config-driven DDL)
+    Migrate {
+        /// Stream to migrate (omit for all enabled streams)
+        #[arg(short, long)]
+        stream: Option<String>,
+
+        /// Dry-run: show DDL without executing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Output file for DDL (default: stdout for dry-run)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
 }
 
 /// Main entry point
@@ -176,6 +198,11 @@ async fn main() -> Result<()> {
             ref format,
         } => show_status(&cli, stream.as_deref(), format).await,
         Commands::Metrics => export_metrics(&registry),
+        Commands::Migrate {
+            ref stream,
+            dry_run,
+            ref output,
+        } => migrate_schema(&cli, stream.as_deref(), *dry_run, output.as_deref()).await,
     };
 
     // Handle result and set exit code
@@ -495,6 +522,179 @@ async fn show_status(cli: &Cli, stream: Option<&str>, format: &str) -> Result<i3
     }
 
     Ok(0)
+}
+
+/// Migrate schema - create/update TimescaleDB tables from config
+///
+/// This is the truly config-driven approach: the schema is derived entirely
+/// from the silver_etl configuration. No manual SQL migrations needed.
+async fn migrate_schema(
+    cli: &Cli,
+    stream: Option<&str>,
+    dry_run: bool,
+    output: Option<&str>,
+) -> Result<i32> {
+    info!(
+        stream = stream.unwrap_or("all"),
+        dry_run = dry_run,
+        "Migrating schema from config"
+    );
+
+    let config_loader = ConfigLoader::new(&cli.etcd_endpoint, &cli.config_dir);
+    let schema_gen = SchemaGenerator::new();
+
+    // Get list of streams
+    let streams = match stream {
+        Some(s) => vec![s.to_string()],
+        None => config_loader
+            .load_all_enabled()
+            .await
+            .context("Failed to load enabled streams")?,
+    };
+
+    if streams.is_empty() {
+        println!("No enabled streams found");
+        return Ok(0);
+    }
+
+    // Collect all DDL statements
+    let mut all_ddl = Vec::new();
+    let mut schemas_created = std::collections::HashSet::new();
+
+    for stream_id in &streams {
+        info!(stream_id = %stream_id, "Processing stream");
+
+        let config = config_loader
+            .load_stream_config(stream_id)
+            .await
+            .context(format!("Failed to load config for stream '{}'", stream_id))?;
+
+        // Validate config first
+        config.validate().context(format!(
+            "Invalid configuration for stream '{}'",
+            stream_id
+        ))?;
+
+        // Add schema creation (once per schema)
+        let schema_ddl = schema_gen.generate_create_schema(&config)?;
+        let schema_name = schema_ddl
+            .split_whitespace()
+            .last()
+            .unwrap_or("silver")
+            .trim_end_matches(';')
+            .to_string();
+        if !schemas_created.contains(&schema_name) {
+            all_ddl.push(format!("-- Schema for {}", stream_id));
+            all_ddl.push(schema_ddl);
+            all_ddl.push(String::new());
+            schemas_created.insert(schema_name);
+        }
+
+        // Add table creation
+        all_ddl.push(format!("-- Table for stream: {}", stream_id));
+        all_ddl.push(schema_gen.generate_create_table(&config)?);
+        all_ddl.push(String::new());
+
+        // Add hypertable creation
+        all_ddl.push(format!("-- Hypertable for: {}", config.target_table));
+        all_ddl.push(schema_gen.generate_hypertable(&config)?);
+        all_ddl.push(String::new());
+
+        // Add indexes
+        all_ddl.push(format!("-- Indexes for: {}", config.target_table));
+        for index_ddl in schema_gen.generate_indexes(&config)? {
+            all_ddl.push(index_ddl);
+        }
+        all_ddl.push(String::new());
+
+        info!(
+            stream_id = %stream_id,
+            table = %config.target_table,
+            "Generated DDL for stream"
+        );
+    }
+
+    let combined_ddl = all_ddl.join("\n");
+
+    if dry_run {
+        // Output DDL without executing
+        match output {
+            Some(path) => {
+                std::fs::write(path, &combined_ddl)
+                    .context(format!("Failed to write DDL to {}", path))?;
+                println!("DDL written to: {}", path);
+            }
+            None => {
+                println!("{}", combined_ddl);
+            }
+        }
+        return Ok(0);
+    }
+
+    // Execute DDL against TimescaleDB
+    let timescale_url = cli
+        .timescale_url
+        .as_ref()
+        .context("--timescale-url required for migration (or set TIMESCALE_URL)")?;
+
+    info!(url = %timescale_url, "Connecting to TimescaleDB");
+
+    // Use tokio-postgres for DDL execution
+    let (client, connection) = tokio_postgres::connect(timescale_url, tokio_postgres::NoTls)
+        .await
+        .context("Failed to connect to TimescaleDB")?;
+
+    // Spawn connection handler
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            error!(error = %e, "PostgreSQL connection error");
+        }
+    });
+
+    // Execute each statement
+    let statements: Vec<&str> = combined_ddl
+        .split(';')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty() && !s.starts_with("--"))
+        .collect();
+
+    let mut success_count = 0;
+    let mut error_count = 0;
+
+    for stmt in statements {
+        // Skip comments and empty lines
+        if stmt.starts_with("--") || stmt.is_empty() {
+            continue;
+        }
+
+        debug!(statement = %stmt, "Executing DDL");
+
+        match client.execute(&format!("{};", stmt), &[]).await {
+            Ok(_) => {
+                success_count += 1;
+                debug!("Statement executed successfully");
+            }
+            Err(e) => {
+                // Some errors are expected (e.g., table already exists without IF NOT EXISTS)
+                warn!(error = %e, statement = %stmt, "Statement failed");
+                error_count += 1;
+            }
+        }
+    }
+
+    println!(
+        "Migration complete: {} statements succeeded, {} failed",
+        success_count, error_count
+    );
+
+    // Also write DDL to output file if specified
+    if let Some(path) = output {
+        std::fs::write(path, &combined_ddl)
+            .context(format!("Failed to write DDL to {}", path))?;
+        println!("DDL also saved to: {}", path);
+    }
+
+    Ok(if error_count == 0 { 0 } else { 1 })
 }
 
 /// Export Prometheus metrics
