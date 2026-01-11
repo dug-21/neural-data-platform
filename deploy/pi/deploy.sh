@@ -8,9 +8,10 @@
 #   ./deploy.sh stop       - Stop services
 #   ./deploy.sh logs       - View logs
 #   ./deploy.sh status     - Check status
-#   ./deploy.sh update     - Pull latest and rebuild all
-#   ./deploy.sh update mcp - Pull latest and rebuild MCP server only (~15 min)
-#   ./deploy.sh update app - Pull latest and rebuild air-quality-app only (~15 min)
+#   ./deploy.sh update        - Pull latest and rebuild all
+#   ./deploy.sh update app    - Rebuild air-quality-app only (~15 min)
+#   ./deploy.sh update mcp    - Rebuild MCP server only (~15 min)
+#   ./deploy.sh update silver - Rebuild silver-etl only (~15 min)
 
 set -e
 
@@ -419,6 +420,11 @@ update() {
             dc build --no-cache --progress=plain air-quality-app
             dc up -d air-quality-app
             ;;
+        silver)
+            log "Rebuilding silver-etl only..."
+            dc --profile silver build --no-cache --progress=plain silver-etl
+            log "silver-etl rebuilt. Run './deploy.sh silver-migrate' or './deploy.sh silver-etl' to use it."
+            ;;
         all|*)
             log "Rebuilding all services..."
             dc build --no-cache --progress=plain
@@ -563,7 +569,7 @@ case "${1:-deploy}" in
         echo "  logs            - View logs"
         echo "  status          - Check service health and URLs"
         echo "  update [target] - Pull latest and rebuild (for code changes)"
-        echo "                    Targets: mcp (MCP server only), app (air-quality only), all (default)"
+        echo "                    Targets: app, mcp, silver, all (default)"
         echo "  refresh         - Pull latest configs only (no rebuild)"
         echo "  build           - Build Docker images"
         echo "  sync            - Sync configuration to etcd"
