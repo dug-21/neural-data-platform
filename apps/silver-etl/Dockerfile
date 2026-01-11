@@ -2,7 +2,8 @@
 # Transforms Bronze (Parquet) to Silver (TimescaleDB)
 
 # Stage 1: Chef - prepare build environment
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+# Use bookworm-based image to match runtime glibc version
+FROM lukemathwalker/cargo-chef:latest-rust-1-bookworm AS chef
 WORKDIR /app
 
 # Stage 2: Planner - analyze dependencies and generate recipe
@@ -52,6 +53,7 @@ RUN apt-get update && \
     apt-get install -y \
     ca-certificates \
     libssl3 \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
