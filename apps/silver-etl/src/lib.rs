@@ -28,6 +28,7 @@
 
 // Module declarations
 pub mod config;
+pub mod daemon;
 pub mod dq;
 pub mod etl;
 pub mod metrics;
@@ -36,6 +37,7 @@ pub mod sql_gen;
 
 // Re-export main types for library consumers
 pub use config::ConfigLoader;
+pub use daemon::{DaemonConfig, DaemonError, DaemonRunner, EtlExecutor, RealEtlExecutor};
 pub use dq::DqSqlGenerator;
 pub use etl::{EtlError, EtlRunner, EtlStats};
 pub use metrics::EtlMetrics;

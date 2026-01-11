@@ -36,9 +36,13 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use prometheus::{Encoder, Registry, TextEncoder};
-use silver_etl::{ConfigLoader, EtlMetrics, EtlRunner, EtlStats, SchemaGenerator};
+use silver_etl::{
+    ConfigLoader, DaemonConfig, DaemonRunner, EtlMetrics, EtlRunner, EtlStats, RealEtlExecutor,
+    SchemaGenerator,
+};
 use std::io::Write;
 use std::time::Instant;
+use tokio::sync::watch;
 use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -147,6 +151,17 @@ enum Commands {
         #[arg(short, long)]
         output: Option<String>,
     },
+
+    /// Run ETL in daemon mode (continuous processing with interval)
+    Daemon {
+        /// Interval between ETL runs in seconds
+        #[arg(short, long, default_value = "300")]
+        interval: u64,
+
+        /// Specific stream to process (omit for all enabled streams)
+        #[arg(short, long)]
+        stream: Option<String>,
+    },
 }
 
 /// Main entry point
@@ -203,6 +218,10 @@ async fn main() -> Result<()> {
             dry_run,
             ref output,
         } => migrate_schema(&cli, stream.as_deref(), *dry_run, output.as_deref()).await,
+        Commands::Daemon {
+            interval,
+            ref stream,
+        } => run_daemon(&cli, *interval, stream.clone()).await,
     };
 
     // Handle result and set exit code
@@ -712,6 +731,71 @@ fn export_metrics(registry: &Registry) -> Result<i32> {
     Ok(0)
 }
 
+/// Run ETL in daemon mode with graceful shutdown
+async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>) -> Result<i32> {
+    info!(
+        interval_secs = interval,
+        stream = stream.as_deref().unwrap_or("all"),
+        "Starting daemon mode"
+    );
+
+    // Create config loader
+    let config_loader = ConfigLoader::new(&cli.etcd_endpoint, &cli.config_dir);
+
+    // Create ETL runner
+    let runner = match &cli.timescale_url {
+        Some(url) => EtlRunner::with_postgres(url).context("Failed to create PostgreSQL runner")?,
+        None => {
+            warn!("No TIMESCALE_URL provided, using dry-run mode (no database writes)");
+            EtlRunner::new_in_memory().context("Failed to create in-memory runner")?
+        }
+    };
+
+    // Create the real executor that wraps EtlRunner
+    let executor = RealEtlExecutor::new(runner, config_loader, cli.bronze_dir.clone());
+
+    // Create shutdown channel
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+
+    // Create daemon configuration
+    let daemon_config = DaemonConfig {
+        interval_secs: interval,
+        stream_filter: stream,
+        ..Default::default()
+    };
+
+    // Create daemon runner
+    let mut daemon = DaemonRunner::new(executor, daemon_config, shutdown_rx);
+
+    // Spawn task to handle shutdown signals
+    let shutdown_handle = tokio::spawn(async move {
+        // Wait for Ctrl+C
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for Ctrl+C");
+        info!("Received shutdown signal (Ctrl+C)");
+        let _ = shutdown_tx.send(true);
+    });
+
+    // Run the daemon
+    info!("Daemon running. Press Ctrl+C to gracefully shutdown.");
+    let result = daemon.run().await;
+
+    // Clean up
+    shutdown_handle.abort();
+
+    match result {
+        Ok(()) => {
+            info!("Daemon stopped gracefully");
+            Ok(0)
+        }
+        Err(e) => {
+            error!(error = %e, "Daemon stopped with error");
+            Ok(1)
+        }
+    }
+}
+
 /// Stream status information
 #[derive(Debug, serde::Serialize)]
 struct StreamStatus {
@@ -874,5 +958,60 @@ mod tests {
     fn test_metrics_command() {
         let cli = Cli::parse_from(["silver-etl", "metrics"]);
         assert!(matches!(cli.command, Commands::Metrics));
+    }
+
+    #[test]
+    fn test_daemon_command_parsing() {
+        let cli = Cli::parse_from(["silver-etl", "daemon"]);
+        match cli.command {
+            Commands::Daemon { interval, stream } => {
+                assert_eq!(interval, 300); // Default interval
+                assert!(stream.is_none());
+            }
+            _ => panic!("Expected Daemon command"),
+        }
+    }
+
+    #[test]
+    fn test_daemon_with_custom_interval() {
+        let cli = Cli::parse_from(["silver-etl", "daemon", "--interval", "60"]);
+        match cli.command {
+            Commands::Daemon { interval, stream } => {
+                assert_eq!(interval, 60);
+                assert!(stream.is_none());
+            }
+            _ => panic!("Expected Daemon command"),
+        }
+    }
+
+    #[test]
+    fn test_daemon_with_stream() {
+        let cli = Cli::parse_from(["silver-etl", "daemon", "--stream", "air-quality"]);
+        match cli.command {
+            Commands::Daemon { interval, stream } => {
+                assert_eq!(interval, 300);
+                assert_eq!(stream, Some("air-quality".to_string()));
+            }
+            _ => panic!("Expected Daemon command"),
+        }
+    }
+
+    #[test]
+    fn test_daemon_with_all_options() {
+        let cli = Cli::parse_from([
+            "silver-etl",
+            "daemon",
+            "--interval",
+            "120",
+            "--stream",
+            "outdoor-weather",
+        ]);
+        match cli.command {
+            Commands::Daemon { interval, stream } => {
+                assert_eq!(interval, 120);
+                assert_eq!(stream, Some("outdoor-weather".to_string()));
+            }
+            _ => panic!("Expected Daemon command"),
+        }
     }
 }

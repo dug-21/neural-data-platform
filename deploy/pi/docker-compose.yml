@@ -206,6 +206,7 @@ services:
   # Silver ETL - Bronze to Silver Layer Transformation (DP-006)
   # Reads Parquet files from Bronze, writes to TimescaleDB Silver layer
   # Memory target: <200MB runtime (256MB limit with buffer)
+  # Supports both one-shot (run) and daemon mode (continuous processing)
   silver-etl:
     build:
       context: ../..
@@ -230,6 +231,43 @@ services:
           memory: 256M
     profiles:
       - silver
+
+  # Silver ETL Daemon - Continuous ETL Processing (DP-006 BUG-001)
+  # Runs silver-etl in daemon mode for continuous Bronze->Silver transformation
+  # Default interval: 5 minutes (300 seconds)
+  silver-etl-daemon:
+    build:
+      context: ../..
+      dockerfile: apps/silver-etl/Dockerfile
+    image: neural-data-platform/silver-etl:latest
+    container_name: silver-etl-daemon
+    command: ["daemon", "--interval", "${SILVER_ETL_INTERVAL:-300}"]
+    volumes:
+      - air-quality-data:/data:ro    # Read-only access to Bronze Parquet files
+    environment:
+      - RUST_LOG=info
+      - ETCD_ENDPOINT=http://etcd:2379
+      - BRONZE_DATA_DIR=/data/raw
+      - TIMESCALE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-ndp_secure_password}@timescaledb:5432/ndp
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # Daemon is healthy if the process is running
+      test: ["CMD-SHELL", "pgrep -x silver-etl || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    profiles:
+      - silver-daemon
 
 volumes:
   mosquitto-data:

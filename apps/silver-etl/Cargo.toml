@@ -57,3 +57,4 @@ prometheus = "0.13"
 tempfile = "3"
 polars = { workspace = true }
 tokio-test = "0.4"
+mockall = "0.13"

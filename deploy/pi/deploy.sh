@@ -577,8 +577,43 @@ case "${1:-deploy}" in
         dc --profile silver run --rm silver-etl migrate
         log "Silver migrations complete"
         ;;
+    silver-daemon)
+        log "Starting Silver ETL daemon mode..."
+        # Ensure TimescaleDB is ready
+        until docker exec pi5-timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+            warn "Waiting for TimescaleDB to be ready..."
+            sleep 2
+        done
+        # Start silver-etl-daemon service with silver-daemon profile
+        dc --profile silver-daemon up -d silver-etl-daemon
+        log "Silver ETL daemon started (interval: ${SILVER_ETL_INTERVAL:-300}s)"
+        log "View logs: docker logs -f silver-etl-daemon"
+        ;;
+    silver-daemon-stop)
+        log "Stopping Silver ETL daemon..."
+        dc --profile silver-daemon stop silver-etl-daemon
+        dc --profile silver-daemon rm -f silver-etl-daemon
+        log "Silver ETL daemon stopped"
+        ;;
+    silver-daemon-logs)
+        log "Silver ETL daemon logs:"
+        docker logs -f silver-etl-daemon
+        ;;
+    silver-daemon-status)
+        log "Silver ETL daemon status:"
+        if docker ps -q -f name=silver-etl-daemon | grep -q .; then
+            echo "  Status: Running"
+            docker exec silver-etl-daemon ps aux 2>/dev/null || true
+            echo ""
+            log "Recent logs:"
+            docker logs --tail 20 silver-etl-daemon 2>&1
+        else
+            echo "  Status: Not running"
+            echo "  Start with: ./deploy.sh silver-daemon"
+        fi
+        ;;
     *)
-        echo "Usage: $0 {deploy|start|stop|logs|status|update|refresh|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback|silver-etl|silver-migrate}"
+        echo "Usage: $0 {deploy|start|stop|logs|status|update|refresh|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback|silver-etl|silver-migrate|silver-daemon|silver-daemon-stop|silver-daemon-logs|silver-daemon-status}"
         echo ""
         echo "Commands:"
         echo "  deploy          - Full deploy (build + start all services)"
@@ -597,8 +632,17 @@ case "${1:-deploy}" in
         echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
         echo "  analytics       - Start DuckDB + Grafana analytics stack"
         echo "  rollback        - Stop and remove analytics stack"
-        echo "  silver-etl      - Run Silver ETL once (Bronze -> TimescaleDB)"
-        echo "  silver-migrate  - Run Silver Layer TimescaleDB migrations"
+        echo ""
+        echo "Silver ETL Commands:"
+        echo "  silver-etl         - Run Silver ETL once (Bronze -> TimescaleDB)"
+        echo "  silver-migrate     - Run Silver Layer TimescaleDB migrations"
+        echo "  silver-daemon      - Start Silver ETL in daemon mode (continuous)"
+        echo "  silver-daemon-stop - Stop Silver ETL daemon"
+        echo "  silver-daemon-logs - View Silver ETL daemon logs"
+        echo "  silver-daemon-status - Check Silver ETL daemon status"
+        echo ""
+        echo "Environment Variables:"
+        echo "  SILVER_ETL_INTERVAL - Daemon ETL interval in seconds (default: 300)"
         exit 1
         ;;
 esac

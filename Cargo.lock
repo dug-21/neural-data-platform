@@ -4011,6 +4011,7 @@ dependencies = [
  "config-client",
  "duckdb",
  "glob",
+ "mockall 0.13.1",
  "platform-core",
  "polars",
  "prometheus",
