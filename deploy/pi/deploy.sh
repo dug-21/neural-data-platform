@@ -8,10 +8,12 @@
 #   ./deploy.sh stop       - Stop services
 #   ./deploy.sh logs       - View logs
 #   ./deploy.sh status     - Check status
-#   ./deploy.sh update        - Pull latest and rebuild all
-#   ./deploy.sh update app    - Rebuild air-quality-app only (~15 min)
-#   ./deploy.sh update mcp    - Rebuild MCP server only (~15 min)
-#   ./deploy.sh update silver - Rebuild silver-etl only (~15 min)
+#   ./deploy.sh update [--no-cache] [target]
+#     Examples:
+#       ./deploy.sh update              - Rebuild all (uses cache)
+#       ./deploy.sh update --no-cache   - Rebuild all (no cache)
+#       ./deploy.sh update silver       - Rebuild silver-etl only (uses cache)
+#       ./deploy.sh update --no-cache silver - Rebuild silver-etl (no cache)
 
 set -e
 
@@ -389,9 +391,24 @@ status() {
 }
 
 update() {
-    local target="${1:-all}"
+    local no_cache=""
+    local target="all"
 
-    log "Updating deployment (target: $target)..."
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-cache)
+                no_cache="--no-cache"
+                shift
+                ;;
+            *)
+                target="$1"
+                shift
+                ;;
+        esac
+    done
+
+    log "Updating deployment (target: $target, no-cache: ${no_cache:-no})..."
 
     # Fetch latest from origin
     git -C "$REPO_ROOT" fetch origin
@@ -408,26 +425,26 @@ update() {
     log "Syncing to origin/main..."
     git -C "$REPO_ROOT" reset --hard origin/main
 
-    # Rebuild with --no-cache to ensure source changes are picked up
+    # Rebuild (with optional --no-cache)
     case "$target" in
         mcp)
             log "Rebuilding ndp-mcp-server only..."
-            dc build --no-cache --progress=plain ndp-mcp-server
+            dc build $no_cache --progress=plain ndp-mcp-server
             dc up -d ndp-mcp-server
             ;;
         app)
             log "Rebuilding air-quality-app only..."
-            dc build --no-cache --progress=plain air-quality-app
+            dc build $no_cache --progress=plain air-quality-app
             dc up -d air-quality-app
             ;;
         silver)
             log "Rebuilding silver-etl only..."
-            dc --profile silver build --no-cache --progress=plain silver-etl
+            dc --profile silver build $no_cache --progress=plain silver-etl
             log "silver-etl rebuilt. Run './deploy.sh silver-migrate' or './deploy.sh silver-etl' to use it."
             ;;
         all|*)
             log "Rebuilding all services..."
-            dc build --no-cache --progress=plain
+            dc build $no_cache --progress=plain
             dc up -d
             ;;
     esac
@@ -496,7 +513,8 @@ case "${1:-deploy}" in
         ;;
     update)
         check_prereqs
-        update "$2"
+        shift  # remove 'update' from args
+        update "$@"
         ;;
     refresh)
         refresh
@@ -568,7 +586,8 @@ case "${1:-deploy}" in
         echo "  stop            - Stop all services"
         echo "  logs            - View logs"
         echo "  status          - Check service health and URLs"
-        echo "  update [target] - Pull latest and rebuild (for code changes)"
+        echo "  update [--no-cache] [target] - Pull latest and rebuild"
+        echo "                    --no-cache: Force full rebuild (skip Docker cache)"
         echo "                    Targets: app, mcp, silver, all (default)"
         echo "  refresh         - Pull latest configs only (no rebuild)"
         echo "  build           - Build Docker images"
