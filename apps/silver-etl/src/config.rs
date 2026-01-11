@@ -4,7 +4,7 @@
 //! Priority: etcd -> YAML files (fallback)
 
 use anyhow::{Context, Result};
-use config_client::StreamRegistry;
+use config_client::{ConfigClient, StreamRegistry};
 use neural_core::config::SilverEtlConfig;
 use std::path::Path;
 use tracing::{debug, info};
@@ -50,9 +50,9 @@ impl ConfigLoader {
 
     /// Load config from etcd
     ///
-    /// Note: Currently etcd stores StreamConfig (not SilverEtlConfig).
-    /// Silver ETL configs are typically loaded from YAML files.
-    /// This method is a placeholder for future etcd-based silver config storage.
+    /// Fetches silver_etl config from flattened etcd keys under /streams/{stream_id}/silver_etl/
+    /// Keys like /silver_etl/enabled, /silver_etl/target_table, etc. are unflattened into
+    /// a nested JSON object and deserialized to SilverEtlConfig.
     async fn load_from_etcd(&self, stream_id: &str) -> Result<SilverEtlConfig> {
         // First verify the stream exists in etcd (validates stream_id)
         let registry = StreamRegistry::new(&[&self.etcd_endpoint])
@@ -69,13 +69,27 @@ impl ConfigLoader {
             return Err(anyhow::anyhow!("Stream '{}' not found in etcd", stream_id));
         }
 
-        // For now, silver_etl configs are not stored in etcd.
-        // Fall through to YAML loading.
-        // TODO: Add silver_etl section to StreamConfig or create separate etcd key
-        Err(anyhow::anyhow!(
-            "Stream '{}' exists but silver_etl config not yet supported in etcd, use YAML",
+        // Fetch silver_etl config using get_prefix_nested to unflatten keys
+        let client = ConfigClient::new(&[&self.etcd_endpoint])
+            .await
+            .context("Failed to connect to etcd")?;
+
+        let prefix = format!("/streams/{}/silver_etl", stream_id);
+        let nested_value = client
+            .get_prefix_nested(&prefix)
+            .await
+            .context(format!(
+                "Stream '{}' has no silver_etl config in etcd (run sync script)",
+                stream_id
+            ))?;
+
+        let config: SilverEtlConfig = serde_json::from_value(nested_value).context(format!(
+            "Failed to deserialize silver_etl config for stream '{}'",
             stream_id
-        ))
+        ))?;
+
+        info!(stream_id = %stream_id, "Loaded silver_etl config from etcd");
+        Ok(config)
     }
 
     /// Load config from YAML file
