@@ -4,7 +4,7 @@
 Enhancement
 
 ## Status
-Open
+Resolved (commit a38b73c)
 
 ## Priority
 Medium
@@ -42,14 +42,14 @@ SILVER_ETL_INTERVAL=5m
 
 ## Acceptance Criteria
 
-- [ ] Add `daemon` subcommand to CLI
-- [ ] Configurable interval via `--interval` flag or `SILVER_ETL_INTERVAL` env
-- [ ] Graceful shutdown on SIGTERM/SIGINT
-- [ ] Health check endpoint (optional, for docker healthcheck)
-- [ ] Metrics for ETL runs (count, duration, errors)
-- [ ] Update docker-compose to run as daemon by default
-- [ ] Update deploy.sh to support both modes
-- [ ] Tests for daemon loop logic
+- [x] Add `daemon` subcommand to CLI
+- [x] Configurable interval via `--interval` flag or `SILVER_ETL_INTERVAL` env
+- [x] Graceful shutdown on SIGTERM/SIGINT
+- [x] Health check endpoint (optional, for docker healthcheck)
+- [x] Metrics for ETL runs (count, duration, errors)
+- [x] Update docker-compose to run as daemon by default
+- [x] Update deploy.sh to support both modes
+- [x] Tests for daemon loop logic (6 London TDD tests)
 
 ## Implementation Notes
 
