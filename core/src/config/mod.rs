@@ -6,7 +6,28 @@
 pub mod silver_etl;
 
 pub use silver_etl::{
-    ConversionFormula, DeduplicationConfig, DeduplicationStrategy, DqAction, DqOutputConfig,
-    DqRule, IdentityField, IncrementalConfig, SilverConfigError, SilverEtlConfig,
-    SilverFieldMapping, TimestampMapping, TimestampTransform, TransformConfig,
+    // Pre-transform configuration types (dp-007)
+    ArrayExplosionConfig,
+    // Standard configuration types
+    ConversionFormula,
+    DeduplicationConfig,
+    DeduplicationStrategy,
+    DqAction,
+    DqOutputConfig,
+    DqRule,
+    // Valid timestamp types
+    FieldSource,
+    IdentityField,
+    IncrementalConfig,
+    MetricExplosionMapping,
+    PreTransformConfig,
+    PreTransformType,
+    SilverConfigError,
+    SilverEtlConfig,
+    SilverFieldMapping,
+    TimestampMapping,
+    TimestampTransform,
+    TransformConfig,
+    ValidTimestampMapping,
+    ValidTimestampSource,
 };

@@ -38,3 +38,9 @@ pub use config::{
     DqRule, IdentityField, IncrementalConfig, SilverConfigError, SilverEtlConfig,
     SilverFieldMapping, TimestampMapping, TimestampTransform, TransformConfig,
 };
+
+// Pre-transform config types (DP-007)
+pub use config::{
+    ArrayExplosionConfig, FieldSource, MetricExplosionMapping, PreTransformConfig,
+    PreTransformType, ValidTimestampMapping, ValidTimestampSource,
+};

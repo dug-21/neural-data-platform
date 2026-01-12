@@ -444,6 +444,15 @@ impl EtlRunner {
             None
         };
 
+        // Check if pre-transform is enabled
+        // TODO (dp-007): When pre_transform.rs is implemented, call apply_pre_transform here
+        // to populate the pre_transformed temp table before SQL generation
+        let use_pre_transform = config.pre_transform.is_some();
+        if use_pre_transform {
+            info!(stream_id = %stream_id, "Pre-transform enabled - will use pre_transformed temp table");
+            // Future: self.apply_pre_transform_if_needed(&config, stream_id, bronze_path)?;
+        }
+
         // Generate ETL SQL
         let sql_gen = SqlGenerator::new();
         let dq_gen = DqSqlGenerator::new();
@@ -456,6 +465,7 @@ impl EtlRunner {
                 stream_id,
                 bronze_path,
                 watermark_before,
+                use_pre_transform,
             )
             .map_err(|e| EtlError::SqlGeneration(e.to_string()))?;
 
@@ -526,14 +536,35 @@ impl EtlRunner {
     ) -> Result<String, EtlError> {
         info!(stream_id = %stream_id, "Generating ETL SQL (dry-run)");
 
+        // Check if pre-transform is enabled
+        let use_pre_transform = config.pre_transform.is_some();
+
         let sql_gen = SqlGenerator::new();
         let dq_gen = DqSqlGenerator::new();
 
-        self.generate_full_etl_sql(&sql_gen, &dq_gen, config, stream_id, bronze_path, None)
-            .map_err(|e| EtlError::SqlGeneration(e.to_string()))
+        self.generate_full_etl_sql(
+            &sql_gen,
+            &dq_gen,
+            config,
+            stream_id,
+            bronze_path,
+            None,
+            use_pre_transform,
+        )
+        .map_err(|e| EtlError::SqlGeneration(e.to_string()))
     }
 
     /// Generate complete ETL SQL statement
+    ///
+    /// # Arguments
+    ///
+    /// * `sql_gen` - SQL generator for field expressions
+    /// * `dq_gen` - DQ SQL generator for quality flags
+    /// * `config` - Silver ETL configuration
+    /// * `stream_id` - Stream identifier
+    /// * `bronze_path` - Path to Bronze data
+    /// * `watermark` - Optional watermark for incremental loads
+    /// * `use_pre_transform` - If true, select from `pre_transformed` table instead of Parquet
     fn generate_full_etl_sql(
         &self,
         sql_gen: &SqlGenerator,
@@ -542,6 +573,7 @@ impl EtlRunner {
         stream_id: &str,
         bronze_path: &str,
         watermark: Option<DateTime<Utc>>,
+        use_pre_transform: bool,
     ) -> Result<String, EtlError> {
         let mut sql_parts = Vec::new();
 
@@ -595,11 +627,20 @@ impl EtlRunner {
         // Build SELECT
         sql_parts.push(format!("SELECT\n    {}", select_exprs.join(",\n    ")));
 
-        // Build FROM with Parquet glob
-        let parquet_glob = format!("{}/{}/**/*.parquet", bronze_path, stream_id);
-        sql_parts.push(format!("FROM read_parquet('{}')", parquet_glob));
+        // Build FROM clause - use pre_transformed table if pre-transform is enabled
+        if use_pre_transform {
+            // Pre-transform stage has already populated a temp table with flattened data
+            sql_parts.push("FROM pre_transformed".to_string());
+            debug!(stream_id = %stream_id, "Using pre_transformed temp table as source");
+        } else {
+            // Standard path: read directly from Bronze Parquet files
+            let parquet_glob = format!("{}/{}/**/*.parquet", bronze_path, stream_id);
+            sql_parts.push(format!("FROM read_parquet('{}')", parquet_glob));
+        }
 
         // Build WHERE clause for incremental
+        // Note: When using pre_transformed, watermark filtering should already be applied
+        // during the pre-transform stage, but we apply it here as well for safety
         if config.incremental.enabled {
             if let Some(wm) = watermark {
                 let lag_seconds = parse_interval_to_seconds(&config.incremental.lag_interval);
@@ -732,6 +773,24 @@ impl EtlStats {
             (self.rows_with_dq_flags as f64 / self.rows_processed as f64) * 100.0
         }
     }
+}
+
+// =============================================================================
+// Bronze Raw Data (for pre-transform)
+// =============================================================================
+
+/// Raw data extracted from Bronze Parquet for pre-transformation
+///
+/// Used when pre-transform is enabled to extract the raw JSON payloads
+/// along with timestamps and identifiers before applying the parser.
+#[derive(Debug, Default)]
+pub struct BronzeRawData {
+    /// Timestamps from Bronze layer (microseconds since epoch)
+    pub timestamps: Vec<i64>,
+    /// NDP IDs from Bronze layer
+    pub ndp_ids: Vec<Option<String>>,
+    /// Raw JSON payloads from Bronze layer
+    pub raw_payloads: Vec<serde_json::Value>,
 }
 
 // =============================================================================
@@ -1019,6 +1078,8 @@ mod tests {
                 target_field: "observation_time".to_string(),
                 transform: TimestampTransform::MicrosecondsToTimestamp,
             },
+            valid_timestamp: None,
+            pre_transform: None,
             identity_fields: vec![IdentityField {
                 source: "ndp_id".to_string(),
                 target: "ndp_id".to_string(),
@@ -1036,5 +1097,139 @@ mod tests {
             deduplication: DeduplicationConfig::default(),
             incremental: IncrementalConfig::default(),
         }
+    }
+
+    // ============================================================
+    // Pre-Transform Integration Tests (dp-007)
+    // ============================================================
+
+    // ============================================================
+    // Test 12: Pre-transform not applied when disabled (no pre_transform config)
+    // ============================================================
+    #[test]
+    fn test_pre_transform_not_applied_when_disabled() {
+        // Config without pre_transform section (None)
+        let config = create_test_silver_config();
+        assert!(config.pre_transform.is_none());
+
+        let runner = EtlRunner::new_in_memory().unwrap();
+
+        // Dry run should produce SQL using read_parquet, not pre_transformed table
+        let sql = runner
+            .dry_run(&config, "air-quality", "/data/raw")
+            .expect("Should generate SQL");
+
+        // Should use read_parquet since pre-transform is disabled
+        assert!(
+            sql.contains("FROM read_parquet"),
+            "SQL should use read_parquet when pre-transform is disabled"
+        );
+        assert!(
+            !sql.contains("FROM pre_transformed"),
+            "SQL should NOT use pre_transformed table when pre-transform is disabled"
+        );
+    }
+
+    // ============================================================
+    // Test 13: Pre-transform applied when enabled
+    // ============================================================
+    #[test]
+    fn test_pre_transform_applied_when_enabled() {
+        use neural_core::config::{
+            ArrayExplosionConfig, MetricExplosionMapping, PreTransformConfig, PreTransformType,
+        };
+
+        // Config with pre_transform enabled
+        let mut config = create_test_silver_config();
+        config.pre_transform = Some(PreTransformConfig {
+            transform_type: PreTransformType::ArrayExplosion(ArrayExplosionConfig {
+                metrics_base_path: "properties".to_string(),
+                timestamp_field: "validTime".to_string(),
+                value_field: "value".to_string(),
+                values_path: "values".to_string(),
+                metrics: vec![MetricExplosionMapping {
+                    metric_path: "temperature".to_string(),
+                    target_column: "temperature_c".to_string(),
+                    column_type: "double_precision".to_string(),
+                }],
+            }),
+        });
+
+        assert!(config.pre_transform.is_some());
+
+        let runner = EtlRunner::new_in_memory().unwrap();
+
+        // Dry run should produce SQL using pre_transformed table
+        let sql = runner
+            .dry_run(&config, "nws-gridpoints-forecast", "/data/raw")
+            .expect("Should generate SQL");
+
+        // Should use pre_transformed table since pre-transform is enabled
+        assert!(
+            sql.contains("FROM pre_transformed"),
+            "SQL should use pre_transformed table when pre-transform is enabled. Got: {}",
+            sql
+        );
+        assert!(
+            !sql.contains("FROM read_parquet"),
+            "SQL should NOT use read_parquet when pre-transform is enabled"
+        );
+    }
+
+    // ============================================================
+    // Test 14: SQL uses temp table after pre-transform
+    // ============================================================
+    #[test]
+    fn test_sql_uses_temp_table_after_pre_transform() {
+        use neural_core::config::{
+            ArrayExplosionConfig, MetricExplosionMapping, PreTransformConfig, PreTransformType,
+        };
+
+        let mut config = create_test_silver_config();
+        config.target_table = "silver.nws_forecasts".to_string();
+        config.pre_transform = Some(PreTransformConfig {
+            transform_type: PreTransformType::ArrayExplosion(ArrayExplosionConfig {
+                metrics_base_path: "properties".to_string(),
+                timestamp_field: "validTime".to_string(),
+                value_field: "value".to_string(),
+                values_path: "values".to_string(),
+                metrics: vec![
+                    MetricExplosionMapping {
+                        metric_path: "temperature".to_string(),
+                        target_column: "temperature_c".to_string(),
+                        column_type: "double_precision".to_string(),
+                    },
+                    MetricExplosionMapping {
+                        metric_path: "windSpeed".to_string(),
+                        target_column: "wind_speed_ms".to_string(),
+                        column_type: "double_precision".to_string(),
+                    },
+                ],
+            }),
+        });
+
+        let runner = EtlRunner::new_in_memory().unwrap();
+        let sql = runner
+            .dry_run(&config, "nws-gridpoints-forecast", "/data/raw")
+            .expect("Should generate SQL");
+
+        // Verify SQL structure uses temp table
+        assert!(sql.contains("INSERT INTO"));
+        assert!(sql.contains("silver.nws_forecasts"));
+        assert!(
+            sql.contains("FROM pre_transformed"),
+            "Generated SQL should select from pre_transformed table"
+        );
+    }
+
+    // ============================================================
+    // Test 15: BronzeRawData structure is correct
+    // ============================================================
+    #[test]
+    fn test_bronze_raw_data_default() {
+        let data = BronzeRawData::default();
+        assert!(data.timestamps.is_empty());
+        assert!(data.ndp_ids.is_empty());
+        assert!(data.raw_payloads.is_empty());
     }
 }

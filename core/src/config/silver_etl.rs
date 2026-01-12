@@ -69,8 +69,16 @@ pub struct SilverEtlConfig {
     #[serde(default)]
     pub target_schema: Option<String>,
 
-    /// Timestamp field mapping
+    /// Timestamp field mapping (primary - issue time for forecasts)
     pub timestamp: TimestampMapping,
+
+    /// Optional secondary timestamp for forecast valid time
+    #[serde(default)]
+    pub valid_timestamp: Option<ValidTimestampMapping>,
+
+    /// Optional pre-transform for complex data structures (e.g., array explosion)
+    #[serde(default)]
+    pub pre_transform: Option<PreTransformConfig>,
 
     /// Identity fields that pass through unchanged
     #[serde(default)]
@@ -269,7 +277,10 @@ pub enum TransformConfig {
     Timestamp { format: TimestampTransform },
 
     /// Computed field based on other columns
-    Computed { depends_on: Vec<String>, expr: String },
+    Computed {
+        depends_on: Vec<String>,
+        expr: String,
+    },
 }
 
 /// Conversion formula types
@@ -457,7 +468,9 @@ impl DqRule {
     /// Validate DQ rule configuration
     pub fn validate(&self) -> Result<(), SilverConfigError> {
         match self {
-            DqRule::RangeCheck { min, max, field, .. } => {
+            DqRule::RangeCheck {
+                min, max, field, ..
+            } => {
                 if min.is_none() && max.is_none() {
                     return Err(SilverConfigError::InvalidDqRule(format!(
                         "range_check for '{}' must have at least min or max",
@@ -669,6 +682,149 @@ pub struct IncrementalConfig {
     /// Lag interval for late arrivals (e.g., "5 minutes")
     #[serde(default)]
     pub lag_interval: String,
+}
+
+// =============================================================================
+// Pre-Transform Configuration
+// =============================================================================
+
+/// Pre-transform configuration for complex data structures
+///
+/// Pre-transforms are applied before standard field mappings to handle
+/// data sources with non-tabular structures (e.g., NWS gridpoints where
+/// each metric contains an array of timestamped values).
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct PreTransformConfig {
+    /// Type of pre-transform to apply
+    pub transform_type: PreTransformType,
+}
+
+/// Pre-transform type variants
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PreTransformType {
+    /// Explode columnar arrays into individual rows
+    ArrayExplosion(ArrayExplosionConfig),
+}
+
+/// Configuration for array explosion pre-transform
+///
+/// Used for NWS gridpoints where each metric has an array of {validTime, value} pairs.
+/// This transforms columnar array data into row-based format suitable for timeseries tables.
+///
+/// # Example Input (NWS gridpoints)
+/// ```json
+/// {
+///   "properties": {
+///     "temperature": {
+///       "values": [
+///         {"validTime": "2024-01-01T00:00:00Z/PT1H", "value": 5.5},
+///         {"validTime": "2024-01-01T01:00:00Z/PT1H", "value": 5.2}
+///       ]
+///     },
+///     "windSpeed": {
+///       "values": [
+///         {"validTime": "2024-01-01T00:00:00Z/PT1H", "value": 10.3}
+///       ]
+///     }
+///   }
+/// }
+/// ```
+///
+/// # Output
+/// Each valid_time becomes a row with temperature_c, wind_speed_ms columns
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ArrayExplosionConfig {
+    /// Base path to the metrics object (e.g., "properties")
+    pub metrics_base_path: String,
+
+    /// Field within each array element containing the timestamp
+    #[serde(default = "default_valid_time")]
+    pub timestamp_field: String,
+
+    /// Field within each array element containing the value
+    #[serde(default = "default_value")]
+    pub value_field: String,
+
+    /// Path to the values array within each metric (e.g., "values")
+    #[serde(default = "default_values")]
+    pub values_path: String,
+
+    /// List of metrics to explode (column mappings)
+    pub metrics: Vec<MetricExplosionMapping>,
+}
+
+/// Mapping for a single metric in array explosion
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct MetricExplosionMapping {
+    /// Path to the metric within metrics_base_path (e.g., "temperature")
+    pub metric_path: String,
+
+    /// Target column name in Silver table
+    pub target_column: String,
+
+    /// PostgreSQL column type
+    #[serde(rename = "type")]
+    pub column_type: String,
+}
+
+fn default_valid_time() -> String {
+    "validTime".to_string()
+}
+
+fn default_value() -> String {
+    "value".to_string()
+}
+
+fn default_values() -> String {
+    "values".to_string()
+}
+
+// =============================================================================
+// Valid Timestamp Configuration (TDD Cycle 2)
+// =============================================================================
+
+/// Secondary timestamp mapping for forecast valid times
+///
+/// NWS gridpoints forecasts have two timestamps:
+/// - `issue_time`: When the forecast was issued (from Bronze timestamp)
+/// - `valid_time`: When the forecast applies (from array element's validTime field)
+///
+/// This configuration defines how to extract the secondary valid_time timestamp.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ValidTimestampMapping {
+    /// Target column name in Silver (e.g., "valid_time")
+    pub target_field: String,
+
+    /// Transform to apply (usually NwsDuration for ISO 8601 with duration suffix)
+    pub transform: TimestampTransform,
+
+    /// Source specification - from array explosion or direct field reference
+    #[serde(default)]
+    pub source: ValidTimestampSource,
+}
+
+/// Source specification for valid timestamp extraction
+///
+/// Can be specified in YAML as:
+/// - `source: array_explosion` (default)
+/// - `source: { field: { path: "raw_payload.validTime" } }`
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidTimestampSource {
+    /// Extracted from array explosion (validTime field in exploded rows)
+    #[default]
+    ArrayExplosion,
+
+    /// Direct field reference from raw payload
+    Field(FieldSource),
+}
+
+/// Field source configuration for direct timestamp extraction
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct FieldSource {
+    /// JSON path to the timestamp field
+    pub path: String,
 }
 
 // =============================================================================
@@ -906,8 +1062,7 @@ message: pm10_less_than_pm25
 action: flag
 "#;
 
-        let rule: DqRule =
-            serde_yaml::from_str(yaml).expect("Should parse cross_field_check rule");
+        let rule: DqRule = serde_yaml::from_str(yaml).expect("Should parse cross_field_check rule");
 
         match rule {
             DqRule::CrossFieldCheck {
@@ -957,6 +1112,8 @@ field_mappings: []
                 target_field: "observation_time".to_string(),
                 transform: TimestampTransform::MicrosecondsToTimestamp,
             },
+            valid_timestamp: None,
+            pre_transform: None,
             identity_fields: vec![],
             field_mappings: vec![SilverFieldMapping {
                 source_path: "raw_payload.pm02".to_string(),
@@ -1179,8 +1336,7 @@ expected_range: [1, 10]
 action: warn
 "#;
 
-        let rule: DqRule =
-            serde_yaml::from_str(yaml).expect("Should parse cardinality_check rule");
+        let rule: DqRule = serde_yaml::from_str(yaml).expect("Should parse cardinality_check rule");
 
         match rule {
             DqRule::CardinalityCheck {
@@ -1249,6 +1405,8 @@ action: flag
                 target_field: "observation_time".to_string(),
                 transform: TimestampTransform::MicrosecondsToTimestamp,
             },
+            valid_timestamp: None,
+            pre_transform: None,
             identity_fields: vec![],
             field_mappings: vec![],
             dq_rules: vec![],
@@ -1290,7 +1448,10 @@ action: flag
     #[test]
     fn test_parse_all_timestamp_transforms() {
         let transforms = vec![
-            ("microseconds_to_timestamp", TimestampTransform::MicrosecondsToTimestamp),
+            (
+                "microseconds_to_timestamp",
+                TimestampTransform::MicrosecondsToTimestamp,
+            ),
             ("iso8601", TimestampTransform::Iso8601),
             ("unix_seconds", TimestampTransform::UnixSeconds),
             ("nws_duration", TimestampTransform::NwsDuration),
@@ -1455,7 +1616,354 @@ expr: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600"
     }
 
     // ============================================================
-    // Test 26: Serialization round-trip
+    // Test 26: Parse PreTransformConfig with ArrayExplosion (TDD RED)
+    // ============================================================
+    #[test]
+    fn test_parse_pre_transform_config_array_explosion() {
+        let yaml = r#"
+transform_type:
+  type: array_explosion
+  metrics_base_path: properties
+  timestamp_field: validTime
+  value_field: value
+  values_path: values
+  metrics:
+    - metric_path: temperature
+      target_column: temperature_c
+      type: double_precision
+    - metric_path: windSpeed
+      target_column: wind_speed_ms
+      type: double_precision
+"#;
+
+        let config: PreTransformConfig =
+            serde_yaml::from_str(yaml).expect("Should parse pre-transform config");
+
+        match &config.transform_type {
+            PreTransformType::ArrayExplosion(explosion) => {
+                assert_eq!(explosion.metrics_base_path, "properties");
+                assert_eq!(explosion.timestamp_field, "validTime");
+                assert_eq!(explosion.value_field, "value");
+                assert_eq!(explosion.values_path, "values");
+                assert_eq!(explosion.metrics.len(), 2);
+                assert_eq!(explosion.metrics[0].metric_path, "temperature");
+                assert_eq!(explosion.metrics[0].target_column, "temperature_c");
+                assert_eq!(explosion.metrics[0].column_type, "double_precision");
+            }
+        }
+    }
+
+    // ============================================================
+    // Test 27: Parse ArrayExplosionConfig with default values (TDD RED)
+    // ============================================================
+    #[test]
+    fn test_parse_array_explosion_config_defaults() {
+        let yaml = r#"
+transform_type:
+  type: array_explosion
+  metrics_base_path: properties
+  metrics:
+    - metric_path: temperature
+      target_column: temp
+      type: double_precision
+"#;
+
+        let config: PreTransformConfig =
+            serde_yaml::from_str(yaml).expect("Should parse with defaults");
+
+        match &config.transform_type {
+            PreTransformType::ArrayExplosion(explosion) => {
+                // Check default values
+                assert_eq!(explosion.timestamp_field, "validTime");
+                assert_eq!(explosion.value_field, "value");
+                assert_eq!(explosion.values_path, "values");
+            }
+        }
+    }
+
+    // ============================================================
+    // Test 28: Parse MetricExplosionMapping (TDD RED)
+    // ============================================================
+    #[test]
+    fn test_parse_metric_explosion_mapping() {
+        let yaml = r#"
+metric_path: temperature
+target_column: temperature_c
+type: double_precision
+"#;
+
+        let mapping: MetricExplosionMapping =
+            serde_yaml::from_str(yaml).expect("Should parse metric mapping");
+
+        assert_eq!(mapping.metric_path, "temperature");
+        assert_eq!(mapping.target_column, "temperature_c");
+        assert_eq!(mapping.column_type, "double_precision");
+    }
+
+    // ============================================================
+    // Test 29: SilverEtlConfig with pre_transform field (TDD RED)
+    // ============================================================
+    #[test]
+    fn test_silver_etl_config_with_pre_transform() {
+        let yaml = r#"
+enabled: true
+target_table: silver.weather_forecasts
+timestamp:
+  source_field: valid_time
+  target_field: forecast_time
+  transform: nws_duration
+pre_transform:
+  transform_type:
+    type: array_explosion
+    metrics_base_path: properties
+    metrics:
+      - metric_path: temperature
+        target_column: temperature_c
+        type: double_precision
+field_mappings: []
+"#;
+
+        let config: SilverEtlConfig =
+            serde_yaml::from_str(yaml).expect("Should parse config with pre_transform");
+
+        assert!(config.pre_transform.is_some());
+        let pre_transform = config.pre_transform.unwrap();
+        match &pre_transform.transform_type {
+            PreTransformType::ArrayExplosion(explosion) => {
+                assert_eq!(explosion.metrics_base_path, "properties");
+                assert_eq!(explosion.metrics.len(), 1);
+            }
+        }
+    }
+
+    // ============================================================
+    // Test 30: SilverEtlConfig without pre_transform (backward compat)
+    // ============================================================
+    #[test]
+    fn test_silver_etl_config_without_pre_transform() {
+        let yaml = r#"
+enabled: true
+target_table: silver.air_quality_observations
+timestamp:
+  source_field: timestamp
+  target_field: observation_time
+  transform: microseconds_to_timestamp
+field_mappings: []
+"#;
+
+        let config: SilverEtlConfig =
+            serde_yaml::from_str(yaml).expect("Should parse without pre_transform");
+
+        assert!(config.pre_transform.is_none());
+    }
+
+    // ============================================================
+    // Test 31: Serialization round-trip with PreTransformConfig
+    // ============================================================
+    #[test]
+    fn test_pre_transform_serialization_round_trip() {
+        let config = PreTransformConfig {
+            transform_type: PreTransformType::ArrayExplosion(ArrayExplosionConfig {
+                metrics_base_path: "properties".to_string(),
+                timestamp_field: "validTime".to_string(),
+                value_field: "value".to_string(),
+                values_path: "values".to_string(),
+                metrics: vec![
+                    MetricExplosionMapping {
+                        metric_path: "temperature".to_string(),
+                        target_column: "temperature_c".to_string(),
+                        column_type: "double_precision".to_string(),
+                    },
+                    MetricExplosionMapping {
+                        metric_path: "windSpeed".to_string(),
+                        target_column: "wind_speed_ms".to_string(),
+                        column_type: "double_precision".to_string(),
+                    },
+                ],
+            }),
+        };
+
+        // Serialize to YAML
+        let yaml = serde_yaml::to_string(&config).expect("Serialization should succeed");
+
+        // Deserialize back
+        let restored: PreTransformConfig =
+            serde_yaml::from_str(&yaml).expect("Deserialization should succeed");
+
+        assert_eq!(config, restored);
+    }
+
+    // ============================================================
+    // TDD Cycle 2: Valid Time Timestamp Support
+    // ============================================================
+
+    // ============================================================
+    // Test 32: Parse ValidTimestampMapping with default source
+    // ============================================================
+    #[test]
+    fn test_parse_valid_timestamp_mapping_default_source() {
+        let yaml = r#"
+target_field: valid_time
+transform: nws_duration
+"#;
+
+        let mapping: ValidTimestampMapping =
+            serde_yaml::from_str(yaml).expect("Should parse valid timestamp mapping");
+
+        assert_eq!(mapping.target_field, "valid_time");
+        assert!(matches!(mapping.transform, TimestampTransform::NwsDuration));
+        assert!(matches!(
+            mapping.source,
+            ValidTimestampSource::ArrayExplosion
+        ));
+    }
+
+    // ============================================================
+    // Test 33: Parse ValidTimestampMapping with explicit array_explosion
+    // ============================================================
+    #[test]
+    fn test_parse_valid_timestamp_mapping_explicit_array_explosion() {
+        let yaml = r#"
+target_field: valid_time
+transform: nws_duration
+source: array_explosion
+"#;
+
+        let mapping: ValidTimestampMapping =
+            serde_yaml::from_str(yaml).expect("Should parse with explicit array_explosion");
+
+        assert_eq!(mapping.target_field, "valid_time");
+        assert!(matches!(
+            mapping.source,
+            ValidTimestampSource::ArrayExplosion
+        ));
+    }
+
+    // ============================================================
+    // Test 34: Parse ValidTimestampMapping with field source
+    // ============================================================
+    #[test]
+    fn test_parse_valid_timestamp_mapping_field_source() {
+        // Note: serde_yaml uses YAML tags for externally tagged enums
+        let yaml = r#"
+target_field: valid_time
+transform: iso8601
+source: !field
+  path: raw_payload.properties.validTime
+"#;
+
+        let mapping: ValidTimestampMapping =
+            serde_yaml::from_str(yaml).expect("Should parse with field source");
+
+        assert_eq!(mapping.target_field, "valid_time");
+        assert!(matches!(mapping.transform, TimestampTransform::Iso8601));
+        match &mapping.source {
+            ValidTimestampSource::Field(fs) => {
+                assert_eq!(fs.path, "raw_payload.properties.validTime");
+            }
+            _ => panic!("Expected Field source"),
+        }
+    }
+
+    // ============================================================
+    // Test 35: SilverEtlConfig with valid_timestamp field
+    // ============================================================
+    #[test]
+    fn test_silver_etl_config_with_valid_timestamp() {
+        let yaml = r#"
+enabled: true
+target_table: silver.nws_forecasts
+timestamp:
+  source_field: timestamp
+  target_field: issue_time
+  transform: microseconds_to_timestamp
+valid_timestamp:
+  target_field: valid_time
+  transform: nws_duration
+  source: array_explosion
+field_mappings: []
+"#;
+
+        let config: SilverEtlConfig =
+            serde_yaml::from_str(yaml).expect("Should parse config with valid_timestamp");
+
+        assert!(config.enabled);
+        assert_eq!(config.target_table, "silver.nws_forecasts");
+        assert_eq!(config.timestamp.target_field, "issue_time");
+
+        let valid_ts = config.valid_timestamp.expect("Should have valid_timestamp");
+        assert_eq!(valid_ts.target_field, "valid_time");
+        assert!(matches!(
+            valid_ts.transform,
+            TimestampTransform::NwsDuration
+        ));
+        assert!(matches!(
+            valid_ts.source,
+            ValidTimestampSource::ArrayExplosion
+        ));
+    }
+
+    // ============================================================
+    // Test 36: SilverEtlConfig without valid_timestamp (optional)
+    // ============================================================
+    #[test]
+    fn test_silver_etl_config_without_valid_timestamp() {
+        let yaml = r#"
+enabled: true
+target_table: silver.air_quality
+timestamp:
+  source_field: timestamp
+  target_field: observation_time
+  transform: microseconds_to_timestamp
+field_mappings: []
+"#;
+
+        let config: SilverEtlConfig =
+            serde_yaml::from_str(yaml).expect("Should parse config without valid_timestamp");
+
+        assert!(config.valid_timestamp.is_none());
+    }
+
+    // ============================================================
+    // Test 37: ValidTimestampMapping serialization round-trip
+    // ============================================================
+    #[test]
+    fn test_valid_timestamp_mapping_serialization_round_trip() {
+        let mapping = ValidTimestampMapping {
+            target_field: "valid_time".to_string(),
+            transform: TimestampTransform::NwsDuration,
+            source: ValidTimestampSource::ArrayExplosion,
+        };
+
+        let yaml = serde_yaml::to_string(&mapping).expect("Serialization should succeed");
+        let restored: ValidTimestampMapping =
+            serde_yaml::from_str(&yaml).expect("Deserialization should succeed");
+
+        assert_eq!(mapping, restored);
+    }
+
+    // ============================================================
+    // Test 38: ValidTimestampMapping with Field source serialization
+    // ============================================================
+    #[test]
+    fn test_valid_timestamp_field_source_serialization() {
+        let mapping = ValidTimestampMapping {
+            target_field: "forecast_valid_time".to_string(),
+            transform: TimestampTransform::Iso8601,
+            source: ValidTimestampSource::Field(FieldSource {
+                path: "raw_payload.validTime".to_string(),
+            }),
+        };
+
+        let yaml = serde_yaml::to_string(&mapping).expect("Serialization should succeed");
+        let restored: ValidTimestampMapping =
+            serde_yaml::from_str(&yaml).expect("Deserialization should succeed");
+
+        assert_eq!(mapping, restored);
+    }
+
+    // ============================================================
+    // Test 39: Serialization round-trip
     // ============================================================
     #[test]
     fn test_serialization_round_trip() {
@@ -1468,6 +1976,8 @@ expr: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600"
                 target_field: "observation_time".to_string(),
                 transform: TimestampTransform::MicrosecondsToTimestamp,
             },
+            valid_timestamp: None,
+            pre_transform: None,
             identity_fields: vec![IdentityField {
                 source: "ndp_id".to_string(),
                 target: "ndp_id".to_string(),
@@ -1502,10 +2012,7 @@ expr: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600"
             },
             deduplication: DeduplicationConfig {
                 enabled: true,
-                key_columns: vec![
-                    "observation_time".to_string(),
-                    "ndp_id".to_string(),
-                ],
+                key_columns: vec!["observation_time".to_string(), "ndp_id".to_string()],
                 strategy: DeduplicationStrategy::Upsert,
             },
             incremental: IncrementalConfig {

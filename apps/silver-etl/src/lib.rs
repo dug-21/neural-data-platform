@@ -25,6 +25,7 @@
 //! - `dq`: DQ rule evaluation and flag generation
 //! - `etl`: ETL execution engine
 //! - `metrics`: Prometheus metrics
+//! - `pre_transform`: Pre-transform stage for columnar array data (dp-007)
 
 // Module declarations
 pub mod config;
@@ -32,6 +33,7 @@ pub mod daemon;
 pub mod dq;
 pub mod etl;
 pub mod metrics;
+pub mod pre_transform;
 pub mod schema_gen;
 pub mod sql_gen;
 
@@ -39,7 +41,10 @@ pub mod sql_gen;
 pub use config::ConfigLoader;
 pub use daemon::{DaemonConfig, DaemonError, DaemonRunner, EtlExecutor, RealEtlExecutor};
 pub use dq::DqSqlGenerator;
-pub use etl::{EtlError, EtlRunner, EtlStats};
+pub use etl::{BronzeRawData, EtlError, EtlRunner, EtlStats};
 pub use metrics::EtlMetrics;
+pub use pre_transform::{
+    apply_pre_transform, build_parser, create_temp_table, PreTransformError, PreTransformResult,
+};
 pub use schema_gen::{SchemaError, SchemaGenerator};
 pub use sql_gen::{SqlGenError, SqlGenerator};

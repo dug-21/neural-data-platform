@@ -526,3 +526,232 @@ entity_schemas:
         description: Visibility distance
         nullable: true
         range: [0, 50000]
+
+# Silver ETL Configuration (DP-006, DP-007)
+# Transforms Bronze Parquet data to Silver TimescaleDB
+#
+# DP-007: Pre-transform integration enables processing of columnar array data
+# by using ColumnOrientedParser to explode arrays into individual forecast rows
+# before DuckDB SQL processing.
+silver_etl:
+  enabled: true
+  target_table: silver.nws_forecasts
+
+  # Pre-transform configuration (DP-007)
+  # Parses raw_payload through ColumnOrientedParser to flatten columnar arrays
+  pre_transform:
+    enabled: true
+    parser_type: column_oriented
+    # Reference to parser config in sources section
+    parser_config_ref: sources[0].parser
+
+  # Primary timestamp: issue_time (when forecast was generated)
+  # Bronze timestamp is microseconds since epoch
+  timestamp:
+    source_field: timestamp
+    target_field: issue_time
+    transform: microseconds_to_timestamp
+
+  # Secondary timestamp: valid_time (when forecast applies)
+  # Extracted from pre-transform output (forecast_valid_time tag as Unix seconds)
+  valid_timestamp:
+    target_field: valid_time
+    transform: nws_duration
+    source: array_explosion
+
+  # Identity fields (used in deduplication and grouping)
+  identity_fields:
+    - source: ndp_id
+      target: ndp_id
+
+  # Field mappings - metric names match ColumnOrientedParser output
+  # Pre-transform creates rows with metric_name column; PIVOT SQL uses these
+  # to create one column per metric via MAX(CASE WHEN metric_name = 'X' ...)
+  field_mappings:
+    # Temperature Suite
+    - source_path: temperature
+      target_column: temperature_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -50.0
+          max: 60.0
+          action: flag
+
+    - source_path: dewpoint
+      target_column: dewpoint_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -50.0
+          max: 60.0
+          action: flag
+
+    - source_path: apparent_temperature
+      target_column: apparent_temp_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -60.0
+          max: 70.0
+          action: flag
+
+    - source_path: heat_index
+      target_column: heat_index_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -50.0
+          max: 70.0
+          action: flag
+
+    - source_path: wind_chill
+      target_column: wind_chill_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -70.0
+          max: 30.0
+          action: flag
+
+    # Wind Suite
+    - source_path: wind_speed
+      target_column: wind_speed_kmh
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 300.0
+          action: flag
+
+    - source_path: wind_direction
+      target_column: wind_direction_deg
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 360.0
+          action: clamp
+          clamp_to_bounds: true
+
+    - source_path: wind_gust
+      target_column: wind_gust_kmh
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 400.0
+          action: flag
+
+    # Precipitation Suite
+    - source_path: probability_of_precipitation
+      target_column: precip_probability_pct
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 100.0
+          action: clamp
+          clamp_to_bounds: true
+
+    - source_path: quantitative_precipitation
+      target_column: precip_amount_mm
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 500.0
+          action: flag
+
+    # Humidity & Sky
+    - source_path: relative_humidity
+      target_column: humidity_pct
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 100.0
+          action: clamp
+          clamp_to_bounds: true
+
+    - source_path: sky_cover
+      target_column: sky_cover_pct
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 100.0
+          action: clamp
+          clamp_to_bounds: true
+
+    - source_path: visibility
+      target_column: visibility_m
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 50000.0
+          action: flag
+
+  # Cross-field DQ rules
+  dq_rules:
+    # Wind gust >= wind speed (physical constraint)
+    - rule: cross_field_check
+      name: wind_gust_gte_speed
+      expression: "wind_gust_kmh IS NULL OR wind_speed_kmh IS NULL OR wind_gust_kmh >= wind_speed_kmh"
+      message: "gust_less_than_sustained"
+      action: flag
+
+    # Forecast lead time: valid_time >= issue_time
+    - rule: cross_field_check
+      name: valid_time_after_issue
+      expression: "valid_time >= issue_time"
+      message: "valid_time_before_issue"
+      action: flag
+
+    # Maximum forecast horizon (7 days = 604800 seconds)
+    - rule: cross_field_check
+      name: forecast_horizon_reasonable
+      expression: "EXTRACT(EPOCH FROM (valid_time - issue_time)) <= 604800"
+      message: "forecast_horizon_exceeds_7_days"
+      action: flag
+
+    # Dewpoint cannot exceed temperature
+    - rule: cross_field_check
+      name: dewpoint_lte_temp
+      expression: "dewpoint_c IS NULL OR temperature_c IS NULL OR dewpoint_c <= temperature_c"
+      message: "dewpoint_exceeds_temperature"
+      action: flag
+
+  # DQ output configuration
+  dq_output:
+    enabled: true
+    target_column: dq_flags
+    include_rules: true
+    include_values: false
+
+  # Deduplication strategy
+  # Key: issue_time + valid_time + ndp_id (unique forecast point)
+  deduplication:
+    enabled: true
+    key_columns: [issue_time, valid_time, ndp_id]
+    strategy: upsert
+
+  # Incremental processing based on issue_time
+  incremental:
+    enabled: true
+    watermark_column: issue_time
+    lag_interval: 1 hour
