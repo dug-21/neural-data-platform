@@ -262,12 +262,13 @@ impl Parser for ColumnOrientedParser {
                     }
                 };
 
-                // Extract numeric value
+                // Extract numeric value - null values are expected for sparse arrays
+                // (e.g., heat_index not reported in cold weather, wind_chill not in warm)
                 let raw_value = match self.extract_value(value_entry, mapping) {
                     Some(v) => v,
                     None => {
-                        warn!(
-                            "Could not extract value {} in metric '{}', skipping",
+                        debug!(
+                            "Null value at index {} in metric '{}', skipping (expected for sparse arrays)",
                             idx, mapping.field_name
                         );
                         continue;
