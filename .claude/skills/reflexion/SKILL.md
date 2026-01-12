@@ -20,13 +20,13 @@ Records feedback on patterns and approaches used during work. This feedback:
 
 ```bash
 # Store feedback
-npx agentdb reflexion store "session-id" "task description" reward success "critique"
+agentdb reflexion store "session-id" "task description" reward success "critique"
 
 # Retrieve similar experiences
-npx agentdb reflexion retrieve "search query" --k 5 --only-successes
+agentdb reflexion retrieve "search query" --k 5 --only-successes
 
 # Get critique summary
-npx agentdb reflexion critique-summary "topic" true
+agentdb reflexion critique-summary "topic" true
 ```
 
 ---
@@ -34,7 +34,7 @@ npx agentdb reflexion critique-summary "topic" true
 ## Primary Method: Store Feedback
 
 ```bash
-npx agentdb reflexion store \
+agentdb reflexion store \
   "dp-004" \
   "Used domain-adapter pattern for new HTTP source" \
   1.0 \
@@ -63,7 +63,7 @@ npx agentdb reflexion store \
 ### Pattern Worked Well
 
 ```bash
-npx agentdb reflexion store \
+agentdb reflexion store \
   "dp-004" \
   "Used domain-adapter pattern for new HTTP source" \
   1.0 \
@@ -74,7 +74,7 @@ npx agentdb reflexion store \
 ### Pattern Partially Worked
 
 ```bash
-npx agentdb reflexion store \
+agentdb reflexion store \
   "dp-004" \
   "Used add-stream pattern but needed adjustment" \
   0.6 \
@@ -85,7 +85,7 @@ npx agentdb reflexion store \
 ### Pattern Failed
 
 ```bash
-npx agentdb reflexion store \
+agentdb reflexion store \
   "dp-004" \
   "Pattern mqtt-routing failed for multi-topic subscription" \
   0.2 \
@@ -96,7 +96,7 @@ npx agentdb reflexion store \
 ### No Pattern Found
 
 ```bash
-npx agentdb reflexion store \
+agentdb reflexion store \
   "dp-004" \
   "Implemented TimescaleDB continuous aggregate - no existing pattern" \
   0.85 \
@@ -110,18 +110,18 @@ npx agentdb reflexion store \
 
 ```bash
 # Find successful similar work
-npx agentdb reflexion retrieve "HTTP source implementation" \
+agentdb reflexion retrieve "HTTP source implementation" \
   --k 5 \
   --only-successes \
   --min-reward 0.7
 
 # Find failures to learn from
-npx agentdb reflexion retrieve "MQTT configuration" \
+agentdb reflexion retrieve "MQTT configuration" \
   --k 5 \
   --only-failures
 
 # Get synthesized summary
-npx agentdb reflexion retrieve "parquet storage" \
+agentdb reflexion retrieve "parquet storage" \
   --k 10 \
   --synthesize-context
 ```
@@ -144,10 +144,10 @@ Aggregate lessons from critiques:
 
 ```bash
 # Get critique summary for failures
-npx agentdb reflexion critique-summary "mqtt" true
+agentdb reflexion critique-summary "mqtt" true
 
 # Get all critiques for a topic
-npx agentdb reflexion critique-summary "architecture" false
+agentdb reflexion critique-summary "architecture" false
 ```
 
 ---
@@ -215,7 +215,7 @@ If your critique identifies a pattern that needs updating:
 
 ```bash
 # 1. Record the feedback (this skill)
-npx agentdb reflexion store \
+agentdb reflexion store \
   "dp-004" \
   "Used add-stream pattern" \
   0.6 \
@@ -223,7 +223,7 @@ npx agentdb reflexion store \
   "Pattern missing required retention field"
 
 # 2. Update the pattern (save-pattern skill)
-npx agentdb skill create \
+agentdb skill create \
   "add-stream-v2" \
   "Add Data Stream (v2.0): Now requires retention field. Steps: 1) Create config.yaml, 2) Add retention field (required), 3) Run sync..." \
   "tags: streams, config, updated"

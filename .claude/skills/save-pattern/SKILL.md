@@ -17,13 +17,13 @@ Stores **application patterns** to AgentDB's **skills table** with semantic embe
 
 ```bash
 # Store a new pattern
-npx agentdb skill create "pattern-name" "description of the pattern" "optional details or code"
+agentdb skill create "pattern-name" "description of the pattern" "optional details or code"
 
 # Check existing patterns
-npx agentdb db stats
+agentdb db stats
 
 # Search before creating (avoid duplicates)
-npx agentdb skill search "pattern name" 3
+agentdb skill search "pattern name" 3
 ```
 
 ---
@@ -31,7 +31,7 @@ npx agentdb skill search "pattern name" 3
 ## Primary Method: Skill Create
 
 ```bash
-npx agentdb skill create "<name>" "<description>" "[code/details]"
+agentdb skill create "<name>" "<description>" "[code/details]"
 ```
 
 ### Parameters (positional)
@@ -49,7 +49,7 @@ npx agentdb skill create "<name>" "<description>" "[code/details]"
 ### Store Architecture Pattern
 
 ```bash
-npx agentdb skill create \
+agentdb skill create \
   "domain-adapter-source" \
   "Domain Adapter Pattern for Data Sources: All data sources implement the Source trait for uniform handling. Steps: 1) Create struct implementing Source trait, 2) Implement fetch() -> Vec<TimeSeriesPoint>, 3) Implement health_check() -> HealthStatus. Related files: core/src/traits.rs, core/src/sources/http_poll.rs" \
   "tags: hexagonal, traits, source, architecture"
@@ -58,7 +58,7 @@ npx agentdb skill create \
 ### Store Development Procedure
 
 ```bash
-npx agentdb skill create \
+agentdb skill create \
   "add-data-stream" \
   "Add New Data Stream: Prerequisites - Stream config YAML ready, etcd running. Steps: 1) Create config/base/streams/{stream-id}/config.yaml, 2) Define fields array with name, source_path, unit, 3) Run ./deploy.sh sync, 4) Verify: etcdctl get /streams/{id}/config" \
   "tags: streams, config, etcd, development"
@@ -67,7 +67,7 @@ npx agentdb skill create \
 ### Store Troubleshooting Pattern
 
 ```bash
-npx agentdb skill create \
+agentdb skill create \
   "mqtt-data-not-appearing" \
   "MQTT Data Not Appearing - Symptoms: Sensor data not in Parquet files, no errors in logs. Root Causes: 1) Topic mismatch, 2) Missing stream_id in routing. Solution: 1) Check mosquitto_sub -t # for actual topics, 2) Verify config.yaml source.topics matches, 3) Ensure IngestionRouter tags stream_id" \
   "tags: mqtt, debugging, parquet, troubleshooting"
@@ -76,7 +76,7 @@ npx agentdb skill create \
 ### Store Product Vision
 
 ```bash
-npx agentdb skill create \
+agentdb skill create \
   "ndp-product-vision" \
   "The Neural Data Platform is a generic, extensible data ingestion and analytics system built in Rust. Uses Domain Adapter Pattern (hexagonal architecture) for pluggable sources/stores, configuration-driven stream management, Bronze->Silver->Gold data lake model." \
   "tags: vision, product, architecture"
@@ -105,7 +105,7 @@ Use consistent naming prefixes:
 Always search before creating to avoid duplicates:
 
 ```bash
-npx agentdb skill search "pattern topic" 5
+agentdb skill search "pattern topic" 5
 ```
 
 ### 2. Be Specific
@@ -141,16 +141,16 @@ How to confirm the pattern worked:
 
 AgentDB tracks skill usage and success rates. To update a pattern:
 
-1. **Search for existing**: `npx agentdb skill search "pattern-name" 3`
+1. **Search for existing**: `agentdb skill search "pattern-name" 3`
 2. **If found with low success rate**: Create improved version with `-v2` suffix
 3. **If found with high success rate**: Only create new if fundamentally different
 
 ```bash
 # Original
-npx agentdb skill create "add-stream" "Original approach..."
+agentdb skill create "add-stream" "Original approach..."
 
 # Updated version (when original is insufficient)
-npx agentdb skill create "add-stream-v2" "Updated approach with retention field requirement..."
+agentdb skill create "add-stream-v2" "Updated approach with retention field requirement..."
 ```
 
 ---

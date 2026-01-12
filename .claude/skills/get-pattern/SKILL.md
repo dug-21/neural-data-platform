@@ -17,13 +17,13 @@ Retrieves established **application patterns** (architecture, procedures, conven
 
 ```bash
 # Search for patterns by description
-npx agentdb skill search "domain adapter pattern" 5
+agentdb skill search "domain adapter pattern" 5
 
 # Fallback: search reflexion episodes for past experiences
-npx agentdb reflexion retrieve "how to add a stream" --k 5 --only-successes
+agentdb reflexion retrieve "how to add a stream" --k 5 --only-successes
 
 # View all stored patterns
-npx agentdb db stats
+agentdb db stats
 ```
 
 ---
@@ -31,7 +31,7 @@ npx agentdb db stats
 ## Primary Method: Skill Search
 
 ```bash
-npx agentdb skill search "<query>" <k>
+agentdb skill search "<query>" <k>
 ```
 
 ### Parameters
@@ -45,16 +45,16 @@ npx agentdb skill search "<query>" <k>
 
 ```bash
 # Find architecture patterns
-npx agentdb skill search "domain adapter pattern" 5
+agentdb skill search "domain adapter pattern" 5
 
 # Find deployment procedures
-npx agentdb skill search "deploy to raspberry pi" 3
+agentdb skill search "deploy to raspberry pi" 3
 
 # Find naming conventions
-npx agentdb skill search "naming conventions streams fields" 3
+agentdb skill search "naming conventions streams fields" 3
 
 # Find troubleshooting guides
-npx agentdb skill search "mqtt data not appearing" 5
+agentdb skill search "mqtt data not appearing" 5
 ```
 
 ---
@@ -64,7 +64,7 @@ npx agentdb skill search "mqtt data not appearing" 5
 If no skill patterns exist, search past experiences:
 
 ```bash
-npx agentdb reflexion retrieve "<query>" --k 5 --only-successes --synthesize-context
+agentdb reflexion retrieve "<query>" --k 5 --only-successes --synthesize-context
 ```
 
 ### Parameters
@@ -81,13 +81,13 @@ npx agentdb reflexion retrieve "<query>" --k 5 --only-successes --synthesize-con
 
 ```bash
 # Find successful similar work
-npx agentdb reflexion retrieve "HTTP source implementation" \
+agentdb reflexion retrieve "HTTP source implementation" \
   --k 5 \
   --only-successes \
   --min-reward 0.7
 
 # Get synthesized context
-npx agentdb reflexion retrieve "timescaledb schema" \
+agentdb reflexion retrieve "timescaledb schema" \
   --k 10 \
   --synthesize-context
 ```
@@ -126,17 +126,17 @@ Results from `skill search` include:
 
 ```bash
 # 1. Search for existing patterns
-npx agentdb skill search "what I'm about to implement" 5
+agentdb skill search "what I'm about to implement" 5
 
 # 2. If found: Follow the pattern
 # 3. If not found: Check reflexion for past experiences
-npx agentdb reflexion retrieve "similar task" --k 5 --only-successes
+agentdb reflexion retrieve "similar task" --k 5 --only-successes
 
 # 4. After work: Record feedback
-npx agentdb reflexion store "feature-id" "task" 0.9 true "Pattern worked well"
+agentdb reflexion store "feature-id" "task" 0.9 true "Pattern worked well"
 
 # 5. If you discovered something new: Save it
-npx agentdb skill create "pattern-name" "description" "optional-details"
+agentdb skill create "pattern-name" "description" "optional-details"
 ```
 
 ---
@@ -147,13 +147,13 @@ After using a pattern, **always use the `reflexion` skill** to record whether it
 
 ```bash
 # Pattern worked well
-npx agentdb reflexion store "dp-004" \
+agentdb reflexion store "dp-004" \
   "Used domain-adapter pattern for new HTTP source" \
   1.0 true \
   "Pattern was complete - followed steps exactly, tests passed"
 
 # Pattern needed fixes
-npx agentdb reflexion store "dp-004" \
+agentdb reflexion store "dp-004" \
   "Used add-stream pattern but needed adjustment" \
   0.6 true \
   "Pattern missing retention field - should update via save-pattern"
@@ -167,12 +167,12 @@ Without feedback, the system can't learn which patterns work.
 
 1. **Check pattern stats:**
    ```bash
-   npx agentdb db stats
+   agentdb db stats
    ```
 
 2. **Search reflexion episodes:**
    ```bash
-   npx agentdb reflexion retrieve "your query" --k 10 --synthesize-context
+   agentdb reflexion retrieve "your query" --k 10 --synthesize-context
    ```
 
 3. **Check file-based documentation:**

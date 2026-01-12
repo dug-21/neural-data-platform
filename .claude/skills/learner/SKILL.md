@@ -20,16 +20,16 @@ Analyzes reflexion episodes to automatically discover:
 
 ```bash
 # Discover causal patterns from episodes
-npx agentdb learner run 3 0.6 0.7
+agentdb learner run 3 0.6 0.7
 
 # Consolidate skills from successful episodes
-npx agentdb skill consolidate 3 0.7 7 true
+agentdb skill consolidate 3 0.7 7 true
 
 # Prune old/low-quality data
-npx agentdb reflexion prune 90 0.5
+agentdb reflexion prune 90 0.5
 
 # View database statistics
-npx agentdb db stats
+agentdb db stats
 ```
 
 ---
@@ -39,7 +39,7 @@ npx agentdb db stats
 Auto-discover causal patterns from reflexion episodes:
 
 ```bash
-npx agentdb learner run 3 0.6 0.7
+agentdb learner run 3 0.6 0.7
 ```
 
 ### Parameters (positional)
@@ -54,22 +54,22 @@ npx agentdb learner run 3 0.6 0.7
 
 **Standard discovery:**
 ```bash
-npx agentdb learner run 3 0.6 0.7
+agentdb learner run 3 0.6 0.7
 ```
 
 **Aggressive (more patterns, lower thresholds):**
 ```bash
-npx agentdb learner run 2 0.5 0.6
+agentdb learner run 2 0.5 0.6
 ```
 
 **Conservative (fewer, higher-confidence patterns):**
 ```bash
-npx agentdb learner run 5 0.8 0.9
+agentdb learner run 5 0.8 0.9
 ```
 
 **Dry run (preview without storing):**
 ```bash
-npx agentdb learner run 3 0.6 0.7 true
+agentdb learner run 3 0.6 0.7 true
 ```
 
 ---
@@ -79,7 +79,7 @@ npx agentdb learner run 3 0.6 0.7 true
 Automatically creates reusable skills from successful episodes:
 
 ```bash
-npx agentdb skill consolidate 3 0.7 7 true
+agentdb skill consolidate 3 0.7 7 true
 ```
 
 ### Parameters (positional)
@@ -95,12 +95,12 @@ npx agentdb skill consolidate 3 0.7 7 true
 
 **Standard consolidation:**
 ```bash
-npx agentdb skill consolidate 3 0.7 7 true
+agentdb skill consolidate 3 0.7 7 true
 ```
 
 **Higher thresholds, longer window:**
 ```bash
-npx agentdb skill consolidate 5 0.8 14 true
+agentdb skill consolidate 5 0.8 14 true
 ```
 
 ---
@@ -110,22 +110,22 @@ npx agentdb skill consolidate 5 0.8 14 true
 ### View Causal Edges
 
 ```bash
-npx agentdb causal query
+agentdb causal query
 ```
 
 With filters:
 ```bash
 # Filter by cause
-npx agentdb causal query "Source trait" "" 0.7 0.1 20
+agentdb causal query "Source trait" "" 0.7 0.1 20
 
 # Filter by minimum confidence and uplift
-npx agentdb causal query "" "" 0.8 0.2 10
+agentdb causal query "" "" 0.8 0.2 10
 ```
 
 ### Search Skills
 
 ```bash
-npx agentdb skill search "data ingestion" 5
+agentdb skill search "data ingestion" 5
 ```
 
 ---
@@ -136,21 +136,21 @@ npx agentdb skill search "data ingestion" 5
 
 ```bash
 # Remove episodes older than 90 days with reward < 0.5
-npx agentdb reflexion prune 90 0.5
+agentdb reflexion prune 90 0.5
 ```
 
 ### Prune Low-Confidence Causal Edges
 
 ```bash
 # Remove edges with confidence < 0.5, uplift < 0.05, older than 90 days
-npx agentdb learner prune 0.5 0.05 90
+agentdb learner prune 0.5 0.05 90
 ```
 
 ### Prune Underperforming Skills
 
 ```bash
 # Remove skills with < 3 uses, < 40% success rate, older than 60 days
-npx agentdb skill prune 3 0.4 60
+agentdb skill prune 3 0.4 60
 ```
 
 ---
@@ -160,7 +160,7 @@ npx agentdb skill prune 3 0.4 60
 Consolidate and compress pattern memory:
 
 ```bash
-npx agentdb optimize-memory --compress true --consolidate-patterns true
+agentdb optimize-memory --compress true --consolidate-patterns true
 ```
 
 ---
@@ -171,16 +171,16 @@ Run after completing a feature:
 
 ```bash
 # 1. Discover causal patterns
-npx agentdb learner run 3 0.7 0.8
+agentdb learner run 3 0.7 0.8
 
 # 2. Consolidate skills
-npx agentdb skill consolidate 3 0.7 7 true
+agentdb skill consolidate 3 0.7 7 true
 
 # 3. View what was learned
-npx agentdb db stats
+agentdb db stats
 
 # 4. (Optional) Search discovered skills
-npx agentdb skill search "feature-topic" 5
+agentdb skill search "feature-topic" 5
 ```
 
 ---
@@ -243,10 +243,10 @@ Uses: 7
 
 | Frequency | Action | Command |
 |-----------|--------|---------|
-| **Post-feature** | Discover patterns | `npx agentdb learner run` |
-| **Weekly** | Consolidate skills | `npx agentdb skill consolidate` |
-| **Monthly** | Review stats | `npx agentdb db stats` |
-| **Quarterly** | Prune stale data | `npx agentdb reflexion prune` |
+| **Post-feature** | Discover patterns | `agentdb learner run` |
+| **Weekly** | Consolidate skills | `agentdb skill consolidate` |
+| **Monthly** | Review stats | `agentdb db stats` |
+| **Quarterly** | Prune stale data | `agentdb reflexion prune` |
 
 ---
 
@@ -256,14 +256,14 @@ For A/B testing approaches:
 
 ```bash
 # Create experiment
-npx agentdb causal experiment create "batch-size-test" "batch_size_1000" "memory_usage"
+agentdb causal experiment create "batch-size-test" "batch_size_1000" "memory_usage"
 
 # Add observations
-npx agentdb causal experiment add-observation 1 true 0.15   # treatment
-npx agentdb causal experiment add-observation 1 false 0.45  # control
+agentdb causal experiment add-observation 1 true 0.15   # treatment
+agentdb causal experiment add-observation 1 false 0.45  # control
 
 # Calculate results
-npx agentdb causal experiment calculate 1
+agentdb causal experiment calculate 1
 ```
 
 ---
