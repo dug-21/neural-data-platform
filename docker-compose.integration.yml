@@ -1,0 +1,179 @@
+# Integration Test Environment - Mirrors Production
+# Usage:
+#   docker compose -f docker-compose.integration.yml up -d
+#   docker compose -f docker-compose.integration.yml down -v  # Clean slate
+#
+# This provides the full stack locally:
+#   - Bronze layer (Parquet via air-quality-app)
+#   - Silver layer (TimescaleDB via silver-etl-daemon)
+#   - Config store (etcd)
+#   - MQTT broker (mosquitto)
+#
+# Test data injection:
+#   mosquitto_pub -h localhost -t "airgradient/test/measures" \
+#     -m '{"wifi":-50,"pm02":15,"rco2":650,"atmp":22.5,"rhum":55}'
+
+services:
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: integration-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # etcd - Configuration Store
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.11
+    container_name: integration-etcd
+    ports:
+      - "2379:2379"
+    environment:
+      - ETCD_NAME=etcd0
+      - ETCD_DATA_DIR=/etcd-data
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER=etcd0=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER_TOKEN=integration-cluster
+      - ETCD_INITIAL_CLUSTER_STATE=new
+    volumes:
+      - etcd-data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB - Silver Layer Storage
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: integration-timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ndp
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+      - ./deploy/pi/init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ndp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Air Quality App - Bronze Layer (Parquet)
+  air-quality-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: ndp/air-quality-app:integration
+    container_name: integration-air-quality
+    ports:
+      - "8080:8080"
+    volumes:
+      - bronze-data:/data
+    environment:
+      - RUST_LOG=info,silver_etl=debug
+      - DATA_DIR=/data
+      - ETCD_ENDPOINT=http://etcd:2379
+      - MQTT_BROKER_URL=mosquitto
+      - MQTT_PORT=1883
+      # Mock external APIs for testing (optional)
+      - OPENWEATHERMAP_API_KEY=${OPENWEATHERMAP_API_KEY:-}
+      - WEATHER_LATITUDE=${WEATHER_LATITUDE:-29.95838}
+      - WEATHER_LONGITUDE=${WEATHER_LONGITUDE:--81.30878}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Silver ETL Daemon - Bronze to Silver transformation
+  silver-etl-daemon:
+    build:
+      context: .
+      dockerfile: apps/silver-etl/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: ndp/silver-etl:integration
+    container_name: integration-silver-etl
+    volumes:
+      - bronze-data:/data/raw:ro
+      - ./config/base/streams:/workspaces/neural-data-platform/config/base/streams:ro
+    environment:
+      - RUST_LOG=info,silver_etl=debug
+      - BRONZE_DIR=/data/raw
+      - CONFIG_DIR=/workspaces/neural-data-platform/config/base/streams
+      - ETCD_ENDPOINT=http://etcd:2379
+      - POSTGRES_HOST=timescaledb
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ndp
+      - ETL_INTERVAL_SECS=60
+    command: ["daemon", "--interval", "60"]
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+      air-quality-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "silver-etl"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Grafana - Optional dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: integration-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
+    depends_on:
+      - timescaledb
+    profiles:
+      - dashboards
+
+volumes:
+  mosquitto-data:
+  etcd-data:
+  timescaledb-data:
+  bronze-data:
+  grafana-data:
+
+networks:
+  default:
+    name: integration-network
+    driver: bridge
