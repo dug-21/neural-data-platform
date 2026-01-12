@@ -127,10 +127,7 @@ impl ConfigClient {
     /// Get all keys under a prefix and unflatten into a nested JSON object
     ///
     /// Converts flattened keys like "a/b/c" with value "x" into {"a": {"b": {"c": "x"}}}
-    pub async fn get_prefix_nested(
-        &self,
-        prefix: &str,
-    ) -> Result<serde_json::Value, ConfigError> {
+    pub async fn get_prefix_nested(&self, prefix: &str) -> Result<serde_json::Value, ConfigError> {
         let pairs = self.get_prefix_raw(prefix).await?;
 
         if pairs.is_empty() {
@@ -192,7 +189,11 @@ impl ConfigClient {
 /// Insert a value into a nested JSON map structure
 ///
 /// Given parts ["a", "b", "c"] and value "x", creates {"a": {"b": {"c": "x"}}}
-fn insert_nested(map: &mut serde_json::Map<String, serde_json::Value>, parts: &[&str], value: serde_json::Value) {
+fn insert_nested(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    parts: &[&str],
+    value: serde_json::Value,
+) {
     if parts.is_empty() {
         return;
     }
@@ -203,7 +204,9 @@ fn insert_nested(map: &mut serde_json::Map<String, serde_json::Value>, parts: &[
     }
 
     let key = parts[0].to_string();
-    let entry = map.entry(key).or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let entry = map
+        .entry(key)
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
 
     if let serde_json::Value::Object(ref mut nested) = entry {
         insert_nested(nested, &parts[1..], value);
@@ -245,7 +248,11 @@ mod tests {
         let mut map = serde_json::Map::new();
 
         // Insert multiple keys that share common prefixes
-        insert_nested(&mut map, &["config", "database", "host"], json!("localhost"));
+        insert_nested(
+            &mut map,
+            &["config", "database", "host"],
+            json!("localhost"),
+        );
         insert_nested(&mut map, &["config", "database", "port"], json!(5432));
         insert_nested(&mut map, &["config", "cache", "enabled"], json!(true));
         insert_nested(&mut map, &["metrics", "interval"], json!(60));
