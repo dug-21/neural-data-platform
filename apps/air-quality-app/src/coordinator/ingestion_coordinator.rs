@@ -156,7 +156,10 @@ mod tests {
         let source_manager = Arc::new(RwLock::new(SourceManager::new(registry)));
 
         // Set ingestion sender before creating coordinator
-        source_manager.write().await.set_ingestion_sender(ingestion_tx);
+        source_manager
+            .write()
+            .await
+            .set_ingestion_sender(ingestion_tx);
 
         let coordinator = IngestionCoordinator::new(router, source_manager, 100);
         (coordinator, ingestion_rx)
@@ -277,7 +280,10 @@ mod tests {
         );
         let router = Arc::new(IngestionRouter::new(registry.clone(), dead_letter_tx));
         let source_manager = Arc::new(RwLock::new(SourceManager::new(registry)));
-        source_manager.write().await.set_ingestion_sender(ingestion_tx);
+        source_manager
+            .write()
+            .await
+            .set_ingestion_sender(ingestion_tx);
         let coordinator = IngestionCoordinator::new(router, source_manager, buffer_size);
 
         // Act & Assert - verify coordinator created successfully with buffer

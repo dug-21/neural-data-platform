@@ -22,9 +22,8 @@ use tracing::{debug, error, info, warn};
 
 /// Cached regex for environment variable expansion (e.g., ${VAR_NAME})
 /// Compiled once at first use, avoiding repeated compilation overhead.
-static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\$\{([^}]+)\}").expect("ENV_VAR_REGEX pattern is invalid")
-});
+static ENV_VAR_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$\{([^}]+)\}").expect("ENV_VAR_REGEX pattern is invalid"));
 
 /// Source health status
 #[derive(Debug, Clone, PartialEq)]
