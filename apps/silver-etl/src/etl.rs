@@ -340,7 +340,11 @@ impl EtlRunner {
             });
         }
 
-        let sql = format!("SELECT MAX({}) AS watermark FROM pg.{}", column, table);
+        // Cast to VARCHAR for consistent string handling across DuckDB/PostgreSQL
+        let sql = format!(
+            "SELECT MAX({})::VARCHAR AS watermark FROM pg.{}",
+            column, table
+        );
 
         debug!(table = %table, column = %column, "Querying watermark");
 
