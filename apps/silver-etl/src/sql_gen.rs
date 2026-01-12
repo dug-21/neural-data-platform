@@ -299,8 +299,10 @@ impl SqlGenerator {
             format!("pg.{}", table)
         };
 
+        // Cast to TIMESTAMP for DuckDB interval arithmetic compatibility
+        // DuckDB doesn't support TIMESTAMPTZ - INTERVAL directly
         format!(
-            "WHERE {} > (\n  SELECT COALESCE(MAX({}), '1970-01-01'::TIMESTAMPTZ)\n  FROM {}\n) - INTERVAL '{}'\nAND {} <= current_timestamp - INTERVAL '{}'",
+            "WHERE {}::TIMESTAMP > ((\n  SELECT COALESCE(MAX({}), '1970-01-01'::TIMESTAMP)\n  FROM {}\n)::TIMESTAMP - INTERVAL '{}')\nAND {}::TIMESTAMP <= (current_timestamp::TIMESTAMP - INTERVAL '{}')",
             ts_expr,
             incremental.watermark_column,
             pg_table,
@@ -1006,10 +1008,14 @@ mod tests {
         let gen = SqlGenerator::new();
         let sql = gen.generate_where_clause(&incremental, "silver.air_quality");
 
-        assert!(sql.contains("to_timestamp(timestamp / 1000000) >"));
+        // Check timestamp expression with DuckDB-compatible TIMESTAMP casts
+        assert!(sql.contains("::TIMESTAMP >"));
         assert!(sql.contains("SELECT COALESCE(MAX(observation_time)"));
         assert!(sql.contains("FROM pg.silver.air_quality"));
         assert!(sql.contains("INTERVAL '5 minutes'"));
+        // DuckDB requires casting to TIMESTAMP for interval arithmetic
+        assert!(sql.contains("::TIMESTAMP - INTERVAL"));
+        assert!(sql.contains("current_timestamp::TIMESTAMP"));
     }
 
     #[test]
