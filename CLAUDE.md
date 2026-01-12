@@ -96,8 +96,8 @@ See: `.claude/agents/ndp/README.md` for full documentation.
 
 **Use claude-flow memory for swarm coordination and session state:**
 ```bash
-npx claude-flow memory store "<key>" "<value>" --namespace <ns>
-npx claude-flow memory query "<pattern>" --namespace <ns>
+claude-flow memory store "<key>" "<value>" --namespace <ns>
+claude-flow memory query "<pattern>" --namespace <ns>
 ```
 
 **Transient memory is for:**
@@ -236,29 +236,29 @@ product/features/{phase}-{NNN}/
 **⚠️ WRONG Pattern (causes empty swarms):**
 ```bash
 # ❌ WRONG: Creates swarm then ignores it
-npx claude-flow swarm init --topology hierarchical
+claude-flow swarm init --topology hierarchical
 Task("Do work", "...", "ndp-rust-dev")  # Work happens OUTSIDE swarm!
 ```
 
 **✅ CORRECT Pattern (work happens IN swarm):**
 ```bash
 # ✅ RIGHT: Full swarm lifecycle
-npx claude-flow swarm init --topology hierarchical --max-agents 5
+claude-flow swarm init --topology hierarchical --max-agents 5
 
 # Spawn agents INTO the swarm
-npx claude-flow agent spawn --type coordinator --name "lead"
-npx claude-flow agent spawn --type coder --name "rust-dev"
-npx claude-flow agent spawn --type analyst --name "reviewer"
+claude-flow agent spawn --type coordinator --name "lead"
+claude-flow agent spawn --type coder --name "rust-dev"
+claude-flow agent spawn --type analyst --name "reviewer"
 
 # Orchestrate work TO the swarm agents
-npx claude-flow task orchestrate \
+claude-flow task orchestrate \
   --task "Implement TimescaleDB ETL pipeline with tests" \
   --strategy adaptive \
   --priority high
 
 # Monitor and retrieve results
-npx claude-flow task status --task-id "..."
-npx claude-flow task results --task-id "..." --format detailed
+claude-flow task status --task-id "..."
+claude-flow task results --task-id "..." --format detailed
 ```
 
 ---
@@ -292,9 +292,9 @@ npx claude-flow task results --task-id "..." --format detailed
 - `./deploy/pi/deploy.sh status` - Check health
 
 ### SPARC Commands
-- `npx claude-flow sparc modes` - List available modes
-- `npx claude-flow sparc run <mode> "<task>"` - Execute specific mode
-- `npx claude-flow sparc tdd "<feature>"` - Run complete TDD workflow
+- `claude-flow sparc modes` - List available modes
+- `claude-flow sparc run <mode> "<task>"` - Execute specific mode
+- `claude-flow sparc tdd "<feature>"` - Run complete TDD workflow
 
 ---
 
@@ -309,13 +309,13 @@ npx claude-flow task results --task-id "..." --format detailed
 - **Task tool**: For independent parallel agents (no coordination needed)
 
 ### Claude-Flow CLI (Swarm Coordination):
-All swarm operations use `npx claude-flow` commands:
+All swarm operations use `claude-flow` commands:
 ```bash
 # Swarm lifecycle
-npx claude-flow swarm init --topology hierarchical --max-agents 5
-npx claude-flow agent spawn --type coordinator --name "lead"
-npx claude-flow task orchestrate --task "<task>" --strategy adaptive
-npx claude-flow task results --task-id "<id>"
+claude-flow swarm init --topology hierarchical --max-agents 5
+claude-flow agent spawn --type coordinator --name "lead"
+claude-flow task orchestrate --task "<task>" --strategy adaptive
+claude-flow task results --task-id "<id>"
 ```
 
 ### Persistent Pattern Memory (AgentDB Skills):
@@ -337,23 +337,23 @@ See `.claude/skills/` for full documentation. Skills wrap `agentdb` CLI commands
 
 ### Swarm Coordination
 ```bash
-npx claude-flow swarm init --topology <type> --max-agents <n>
-npx claude-flow agent spawn --type <type> --name "<name>"
-npx claude-flow task orchestrate --task "<task>" --strategy <strategy>
+claude-flow swarm init --topology <type> --max-agents <n>
+claude-flow agent spawn --type <type> --name "<name>"
+claude-flow task orchestrate --task "<task>" --strategy <strategy>
 ```
 
 ### Monitoring
 ```bash
-npx claude-flow swarm status
-npx claude-flow agent list
-npx claude-flow task status --task-id "<id>"
-npx claude-flow task results --task-id "<id>" --format detailed
+claude-flow swarm status
+claude-flow agent list
+claude-flow task status --task-id "<id>"
+claude-flow task results --task-id "<id>" --format detailed
 ```
 
 ### Transient Memory (Claude-Flow) - Swarms & Sessions
 ```bash
-npx claude-flow memory store "<key>" "<value>" --namespace <ns>
-npx claude-flow memory query "<pattern>" --namespace <ns>
+claude-flow memory store "<key>" "<value>" --namespace <ns>
+claude-flow memory query "<pattern>" --namespace <ns>
 ```
 Use for: swarm coordination state, agent task progress, session-specific working memory.
 
@@ -376,28 +376,28 @@ Use swarms when you need coordination, shared state, and tracked progress:
 
 ```bash
 # Step 1: Initialize swarm
-npx claude-flow swarm init --topology hierarchical --max-agents 6 --strategy specialized
+claude-flow swarm init --topology hierarchical --max-agents 6 --strategy specialized
 
 # Step 2: Spawn specialized agents INTO the swarm
-npx claude-flow agent spawn --type coordinator --name "dp-lead"
-npx claude-flow agent spawn --type coder --name "timescale-dev"
-npx claude-flow agent spawn --type coder --name "parquet-dev"
-npx claude-flow agent spawn --type analyst --name "feature-eng"
-npx claude-flow agent spawn --type tester --name "qa"
+claude-flow agent spawn --type coordinator --name "dp-lead"
+claude-flow agent spawn --type coder --name "timescale-dev"
+claude-flow agent spawn --type coder --name "parquet-dev"
+claude-flow agent spawn --type analyst --name "feature-eng"
+claude-flow agent spawn --type tester --name "qa"
 
 # Step 3: Orchestrate the work TO the swarm
-npx claude-flow task orchestrate \
+claude-flow task orchestrate \
   --task "Implement Silver Layer: 1) Design TimescaleDB schema with hypertables, 2) Build Parquet ETL, 3) Create feature aggregations, 4) Write integration tests" \
   --strategy adaptive \
   --priority high \
   --max-agents 4
 
 # Step 4: Monitor progress
-npx claude-flow swarm status
-npx claude-flow task status --detailed
+claude-flow swarm status
+claude-flow task status --detailed
 
 # Step 5: Retrieve results when complete
-npx claude-flow task results --task-id "..." --format detailed
+claude-flow task results --task-id "..." --format detailed
 ```
 
 ### Example 2: Task Tool for Independent Work (Simple Parallel)
@@ -419,13 +419,13 @@ Use Task tool when agents don't need to coordinate:
 git checkout -b feature/dp-001
 
 # Initialize coordinated swarm for feature
-npx claude-flow swarm init --topology hierarchical --max-agents 4
-npx claude-flow agent spawn --type coordinator --name "scrum-master"
-npx claude-flow agent spawn --type architect --name "designer"
-npx claude-flow agent spawn --type coder --name "implementer"
+claude-flow swarm init --topology hierarchical --max-agents 4
+claude-flow agent spawn --type coordinator --name "scrum-master"
+claude-flow agent spawn --type architect --name "designer"
+claude-flow agent spawn --type coder --name "implementer"
 
 # Orchestrate SPARC workflow
-npx claude-flow task orchestrate \
+claude-flow task orchestrate \
   --task "Initialize dp-001: Create feature directory, STATUS.md, specification docs, architecture ADRs" \
   --strategy sequential \
   --priority high
