@@ -192,7 +192,8 @@ END AS {}"#,
         // Add per-field rules, inheriting field name from parent mapping
         for mapping in &config.field_mappings {
             for rule in &mapping.dq_rules {
-                let rule_with_field = self.inherit_field_from_mapping(rule.clone(), &mapping.target_column);
+                let rule_with_field =
+                    self.inherit_field_from_mapping(rule.clone(), &mapping.target_column);
                 all_rules.push(rule_with_field);
             }
         }
@@ -203,62 +204,140 @@ END AS {}"#,
     /// Inherit field name from parent mapping if rule's field is empty
     fn inherit_field_from_mapping(&self, rule: DqRule, parent_field: &str) -> DqRule {
         match rule {
-            DqRule::RangeCheck { field, min, max, action, clamp_to_bounds } => {
-                DqRule::RangeCheck {
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    min, max, action, clamp_to_bounds,
-                }
-            }
-            DqRule::NullCheck { field, action } => {
-                DqRule::NullCheck {
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    action,
-                }
-            }
-            DqRule::EnumCheck { field, allowed_values, case_sensitive, action } => {
-                DqRule::EnumCheck {
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    allowed_values, case_sensitive, action,
-                }
-            }
-            DqRule::PatternCheck { field, pattern, action } => {
-                DqRule::PatternCheck {
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    pattern, action,
-                }
-            }
-            DqRule::FreshnessCheck { field, max_age, max_future, reference, action } => {
-                DqRule::FreshnessCheck {
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    max_age, max_future, reference, action,
-                }
-            }
-            DqRule::MonotonicCheck { field, direction, partition_by, allow_reset, reset_threshold, action } => {
-                DqRule::MonotonicCheck {
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    direction, partition_by, allow_reset, reset_threshold, action,
-                }
-            }
-            DqRule::RateOfChange { field, max_change_per_minute, partition_by, action } => {
-                DqRule::RateOfChange {
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    max_change_per_minute, partition_by, action,
-                }
-            }
-            DqRule::CompletenessCheck { level, field, min_completeness, action } => {
-                DqRule::CompletenessCheck {
-                    level,
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    min_completeness, action,
-                }
-            }
-            DqRule::CardinalityCheck { level, field, expected_range, action } => {
-                DqRule::CardinalityCheck {
-                    level,
-                    field: if field.is_empty() { parent_field.to_string() } else { field },
-                    expected_range, action,
-                }
-            }
+            DqRule::RangeCheck {
+                field,
+                min,
+                max,
+                action,
+                clamp_to_bounds,
+            } => DqRule::RangeCheck {
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                min,
+                max,
+                action,
+                clamp_to_bounds,
+            },
+            DqRule::NullCheck { field, action } => DqRule::NullCheck {
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                action,
+            },
+            DqRule::EnumCheck {
+                field,
+                allowed_values,
+                case_sensitive,
+                action,
+            } => DqRule::EnumCheck {
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                allowed_values,
+                case_sensitive,
+                action,
+            },
+            DqRule::PatternCheck {
+                field,
+                pattern,
+                action,
+            } => DqRule::PatternCheck {
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                pattern,
+                action,
+            },
+            DqRule::FreshnessCheck {
+                field,
+                max_age,
+                max_future,
+                reference,
+                action,
+            } => DqRule::FreshnessCheck {
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                max_age,
+                max_future,
+                reference,
+                action,
+            },
+            DqRule::MonotonicCheck {
+                field,
+                direction,
+                partition_by,
+                allow_reset,
+                reset_threshold,
+                action,
+            } => DqRule::MonotonicCheck {
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                direction,
+                partition_by,
+                allow_reset,
+                reset_threshold,
+                action,
+            },
+            DqRule::RateOfChange {
+                field,
+                max_change_per_minute,
+                partition_by,
+                action,
+            } => DqRule::RateOfChange {
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                max_change_per_minute,
+                partition_by,
+                action,
+            },
+            DqRule::CompletenessCheck {
+                level,
+                field,
+                min_completeness,
+                action,
+            } => DqRule::CompletenessCheck {
+                level,
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                min_completeness,
+                action,
+            },
+            DqRule::CardinalityCheck {
+                level,
+                field,
+                expected_range,
+                action,
+            } => DqRule::CardinalityCheck {
+                level,
+                field: if field.is_empty() {
+                    parent_field.to_string()
+                } else {
+                    field
+                },
+                expected_range,
+                action,
+            },
             // Cross-field and conditional rules don't have a single field
             other => other,
         }
@@ -275,7 +354,7 @@ END AS {}"#,
     /// SQL expression that produces TEXT[] of all triggered flags
     pub fn generate_dq_flags_expr(&self, rules: &[DqRule]) -> String {
         if rules.is_empty() {
-            return "ARRAY[]::TEXT[] AS dq_flags".to_string();
+            return "[]::VARCHAR[] AS dq_flags".to_string();
         }
 
         // Collect all flag expressions (skip batch-level rules that return empty strings)
@@ -286,11 +365,12 @@ END AS {}"#,
             .collect();
 
         if flag_exprs.is_empty() {
-            return "ARRAY[]::TEXT[] AS dq_flags".to_string();
+            return "[]::VARCHAR[] AS dq_flags".to_string();
         }
 
+        // Use DuckDB's list_filter to remove NULLs (PostgreSQL's ARRAY_REMOVE doesn't exist in DuckDB)
         format!(
-            "ARRAY_REMOVE(ARRAY[\n{}\n], NULL) AS dq_flags",
+            "list_filter([\n{}\n], x -> x IS NOT NULL) AS dq_flags",
             flag_exprs.join(",\n")
         )
     }
@@ -737,7 +817,7 @@ END"#
     }
 
     // ============================================================
-    // Test 8: Multiple rules generate ARRAY_REMOVE
+    // Test 8: Multiple rules generate list_filter (DuckDB compatible)
     // ============================================================
     #[test]
     fn test_multiple_rules_array_construct() {
@@ -758,10 +838,10 @@ END"#
         let gen = DqSqlGenerator::new();
         let sql = gen.generate_dq_flags_expr(&rules);
 
-        assert!(sql.contains("ARRAY_REMOVE(ARRAY["));
+        assert!(sql.contains("list_filter(["));
         assert!(sql.contains("range_check:pm25:out_of_bounds"));
         assert!(sql.contains("null_check:observation_time:missing"));
-        assert!(sql.contains("], NULL) AS dq_flags"));
+        assert!(sql.contains("], x -> x IS NOT NULL) AS dq_flags"));
     }
 
     // ============================================================
@@ -774,7 +854,7 @@ END"#
         let gen = DqSqlGenerator::new();
         let sql = gen.generate_dq_flags_expr(&rules);
 
-        assert_eq!(sql, "ARRAY[]::TEXT[] AS dq_flags");
+        assert_eq!(sql, "[]::VARCHAR[] AS dq_flags");
     }
 
     // ============================================================
@@ -981,9 +1061,9 @@ END"#
     #[test]
     fn test_default_trait() {
         let gen = DqSqlGenerator::default();
-        // Just verify it constructs successfully
+        // Just verify it constructs successfully with DuckDB-compatible syntax
         let empty: Vec<DqRule> = vec![];
         let sql = gen.generate_dq_flags_expr(&empty);
-        assert!(sql.contains("ARRAY[]"));
+        assert!(sql.contains("[]::VARCHAR[]"));
     }
 }

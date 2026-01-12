@@ -75,13 +75,10 @@ impl ConfigLoader {
             .context("Failed to connect to etcd")?;
 
         let prefix = format!("/streams/{}/silver_etl", stream_id);
-        let nested_value = client
-            .get_prefix_nested(&prefix)
-            .await
-            .context(format!(
-                "Stream '{}' has no silver_etl config in etcd (run sync script)",
-                stream_id
-            ))?;
+        let nested_value = client.get_prefix_nested(&prefix).await.context(format!(
+            "Stream '{}' has no silver_etl config in etcd (run sync script)",
+            stream_id
+        ))?;
 
         let config: SilverEtlConfig = serde_json::from_value(nested_value).context(format!(
             "Failed to deserialize silver_etl config for stream '{}'",
@@ -97,7 +94,9 @@ impl ConfigLoader {
     /// Tries both directory structure (stream_id/config.yaml) and flat (stream_id.yaml)
     async fn load_from_yaml(&self, stream_id: &str) -> Result<SilverEtlConfig> {
         // Try directory structure first: {config_dir}/{stream_id}/config.yaml
-        let dir_path = Path::new(&self.config_dir).join(stream_id).join("config.yaml");
+        let dir_path = Path::new(&self.config_dir)
+            .join(stream_id)
+            .join("config.yaml");
         // Then try flat structure: {config_dir}/{stream_id}.yaml
         let flat_path = Path::new(&self.config_dir).join(format!("{}.yaml", stream_id));
 

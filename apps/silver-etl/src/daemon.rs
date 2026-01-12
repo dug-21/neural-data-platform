@@ -228,7 +228,9 @@ impl<E: EtlExecutor + 'static> DaemonRunner<E> {
         // Update daemon-level metrics
         if let Some(metrics) = EtlMetrics::get() {
             metrics.runs_total.inc();
-            metrics.duration_seconds.observe(start.elapsed().as_secs_f64());
+            metrics
+                .duration_seconds
+                .observe(start.elapsed().as_secs_f64());
         }
 
         Ok(stats)
@@ -266,9 +268,8 @@ impl EtlExecutor for RealEtlExecutor {
     fn run_stream(&self, stream_id: &str) -> Result<EtlStats, DaemonError> {
         // Load config synchronously (blocking call in async context)
         let config = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                self.config_loader.load_stream_config(stream_id).await
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { self.config_loader.load_stream_config(stream_id).await })
         })
         .map_err(|e| DaemonError::Config(e.to_string()))?;
 
@@ -279,9 +280,8 @@ impl EtlExecutor for RealEtlExecutor {
 
     fn list_enabled_streams(&self) -> Result<Vec<String>, DaemonError> {
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                self.config_loader.load_all_enabled().await
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { self.config_loader.load_all_enabled().await })
         })
         .map_err(|e| DaemonError::Config(e.to_string()))
     }

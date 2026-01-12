@@ -56,11 +56,13 @@ impl SchemaGenerator {
     pub fn generate_create_schema(&self, config: &SilverEtlConfig) -> Result<String, SchemaError> {
         let schema_name = self.extract_schema_name(&config.target_table)?;
 
-        let if_not_exists = if self.if_not_exists { "IF NOT EXISTS " } else { "" };
+        let if_not_exists = if self.if_not_exists {
+            "IF NOT EXISTS "
+        } else {
+            ""
+        };
 
-        Ok(format!(
-            "CREATE SCHEMA {if_not_exists}{schema_name};"
-        ))
+        Ok(format!("CREATE SCHEMA {if_not_exists}{schema_name};"))
     }
 
     /// Generate CREATE TABLE statement from config
@@ -69,7 +71,11 @@ impl SchemaGenerator {
     /// and timestamp configuration.
     pub fn generate_create_table(&self, config: &SilverEtlConfig) -> Result<String, SchemaError> {
         let table_name = &config.target_table;
-        let if_not_exists = if self.if_not_exists { "IF NOT EXISTS " } else { "" };
+        let if_not_exists = if self.if_not_exists {
+            "IF NOT EXISTS "
+        } else {
+            ""
+        };
 
         let mut columns = Vec::new();
 
@@ -90,7 +96,10 @@ impl SchemaGenerator {
         for mapping in &config.field_mappings {
             let pg_type = self.to_postgres_type(&mapping.column_type)?;
             let nullable = if mapping.nullable { "" } else { " NOT NULL" };
-            columns.push(format!("    {} {}{}", mapping.target_column, pg_type, nullable));
+            columns.push(format!(
+                "    {} {}{}",
+                mapping.target_column, pg_type, nullable
+            ));
         }
 
         // 5. Add dq_flags column if DQ output enabled
@@ -99,16 +108,17 @@ impl SchemaGenerator {
         }
 
         // Build primary key from deduplication config or defaults
-        let pk_columns = if config.deduplication.enabled && !config.deduplication.key_columns.is_empty() {
-            config.deduplication.key_columns.join(", ")
-        } else {
-            // Default: timestamp + identity fields
-            let mut pk = vec![config.timestamp.target_field.clone()];
-            for id_field in &config.identity_fields {
-                pk.push(id_field.target.clone());
-            }
-            pk.join(", ")
-        };
+        let pk_columns =
+            if config.deduplication.enabled && !config.deduplication.key_columns.is_empty() {
+                config.deduplication.key_columns.join(", ")
+            } else {
+                // Default: timestamp + identity fields
+                let mut pk = vec![config.timestamp.target_field.clone()];
+                for id_field in &config.identity_fields {
+                    pk.push(id_field.target.clone());
+                }
+                pk.join(", ")
+            };
 
         let sql = format!(
             r#"CREATE TABLE {if_not_exists}{table_name} (
@@ -214,7 +224,11 @@ impl SchemaGenerator {
 
         // Composite index on time + identity (for time-series queries)
         if !config.identity_fields.is_empty() {
-            let id_cols: Vec<_> = config.identity_fields.iter().map(|f| f.target.as_str()).collect();
+            let id_cols: Vec<_> = config
+                .identity_fields
+                .iter()
+                .map(|f| f.target.as_str())
+                .collect();
             indexes.push(format!(
                 "CREATE INDEX IF NOT EXISTS idx_{table_short}_time_id ON {table_name} ({}, {});",
                 time_column,
@@ -284,8 +298,8 @@ impl SchemaGenerator {
 mod tests {
     use super::*;
     use neural_core::config::{
-        DeduplicationConfig, DqOutputConfig, IdentityField, IncrementalConfig,
-        SilverFieldMapping, TimestampMapping, TimestampTransform,
+        DeduplicationConfig, DqOutputConfig, IdentityField, IncrementalConfig, SilverFieldMapping,
+        TimestampMapping, TimestampTransform,
     };
 
     fn test_config() -> SilverEtlConfig {
@@ -298,6 +312,8 @@ mod tests {
                 target_field: "observation_time".to_string(),
                 transform: TimestampTransform::MicrosecondsToTimestamp,
             },
+            valid_timestamp: None,
+            pre_transform: None,
             identity_fields: vec![IdentityField {
                 source: "ndp_id".to_string(),
                 target: "ndp_id".to_string(),
@@ -379,8 +395,12 @@ mod tests {
         let indexes = gen.generate_indexes(&config).unwrap();
 
         assert!(indexes.len() >= 2);
-        assert!(indexes.iter().any(|s| s.contains("idx_air_quality_observations_ndp_id")));
-        assert!(indexes.iter().any(|s| s.contains("idx_air_quality_observations_ingestion")));
+        assert!(indexes
+            .iter()
+            .any(|s| s.contains("idx_air_quality_observations_ndp_id")));
+        assert!(indexes
+            .iter()
+            .any(|s| s.contains("idx_air_quality_observations_ingestion")));
     }
 
     #[test]
@@ -401,7 +421,11 @@ mod tests {
         let config = test_config();
 
         // Simulate existing columns missing pm25
-        let existing = vec!["observation_time".to_string(), "ndp_id".to_string(), "temperature_c".to_string()];
+        let existing = vec![
+            "observation_time".to_string(),
+            "ndp_id".to_string(),
+            "temperature_c".to_string(),
+        ];
         let stmts = gen.generate_add_columns(&config, &existing).unwrap();
 
         assert_eq!(stmts.len(), 2); // pm25 and dq_flags
@@ -413,7 +437,10 @@ mod tests {
     fn test_to_postgres_type() {
         let gen = SchemaGenerator::new();
 
-        assert_eq!(gen.to_postgres_type("double_precision").unwrap(), "DOUBLE PRECISION");
+        assert_eq!(
+            gen.to_postgres_type("double_precision").unwrap(),
+            "DOUBLE PRECISION"
+        );
         assert_eq!(gen.to_postgres_type("smallint").unwrap(), "SMALLINT");
         assert_eq!(gen.to_postgres_type("text").unwrap(), "TEXT");
         assert_eq!(gen.to_postgres_type("boolean").unwrap(), "BOOLEAN");

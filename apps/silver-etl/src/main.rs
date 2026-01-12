@@ -547,6 +547,9 @@ async fn show_status(cli: &Cli, stream: Option<&str>, format: &str) -> Result<i3
 ///
 /// This is the truly config-driven approach: the schema is derived entirely
 /// from the silver_etl configuration. No manual SQL migrations needed.
+///
+/// Supports schema evolution: if a table exists, new columns from config
+/// are added via ALTER TABLE ADD COLUMN IF NOT EXISTS.
 async fn migrate_schema(
     cli: &Cli,
     stream: Option<&str>,
@@ -576,6 +579,25 @@ async fn migrate_schema(
         return Ok(0);
     }
 
+    // Connect to TimescaleDB first (needed for querying existing columns)
+    let timescale_url = cli
+        .timescale_url
+        .as_ref()
+        .context("--timescale-url required for migration (or set TIMESCALE_URL)")?;
+
+    info!(url = %timescale_url, "Connecting to TimescaleDB");
+
+    let (client, connection) = tokio_postgres::connect(timescale_url, tokio_postgres::NoTls)
+        .await
+        .context("Failed to connect to TimescaleDB")?;
+
+    // Spawn connection handler
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            error!(error = %e, "PostgreSQL connection error");
+        }
+    });
+
     // Collect all DDL statements
     let mut all_ddl = Vec::new();
     let mut schemas_created = std::collections::HashSet::new();
@@ -589,10 +611,12 @@ async fn migrate_schema(
             .context(format!("Failed to load config for stream '{}'", stream_id))?;
 
         // Validate config first
-        config.validate().context(format!(
-            "Invalid configuration for stream '{}'",
-            stream_id
-        ))?;
+        config
+            .validate()
+            .context(format!("Invalid configuration for stream '{}'", stream_id))?;
+
+        // Query existing columns for schema evolution
+        let existing_columns = query_existing_columns(&client, &config.target_table).await?;
 
         // Add schema creation (once per schema)
         let schema_ddl = schema_gen.generate_create_schema(&config)?;
@@ -614,6 +638,25 @@ async fn migrate_schema(
         all_ddl.push(schema_gen.generate_create_table(&config)?);
         all_ddl.push(String::new());
 
+        // Add ALTER TABLE for new columns (schema evolution)
+        let alter_statements = schema_gen.generate_add_columns(&config, &existing_columns)?;
+        if !alter_statements.is_empty() {
+            all_ddl.push(format!(
+                "-- Schema evolution: adding {} new column(s) to {}",
+                alter_statements.len(),
+                config.target_table
+            ));
+            for stmt in &alter_statements {
+                all_ddl.push(stmt.clone());
+            }
+            all_ddl.push(String::new());
+            info!(
+                stream_id = %stream_id,
+                new_columns = alter_statements.len(),
+                "Generated ALTER TABLE for new columns"
+            );
+        }
+
         // Add hypertable creation
         all_ddl.push(format!("-- Hypertable for: {}", config.target_table));
         all_ddl.push(schema_gen.generate_hypertable(&config)?);
@@ -629,6 +672,7 @@ async fn migrate_schema(
         info!(
             stream_id = %stream_id,
             table = %config.target_table,
+            existing_columns = existing_columns.len(),
             "Generated DDL for stream"
         );
     }
@@ -650,26 +694,7 @@ async fn migrate_schema(
         return Ok(0);
     }
 
-    // Execute DDL against TimescaleDB
-    let timescale_url = cli
-        .timescale_url
-        .as_ref()
-        .context("--timescale-url required for migration (or set TIMESCALE_URL)")?;
-
-    info!(url = %timescale_url, "Connecting to TimescaleDB");
-
-    // Use tokio-postgres for DDL execution
-    let (client, connection) = tokio_postgres::connect(timescale_url, tokio_postgres::NoTls)
-        .await
-        .context("Failed to connect to TimescaleDB")?;
-
-    // Spawn connection handler
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            error!(error = %e, "PostgreSQL connection error");
-        }
-    });
-
+    // Execute DDL against TimescaleDB (already connected above)
     // Execute each statement
     let statements: Vec<&str> = combined_ddl
         .split(';')
@@ -708,12 +733,51 @@ async fn migrate_schema(
 
     // Also write DDL to output file if specified
     if let Some(path) = output {
-        std::fs::write(path, &combined_ddl)
-            .context(format!("Failed to write DDL to {}", path))?;
+        std::fs::write(path, &combined_ddl).context(format!("Failed to write DDL to {}", path))?;
         println!("DDL also saved to: {}", path);
     }
 
     Ok(if error_count == 0 { 0 } else { 1 })
+}
+
+/// Query existing columns for a table from PostgreSQL
+///
+/// Returns empty vec if table doesn't exist (allows CREATE TABLE to proceed)
+async fn query_existing_columns(
+    client: &tokio_postgres::Client,
+    table_name: &str,
+) -> Result<Vec<String>> {
+    // Parse schema.table format
+    let parts: Vec<&str> = table_name.split('.').collect();
+    let (schema, table) = match parts.as_slice() {
+        [schema, table] => (*schema, *table),
+        [table] => ("public", *table),
+        _ => return Ok(vec![]), // Invalid format, let CREATE TABLE handle it
+    };
+
+    let sql = r#"
+        SELECT column_name::text
+        FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = $2
+        ORDER BY ordinal_position
+    "#;
+
+    match client.query(sql, &[&schema, &table]).await {
+        Ok(rows) => {
+            let columns: Vec<String> = rows.iter().map(|r| r.get(0)).collect();
+            debug!(
+                table = %table_name,
+                columns = ?columns,
+                "Found existing columns"
+            );
+            Ok(columns)
+        }
+        Err(e) => {
+            // Table might not exist yet, that's fine
+            debug!(table = %table_name, error = %e, "Could not query columns (table may not exist)");
+            Ok(vec![])
+        }
+    }
 }
 
 /// Export Prometheus metrics

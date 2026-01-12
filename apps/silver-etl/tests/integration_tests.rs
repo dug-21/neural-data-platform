@@ -318,7 +318,10 @@ async fn test_upsert_updates_existing() {
     // );
 
     // Placeholder
-    assert!(config.deduplication.enabled, "Deduplication should be enabled");
+    assert!(
+        config.deduplication.enabled,
+        "Deduplication should be enabled"
+    );
 }
 
 // ============================================================================
