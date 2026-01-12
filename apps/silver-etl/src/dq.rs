@@ -508,6 +508,9 @@ END"#,
     }
 
     /// Generate freshness_check SQL
+    ///
+    /// Note: DuckDB doesn't support TIMESTAMPTZ - INTERVAL directly,
+    /// so we cast both sides to TIMESTAMP for interval arithmetic.
     fn generate_freshness_check_sql(
         &self,
         field: &str,
@@ -517,16 +520,17 @@ END"#,
     ) -> String {
         let mut cases = Vec::new();
 
+        // Cast to TIMESTAMP for DuckDB interval arithmetic compatibility
         if let Some(age) = max_age {
             cases.push(format!(
-                "WHEN {} < {} - INTERVAL '{}' THEN 'freshness_check:{}:stale'",
+                "WHEN {}::TIMESTAMP < ({}::TIMESTAMP - INTERVAL '{}') THEN 'freshness_check:{}:stale'",
                 field, reference, age, field
             ));
         }
 
         if let Some(future) = max_future {
             cases.push(format!(
-                "WHEN {} > {} + INTERVAL '{}' THEN 'freshness_check:{}:future'",
+                "WHEN {}::TIMESTAMP > ({}::TIMESTAMP + INTERVAL '{}') THEN 'freshness_check:{}:future'",
                 field, reference, future, field
             ));
         }
@@ -858,7 +862,7 @@ END"#
     }
 
     // ============================================================
-    // Test 10: Freshness check SQL
+    // Test 10: Freshness check SQL (with DuckDB TIMESTAMP casts)
     // ============================================================
     #[test]
     fn test_freshness_check_sql() {
@@ -873,9 +877,10 @@ END"#
         let gen = DqSqlGenerator::new();
         let sql = gen.generate_check_sql(&rule);
 
-        assert!(sql.contains("observation_time < ingestion_time - INTERVAL '2 hours'"));
+        // DuckDB requires casting TIMESTAMPTZ to TIMESTAMP for interval arithmetic
+        assert!(sql.contains("observation_time::TIMESTAMP < (ingestion_time::TIMESTAMP - INTERVAL '2 hours')"));
         assert!(sql.contains("freshness_check:observation_time:stale"));
-        assert!(sql.contains("observation_time > ingestion_time + INTERVAL '10 minutes'"));
+        assert!(sql.contains("observation_time::TIMESTAMP > (ingestion_time::TIMESTAMP + INTERVAL '10 minutes')"));
         assert!(sql.contains("freshness_check:observation_time:future"));
     }
 
@@ -981,7 +986,8 @@ END"#
         let gen = DqSqlGenerator::new();
         let sql = gen.generate_check_sql(&rule);
 
-        assert!(sql.contains("observation_time < NOW() - INTERVAL '1 hour'"));
+        // DuckDB requires casting TIMESTAMPTZ to TIMESTAMP for interval arithmetic
+        assert!(sql.contains("observation_time::TIMESTAMP < (NOW()::TIMESTAMP - INTERVAL '1 hour')"));
         assert!(sql.contains("freshness_check:observation_time:stale"));
         assert!(!sql.contains("future"));
     }
