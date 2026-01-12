@@ -535,7 +535,7 @@ entity_schemas:
 # before DuckDB SQL processing.
 silver_etl:
   enabled: true
-  target_table: silver.nws_forecasts
+  target_table: silver.weather_forecasts
 
   # Pre-transform configuration (DP-007)
   # Parses raw_payload through ColumnOrientedParser to flatten columnar arrays

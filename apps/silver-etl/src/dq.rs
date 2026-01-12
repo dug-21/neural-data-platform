@@ -550,6 +550,9 @@ END"#,
     }
 
     /// Generate rate_of_change SQL using LAG window function
+    ///
+    /// Note: DuckDB doesn't support TIMESTAMPTZ - TIMESTAMPTZ directly,
+    /// so we cast to TIMESTAMP for the time difference calculation.
     fn generate_rate_of_change_sql(
         &self,
         field: &str,
@@ -564,10 +567,11 @@ END"#,
 
         // Note: This generates a complex expression that requires window context
         // In practice, this would be used in a CTE with proper window definitions
+        // Cast to TIMESTAMP for DuckDB compatibility with timestamp subtraction
         format!(
             r#"CASE
   WHEN ABS({} - LAG({}) OVER ({}ORDER BY observation_time)) /
-       NULLIF(EXTRACT(EPOCH FROM observation_time - LAG(observation_time) OVER ({}ORDER BY observation_time)) / 60.0, 0)
+       NULLIF(EXTRACT(EPOCH FROM observation_time::TIMESTAMP - (LAG(observation_time) OVER ({}ORDER BY observation_time))::TIMESTAMP) / 60.0, 0)
        > {}
   THEN 'rate_of_change:{}:exceeded'
   ELSE NULL
@@ -971,6 +975,9 @@ END"#
         assert!(sql.contains("PARTITION BY ndp_id"));
         assert!(sql.contains("> 2"));
         assert!(sql.contains("rate_of_change:temperature_c:exceeded"));
+        // DuckDB requires casting TIMESTAMPTZ to TIMESTAMP for subtraction
+        assert!(sql.contains("observation_time::TIMESTAMP"));
+        assert!(sql.contains("::TIMESTAMP) / 60.0"));
     }
 
     #[test]

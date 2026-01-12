@@ -282,7 +282,7 @@ entity_schemas:
 # NWS observations use WMO standard SI units - no conversion needed
 silver_etl:
   enabled: true
-  target_table: silver.nws_observations
+  target_table: silver.weather_observations
 
   # Timestamp mapping - use observation timestamp from API
   timestamp:
