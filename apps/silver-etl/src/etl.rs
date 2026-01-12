@@ -355,34 +355,37 @@ impl EtlRunner {
             Ok(watermark_str)
         }) {
             Ok(Some(ts_str)) => {
-                // Parse the timestamp string
-                match DateTime::parse_from_rfc3339(&ts_str) {
-                    Ok(dt) => {
-                        let watermark = dt.with_timezone(&Utc);
-                        debug!(table = %table, watermark = %watermark, "Retrieved watermark");
-                        Ok(Some(watermark))
-                    }
-                    Err(_) => {
-                        // Try alternative parsing
-                        match chrono::NaiveDateTime::parse_from_str(&ts_str, "%Y-%m-%d %H:%M:%S%.f")
-                        {
-                            Ok(naive) => {
-                                let watermark = DateTime::from_naive_utc_and_offset(naive, Utc);
-                                debug!(table = %table, watermark = %watermark, "Retrieved watermark");
-                                Ok(Some(watermark))
-                            }
-                            Err(e) => {
-                                warn!(
-                                    table = %table,
-                                    timestamp = %ts_str,
-                                    error = %e,
-                                    "Failed to parse watermark timestamp"
-                                );
-                                Ok(None)
-                            }
-                        }
-                    }
+                // Parse the timestamp string - try multiple formats
+                // PostgreSQL timestamptz format: "2026-01-12 20:59:37.327627+00"
+                if let Ok(dt) = DateTime::parse_from_str(&ts_str, "%Y-%m-%d %H:%M:%S%.f%#z") {
+                    let watermark = dt.with_timezone(&Utc);
+                    debug!(table = %table, watermark = %watermark, "Retrieved watermark (PostgreSQL format)");
+                    return Ok(Some(watermark));
                 }
+
+                // RFC3339 format: "2026-01-12T20:59:37.327627+00:00"
+                if let Ok(dt) = DateTime::parse_from_rfc3339(&ts_str) {
+                    let watermark = dt.with_timezone(&Utc);
+                    debug!(table = %table, watermark = %watermark, "Retrieved watermark (RFC3339)");
+                    return Ok(Some(watermark));
+                }
+
+                // NaiveDateTime without timezone: "2026-01-12 20:59:37.327627"
+                if let Ok(naive) =
+                    chrono::NaiveDateTime::parse_from_str(&ts_str, "%Y-%m-%d %H:%M:%S%.f")
+                {
+                    let watermark = DateTime::from_naive_utc_and_offset(naive, Utc);
+                    debug!(table = %table, watermark = %watermark, "Retrieved watermark (naive UTC)");
+                    return Ok(Some(watermark));
+                }
+
+                // All parsing attempts failed
+                warn!(
+                    table = %table,
+                    timestamp = %ts_str,
+                    "Failed to parse watermark timestamp - unrecognized format"
+                );
+                Ok(None)
             }
             Ok(None) => {
                 debug!(table = %table, "No watermark found (table empty)");
