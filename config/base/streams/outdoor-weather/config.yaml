@@ -219,21 +219,13 @@ silver_etl:
       target: ndp_id
 
   # Field mappings with transforms and DQ rules
-  # Note: OpenWeatherMap returns Kelvin by default, but our config uses metric units
-  # The raw_payload stores values in the API's native format
+  # Note: OpenWeatherMap with units=metric returns Celsius directly (no conversion needed)
   field_mappings:
     - source_path: raw_payload.main.temp
       target_column: temperature_c
       type: double_precision
       nullable: false
-      transform:
-        type: unit_conversion
-        from: kelvin
-        to: celsius
-        formula:
-          type: linear
-          scale: 1.0
-          offset: -273.15
+      # No transform needed - API returns Celsius with units=metric
       dq_rules:
         - rule: range_check
           min: -60.0
@@ -244,14 +236,7 @@ silver_etl:
       target_column: feels_like_c
       type: double_precision
       nullable: true
-      transform:
-        type: unit_conversion
-        from: kelvin
-        to: celsius
-        formula:
-          type: linear
-          scale: 1.0
-          offset: -273.15
+      # No transform needed - API returns Celsius with units=metric
       dq_rules:
         - rule: range_check
           min: -60.0

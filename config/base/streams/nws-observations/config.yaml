@@ -276,3 +276,159 @@ entity_schemas:
         description: Wind chill temperature
         nullable: true
         range: [-50, 60]
+
+# Silver ETL Configuration (DP-006)
+# Transforms Bronze Parquet data to Silver TimescaleDB
+# NWS observations use WMO standard SI units - no conversion needed
+silver_etl:
+  enabled: true
+  target_table: silver.nws_observations
+
+  # Timestamp mapping - use observation timestamp from API
+  timestamp:
+    source_field: timestamp
+    target_field: observation_time
+    transform: microseconds_to_timestamp
+
+  # Identity fields (used in deduplication)
+  identity_fields:
+    - source: ndp_id
+      target: ndp_id
+
+  # Field mappings - NWS already provides SI units (WMO standard)
+  field_mappings:
+    - source_path: raw_payload.properties.temperature.value
+      target_column: temperature_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -50.0
+          max: 60.0
+          action: flag
+
+    - source_path: raw_payload.properties.dewpoint.value
+      target_column: dewpoint_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -50.0
+          max: 60.0
+          action: flag
+
+    - source_path: raw_payload.properties.relativeHumidity.value
+      target_column: humidity_pct
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 100.0
+          action: clamp
+          clamp_to_bounds: true
+
+    - source_path: raw_payload.properties.windSpeed.value
+      target_column: wind_speed_kmh
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 300.0
+          action: flag
+
+    - source_path: raw_payload.properties.windDirection.value
+      target_column: wind_direction_deg
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 360.0
+          action: clamp
+          clamp_to_bounds: true
+
+    - source_path: raw_payload.properties.windGust.value
+      target_column: wind_gust_kmh
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 400.0
+          action: flag
+
+    - source_path: raw_payload.properties.barometricPressure.value
+      target_column: pressure_pa
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 80000.0
+          max: 110000.0
+          action: flag
+
+    - source_path: raw_payload.properties.visibility.value
+      target_column: visibility_m
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: 0.0
+          max: 50000.0
+          action: flag
+
+    - source_path: raw_payload.properties.heatIndex.value
+      target_column: heat_index_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -50.0
+          max: 70.0
+          action: flag
+
+    - source_path: raw_payload.properties.windChill.value
+      target_column: wind_chill_c
+      type: double_precision
+      nullable: true
+      dq_rules:
+        - rule: range_check
+          min: -70.0
+          max: 30.0
+          action: flag
+
+  # Additional DQ rules
+  dq_rules:
+    # Cross-field: wind gust >= wind speed
+    - rule: cross_field_check
+      name: wind_gust_gte_speed
+      expression: "wind_gust_kmh IS NULL OR wind_speed_kmh IS NULL OR wind_gust_kmh >= wind_speed_kmh"
+      message: "gust_less_than_sustained"
+      action: flag
+
+    # Freshness check - NWS updates hourly
+    - rule: freshness_check
+      field: observation_time
+      max_age: "2 hours"
+      max_future: "10 minutes"
+      reference: ingestion_time
+      action: flag
+
+  # DQ output configuration
+  dq_output:
+    enabled: true
+    target_column: dq_flags
+
+  # Deduplication strategy
+  deduplication:
+    enabled: true
+    key_columns: [observation_time, ndp_id]
+    strategy: upsert
+
+  # Incremental processing
+  incremental:
+    enabled: true
+    watermark_column: observation_time
+    lag_interval: 5 minutes

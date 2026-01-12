@@ -166,7 +166,7 @@ silver_etl:
 
   # Field mappings with transforms and DQ rules
   field_mappings:
-    - source_path: raw_payload.pm02
+    - source_path: raw_payload.pm02Compensated
       target_column: pm25
       type: double_precision
       nullable: false
@@ -196,7 +196,7 @@ silver_etl:
           max: 10000
           action: flag
 
-    - source_path: raw_payload.atmp
+    - source_path: raw_payload.atmpCompensated
       target_column: temperature_c
       type: double_precision
       nullable: true
@@ -206,7 +206,7 @@ silver_etl:
           max: 85.0
           action: flag
 
-    - source_path: raw_payload.rhum
+    - source_path: raw_payload.rhumCompensated
       target_column: humidity_pct
       type: double_precision
       nullable: true
