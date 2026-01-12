@@ -29,11 +29,10 @@
     }
   },
 
-  
-  "remoteUser": "vscode",
 
-  "runArgs": [
-    "--privileged"
-  ],
+    "remoteUser": "vscode",
 
-}
+    "runArgs": [
+      "--privileged"
+    ]
+  }
