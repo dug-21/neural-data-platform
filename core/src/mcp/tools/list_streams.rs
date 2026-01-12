@@ -26,11 +26,7 @@
 //! ```
 
 use crate::mcp::tools::{
-    AppState,
-    create_tool_response,
-    create_error_response,
-    error_codes,
-    traits::ConfigError,
+    create_error_response, create_tool_response, error_codes, traits::ConfigError, AppState,
 };
 use crate::mcp::{McpRpcError, ToolDefinition};
 use chrono::{DateTime, Utc};
@@ -131,18 +127,21 @@ pub async fn execute(state: &AppState, _args: Value) -> Result<Value, McpRpcErro
         };
 
         // Find matching storage info
-        let storage = storage_info.iter()
+        let storage = storage_info
+            .iter()
             .find(|s| s.stream_id == *stream_id)
             .and_then(|s| {
                 // Only include storage if we have the required fields
-                match (s.latest_partition.as_ref(), s.file_size_bytes, s.file_modified) {
-                    (Some(partition), Some(size), Some(modified)) => {
-                        Some(StorageMetadata {
-                            latest_partition: partition.clone(),
-                            file_size_bytes: size,
-                            file_modified: modified,
-                        })
-                    }
+                match (
+                    s.latest_partition.as_ref(),
+                    s.file_size_bytes,
+                    s.file_modified,
+                ) {
+                    (Some(partition), Some(size), Some(modified)) => Some(StorageMetadata {
+                        latest_partition: partition.clone(),
+                        file_size_bytes: size,
+                        file_modified: modified,
+                    }),
                     _ => None,
                 }
             });
@@ -170,8 +169,7 @@ pub async fn execute(state: &AppState, _args: Value) -> Result<Value, McpRpcErro
 mod tests {
     use super::*;
     use crate::mcp::tools::traits::{
-        MockBronzeStorage, MockConfigStore,
-        StreamStorageInfo, StreamConfigInfo, StorageError,
+        MockBronzeStorage, MockConfigStore, StorageError, StreamConfigInfo, StreamStorageInfo,
     };
     use crate::mcp::ToolResponse;
     use mockall::predicate::*;
@@ -182,10 +180,7 @@ mod tests {
         mock_storage: MockBronzeStorage,
         mock_config: MockConfigStore,
     ) -> AppState {
-        AppState::new(
-            Arc::new(mock_storage),
-            Arc::new(mock_config),
-        )
+        AppState::new(Arc::new(mock_storage), Arc::new(mock_config))
     }
 
     // -------------------------------------------------------------------------
@@ -199,52 +194,60 @@ mod tests {
         let mut mock_storage = MockBronzeStorage::new();
 
         // Config store returns 3 stream IDs
-        mock_config.expect_list_stream_ids()
-            .times(1)
-            .returning(|| Ok(vec![
+        mock_config.expect_list_stream_ids().times(1).returning(|| {
+            Ok(vec![
                 "air-quality".to_string(),
                 "outdoor-weather".to_string(),
                 "nws-forecast-hourly".to_string(),
-            ]));
+            ])
+        });
 
         // Config store returns details for each stream
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .with(eq("air-quality"))
             .times(1)
-            .returning(|_| Ok(StreamConfigInfo {
-                stream_id: "air-quality".to_string(),
-                description: "AirGradient sensor readings from MQTT".to_string(),
-                enabled: true,
-                version: "1.0.0".to_string(),
-                sources: vec!["mqtt".to_string()],
-            }));
+            .returning(|_| {
+                Ok(StreamConfigInfo {
+                    stream_id: "air-quality".to_string(),
+                    description: "AirGradient sensor readings from MQTT".to_string(),
+                    enabled: true,
+                    version: "1.0.0".to_string(),
+                    sources: vec!["mqtt".to_string()],
+                })
+            });
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .with(eq("outdoor-weather"))
             .times(1)
-            .returning(|_| Ok(StreamConfigInfo {
-                stream_id: "outdoor-weather".to_string(),
-                description: "Outdoor weather data from OpenWeatherMap".to_string(),
-                enabled: true,
-                version: "1.0.0".to_string(),
-                sources: vec!["http_poll".to_string()],
-            }));
+            .returning(|_| {
+                Ok(StreamConfigInfo {
+                    stream_id: "outdoor-weather".to_string(),
+                    description: "Outdoor weather data from OpenWeatherMap".to_string(),
+                    enabled: true,
+                    version: "1.0.0".to_string(),
+                    sources: vec!["http_poll".to_string()],
+                })
+            });
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .with(eq("nws-forecast-hourly"))
             .times(1)
-            .returning(|_| Ok(StreamConfigInfo {
-                stream_id: "nws-forecast-hourly".to_string(),
-                description: "NWS hourly forecast data".to_string(),
-                enabled: false,
-                version: "1.0.0".to_string(),
-                sources: vec!["http_poll".to_string()],
-            }));
+            .returning(|_| {
+                Ok(StreamConfigInfo {
+                    stream_id: "nws-forecast-hourly".to_string(),
+                    description: "NWS hourly forecast data".to_string(),
+                    enabled: false,
+                    version: "1.0.0".to_string(),
+                    sources: vec!["http_poll".to_string()],
+                })
+            });
 
         // Storage returns info for 2 streams (no data for nws-forecast-hourly)
-        mock_storage.expect_list()
-            .times(1)
-            .returning(|| Ok(vec![
+        mock_storage.expect_list().times(1).returning(|| {
+            Ok(vec![
                 StreamStorageInfo {
                     stream_id: "air-quality".to_string(),
                     latest_partition: Some("year=2026/month=01/day=03".to_string()),
@@ -259,7 +262,8 @@ mod tests {
                     file_modified: Some(Utc::now()),
                     row_count: Some(50),
                 },
-            ]));
+            ])
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
@@ -301,21 +305,22 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_list_stream_ids()
+        mock_config
+            .expect_list_stream_ids()
             .returning(|| Ok(vec!["air-quality".to_string()]));
 
-        mock_config.expect_get_stream_config()
-            .returning(|_| Ok(StreamConfigInfo {
+        mock_config.expect_get_stream_config().returning(|_| {
+            Ok(StreamConfigInfo {
                 stream_id: "air-quality".to_string(),
                 description: "Test stream".to_string(),
                 enabled: true,
                 version: "1.0.0".to_string(),
                 sources: vec!["mqtt".to_string()],
-            }));
+            })
+        });
 
         // Empty storage - no files
-        mock_storage.expect_list()
-            .returning(|| Ok(vec![]));
+        mock_storage.expect_list().returning(|| Ok(vec![]));
 
         let state = create_test_state(mock_storage, mock_config);
 
@@ -344,9 +349,11 @@ mod tests {
         let mock_storage = MockBronzeStorage::new();
 
         // etcd connection fails
-        mock_config.expect_list_stream_ids()
-            .times(1)
-            .returning(|| Err(ConfigError::ConnectionFailed("connection refused".to_string())));
+        mock_config.expect_list_stream_ids().times(1).returning(|| {
+            Err(ConfigError::ConnectionFailed(
+                "connection refused".to_string(),
+            ))
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
@@ -361,7 +368,10 @@ mod tests {
         let inner: Value = serde_json::from_str(&response.content[0].text).unwrap();
         assert_eq!(inner["success"], false);
         assert_eq!(inner["code"], "ETCD_UNAVAILABLE");
-        assert!(inner["error"].as_str().unwrap().contains("connection refused"));
+        assert!(inner["error"]
+            .as_str()
+            .unwrap()
+            .contains("connection refused"));
     }
 
     // -------------------------------------------------------------------------
@@ -376,29 +386,30 @@ mod tests {
 
         let expected_modified = Utc::now();
 
-        mock_config.expect_list_stream_ids()
+        mock_config
+            .expect_list_stream_ids()
             .returning(|| Ok(vec!["air-quality".to_string()]));
 
-        mock_config.expect_get_stream_config()
-            .returning(|_| Ok(StreamConfigInfo {
+        mock_config.expect_get_stream_config().returning(|_| {
+            Ok(StreamConfigInfo {
                 stream_id: "air-quality".to_string(),
                 description: "Test".to_string(),
                 enabled: true,
                 version: "1.0.0".to_string(),
                 sources: vec!["mqtt".to_string()],
-            }));
+            })
+        });
 
         let modified_clone = expected_modified;
-        mock_storage.expect_list()
-            .returning(move || Ok(vec![
-                StreamStorageInfo {
-                    stream_id: "air-quality".to_string(),
-                    latest_partition: Some("year=2026/month=01/day=03".to_string()),
-                    file_size_bytes: Some(7310),
-                    file_modified: Some(modified_clone),
-                    row_count: Some(100),
-                },
-            ]));
+        mock_storage.expect_list().returning(move || {
+            Ok(vec![StreamStorageInfo {
+                stream_id: "air-quality".to_string(),
+                latest_partition: Some("year=2026/month=01/day=03".to_string()),
+                file_size_bytes: Some(7310),
+                file_modified: Some(modified_clone),
+                row_count: Some(100),
+            }])
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
@@ -427,20 +438,23 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_list_stream_ids()
+        mock_config
+            .expect_list_stream_ids()
             .returning(|| Ok(vec!["air-quality".to_string()]));
 
-        mock_config.expect_get_stream_config()
-            .returning(|_| Ok(StreamConfigInfo {
+        mock_config.expect_get_stream_config().returning(|_| {
+            Ok(StreamConfigInfo {
                 stream_id: "air-quality".to_string(),
                 description: "Test".to_string(),
                 enabled: true,
                 version: "1.0.0".to_string(),
                 sources: vec![],
-            }));
+            })
+        });
 
         // Storage fails
-        mock_storage.expect_list()
+        mock_storage
+            .expect_list()
             .returning(|| Err(StorageError::Unavailable("disk error".to_string())));
 
         let state = create_test_state(mock_storage, mock_config);

@@ -274,7 +274,10 @@ pub struct ToolInputSchema {
     pub required: Vec<String>,
 
     /// Whether additional properties are allowed
-    #[serde(rename = "additionalProperties", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "additionalProperties",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub additional_properties: Option<bool>,
 }
 

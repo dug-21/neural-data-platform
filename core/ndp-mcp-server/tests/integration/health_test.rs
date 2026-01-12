@@ -23,7 +23,10 @@ impl BronzeStorage for MockStorage {
     async fn list_streams(&self) -> McpResult<Vec<StreamStorageInfo>> {
         Ok(vec![])
     }
-    async fn get_schema(&self, _stream_id: &str) -> McpResult<ndp_mcp_server::storage::ParquetSchemaInfo> {
+    async fn get_schema(
+        &self,
+        _stream_id: &str,
+    ) -> McpResult<ndp_mcp_server::storage::ParquetSchemaInfo> {
         Err(McpError::StreamNotFound("mock".to_string()))
     }
     async fn sample(&self, _stream_id: &str, _n: usize) -> McpResult<Vec<Value>> {

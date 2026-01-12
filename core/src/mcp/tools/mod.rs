@@ -22,15 +22,15 @@
 //! let result = list_streams::execute(&state, json!({})).await?;
 //! ```
 
-pub mod list_streams;
 pub mod describe_schema;
-pub mod validate_config;
+pub mod list_streams;
+mod response;
 pub mod sample_data;
 pub mod traits;
-mod response;
+pub mod validate_config;
 
-pub use traits::{BronzeStorage, ConfigStore, StreamStorageInfo, StreamConfigInfo};
-pub use response::{create_tool_response, create_error_response, ToolResult};
+pub use response::{create_error_response, create_tool_response, ToolResult};
+pub use traits::{BronzeStorage, ConfigStore, StreamConfigInfo, StreamStorageInfo};
 
 use std::sync::Arc;
 
@@ -48,10 +48,7 @@ pub struct AppState {
 
 impl AppState {
     /// Create new application state with injected dependencies
-    pub fn new(
-        storage: Arc<dyn BronzeStorage>,
-        config: Arc<dyn ConfigStore>,
-    ) -> Self {
+    pub fn new(storage: Arc<dyn BronzeStorage>, config: Arc<dyn ConfigStore>) -> Self {
         Self { storage, config }
     }
 }

@@ -340,7 +340,10 @@ mod tests {
         assert_eq!(err.to_string(), "Stream not found: invalid");
 
         let err = StorageError::NoDataAvailable("empty-stream".to_string());
-        assert_eq!(err.to_string(), "No data available for stream: empty-stream");
+        assert_eq!(
+            err.to_string(),
+            "No data available for stream: empty-stream"
+        );
     }
 
     #[test]
@@ -352,7 +355,10 @@ mod tests {
     #[test]
     fn test_payload_structure_with_nested() {
         let mut nested = HashMap::new();
-        nested.insert("main".to_string(), vec!["temp".to_string(), "humidity".to_string()]);
+        nested.insert(
+            "main".to_string(),
+            vec!["temp".to_string(), "humidity".to_string()],
+        );
 
         let structure = PayloadStructure {
             keys: vec!["main".to_string(), "wind".to_string()],

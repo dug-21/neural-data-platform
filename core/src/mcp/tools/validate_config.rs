@@ -25,13 +25,11 @@
 //! ```
 
 use crate::mcp::tools::{
-    AppState,
-    create_tool_response,
-    create_error_response,
-    error_codes,
+    create_error_response, create_tool_response, error_codes,
     traits::{ConfigError, PayloadStructure},
+    AppState,
 };
-use crate::mcp::{McpRpcError, ToolDefinition, JsonRpcError};
+use crate::mcp::{JsonRpcError, McpRpcError, ToolDefinition};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -134,11 +132,12 @@ pub fn tool_definition() -> ToolDefinition {
 /// MCP ToolResponse as JSON Value
 pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError> {
     // Parse input
-    let input: ValidateConfigInput = serde_json::from_value(args)
-        .map_err(|e| McpRpcError::new(
+    let input: ValidateConfigInput = serde_json::from_value(args).map_err(|e| {
+        McpRpcError::new(
             JsonRpcError::INVALID_PARAMS,
             format!("Invalid input: {}", e),
-        ))?;
+        )
+    })?;
 
     // Get full config from etcd
     let full_config = match state.config.get_full_config(&input.stream_id).await {
@@ -171,20 +170,27 @@ pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError
     let payload_structure = state.storage.analyze_payload(&input.stream_id).await.ok();
 
     // Get field mappings and target fields
-    let field_mappings = full_config.parser.as_ref()
+    let field_mappings = full_config
+        .parser
+        .as_ref()
         .map(|p| p.field_mappings.clone())
         .unwrap_or_default();
 
-    let entity_schema = full_config.entity_schemas.first()
+    let entity_schema = full_config
+        .entity_schemas
+        .first()
         .map(|es| es.schema_name.clone())
         .unwrap_or_else(|| "undefined".to_string());
 
-    let config_fields: Vec<String> = full_config.entity_schemas.first()
+    let config_fields: Vec<String> = full_config
+        .entity_schemas
+        .first()
         .map(|es| es.attributes.iter().map(|a| a.name.clone()).collect())
         .unwrap_or_default();
 
     // Analyze based on whether we have payload structure
-    let (status, analysis, notes, raw_payload_fields, raw_payload_nested) = match payload_structure {
+    let (status, analysis, notes, raw_payload_fields, raw_payload_nested) = match payload_structure
+    {
         Some(ps) => analyze_with_payload(&config_fields, &field_mappings, &ps),
         None => analyze_without_payload(&config_fields),
     };
@@ -209,7 +215,8 @@ pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError
 async fn handle_no_entity_schema(stream_id: &str, state: &AppState) -> Result<Value, McpRpcError> {
     let payload_structure = state.storage.analyze_payload(stream_id).await.ok();
 
-    let raw_payload_fields = payload_structure.as_ref()
+    let raw_payload_fields = payload_structure
+        .as_ref()
         .map(|ps| ps.keys.clone())
         .unwrap_or_default();
 
@@ -240,12 +247,19 @@ fn analyze_with_payload(
     config_fields: &[String],
     field_mappings: &[crate::mcp::tools::traits::FieldMapping],
     payload_structure: &PayloadStructure,
-) -> (String, ValidationAnalysis, Option<String>, Vec<String>, Option<std::collections::HashMap<String, Vec<String>>>) {
+) -> (
+    String,
+    ValidationAnalysis,
+    Option<String>,
+    Vec<String>,
+    Option<std::collections::HashMap<String, Vec<String>>>,
+) {
     let config_set: HashSet<_> = config_fields.iter().cloned().collect();
     let payload_set: HashSet<_> = payload_structure.keys.iter().cloned().collect();
 
     // Build mapping lookup: target_field -> source_path
-    let mapping_lookup: std::collections::HashMap<_, _> = field_mappings.iter()
+    let mapping_lookup: std::collections::HashMap<_, _> = field_mappings
+        .iter()
         .map(|m| (m.target_field.clone(), m.source_path.clone()))
         .collect();
 
@@ -277,19 +291,31 @@ fn analyze_with_payload(
     }
 
     // Find payload fields not in config (using source roots from mappings)
-    let mapped_source_roots: HashSet<_> = field_mappings.iter()
-        .map(|m| m.source_path.split('.').next().unwrap_or(&m.source_path).to_string())
+    let mapped_source_roots: HashSet<_> = field_mappings
+        .iter()
+        .map(|m| {
+            m.source_path
+                .split('.')
+                .next()
+                .unwrap_or(&m.source_path)
+                .to_string()
+        })
         .collect();
 
-    let in_payload_not_in_config: Vec<String> = payload_structure.keys.iter()
+    let in_payload_not_in_config: Vec<String> = payload_structure
+        .keys
+        .iter()
         .filter(|k| !config_set.contains(*k) && !mapped_source_roots.contains(*k))
         .cloned()
         .collect();
 
     // Calculate unmapped nested fields
-    let unmapped_nested: Vec<String> = payload_structure.nested.iter()
+    let unmapped_nested: Vec<String> = payload_structure
+        .nested
+        .iter()
         .flat_map(|(parent, children)| {
-            children.iter()
+            children
+                .iter()
                 .map(|child| format!("{}.{}", parent, child))
                 .filter(|path| !field_mappings.iter().any(|m| m.source_path == *path))
                 .collect::<Vec<_>>()
@@ -325,8 +351,16 @@ fn analyze_with_payload(
         in_config_not_in_payload,
         in_payload_not_in_config,
         matching,
-        mapped_correctly: if mapped_correctly.is_empty() { None } else { Some(mapped_correctly) },
-        unmapped_nested_fields: if unmapped_nested.is_empty() { None } else { Some(unmapped_nested) },
+        mapped_correctly: if mapped_correctly.is_empty() {
+            None
+        } else {
+            Some(mapped_correctly)
+        },
+        unmapped_nested_fields: if unmapped_nested.is_empty() {
+            None
+        } else {
+            Some(unmapped_nested)
+        },
     };
 
     let raw_payload_nested = if payload_structure.nested.is_empty() {
@@ -335,13 +369,25 @@ fn analyze_with_payload(
         Some(payload_structure.nested.clone())
     };
 
-    (status, analysis, notes, payload_structure.keys.clone(), raw_payload_nested)
+    (
+        status,
+        analysis,
+        notes,
+        payload_structure.keys.clone(),
+        raw_payload_nested,
+    )
 }
 
 /// Analyze validation without payload structure (no Bronze data)
 fn analyze_without_payload(
     config_fields: &[String],
-) -> (String, ValidationAnalysis, Option<String>, Vec<String>, Option<std::collections::HashMap<String, Vec<String>>>) {
+) -> (
+    String,
+    ValidationAnalysis,
+    Option<String>,
+    Vec<String>,
+    Option<std::collections::HashMap<String, Vec<String>>>,
+) {
     let analysis = ValidationAnalysis {
         in_config_not_in_payload: config_fields.to_vec(),
         in_payload_not_in_config: vec![],
@@ -350,7 +396,10 @@ fn analyze_without_payload(
         unmapped_nested_fields: None,
     };
 
-    let notes = Some("No Bronze data available. Cannot validate config against actual payload structure.".to_string());
+    let notes = Some(
+        "No Bronze data available. Cannot validate config against actual payload structure."
+            .to_string(),
+    );
 
     ("no_data".to_string(), analysis, notes, vec![], None)
 }
@@ -363,21 +412,18 @@ fn analyze_without_payload(
 mod tests {
     use super::*;
     use crate::mcp::tools::traits::{
-        MockBronzeStorage, MockConfigStore,
-        FullStreamConfig, StreamConfigInfo, ParserInfo, EntitySchema, EntityAttribute, FieldMapping,
+        EntityAttribute, EntitySchema, FieldMapping, FullStreamConfig, MockBronzeStorage,
+        MockConfigStore, ParserInfo, StreamConfigInfo,
     };
     use crate::mcp::ToolResponse;
-    use std::sync::Arc;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     fn create_test_state(
         mock_storage: MockBronzeStorage,
         mock_config: MockConfigStore,
     ) -> AppState {
-        AppState::new(
-            Arc::new(mock_storage),
-            Arc::new(mock_config),
-        )
+        AppState::new(Arc::new(mock_storage), Arc::new(mock_config))
     }
 
     fn simple_weather_config() -> FullStreamConfig {
@@ -430,25 +476,21 @@ mod tests {
             },
             parser: Some(ParserInfo {
                 parser_type: "json_path".to_string(),
-                field_mappings: vec![
-                    FieldMapping {
-                        source_path: "main.temp".to_string(),
-                        target_field: "temperature".to_string(),
-                        unit: None,
-                    },
-                ],
+                field_mappings: vec![FieldMapping {
+                    source_path: "main.temp".to_string(),
+                    target_field: "temperature".to_string(),
+                    unit: None,
+                }],
             }),
             entity_schemas: vec![EntitySchema {
                 schema_name: "nested-weather".to_string(),
-                attributes: vec![
-                    EntityAttribute {
-                        name: "temperature".to_string(),
-                        data_type: "float".to_string(),
-                        unit: None,
-                        nullable: false,
-                        description: None,
-                    },
-                ],
+                attributes: vec![EntityAttribute {
+                    name: "temperature".to_string(),
+                    data_type: "float".to_string(),
+                    unit: None,
+                    nullable: false,
+                    description: None,
+                }],
             }],
         }
     }
@@ -463,21 +505,32 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|_| Ok(simple_weather_config()));
 
-        mock_storage.expect_analyze_payload()
-            .returning(|_| Ok(PayloadStructure {
-                keys: vec!["temperature".to_string(), "humidity".to_string(), "pressure".to_string(), "extra".to_string()],
+        mock_storage.expect_analyze_payload().returning(|_| {
+            Ok(PayloadStructure {
+                keys: vec![
+                    "temperature".to_string(),
+                    "humidity".to_string(),
+                    "pressure".to_string(),
+                    "extra".to_string(),
+                ],
                 nested: HashMap::new(),
-            }));
+            })
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "simple-weather"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "simple-weather"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -515,21 +568,27 @@ mod tests {
             description: None,
         });
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(move |_| Ok(config.clone()));
 
-        mock_storage.expect_analyze_payload()
-            .returning(|_| Ok(PayloadStructure {
+        mock_storage.expect_analyze_payload().returning(|_| {
+            Ok(PayloadStructure {
                 keys: vec!["temperature".to_string(), "humidity".to_string()],
                 nested: HashMap::new(),
-            }));
+            })
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "weather-missing"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "weather-missing"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -538,12 +597,17 @@ mod tests {
 
         assert_eq!(inner["validation"]["status"], "mismatch");
 
-        let in_config_not_payload = inner["validation"]["analysis"]["in_config_not_in_payload"].as_array().unwrap();
+        let in_config_not_payload = inner["validation"]["analysis"]["in_config_not_in_payload"]
+            .as_array()
+            .unwrap();
         assert!(in_config_not_payload.iter().any(|v| v == "rain_1h"));
         assert!(in_config_not_payload.iter().any(|v| v == "pressure"));
 
         // Notes should mention missing fields
-        assert!(inner["validation"]["notes"].as_str().unwrap().contains("rain_1h"));
+        assert!(inner["validation"]["notes"]
+            .as_str()
+            .unwrap()
+            .contains("rain_1h"));
     }
 
     // -------------------------------------------------------------------------
@@ -558,32 +622,40 @@ mod tests {
 
         // Config only has temperature
         let mut config = simple_weather_config();
-        config.entity_schemas[0].attributes = vec![
-            EntityAttribute {
-                name: "temperature".to_string(),
-                data_type: "float".to_string(),
-                unit: None,
-                nullable: false,
-                description: None,
-            },
-        ];
+        config.entity_schemas[0].attributes = vec![EntityAttribute {
+            name: "temperature".to_string(),
+            data_type: "float".to_string(),
+            unit: None,
+            nullable: false,
+            description: None,
+        }];
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(move |_| Ok(config.clone()));
 
         // Payload has more fields
-        mock_storage.expect_analyze_payload()
-            .returning(|_| Ok(PayloadStructure {
-                keys: vec!["temperature".to_string(), "humidity".to_string(), "pressure".to_string()],
+        mock_storage.expect_analyze_payload().returning(|_| {
+            Ok(PayloadStructure {
+                keys: vec![
+                    "temperature".to_string(),
+                    "humidity".to_string(),
+                    "pressure".to_string(),
+                ],
                 nested: HashMap::new(),
-            }));
+            })
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "weather-extra"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "weather-extra"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -592,11 +664,15 @@ mod tests {
 
         assert_eq!(inner["validation"]["status"], "partial_match");
 
-        let in_payload_not_config = inner["validation"]["analysis"]["in_payload_not_in_config"].as_array().unwrap();
+        let in_payload_not_config = inner["validation"]["analysis"]["in_payload_not_in_config"]
+            .as_array()
+            .unwrap();
         assert!(in_payload_not_config.iter().any(|v| v == "humidity"));
         assert!(in_payload_not_config.iter().any(|v| v == "pressure"));
 
-        let in_config_not_payload = inner["validation"]["analysis"]["in_config_not_in_payload"].as_array().unwrap();
+        let in_config_not_payload = inner["validation"]["analysis"]["in_config_not_in_payload"]
+            .as_array()
+            .unwrap();
         assert!(in_config_not_payload.is_empty());
     }
 
@@ -610,25 +686,37 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|_| Ok(nested_weather_config()));
 
         let mut nested = HashMap::new();
-        nested.insert("main".to_string(), vec!["temp".to_string(), "humidity".to_string()]);
-        nested.insert("wind".to_string(), vec!["speed".to_string(), "deg".to_string()]);
+        nested.insert(
+            "main".to_string(),
+            vec!["temp".to_string(), "humidity".to_string()],
+        );
+        nested.insert(
+            "wind".to_string(),
+            vec!["speed".to_string(), "deg".to_string()],
+        );
 
-        mock_storage.expect_analyze_payload()
-            .returning(move |_| Ok(PayloadStructure {
+        mock_storage.expect_analyze_payload().returning(move |_| {
+            Ok(PayloadStructure {
                 keys: vec!["main".to_string(), "wind".to_string()],
                 nested: nested.clone(),
-            }));
+            })
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "nested-weather"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "nested-weather"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -641,8 +729,12 @@ mod tests {
         assert!(inner["validation"]["raw_payload_nested"].is_object());
 
         // Mapped correctly should show the path
-        let mapped = inner["validation"]["analysis"]["mapped_correctly"].as_array().unwrap();
-        assert!(mapped.iter().any(|v| v.as_str().unwrap().contains("temperature -> main.temp")));
+        let mapped = inner["validation"]["analysis"]["mapped_correctly"]
+            .as_array()
+            .unwrap();
+        assert!(mapped
+            .iter()
+            .any(|v| v.as_str().unwrap().contains("temperature -> main.temp")));
     }
 
     // -------------------------------------------------------------------------
@@ -659,21 +751,27 @@ mod tests {
         let mut config = simple_weather_config();
         config.entity_schemas = vec![];
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(move |_| Ok(config.clone()));
 
-        mock_storage.expect_analyze_payload()
-            .returning(|_| Ok(PayloadStructure {
+        mock_storage.expect_analyze_payload().returning(|_| {
+            Ok(PayloadStructure {
                 keys: vec!["temp".to_string(), "humidity".to_string()],
                 nested: HashMap::new(),
-            }));
+            })
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "legacy-stream"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "legacy-stream"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -681,7 +779,10 @@ mod tests {
         let inner: Value = serde_json::from_str(&response.content[0].text).unwrap();
 
         assert_eq!(inner["validation"]["status"], "no_target_schema");
-        assert!(inner["validation"]["notes"].as_str().unwrap().contains("No entity_schemas"));
+        assert!(inner["validation"]["notes"]
+            .as_str()
+            .unwrap()
+            .contains("No entity_schemas"));
     }
 
     // -------------------------------------------------------------------------
@@ -694,15 +795,20 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|id| Err(ConfigError::StreamNotFound(id.to_string())));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "nonexistent"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "nonexistent"
+            }),
+        )
+        .await;
 
         // Assert - returns error response (ToolResponse with isError=true)
         assert!(result.is_ok());
@@ -719,6 +825,9 @@ mod tests {
         let def = tool_definition();
         assert_eq!(def.name, "validate_config");
         assert!(def.description.contains("Compare"));
-        assert!(def.input_schema["required"].as_array().unwrap().contains(&json!("stream_id")));
+        assert!(def.input_schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("stream_id")));
     }
 }

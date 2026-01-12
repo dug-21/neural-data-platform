@@ -30,7 +30,10 @@ impl BronzeStorage for MockStorage {
             row_count: None,
         }])
     }
-    async fn get_schema(&self, _stream_id: &str) -> McpResult<ndp_mcp_server::storage::ParquetSchemaInfo> {
+    async fn get_schema(
+        &self,
+        _stream_id: &str,
+    ) -> McpResult<ndp_mcp_server::storage::ParquetSchemaInfo> {
         Err(McpError::StreamNotFound("mock".to_string()))
     }
     async fn sample(&self, _stream_id: &str, _n: usize) -> McpResult<Vec<Value>> {
@@ -84,10 +87,7 @@ async fn test_mcp_initialize_returns_capabilities() {
         "params": {}
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
@@ -118,10 +118,7 @@ async fn test_mcp_tools_list_returns_tools() {
         "params": {}
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
@@ -132,10 +129,7 @@ async fn test_mcp_tools_list_returns_tools() {
     let tools = result["tools"].as_array().expect("tools should be array");
 
     // Verify expected tools are present
-    let tool_names: Vec<&str> = tools
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
+    let tool_names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
 
     assert!(tool_names.contains(&"list_streams"));
     assert!(tool_names.contains(&"describe_schema"));
@@ -154,10 +148,7 @@ async fn test_mcp_tools_have_input_schemas() {
         "params": {}
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     let body: Value = response.json();
     let tools = body["result"]["tools"].as_array().unwrap();
@@ -183,10 +174,7 @@ async fn test_mcp_unknown_method_returns_error() {
         "params": {}
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
@@ -214,10 +202,7 @@ async fn test_mcp_tools_call_list_streams() {
         }
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
@@ -227,7 +212,9 @@ async fn test_mcp_tools_call_list_streams() {
     let result = &body["result"];
     assert!(result.get("content").is_some());
 
-    let content = result["content"].as_array().expect("content should be array");
+    let content = result["content"]
+        .as_array()
+        .expect("content should be array");
     assert!(!content.is_empty());
 }
 
@@ -245,10 +232,7 @@ async fn test_mcp_tools_call_unknown_tool() {
         }
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
@@ -271,10 +255,7 @@ async fn test_mcp_preserves_request_id() {
         "params": {}
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     let body: Value = response.json();
     assert_eq!(body["id"], "test-id-123");
@@ -292,10 +273,7 @@ async fn test_mcp_handles_null_id() {
         "params": {}
     });
 
-    let response = server
-        .post("/mcp")
-        .json(&request)
-        .await;
+    let response = server.post("/mcp").json(&request).await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
 

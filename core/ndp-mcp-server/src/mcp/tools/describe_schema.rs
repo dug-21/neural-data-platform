@@ -240,7 +240,19 @@ where
         .raw_payload_structure
         .map(|s| RawPayloadStructure {
             keys: s.keys,
-            nested: s.nested.into_iter().map(|(k, v)| (k, serde_json::Value::Array(v.into_iter().map(serde_json::Value::String).collect()))).next().map(|(_, v)| v),
+            nested: s
+                .nested
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        serde_json::Value::Array(
+                            v.into_iter().map(serde_json::Value::String).collect(),
+                        ),
+                    )
+                })
+                .next()
+                .map(|(_, v)| v),
         })
         .unwrap_or_else(|| RawPayloadStructure {
             keys: vec![],
@@ -426,7 +438,9 @@ where
 /// Validate stream_id format (kebab-case).
 pub(crate) fn validate_stream_id(stream_id: &str) -> McpResult<()> {
     if stream_id.is_empty() {
-        return Err(McpError::InvalidParams("stream_id cannot be empty".to_string()));
+        return Err(McpError::InvalidParams(
+            "stream_id cannot be empty".to_string(),
+        ));
     }
 
     if stream_id.len() > 64 {

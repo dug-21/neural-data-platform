@@ -136,10 +136,7 @@ where
     let rows: Vec<BronzeRow> = sample_values
         .into_iter()
         .map(|v| BronzeRow {
-            timestamp: v
-                .get("timestamp")
-                .and_then(|t| t.as_i64())
-                .unwrap_or(0),
+            timestamp: v.get("timestamp").and_then(|t| t.as_i64()).unwrap_or(0),
             source_id: v
                 .get("source_id")
                 .and_then(|s| s.as_str())

@@ -58,11 +58,9 @@ impl AppConfig {
                 .filter(|s| !s.is_empty())
                 .collect(),
 
-            raw_path: std::env::var("NDP_RAW_PATH")
-                .unwrap_or_else(|_| "/data/raw".to_string()),
+            raw_path: std::env::var("NDP_RAW_PATH").unwrap_or_else(|_| "/data/raw".to_string()),
 
-            log_level: std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "info".to_string()),
+            log_level: std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
         })
     }
 
@@ -75,9 +73,7 @@ impl AppConfig {
     /// - Listen address is empty
     pub fn validate(&self) -> McpResult<()> {
         if self.etcd_endpoints.is_empty() {
-            return Err(McpError::Config(
-                "No etcd endpoints configured".to_string(),
-            ));
+            return Err(McpError::Config("No etcd endpoints configured".to_string()));
         }
 
         if self.listen_addr.is_empty() {
@@ -91,10 +87,7 @@ impl AppConfig {
 
     /// Get the host portion of the listen address.
     pub fn host(&self) -> &str {
-        self.listen_addr
-            .split(':')
-            .next()
-            .unwrap_or("0.0.0.0")
+        self.listen_addr.split(':').next().unwrap_or("0.0.0.0")
     }
 
     /// Get the port portion of the listen address.
@@ -131,9 +124,9 @@ impl AppConfig {
         let endpoints: Vec<&str> = self.etcd_endpoints.iter().map(|s| s.as_str()).collect();
         info!(endpoints = ?endpoints, "Creating StreamRegistry");
 
-        StreamRegistry::new(&endpoints)
-            .await
-            .map_err(|e| McpError::EtcdUnavailable(format!("Failed to create StreamRegistry: {}", e)))
+        StreamRegistry::new(&endpoints).await.map_err(|e| {
+            McpError::EtcdUnavailable(format!("Failed to create StreamRegistry: {}", e))
+        })
     }
 
     /// Get the storage base path, with etcd fallback.

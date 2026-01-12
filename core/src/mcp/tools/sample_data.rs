@@ -25,13 +25,11 @@
 //! ```
 
 use crate::mcp::tools::{
+    create_error_response, create_tool_response, error_codes,
+    traits::{BronzeRow, ConfigError, StorageError},
     AppState,
-    create_tool_response,
-    create_error_response,
-    error_codes,
-    traits::{ConfigError, StorageError, BronzeRow},
 };
-use crate::mcp::{McpRpcError, ToolDefinition, JsonRpcError};
+use crate::mcp::{JsonRpcError, McpRpcError, ToolDefinition};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -122,11 +120,12 @@ pub fn tool_definition() -> ToolDefinition {
 /// - If n > MAX_N, clamps to MAX_N with a note
 pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError> {
     // Parse input
-    let input: SampleDataInput = serde_json::from_value(args)
-        .map_err(|e| McpRpcError::new(
+    let input: SampleDataInput = serde_json::from_value(args).map_err(|e| {
+        McpRpcError::new(
             JsonRpcError::INVALID_PARAMS,
             format!("Invalid input: {}", e),
-        ))?;
+        )
+    })?;
 
     // Validate stream exists in config (fail fast for invalid stream_id)
     match state.config.get_stream_config(&input.stream_id).await {
@@ -180,14 +179,25 @@ pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError
     };
 
     // Get source file path
-    let source_file = state.storage.get_latest_file_path(&input.stream_id).await.ok().flatten();
+    let source_file = state
+        .storage
+        .get_latest_file_path(&input.stream_id)
+        .await
+        .ok()
+        .flatten();
 
     // Build response with appropriate notes
     let row_count = rows.len();
     let note = if clamped && row_count == MAX_N {
-        Some(format!("Requested {} rows but maximum is {}. Returning {}.", requested_n, MAX_N, MAX_N))
+        Some(format!(
+            "Requested {} rows but maximum is {}. Returning {}.",
+            requested_n, MAX_N, MAX_N
+        ))
     } else if row_count < actual_n && row_count > 0 {
-        Some(format!("Requested {} rows but only {} available", actual_n, row_count))
+        Some(format!(
+            "Requested {} rows but only {} available",
+            actual_n, row_count
+        ))
     } else {
         None
     };
@@ -210,10 +220,7 @@ pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp::tools::traits::{
-        MockBronzeStorage, MockConfigStore,
-        StreamConfigInfo,
-    };
+    use crate::mcp::tools::traits::{MockBronzeStorage, MockConfigStore, StreamConfigInfo};
     use crate::mcp::ToolResponse;
     use std::sync::Arc;
 
@@ -221,10 +228,7 @@ mod tests {
         mock_storage: MockBronzeStorage,
         mock_config: MockConfigStore,
     ) -> AppState {
-        AppState::new(
-            Arc::new(mock_storage),
-            Arc::new(mock_config),
-        )
+        AppState::new(Arc::new(mock_storage), Arc::new(mock_config))
     }
 
     fn sample_config_info() -> StreamConfigInfo {
@@ -238,13 +242,15 @@ mod tests {
     }
 
     fn sample_rows(count: usize) -> Vec<BronzeRow> {
-        (0..count).map(|i| BronzeRow {
-            timestamp: 1767452639760716 - (i as i64 * 60_000_000), // 1 minute apart
-            source_id: "air-quality-Mqtt".to_string(),
-            ndp_id: Some(format!("sensor-{:03}", i)),
-            context: Some(json!({"location": {"room": "office"}})),
-            raw_payload: json!({"pm25": 12.5 + i as f64, "co2": 800 + i as i64}),
-        }).collect()
+        (0..count)
+            .map(|i| BronzeRow {
+                timestamp: 1767452639760716 - (i as i64 * 60_000_000), // 1 minute apart
+                source_id: "air-quality-Mqtt".to_string(),
+                ndp_id: Some(format!("sensor-{:03}", i)),
+                context: Some(json!({"location": {"room": "office"}})),
+                raw_payload: json!({"pm25": 12.5 + i as f64, "co2": 800 + i as i64}),
+            })
+            .collect()
     }
 
     // -------------------------------------------------------------------------
@@ -257,23 +263,35 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .returning(|_| Ok(sample_config_info()));
 
-        mock_storage.expect_sample()
-            .with(mockall::predicate::eq("air-quality"), mockall::predicate::eq(5))
+        mock_storage
+            .expect_sample()
+            .with(
+                mockall::predicate::eq("air-quality"),
+                mockall::predicate::eq(5),
+            )
             .returning(|_, n| Ok(sample_rows(n)));
 
-        mock_storage.expect_get_latest_file_path()
-            .returning(|_| Ok(Some("/data/raw/air-quality/year=2026/month=01/day=03/data.parquet".to_string())));
+        mock_storage.expect_get_latest_file_path().returning(|_| {
+            Ok(Some(
+                "/data/raw/air-quality/year=2026/month=01/day=03/data.parquet".to_string(),
+            ))
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "air-quality",
-            "n": 5
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "air-quality",
+                "n": 5
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -294,7 +312,10 @@ mod tests {
         assert!(first_row["raw_payload"].is_object());
 
         // Verify source_file
-        assert!(inner["source_file"].as_str().unwrap().contains("air-quality"));
+        assert!(inner["source_file"]
+            .as_str()
+            .unwrap()
+            .contains("air-quality"));
     }
 
     // -------------------------------------------------------------------------
@@ -307,23 +328,30 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .returning(|_| Ok(sample_config_info()));
 
         // Storage only has 3 rows
-        mock_storage.expect_sample()
+        mock_storage
+            .expect_sample()
             .returning(|_, _| Ok(sample_rows(3)));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(Some("/data/raw/sparse-stream/data.parquet".to_string())));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "sparse-stream",
-            "n": 100
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "sparse-stream",
+                "n": 100
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -331,7 +359,10 @@ mod tests {
         let inner: Value = serde_json::from_str(&response.content[0].text).unwrap();
 
         assert_eq!(inner["row_count"], 3);
-        assert!(inner["note"].as_str().unwrap().contains("Requested 100 rows but only 3 available"));
+        assert!(inner["note"]
+            .as_str()
+            .unwrap()
+            .contains("Requested 100 rows but only 3 available"));
     }
 
     // -------------------------------------------------------------------------
@@ -348,20 +379,26 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .returning(|_| Ok(sample_config_info()));
 
         // No data available
-        mock_storage.expect_sample()
+        mock_storage
+            .expect_sample()
             .returning(|id, _| Err(StorageError::NoDataAvailable(id.to_string())));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "empty-stream",
-            "n": 10
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "empty-stream",
+                "n": 10
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -372,7 +409,10 @@ mod tests {
         assert_eq!(inner["row_count"], 0);
         assert_eq!(inner["rows"].as_array().unwrap().len(), 0);
         assert!(inner["source_file"].is_null());
-        assert!(inner["note"].as_str().unwrap().contains("No data available"));
+        assert!(inner["note"]
+            .as_str()
+            .unwrap()
+            .contains("No data available"));
     }
 
     // -------------------------------------------------------------------------
@@ -385,23 +425,30 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .returning(|_| Ok(sample_config_info()));
 
         // Verify sample is called with default n=10
-        mock_storage.expect_sample()
+        mock_storage
+            .expect_sample()
             .with(mockall::predicate::always(), mockall::predicate::eq(10))
             .returning(|_, n| Ok(sample_rows(n)));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(None));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act - no n specified
-        let result = execute(&state, json!({
-            "stream_id": "air-quality"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "air-quality"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -421,24 +468,31 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .returning(|_| Ok(sample_config_info()));
 
         // Should be called with MAX_N (100), not 1000
-        mock_storage.expect_sample()
+        mock_storage
+            .expect_sample()
             .with(mockall::predicate::always(), mockall::predicate::eq(100))
             .returning(|_, n| Ok(sample_rows(n)));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(None));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "air-quality",
-            "n": 1000
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "air-quality",
+                "n": 1000
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -446,7 +500,10 @@ mod tests {
         let inner: Value = serde_json::from_str(&response.content[0].text).unwrap();
 
         assert_eq!(inner["row_count"], 100);
-        assert!(inner["note"].as_str().unwrap().contains("Requested 1000 rows but maximum is 100"));
+        assert!(inner["note"]
+            .as_str()
+            .unwrap()
+            .contains("Requested 1000 rows but maximum is 100"));
     }
 
     // -------------------------------------------------------------------------
@@ -459,16 +516,21 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .returning(|id| Err(ConfigError::StreamNotFound(id.to_string())));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "nonexistent",
-            "n": 10
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "nonexistent",
+                "n": 10
+            }),
+        )
+        .await;
 
         // Assert - returns error response (ToolResponse with isError=true)
         assert!(result.is_ok());
@@ -485,7 +547,10 @@ mod tests {
         let def = tool_definition();
         assert_eq!(def.name, "sample_data");
         assert!(def.description.contains("sample rows"));
-        assert!(def.input_schema["required"].as_array().unwrap().contains(&json!("stream_id")));
+        assert!(def.input_schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("stream_id")));
         assert_eq!(def.input_schema["properties"]["n"]["default"], 10);
         assert_eq!(def.input_schema["properties"]["n"]["maximum"], 100);
     }
@@ -500,22 +565,29 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_stream_config()
+        mock_config
+            .expect_get_stream_config()
             .returning(|_| Ok(sample_config_info()));
 
-        mock_storage.expect_sample()
+        mock_storage
+            .expect_sample()
             .returning(|_, n| Ok(sample_rows(n)));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(None));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "air-quality",
-            "n": 3
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "air-quality",
+                "n": 3
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());

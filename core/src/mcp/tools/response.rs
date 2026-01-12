@@ -3,7 +3,7 @@
 //! Provides consistent response formatting following ADR-005.
 //! All tool responses use the MCP content format with success/error flags.
 
-use crate::mcp::{McpRpcError, ToolResponse, JsonRpcError};
+use crate::mcp::{JsonRpcError, McpRpcError, ToolResponse};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -53,13 +53,21 @@ pub fn create_tool_response<T: Serialize>(data: T) -> ToolResult {
         data,
     };
 
-    let json_text = serde_json::to_string(&success_data)
-        .map_err(|e| McpRpcError::new(JsonRpcError::INTERNAL_ERROR, format!("Serialization error: {}", e)))?;
+    let json_text = serde_json::to_string(&success_data).map_err(|e| {
+        McpRpcError::new(
+            JsonRpcError::INTERNAL_ERROR,
+            format!("Serialization error: {}", e),
+        )
+    })?;
 
     let tool_response = ToolResponse::success(json_text);
 
-    serde_json::to_value(tool_response)
-        .map_err(|e| McpRpcError::new(JsonRpcError::INTERNAL_ERROR, format!("Response encoding error: {}", e)))
+    serde_json::to_value(tool_response).map_err(|e| {
+        McpRpcError::new(
+            JsonRpcError::INTERNAL_ERROR,
+            format!("Response encoding error: {}", e),
+        )
+    })
 }
 
 /// Create an error tool response
@@ -71,11 +79,7 @@ pub fn create_tool_response<T: Serialize>(data: T) -> ToolResult {
 ///
 /// # Returns
 /// A JSON Value containing the MCP ToolResponse with isError flag
-pub fn create_error_response(
-    code: &str,
-    message: &str,
-    details: Option<Value>,
-) -> ToolResult {
+pub fn create_error_response(code: &str, message: &str, details: Option<Value>) -> ToolResult {
     let error_data = ErrorResponse {
         success: false,
         error: message.to_string(),
@@ -83,13 +87,21 @@ pub fn create_error_response(
         details,
     };
 
-    let json_text = serde_json::to_string(&error_data)
-        .map_err(|e| McpRpcError::new(JsonRpcError::INTERNAL_ERROR, format!("Serialization error: {}", e)))?;
+    let json_text = serde_json::to_string(&error_data).map_err(|e| {
+        McpRpcError::new(
+            JsonRpcError::INTERNAL_ERROR,
+            format!("Serialization error: {}", e),
+        )
+    })?;
 
     let tool_response = ToolResponse::error(json_text);
 
-    serde_json::to_value(tool_response)
-        .map_err(|e| McpRpcError::new(JsonRpcError::INTERNAL_ERROR, format!("Response encoding error: {}", e)))
+    serde_json::to_value(tool_response).map_err(|e| {
+        McpRpcError::new(
+            JsonRpcError::INTERNAL_ERROR,
+            format!("Response encoding error: {}", e),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -130,7 +142,8 @@ mod tests {
             "STREAM_NOT_FOUND",
             "Stream not found: invalid-stream",
             Some(serde_json::json!({"stream_id": "invalid-stream"})),
-        ).unwrap();
+        )
+        .unwrap();
 
         let response: ToolResponse = serde_json::from_value(result).unwrap();
         assert!(response.is_error());
@@ -144,11 +157,7 @@ mod tests {
 
     #[test]
     fn test_create_error_response_without_details() {
-        let result = create_error_response(
-            "INTERNAL_ERROR",
-            "Something went wrong",
-            None,
-        ).unwrap();
+        let result = create_error_response("INTERNAL_ERROR", "Something went wrong", None).unwrap();
 
         let response: ToolResponse = serde_json::from_value(result).unwrap();
         let inner: Value = serde_json::from_str(&response.content[0].text).unwrap();

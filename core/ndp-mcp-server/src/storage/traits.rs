@@ -9,8 +9,8 @@ use serde_json::Value;
 #[cfg(test)]
 use mockall::automock;
 
-use crate::error::McpResult;
 use super::types::{ParquetSchemaInfo, StreamStorageInfo};
+use crate::error::McpResult;
 
 /// Bronze layer storage abstraction (Port).
 ///
@@ -142,18 +142,16 @@ mod tests {
                 .with_file_size(2048),
         ];
 
-        mock.expect_list_streams()
-            .times(1)
-            .returning(move || {
-                Ok(vec![
-                    StreamStorageInfo::new("air-quality")
-                        .with_latest_partition("year=2026/month=01/day=03")
-                        .with_file_size(1024),
-                    StreamStorageInfo::new("outdoor-weather")
-                        .with_latest_partition("year=2026/month=01/day=03")
-                        .with_file_size(2048),
-                ])
-            });
+        mock.expect_list_streams().times(1).returning(move || {
+            Ok(vec![
+                StreamStorageInfo::new("air-quality")
+                    .with_latest_partition("year=2026/month=01/day=03")
+                    .with_file_size(1024),
+                StreamStorageInfo::new("outdoor-weather")
+                    .with_latest_partition("year=2026/month=01/day=03")
+                    .with_file_size(2048),
+            ])
+        });
 
         let result = mock.list_streams().await;
         assert!(result.is_ok());
@@ -167,9 +165,7 @@ mod tests {
     async fn test_list_streams_returns_empty_when_no_data() {
         let mut mock = MockBronzeStorage::new();
 
-        mock.expect_list_streams()
-            .times(1)
-            .returning(|| Ok(vec![]));
+        mock.expect_list_streams().times(1).returning(|| Ok(vec![]));
 
         let result = mock.list_streams().await;
         assert!(result.is_ok());
@@ -222,7 +218,8 @@ mod tests {
                         keys: vec!["pm25".to_string(), "temperature".to_string()],
                         nested: std::collections::HashMap::new(),
                     }),
-                    file_path: "/data/raw/air-quality/year=2026/month=01/day=03/data.parquet".to_string(),
+                    file_path: "/data/raw/air-quality/year=2026/month=01/day=03/data.parquet"
+                        .to_string(),
                 })
             });
 
@@ -255,7 +252,10 @@ mod tests {
         let mut mock = MockBronzeStorage::new();
 
         mock.expect_sample()
-            .with(mockall::predicate::eq("air-quality"), mockall::predicate::eq(3))
+            .with(
+                mockall::predicate::eq("air-quality"),
+                mockall::predicate::eq(3),
+            )
             .times(1)
             .returning(|_, _| {
                 Ok(vec![
@@ -291,7 +291,10 @@ mod tests {
 
         // Request only 1 row
         mock.expect_sample()
-            .with(mockall::predicate::eq("air-quality"), mockall::predicate::eq(1))
+            .with(
+                mockall::predicate::eq("air-quality"),
+                mockall::predicate::eq(1),
+            )
             .times(1)
             .returning(|_, _| {
                 Ok(vec![json!({
@@ -311,7 +314,10 @@ mod tests {
         let mut mock = MockBronzeStorage::new();
 
         mock.expect_sample()
-            .with(mockall::predicate::eq("empty-stream"), mockall::predicate::eq(10))
+            .with(
+                mockall::predicate::eq("empty-stream"),
+                mockall::predicate::eq(10),
+            )
             .times(1)
             .returning(|stream_id, _| Err(McpError::StreamNotFound(stream_id.to_string())));
 
@@ -375,18 +381,20 @@ mod tests {
                     stream_id: "air-quality".to_string(),
                     fields: vec![FieldInfo::new("timestamp", "INT64")],
                     raw_payload_structure: None,
-                    file_path: "/data/raw/air-quality/year=2026/month=01/day=03/data.parquet".to_string(),
+                    file_path: "/data/raw/air-quality/year=2026/month=01/day=03/data.parquet"
+                        .to_string(),
                 })
             });
 
         // Step 3: Sample data from stream
         mock.expect_sample()
-            .with(mockall::predicate::eq("air-quality"), mockall::predicate::eq(5))
+            .with(
+                mockall::predicate::eq("air-quality"),
+                mockall::predicate::eq(5),
+            )
             .times(1)
             .in_sequence(&mut seq)
-            .returning(|_, _| {
-                Ok(vec![json!({"timestamp": 1704067200000i64})])
-            });
+            .returning(|_, _| Ok(vec![json!({"timestamp": 1704067200000i64})]));
 
         // Execute workflow
         let streams = mock.list_streams().await.unwrap();
@@ -409,7 +417,9 @@ mod tests {
             .with(mockall::predicate::eq("corrupted-stream"))
             .times(1)
             .returning(|_| {
-                Err(McpError::StorageError("Invalid Parquet magic bytes".to_string()))
+                Err(McpError::StorageError(
+                    "Invalid Parquet magic bytes".to_string(),
+                ))
             });
 
         let result = mock.get_schema("corrupted-stream").await;
@@ -425,9 +435,7 @@ mod tests {
 
         mock.expect_sample()
             .times(1)
-            .returning(|_, _| {
-                Err(McpError::StorageError("Disk I/O error".to_string()))
-            });
+            .returning(|_, _| Err(McpError::StorageError("Disk I/O error".to_string())));
 
         let result = mock.sample("any-stream", 10).await;
         assert!(result.is_err());

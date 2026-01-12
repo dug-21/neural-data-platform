@@ -24,9 +24,7 @@
 
 use crate::error::{McpError, McpResult};
 use crate::storage::traits::BronzeStorage;
-use crate::storage::types::{
-    FieldInfo, ParquetSchemaInfo, RawPayloadStructure, StreamStorageInfo,
-};
+use crate::storage::types::{FieldInfo, ParquetSchemaInfo, RawPayloadStructure, StreamStorageInfo};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -165,7 +163,11 @@ impl LocalParquetStorage {
     /// Vector of directory paths matching the prefix.
     fn list_partition_dirs(&self, parent: &Path, prefix: &str) -> McpResult<Vec<PathBuf>> {
         let entries = fs::read_dir(parent).map_err(|e| {
-            McpError::StorageError(format!("Failed to read directory {}: {}", parent.display(), e))
+            McpError::StorageError(format!(
+                "Failed to read directory {}: {}",
+                parent.display(),
+                e
+            ))
         })?;
 
         let dirs: Vec<PathBuf> = entries
@@ -200,13 +202,17 @@ impl LocalParquetStorage {
     /// Tuple of (file_size_bytes, modified_time)
     fn get_file_metadata(&self, path: &Path) -> McpResult<(u64, DateTime<Utc>)> {
         let metadata = fs::metadata(path).map_err(|e| {
-            McpError::StorageError(format!("Failed to get metadata for {}: {}", path.display(), e))
+            McpError::StorageError(format!(
+                "Failed to get metadata for {}: {}",
+                path.display(),
+                e
+            ))
         })?;
 
         let size = metadata.len();
-        let modified = metadata.modified().map_err(|e| {
-            McpError::StorageError(format!("Failed to get modified time: {}", e))
-        })?;
+        let modified = metadata
+            .modified()
+            .map_err(|e| McpError::StorageError(format!("Failed to get modified time: {}", e)))?;
 
         let modified_dt = DateTime::<Utc>::from(modified);
 
@@ -251,9 +257,8 @@ impl LocalParquetStorage {
             McpError::StorageError(format!("Failed to open {}: {}", path.display(), e))
         })?;
 
-        let reader = SerializedFileReader::new(file).map_err(|e| {
-            McpError::StorageError(format!("Failed to read Parquet file: {}", e))
-        })?;
+        let reader = SerializedFileReader::new(file)
+            .map_err(|e| McpError::StorageError(format!("Failed to read Parquet file: {}", e)))?;
 
         let metadata = reader.metadata();
         let row_count: u64 = metadata
@@ -273,9 +278,8 @@ impl LocalParquetStorage {
             McpError::StorageError(format!("Failed to open {}: {}", path.display(), e))
         })?;
 
-        let reader = SerializedFileReader::new(file).map_err(|e| {
-            McpError::StorageError(format!("Failed to read Parquet file: {}", e))
-        })?;
+        let reader = SerializedFileReader::new(file)
+            .map_err(|e| McpError::StorageError(format!("Failed to read Parquet file: {}", e)))?;
 
         let schema_descr = reader.metadata().file_metadata().schema_descr();
         let arrow_schema = parquet::arrow::parquet_to_arrow_schema(
@@ -304,9 +308,8 @@ impl LocalParquetStorage {
             McpError::StorageError(format!("Failed to open {}: {}", path.display(), e))
         })?;
 
-        let reader = SerializedFileReader::new(file).map_err(|e| {
-            McpError::StorageError(format!("Failed to read Parquet file: {}", e))
-        })?;
+        let reader = SerializedFileReader::new(file)
+            .map_err(|e| McpError::StorageError(format!("Failed to read Parquet file: {}", e)))?;
 
         let metadata = reader.metadata();
         let schema = metadata.file_metadata().schema_descr();
@@ -320,15 +323,14 @@ impl LocalParquetStorage {
         let skip_rows = total_rows.saturating_sub(n);
 
         let mut rows = Vec::with_capacity(n.min(total_rows));
-        let row_iter = reader.get_row_iter(None).map_err(|e| {
-            McpError::StorageError(format!("Failed to create row iterator: {}", e))
-        })?;
+        let row_iter = reader
+            .get_row_iter(None)
+            .map_err(|e| McpError::StorageError(format!("Failed to create row iterator: {}", e)))?;
 
         let mut current_row = 0;
         for row_result in row_iter {
-            let row = row_result.map_err(|e| {
-                McpError::StorageError(format!("Failed to read row: {}", e))
-            })?;
+            let row = row_result
+                .map_err(|e| McpError::StorageError(format!("Failed to read row: {}", e)))?;
 
             if current_row >= skip_rows {
                 // Convert row to JSON
@@ -432,7 +434,6 @@ impl LocalParquetStorage {
             }
         }
     }
-
 
     /// Extract structure from raw_payload JSON values.
     ///
@@ -551,12 +552,11 @@ impl BronzeStorage for LocalParquetStorage {
             None
         };
 
-        Ok(ParquetSchemaInfo::new(
-            stream_id,
-            parquet_path.to_string_lossy().to_string(),
+        Ok(
+            ParquetSchemaInfo::new(stream_id, parquet_path.to_string_lossy().to_string())
+                .with_fields(fields)
+                .with_payload_structure(raw_payload_structure.unwrap_or_default()),
         )
-        .with_fields(fields)
-        .with_payload_structure(raw_payload_structure.unwrap_or_default()))
     }
 
     async fn sample(&self, stream_id: &str, n: usize) -> McpResult<Vec<Value>> {
@@ -634,10 +634,8 @@ mod tests {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
 
         let timestamp_array = Int64Array::from(rows.iter().map(|r| r.0).collect::<Vec<_>>());
-        let source_id_array =
-            StringArray::from(rows.iter().map(|r| r.1).collect::<Vec<&str>>());
-        let raw_payload_array =
-            StringArray::from(rows.iter().map(|r| r.2).collect::<Vec<&str>>());
+        let source_id_array = StringArray::from(rows.iter().map(|r| r.1).collect::<Vec<&str>>());
+        let raw_payload_array = StringArray::from(rows.iter().map(|r| r.2).collect::<Vec<&str>>());
 
         let schema = Arc::new(Schema::new(vec![
             Field::new("timestamp", DataType::Int64, false),

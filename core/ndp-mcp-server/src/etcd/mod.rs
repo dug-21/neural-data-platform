@@ -221,15 +221,13 @@ mod tests {
     async fn test_list_stream_ids_returns_all_streams() {
         let mut mock = MockConfigStore::new();
 
-        mock.expect_list_streams()
-            .times(1)
-            .returning(|| {
-                Ok(vec![
-                    "air-quality".to_string(),
-                    "outdoor-weather".to_string(),
-                    "nws-forecast".to_string(),
-                ])
-            });
+        mock.expect_list_streams().times(1).returning(|| {
+            Ok(vec![
+                "air-quality".to_string(),
+                "outdoor-weather".to_string(),
+                "nws-forecast".to_string(),
+            ])
+        });
 
         let result = mock.list_streams().await;
         assert!(result.is_ok());
@@ -243,9 +241,7 @@ mod tests {
     async fn test_list_stream_ids_returns_empty_when_none_configured() {
         let mut mock = MockConfigStore::new();
 
-        mock.expect_list_streams()
-            .times(1)
-            .returning(|| Ok(vec![]));
+        mock.expect_list_streams().times(1).returning(|| Ok(vec![]));
 
         let result = mock.list_streams().await;
         assert!(result.is_ok());
@@ -277,24 +273,20 @@ mod tests {
                     stream_id: stream_id.to_string(),
                     enabled: true,
                     source_type: "mqtt".to_string(),
-                    field_mappings: vec![
-                        FieldMapping {
-                            source: "pm25".to_string(),
-                            target: Some("pm25".to_string()),
-                            field_type: Some("number".to_string()),
-                        },
-                    ],
+                    field_mappings: vec![FieldMapping {
+                        source: "pm25".to_string(),
+                        target: Some("pm25".to_string()),
+                        field_type: Some("number".to_string()),
+                    }],
                     entity_schema: EntitySchema {
                         name: "AirGradient".to_string(),
                         version: "1.0".to_string(),
-                        attributes: vec![
-                            SchemaAttribute {
-                                name: "pm25".to_string(),
-                                attr_type: "number".to_string(),
-                                unit: Some("µg/m³".to_string()),
-                                required: true,
-                            },
-                        ],
+                        attributes: vec![SchemaAttribute {
+                            name: "pm25".to_string(),
+                            attr_type: "number".to_string(),
+                            unit: Some("µg/m³".to_string()),
+                            required: true,
+                        }],
                     },
                     raw_config: HashMap::new(),
                 })
@@ -330,22 +322,20 @@ mod tests {
     async fn test_get_enabled_streams_returns_only_enabled() {
         let mut mock = MockConfigStore::new();
 
-        mock.expect_get_enabled_streams()
-            .times(1)
-            .returning(|| {
-                Ok(vec![
-                    StreamConfig {
-                        stream_id: "air-quality".to_string(),
-                        enabled: true,
-                        ..Default::default()
-                    },
-                    StreamConfig {
-                        stream_id: "outdoor-weather".to_string(),
-                        enabled: true,
-                        ..Default::default()
-                    },
-                ])
-            });
+        mock.expect_get_enabled_streams().times(1).returning(|| {
+            Ok(vec![
+                StreamConfig {
+                    stream_id: "air-quality".to_string(),
+                    enabled: true,
+                    ..Default::default()
+                },
+                StreamConfig {
+                    stream_id: "outdoor-weather".to_string(),
+                    enabled: true,
+                    ..Default::default()
+                },
+            ])
+        });
 
         let result = mock.get_enabled_streams().await;
         assert!(result.is_ok());
@@ -358,9 +348,7 @@ mod tests {
     async fn test_health_check_success() {
         let mut mock = MockConfigStore::new();
 
-        mock.expect_validate()
-            .times(1)
-            .returning(|| Ok(()));
+        mock.expect_validate().times(1).returning(|| Ok(()));
 
         let result = mock.validate().await;
         assert!(result.is_ok());
@@ -446,7 +434,10 @@ mod tests {
 
         assert_eq!(config.field_mappings.len(), 2);
         assert_eq!(config.field_mappings[0].source, "main.temp");
-        assert_eq!(config.field_mappings[1].target, Some("humidity".to_string()));
+        assert_eq!(
+            config.field_mappings[1].target,
+            Some("humidity".to_string())
+        );
     }
 
     #[test]
@@ -482,13 +473,11 @@ mod tests {
             stream_id: "air-quality".to_string(),
             enabled: true,
             source_type: "mqtt".to_string(),
-            field_mappings: vec![
-                FieldMapping {
-                    source: "pm25".to_string(),
-                    target: None,
-                    field_type: None,
-                },
-            ],
+            field_mappings: vec![FieldMapping {
+                source: "pm25".to_string(),
+                target: None,
+                field_type: None,
+            }],
             entity_schema: EntitySchema {
                 name: "AirQuality".to_string(),
                 version: "1.0".to_string(),

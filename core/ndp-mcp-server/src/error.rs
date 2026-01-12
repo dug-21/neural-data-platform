@@ -141,10 +141,7 @@ mod tests {
     #[test]
     fn test_config_error_display() {
         let err = McpError::Config("missing NDP_RAW_PATH".to_string());
-        assert_eq!(
-            err.to_string(),
-            "Configuration error: missing NDP_RAW_PATH"
-        );
+        assert_eq!(err.to_string(), "Configuration error: missing NDP_RAW_PATH");
     }
 
     #[test]

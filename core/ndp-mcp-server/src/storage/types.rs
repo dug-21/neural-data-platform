@@ -472,10 +472,7 @@ mod tests {
         }));
 
         assert_eq!(structure.fields.get("sensor"), Some(&"object".to_string()));
-        assert_eq!(
-            structure.fields.get("readings"),
-            Some(&"array".to_string())
-        );
+        assert_eq!(structure.fields.get("readings"), Some(&"array".to_string()));
 
         // Check nested keys
         let sensor_keys = structure.nested_objects.get("sensor").unwrap();
@@ -549,11 +546,12 @@ mod tests {
 
     #[test]
     fn test_parquet_schema_info_serialization() {
-        let schema = ParquetSchemaInfo::new("outdoor-weather", "/data/raw/outdoor-weather/data.parquet")
-            .with_fields(vec![
-                FieldInfo::new("timestamp", "INT64").with_nullable(false),
-                FieldInfo::new("raw_payload", "UTF8"),
-            ]);
+        let schema =
+            ParquetSchemaInfo::new("outdoor-weather", "/data/raw/outdoor-weather/data.parquet")
+                .with_fields(vec![
+                    FieldInfo::new("timestamp", "INT64").with_nullable(false),
+                    FieldInfo::new("raw_payload", "UTF8"),
+                ]);
 
         let json_str = serde_json::to_string(&schema).unwrap();
         assert!(json_str.contains("outdoor-weather"));
@@ -581,7 +579,10 @@ mod tests {
         assert_eq!(field.name, "temperature");
         assert_eq!(field.data_type, "DOUBLE");
         assert!(!field.nullable);
-        assert_eq!(field.description, Some("Temperature in Celsius".to_string()));
+        assert_eq!(
+            field.description,
+            Some("Temperature in Celsius".to_string())
+        );
     }
 
     #[test]

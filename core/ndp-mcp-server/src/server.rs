@@ -224,11 +224,8 @@ mod tests {
 
     #[test]
     fn test_json_rpc_response_error() {
-        let response = JsonRpcResponse::error(
-            Some(serde_json::json!(1)),
-            -32601,
-            "Method not found",
-        );
+        let response =
+            JsonRpcResponse::error(Some(serde_json::json!(1)), -32601, "Method not found");
         assert_eq!(response.jsonrpc, "2.0");
         assert!(response.result.is_none());
         assert!(response.error.is_some());

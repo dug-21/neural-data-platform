@@ -13,8 +13,8 @@ use crate::etcd::ConfigStore;
 use crate::storage::BronzeStorage;
 
 use super::protocol::{
-    error_codes, InitializeResult, JsonRpcRequest, JsonRpcResponse, McpToolResult,
-    ToolDefinition, ToolInputSchema, ToolsCallParams, ToolsListResult,
+    error_codes, InitializeResult, JsonRpcRequest, JsonRpcResponse, McpToolResult, ToolDefinition,
+    ToolInputSchema, ToolsCallParams, ToolsListResult,
 };
 use super::tools;
 
@@ -160,20 +160,12 @@ where
     }
 
     /// Handle tools/call request.
-    async fn handle_tools_call(
-        &self,
-        id: Option<Value>,
-        params: Option<Value>,
-    ) -> JsonRpcResponse {
+    async fn handle_tools_call(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
         // Parse the params
         let params = match params {
             Some(p) => p,
             None => {
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::INVALID_PARAMS,
-                    "Missing params",
-                );
+                return JsonRpcResponse::error(id, error_codes::INVALID_PARAMS, "Missing params");
             }
         };
 
@@ -192,18 +184,10 @@ where
 
         // Route to the appropriate tool handler
         let result = match call_params.name.as_str() {
-            "list_streams" => {
-                self.execute_list_streams().await
-            }
-            "describe_schema" => {
-                self.execute_describe_schema(call_params.arguments).await
-            }
-            "validate_config" => {
-                self.execute_validate_config(call_params.arguments).await
-            }
-            "sample_data" => {
-                self.execute_sample_data(call_params.arguments).await
-            }
+            "list_streams" => self.execute_list_streams().await,
+            "describe_schema" => self.execute_describe_schema(call_params.arguments).await,
+            "validate_config" => self.execute_validate_config(call_params.arguments).await,
+            "sample_data" => self.execute_sample_data(call_params.arguments).await,
             _ => {
                 warn!(tool = %call_params.name, "Unknown tool");
                 return JsonRpcResponse::error(
@@ -215,33 +199,33 @@ where
         };
 
         match result {
-            Ok(tool_result) => {
-                match serde_json::to_value(tool_result) {
-                    Ok(value) => JsonRpcResponse::success(id, value),
-                    Err(e) => JsonRpcResponse::error(
-                        id,
-                        error_codes::INTERNAL_ERROR,
-                        format!("Serialization error: {}", e),
-                    ),
-                }
-            }
+            Ok(tool_result) => match serde_json::to_value(tool_result) {
+                Ok(value) => JsonRpcResponse::success(id, value),
+                Err(e) => JsonRpcResponse::error(
+                    id,
+                    error_codes::INTERNAL_ERROR,
+                    format!("Serialization error: {}", e),
+                ),
+            },
             Err(e) => {
                 let (code, mcp_code) = match &e {
-                    McpError::StreamNotFound(_) => (error_codes::STREAM_NOT_FOUND, "STREAM_NOT_FOUND"),
-                    McpError::EtcdUnavailable(_) => (error_codes::ETCD_UNAVAILABLE, "ETCD_UNAVAILABLE"),
+                    McpError::StreamNotFound(_) => {
+                        (error_codes::STREAM_NOT_FOUND, "STREAM_NOT_FOUND")
+                    }
+                    McpError::EtcdUnavailable(_) => {
+                        (error_codes::ETCD_UNAVAILABLE, "ETCD_UNAVAILABLE")
+                    }
                     McpError::StorageError(_) => (error_codes::STORAGE_ERROR, "STORAGE_ERROR"),
-                    McpError::InvalidRequest(_) => (error_codes::INVALID_PARAMS, "INVALID_PARAMETER"),
+                    McpError::InvalidRequest(_) => {
+                        (error_codes::INVALID_PARAMS, "INVALID_PARAMETER")
+                    }
                     _ => (error_codes::INTERNAL_ERROR, "INTERNAL_ERROR"),
                 };
 
                 let result = McpToolResult::error(e.to_string(), mcp_code);
                 match serde_json::to_value(result) {
                     Ok(value) => JsonRpcResponse::success(id, value),
-                    Err(ser_err) => JsonRpcResponse::error(
-                        id,
-                        code,
-                        format!("Error: {}", ser_err),
-                    ),
+                    Err(ser_err) => JsonRpcResponse::error(id, code, format!("Error: {}", ser_err)),
                 }
             }
         }
@@ -249,11 +233,8 @@ where
 
     /// Execute list_streams tool.
     async fn execute_list_streams(&self) -> McpResult<McpToolResult> {
-        let result = tools::list_streams::execute(
-            self.storage.as_ref(),
-            self.config_store.as_ref(),
-        )
-        .await?;
+        let result =
+            tools::list_streams::execute(self.storage.as_ref(), self.config_store.as_ref()).await?;
         Ok(result)
     }
 
@@ -284,11 +265,7 @@ where
     /// Execute sample_data tool.
     async fn execute_sample_data(&self, args: Option<Value>) -> McpResult<McpToolResult> {
         let args = args.unwrap_or(serde_json::json!({}));
-        let result = tools::sample_data::execute(
-            self.storage.as_ref(),
-            args,
-        )
-        .await?;
+        let result = tools::sample_data::execute(self.storage.as_ref(), args).await?;
         Ok(result)
     }
 }

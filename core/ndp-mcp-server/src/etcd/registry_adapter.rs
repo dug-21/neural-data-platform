@@ -96,13 +96,10 @@ impl ConfigStore for StreamRegistryAdapter {
     async fn list_streams(&self) -> McpResult<Vec<String>> {
         debug!("StreamRegistryAdapter: listing streams");
 
-        self.registry
-            .list_streams()
-            .await
-            .map_err(|e| {
-                warn!(error = %e, "Failed to list streams via StreamRegistry");
-                McpError::EtcdUnavailable(format!("StreamRegistry list_streams failed: {}", e))
-            })
+        self.registry.list_streams().await.map_err(|e| {
+            warn!(error = %e, "Failed to list streams via StreamRegistry");
+            McpError::EtcdUnavailable(format!("StreamRegistry list_streams failed: {}", e))
+        })
     }
 
     async fn get_config(&self, stream_id: &str) -> McpResult<StreamConfig> {
@@ -112,15 +109,13 @@ impl ConfigStore for StreamRegistryAdapter {
             .registry
             .load_stream(stream_id)
             .await
-            .map_err(|e| {
-                match e {
-                    config_client::ConfigError::NotFound(_) => {
-                        McpError::StreamNotFound(stream_id.to_string())
-                    }
-                    _ => {
-                        warn!(error = %e, stream_id = %stream_id, "Failed to load stream config");
-                        McpError::EtcdUnavailable(format!("StreamRegistry load_stream failed: {}", e))
-                    }
+            .map_err(|e| match e {
+                config_client::ConfigError::NotFound(_) => {
+                    McpError::StreamNotFound(stream_id.to_string())
+                }
+                _ => {
+                    warn!(error = %e, stream_id = %stream_id, "Failed to load stream config");
+                    McpError::EtcdUnavailable(format!("StreamRegistry load_stream failed: {}", e))
                 }
             })?;
 
@@ -138,14 +133,10 @@ impl ConfigStore for StreamRegistryAdapter {
     async fn get_enabled_streams(&self) -> McpResult<Vec<StreamConfig>> {
         debug!("StreamRegistryAdapter: getting enabled streams");
 
-        let all_configs = self
-            .registry
-            .load_all_streams()
-            .await
-            .map_err(|e| {
-                warn!(error = %e, "Failed to load all streams via StreamRegistry");
-                McpError::EtcdUnavailable(format!("StreamRegistry load_all_streams failed: {}", e))
-            })?;
+        let all_configs = self.registry.load_all_streams().await.map_err(|e| {
+            warn!(error = %e, "Failed to load all streams via StreamRegistry");
+            McpError::EtcdUnavailable(format!("StreamRegistry load_all_streams failed: {}", e))
+        })?;
 
         let enabled_configs: Vec<StreamConfig> = all_configs
             .values()
@@ -153,7 +144,10 @@ impl ConfigStore for StreamRegistryAdapter {
             .map(Self::convert_config)
             .collect();
 
-        info!(count = enabled_configs.len(), "Found enabled streams via StreamRegistry");
+        info!(
+            count = enabled_configs.len(),
+            "Found enabled streams via StreamRegistry"
+        );
         Ok(enabled_configs)
     }
 
@@ -162,14 +156,10 @@ impl ConfigStore for StreamRegistryAdapter {
 
         // Validate by attempting to list streams
         // This exercises the full etcd connection path
-        self.registry
-            .list_streams()
-            .await
-            .map(|_| ())
-            .map_err(|e| {
-                warn!(error = %e, "StreamRegistry validation failed");
-                McpError::EtcdUnavailable(format!("StreamRegistry validation failed: {}", e))
-            })
+        self.registry.list_streams().await.map(|_| ()).map_err(|e| {
+            warn!(error = %e, "StreamRegistry validation failed");
+            McpError::EtcdUnavailable(format!("StreamRegistry validation failed: {}", e))
+        })
     }
 }
 
@@ -223,8 +213,14 @@ mod tests {
 
         assert_eq!(mcp_config.field_mappings.len(), 2);
         assert_eq!(mcp_config.field_mappings[0].source, "pm25");
-        assert_eq!(mcp_config.field_mappings[0].target, Some("pm25".to_string()));
-        assert_eq!(mcp_config.field_mappings[0].field_type, Some("float".to_string()));
+        assert_eq!(
+            mcp_config.field_mappings[0].target,
+            Some("pm25".to_string())
+        );
+        assert_eq!(
+            mcp_config.field_mappings[0].field_type,
+            Some("float".to_string())
+        );
     }
 
     #[test]

@@ -152,9 +152,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_streams_empty() {
         let mut storage = MockBronzeStorage::new();
-        storage
-            .expect_list_streams()
-            .returning(|| Ok(vec![]));
+        storage.expect_list_streams().returning(|| Ok(vec![]));
 
         let mut config_store = MockConfigStore::new();
         config_store

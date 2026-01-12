@@ -29,16 +29,11 @@
 //! ```
 
 use crate::mcp::tools::{
+    create_error_response, create_tool_response, error_codes,
+    traits::{ConfigError, EntityAttribute, FieldMapping, PayloadStructure},
     AppState,
-    create_tool_response,
-    create_error_response,
-    error_codes,
-    traits::{
-        ConfigError, PayloadStructure,
-        FieldMapping, EntityAttribute,
-    },
 };
-use crate::mcp::{McpRpcError, ToolDefinition, JsonRpcError};
+use crate::mcp::{JsonRpcError, McpRpcError, ToolDefinition};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -164,17 +159,21 @@ pub fn tool_definition() -> ToolDefinition {
 /// MCP ToolResponse as JSON Value
 pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError> {
     // Parse input
-    let input: DescribeSchemaInput = serde_json::from_value(args)
-        .map_err(|e| McpRpcError::new(
+    let input: DescribeSchemaInput = serde_json::from_value(args).map_err(|e| {
+        McpRpcError::new(
             JsonRpcError::INVALID_PARAMS,
             format!("Invalid input: {}", e),
-        ))?;
+        )
+    })?;
 
     let mode = input.mode.to_lowercase();
     if !["all", "source", "target"].contains(&mode.as_str()) {
         return create_error_response(
             error_codes::INVALID_PARAMETER,
-            &format!("Invalid mode: '{}'. Must be one of: all, source, target", mode),
+            &format!(
+                "Invalid mode: '{}'. Must be one of: all, source, target",
+                mode
+            ),
             Some(json!({"parameter": "mode", "value": mode})),
         );
     }
@@ -203,11 +202,18 @@ pub async fn execute(state: &AppState, args: Value) -> Result<Value, McpRpcError
 
     // Get storage analysis (best effort)
     let payload_structure = state.storage.analyze_payload(&input.stream_id).await.ok();
-    let file_path = state.storage.get_latest_file_path(&input.stream_id).await.ok().flatten();
+    let file_path = state
+        .storage
+        .get_latest_file_path(&input.stream_id)
+        .await
+        .ok()
+        .flatten();
 
     // Execute based on mode
     match mode.as_str() {
-        "source" => execute_source_mode(&input.stream_id, &full_config, payload_structure, file_path),
+        "source" => {
+            execute_source_mode(&input.stream_id, &full_config, payload_structure, file_path)
+        }
         "target" => execute_target_mode(&input.stream_id, &full_config),
         "all" => execute_all_mode(&input.stream_id, &full_config, payload_structure, file_path),
         _ => unreachable!(),
@@ -222,23 +228,30 @@ fn execute_source_mode(
     file_path: Option<String>,
 ) -> Result<Value, McpRpcError> {
     let parser = config.parser.as_ref();
-    let parser_type = parser.map(|p| p.parser_type.clone()).unwrap_or_else(|| "unknown".to_string());
+    let parser_type = parser
+        .map(|p| p.parser_type.clone())
+        .unwrap_or_else(|| "unknown".to_string());
     let field_mappings = parser.map(|p| p.field_mappings.clone()).unwrap_or_default();
 
     // Calculate unmapped source fields
     let unmapped = payload_structure.as_ref().map(|ps| {
-        let mapped_sources: HashSet<_> = field_mappings.iter()
+        let mapped_sources: HashSet<_> = field_mappings
+            .iter()
             .map(|m| m.source_path.split('.').next().unwrap_or(&m.source_path))
             .collect();
 
-        ps.keys.iter()
+        ps.keys
+            .iter()
             .filter(|k| !mapped_sources.contains(k.as_str()))
             .cloned()
             .collect::<Vec<_>>()
     });
 
     let note = if payload_structure.is_none() {
-        Some("No Bronze data available for this stream. Schema derived from config only.".to_string())
+        Some(
+            "No Bronze data available for this stream. Schema derived from config only."
+                .to_string(),
+        )
     } else {
         None
     };
@@ -262,11 +275,15 @@ fn execute_target_mode(
     stream_id: &str,
     config: &crate::mcp::tools::traits::FullStreamConfig,
 ) -> Result<Value, McpRpcError> {
-    let entity_schema = config.entity_schemas.first()
+    let entity_schema = config
+        .entity_schemas
+        .first()
         .map(|es| es.schema_name.clone())
         .unwrap_or_else(|| "undefined".to_string());
 
-    let attributes = config.entity_schemas.first()
+    let attributes = config
+        .entity_schemas
+        .first()
         .map(|es| es.attributes.clone())
         .unwrap_or_default();
 
@@ -288,12 +305,21 @@ fn execute_all_mode(
     file_path: Option<String>,
 ) -> Result<Value, McpRpcError> {
     let parser = config.parser.as_ref();
-    let parser_type = parser.map(|p| p.parser_type.clone()).unwrap_or_else(|| "unknown".to_string());
+    let parser_type = parser
+        .map(|p| p.parser_type.clone())
+        .unwrap_or_else(|| "unknown".to_string());
     let field_mappings = parser.map(|p| p.field_mappings.clone()).unwrap_or_default();
 
     // Calculate unmapped source fields
-    let mapped_source_fields: HashSet<_> = field_mappings.iter()
-        .map(|m| m.source_path.split('.').next().unwrap_or(&m.source_path).to_string())
+    let mapped_source_fields: HashSet<_> = field_mappings
+        .iter()
+        .map(|m| {
+            m.source_path
+                .split('.')
+                .next()
+                .unwrap_or(&m.source_path)
+                .to_string()
+        })
         .collect();
 
     let unmapped_source: Vec<String> = payload_structure
@@ -308,19 +334,25 @@ fn execute_all_mode(
         .unwrap_or_default();
 
     // Calculate target fields without mapping
-    let mapped_target_fields: HashSet<_> = field_mappings.iter()
+    let mapped_target_fields: HashSet<_> = field_mappings
+        .iter()
         .map(|m| m.target_field.clone())
         .collect();
 
-    let entity_schema = config.entity_schemas.first()
+    let entity_schema = config
+        .entity_schemas
+        .first()
         .map(|es| es.schema_name.clone())
         .unwrap_or_else(|| "undefined".to_string());
 
-    let attributes = config.entity_schemas.first()
+    let attributes = config
+        .entity_schemas
+        .first()
         .map(|es| es.attributes.clone())
         .unwrap_or_default();
 
-    let target_without_mapping: Vec<String> = attributes.iter()
+    let target_without_mapping: Vec<String> = attributes
+        .iter()
         .filter(|a| !mapped_target_fields.contains(&a.name))
         .map(|a| a.name.clone())
         .collect();
@@ -329,7 +361,11 @@ fn execute_all_mode(
         raw_payload_structure: payload_structure,
         parser_type,
         field_mappings,
-        unmapped_source_fields: if unmapped_source.is_empty() { None } else { Some(unmapped_source.clone()) },
+        unmapped_source_fields: if unmapped_source.is_empty() {
+            None
+        } else {
+            Some(unmapped_source.clone())
+        },
     };
 
     let target = TargetSchema {
@@ -362,21 +398,18 @@ fn execute_all_mode(
 mod tests {
     use super::*;
     use crate::mcp::tools::traits::{
-        MockBronzeStorage, MockConfigStore, StorageError,
-        FullStreamConfig, StreamConfigInfo, ParserInfo, EntitySchema,
+        EntitySchema, FullStreamConfig, MockBronzeStorage, MockConfigStore, ParserInfo,
+        StorageError, StreamConfigInfo,
     };
     use crate::mcp::ToolResponse;
-    use std::sync::Arc;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     fn create_test_state(
         mock_storage: MockBronzeStorage,
         mock_config: MockConfigStore,
     ) -> AppState {
-        AppState::new(
-            Arc::new(mock_storage),
-            Arc::new(mock_config),
-        )
+        AppState::new(Arc::new(mock_storage), Arc::new(mock_config))
     }
 
     fn sample_full_config() -> FullStreamConfig {
@@ -434,11 +467,26 @@ mod tests {
 
     fn sample_payload_structure() -> PayloadStructure {
         let mut nested = HashMap::new();
-        nested.insert("main".to_string(), vec!["temp".to_string(), "humidity".to_string(), "pressure".to_string()]);
-        nested.insert("wind".to_string(), vec!["speed".to_string(), "deg".to_string()]);
+        nested.insert(
+            "main".to_string(),
+            vec![
+                "temp".to_string(),
+                "humidity".to_string(),
+                "pressure".to_string(),
+            ],
+        );
+        nested.insert(
+            "wind".to_string(),
+            vec!["speed".to_string(), "deg".to_string()],
+        );
 
         PayloadStructure {
-            keys: vec!["main".to_string(), "wind".to_string(), "clouds".to_string(), "base".to_string()],
+            keys: vec![
+                "main".to_string(),
+                "wind".to_string(),
+                "clouds".to_string(),
+                "base".to_string(),
+            ],
             nested,
         }
     }
@@ -453,23 +501,32 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .with(mockall::predicate::eq("outdoor-weather"))
             .returning(|_| Ok(sample_full_config()));
 
-        mock_storage.expect_analyze_payload()
+        mock_storage
+            .expect_analyze_payload()
             .returning(|_| Ok(sample_payload_structure()));
 
-        mock_storage.expect_get_latest_file_path()
-            .returning(|_| Ok(Some("/data/raw/outdoor-weather/year=2026/month=01/day=03/data.parquet".to_string())));
+        mock_storage.expect_get_latest_file_path().returning(|_| {
+            Ok(Some(
+                "/data/raw/outdoor-weather/year=2026/month=01/day=03/data.parquet".to_string(),
+            ))
+        });
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "outdoor-weather",
-            "mode": "source"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "outdoor-weather",
+                "mode": "source"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -494,7 +551,10 @@ mod tests {
         assert!(unmapped.iter().any(|v| v == "base"));
 
         // file_analyzed present
-        assert!(inner["file_analyzed"].as_str().unwrap().contains("outdoor-weather"));
+        assert!(inner["file_analyzed"]
+            .as_str()
+            .unwrap()
+            .contains("outdoor-weather"));
     }
 
     // -------------------------------------------------------------------------
@@ -507,23 +567,30 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|_| Ok(sample_full_config()));
 
         // Target mode still calls these but doesn't use them
-        mock_storage.expect_analyze_payload()
+        mock_storage
+            .expect_analyze_payload()
             .returning(|_| Ok(sample_payload_structure()));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(None));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "outdoor-weather",
-            "mode": "target"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "outdoor-weather",
+                "mode": "target"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -550,22 +617,29 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|_| Ok(sample_full_config()));
 
-        mock_storage.expect_analyze_payload()
+        mock_storage
+            .expect_analyze_payload()
             .returning(|_| Ok(sample_payload_structure()));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(Some("/data/raw/test/data.parquet".to_string())));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "outdoor-weather",
-            "mode": "all"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "outdoor-weather",
+                "mode": "all"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -601,23 +675,30 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|_| Ok(sample_full_config()));
 
         // No data available
-        mock_storage.expect_analyze_payload()
+        mock_storage
+            .expect_analyze_payload()
             .returning(|_| Err(StorageError::NoDataAvailable("test".to_string())));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(None));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "nws-forecast-hourly",
-            "mode": "source"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "nws-forecast-hourly",
+                "mode": "source"
+            }),
+        )
+        .await;
 
         // Assert
         assert!(result.is_ok());
@@ -639,21 +720,28 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mut mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|_| Ok(sample_full_config()));
 
-        mock_storage.expect_analyze_payload()
+        mock_storage
+            .expect_analyze_payload()
             .returning(|_| Ok(sample_payload_structure()));
 
-        mock_storage.expect_get_latest_file_path()
+        mock_storage
+            .expect_get_latest_file_path()
             .returning(|_| Ok(None));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act - no mode specified
-        let result = execute(&state, json!({
-            "stream_id": "air-quality"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "air-quality"
+            }),
+        )
+        .await;
 
         // Assert - should use "all" mode
         assert!(result.is_ok());
@@ -676,16 +764,21 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|id| Err(ConfigError::StreamNotFound(id.to_string())));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "nonexistent-stream",
-            "mode": "all"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "nonexistent-stream",
+                "mode": "all"
+            }),
+        )
+        .await;
 
         // Assert - returns error response (ToolResponse with isError=true)
         assert!(result.is_ok());
@@ -703,16 +796,21 @@ mod tests {
         let mut mock_config = MockConfigStore::new();
         let mock_storage = MockBronzeStorage::new();
 
-        mock_config.expect_get_full_config()
+        mock_config
+            .expect_get_full_config()
             .returning(|_| Ok(sample_full_config()));
 
         let state = create_test_state(mock_storage, mock_config);
 
         // Act
-        let result = execute(&state, json!({
-            "stream_id": "air-quality",
-            "mode": "invalid"
-        })).await;
+        let result = execute(
+            &state,
+            json!({
+                "stream_id": "air-quality",
+                "mode": "invalid"
+            }),
+        )
+        .await;
 
         // Assert - returns error response, not Err
         assert!(result.is_ok());
@@ -729,6 +827,9 @@ mod tests {
         let def = tool_definition();
         assert_eq!(def.name, "describe_schema");
         assert!(def.description.contains("schema"));
-        assert!(def.input_schema["required"].as_array().unwrap().contains(&json!("stream_id")));
+        assert!(def.input_schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("stream_id")));
     }
 }
