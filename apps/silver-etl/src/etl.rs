@@ -32,6 +32,7 @@ use tracing::{debug, error, info, warn};
 use neural_core::config::{DeduplicationStrategy, SilverEtlConfig};
 
 use crate::dq::DqSqlGenerator;
+use crate::pre_transform::{apply_pre_transform, build_parser_from_config};
 use crate::sql_gen::SqlGenerator;
 
 // =============================================================================
@@ -448,13 +449,32 @@ impl EtlRunner {
             None
         };
 
-        // Check if pre-transform is enabled
-        // TODO (dp-007): When pre_transform.rs is implemented, call apply_pre_transform here
-        // to populate the pre_transformed temp table before SQL generation
+        // Apply pre-transform if enabled (DP-007)
         let use_pre_transform = config.pre_transform.is_some();
-        if use_pre_transform {
-            info!(stream_id = %stream_id, "Pre-transform enabled - will use pre_transformed temp table");
-            // Future: self.apply_pre_transform_if_needed(&config, stream_id, bronze_path)?;
+        if let Some(ref pre_transform_config) = config.pre_transform {
+            info!(stream_id = %stream_id, "Applying pre-transform stage");
+
+            let raw_data = self.extract_bronze_raw_data(stream_id, bronze_path, watermark_before)?;
+
+            if !raw_data.raw_payloads.is_empty() {
+                let parser = build_parser_from_config(pre_transform_config)
+                    .map_err(|e| EtlError::Config(format!("Pre-transform parser: {}", e)))?;
+
+                apply_pre_transform(
+                    &self.conn,
+                    &parser,
+                    &raw_data.raw_payloads,
+                    &raw_data.timestamps,
+                    &raw_data.ndp_ids,
+                )
+                .map_err(|e| EtlError::SqlExecution(format!("Pre-transform: {}", e)))?;
+
+                info!(
+                    stream_id = %stream_id,
+                    rows = raw_data.raw_payloads.len(),
+                    "Pre-transform completed"
+                );
+            }
         }
 
         // Generate ETL SQL
@@ -527,6 +547,102 @@ impl EtlRunner {
         );
 
         Ok(stats)
+    }
+
+    /// Extract raw data from Bronze Parquet for pre-transformation
+    ///
+    /// Reads the Bronze Parquet files and extracts timestamps, ndp_ids, and raw_payloads
+    /// for processing through the pre-transform stage.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream_id` - The stream identifier (e.g., "nws-gridpoints-forecast")
+    /// * `bronze_path` - Base path to Bronze data (e.g., "/data/raw")
+    /// * `watermark` - Optional watermark for incremental loads
+    ///
+    /// # Returns
+    ///
+    /// BronzeRawData containing timestamps, ndp_ids, and raw_payloads.
+    fn extract_bronze_raw_data(
+        &self,
+        stream_id: &str,
+        bronze_path: &str,
+        watermark: Option<DateTime<Utc>>,
+    ) -> Result<BronzeRawData, EtlError> {
+        let parquet_glob = format!("{}/{}/**/*.parquet", bronze_path, stream_id);
+
+        debug!(
+            stream_id = %stream_id,
+            parquet_glob = %parquet_glob,
+            "Extracting Bronze raw data for pre-transform"
+        );
+
+        // Check if any files exist first
+        let files = self.resolve_parquet_files(stream_id, bronze_path)?;
+        if files.is_empty() {
+            return Ok(BronzeRawData::default());
+        }
+
+        let sql = if let Some(wm) = watermark {
+            let wm_micros = wm.timestamp_micros();
+            format!(
+                "SELECT timestamp, ndp_id, raw_payload FROM read_parquet('{}') WHERE timestamp > {}",
+                parquet_glob, wm_micros
+            )
+        } else {
+            format!(
+                "SELECT timestamp, ndp_id, raw_payload FROM read_parquet('{}')",
+                parquet_glob
+            )
+        };
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| EtlError::SqlExecution(format!("Prepare extract SQL: {}", e)))?;
+
+        let mut raw_data = BronzeRawData::default();
+
+        let rows = stmt.query_map([], |row| {
+            let ts: i64 = row.get(0)?;
+            let ndp_id: Option<String> = row.get(1)?;
+            let payload_str: String = row.get(2)?;
+            Ok((ts, ndp_id, payload_str))
+        });
+
+        match rows {
+            Ok(rows) => {
+                for row in rows {
+                    match row {
+                        Ok((ts, ndp_id, payload_str)) => {
+                            raw_data.timestamps.push(ts);
+                            raw_data.ndp_ids.push(ndp_id);
+                            raw_data.raw_payloads.push(
+                                serde_json::from_str(&payload_str)
+                                    .unwrap_or(serde_json::Value::Null),
+                            );
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Failed to read row during pre-transform extraction");
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(EtlError::SqlExecution(format!(
+                    "Extract Bronze raw data: {}",
+                    e
+                )));
+            }
+        }
+
+        debug!(
+            stream_id = %stream_id,
+            rows = raw_data.timestamps.len(),
+            "Extracted Bronze raw data"
+        );
+
+        Ok(raw_data)
     }
 
     /// Generate SQL without executing (dry-run)
@@ -1235,5 +1351,101 @@ mod tests {
         assert!(data.timestamps.is_empty());
         assert!(data.ndp_ids.is_empty());
         assert!(data.raw_payloads.is_empty());
+    }
+
+    // ============================================================
+    // Test 16: extract_bronze_raw_data reads from Parquet
+    // ============================================================
+    #[test]
+    fn test_extract_bronze_raw_data() {
+        let temp_dir = TempDir::new().unwrap();
+        let stream_dir = temp_dir
+            .path()
+            .join("test-stream/year=2026/month=01/day=12");
+        std::fs::create_dir_all(&stream_dir).unwrap();
+
+        let parquet_path = stream_dir.join("data.parquet");
+        create_test_parquet_with_json_payload(&parquet_path, r#"{"temp": 25.5}"#);
+
+        let runner = EtlRunner::new_in_memory().unwrap();
+        let raw_data = runner
+            .extract_bronze_raw_data("test-stream", temp_dir.path().to_str().unwrap(), None)
+            .expect("Should extract raw data");
+
+        assert_eq!(raw_data.timestamps.len(), 1);
+        assert_eq!(raw_data.ndp_ids.len(), 1);
+        assert_eq!(raw_data.raw_payloads.len(), 1);
+
+        // Verify payload content
+        assert!(raw_data.raw_payloads[0].is_object());
+        assert_eq!(raw_data.raw_payloads[0]["temp"], 25.5);
+    }
+
+    // ============================================================
+    // Test 17: extract_bronze_raw_data handles empty directory
+    // ============================================================
+    #[test]
+    fn test_extract_bronze_raw_data_empty_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let runner = EtlRunner::new_in_memory().unwrap();
+
+        let raw_data = runner
+            .extract_bronze_raw_data("nonexistent", temp_dir.path().to_str().unwrap(), None)
+            .expect("Should handle missing data gracefully");
+
+        assert!(raw_data.timestamps.is_empty());
+        assert!(raw_data.ndp_ids.is_empty());
+        assert!(raw_data.raw_payloads.is_empty());
+    }
+
+    // ============================================================
+    // Test 18: extract_bronze_raw_data with watermark filter
+    // ============================================================
+    #[test]
+    fn test_extract_bronze_raw_data_with_watermark() {
+        let temp_dir = TempDir::new().unwrap();
+        let stream_dir = temp_dir
+            .path()
+            .join("test-stream/year=2026/month=01/day=12");
+        std::fs::create_dir_all(&stream_dir).unwrap();
+
+        let parquet_path = stream_dir.join("data.parquet");
+        // Timestamp is 1704886800000000 microseconds (2024-01-10T11:00:00Z)
+        create_test_parquet_with_json_payload(&parquet_path, r#"{"temp": 25.5}"#);
+
+        let runner = EtlRunner::new_in_memory().unwrap();
+
+        // Set watermark AFTER the data timestamp - should return empty
+        let future_watermark =
+            DateTime::parse_from_rfc3339("2024-01-11T00:00:00Z").unwrap().with_timezone(&Utc);
+        let raw_data = runner
+            .extract_bronze_raw_data(
+                "test-stream",
+                temp_dir.path().to_str().unwrap(),
+                Some(future_watermark),
+            )
+            .expect("Should extract with watermark");
+
+        assert!(
+            raw_data.timestamps.is_empty(),
+            "Should be empty when watermark is after data"
+        );
+    }
+
+    // Helper function for creating test Parquet with specific JSON payload
+    fn create_test_parquet_with_json_payload(path: &std::path::Path, payload: &str) {
+        use polars::prelude::*;
+
+        let df = df! {
+            "timestamp" => &[1704886800000000_i64],
+            "ndp_id" => &["test-ndp-id"],
+            "source_id" => &["test://source"],
+            "context" => &[r#"{}"#],
+            "raw_payload" => &[payload]
+        }
+        .unwrap();
+
+        let file = std::fs::File::create(path).unwrap();
+        ParquetWriter::new(file).finish(&mut df.clone()).unwrap();
     }
 }

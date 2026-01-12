@@ -2,9 +2,19 @@
 
 ## Current Phase: Completion
 
-## Status: Complete
+## Status: Complete (BUG-001 FIXED)
 
 ## Last Updated: 2026-01-12
+
+---
+
+## BUG-001 Fix Summary (2026-01-12)
+
+**Issue**: Config schema mismatch caused silent deserialization failure.
+**Root Cause**: YAML had `enabled/parser_type/parser_config_ref` but Rust expected `transform_type` enum.
+**Fix**: Updated YAML config and wired ETL integration properly.
+
+See: `product/features/dp-007/bugs/BUG-001-*.md` for full documentation.
 
 ---
 
@@ -80,11 +90,11 @@
 | `apps/silver-etl/src/sql_gen.rs` | Added generate_pivot_sql(), MetricMapping, extract_metric_mappings() |
 | `config/base/streams/nws-gridpoints-forecast/config.yaml` | Enabled silver_etl with pre_transform configuration |
 
-### Test Results
+### Test Results (After BUG-001 Fix)
 ```
-cargo test -p neural-core: 39 passed
-cargo test -p silver-etl: 105 passed (lib), 16 passed (bin), 2 passed (integration)
-Total: 162 tests passing
+cargo test -p platform-core config::silver_etl: 39 passed
+cargo test -p silver-etl: 110 passed (lib), 16 passed (bin), 2 passed (integration)
+Total: 167 tests passing (including 7 new tests from BUG-001 fix)
 ```
 
 ---
@@ -113,30 +123,39 @@ Silver TimescaleDB (silver.nws_forecasts)
 
 ---
 
-## Configuration
+## Configuration (CORRECTED - BUG-001)
 
 The nws-gridpoints-forecast stream is now configured with:
 
 ```yaml
 silver_etl:
   enabled: true
-  target_table: silver.nws_forecasts
+  target_table: silver.weather_forecasts
 
+  # CORRECT format - uses tagged enum transform_type
   pre_transform:
-    enabled: true
-    parser_type: column_oriented
-    parser_config_ref: sources[0].parser
+    transform_type:
+      type: array_explosion
+      metrics_base_path: properties
+      timestamp_field: validTime
+      value_field: value
+      values_path: values
+      metrics:
+        - metric_path: temperature
+          target_column: temperature
+          type: double_precision
+        - metric_path: windSpeed
+          target_column: wind_speed
+          type: double_precision
+        # ... 12 metrics total
 
   timestamp:
     source_field: timestamp
     target_field: issue_time
     transform: microseconds_to_timestamp
-
-  valid_timestamp:
-    target_field: valid_time
-    transform: nws_duration
-    source: array_explosion
 ```
+
+**WARNING**: Do NOT use `enabled/parser_type/parser_config_ref` format - that is WRONG and was fixed in BUG-001.
 
 ---
 

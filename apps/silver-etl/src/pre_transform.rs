@@ -261,6 +261,69 @@ pub fn build_parser(
     ColumnOrientedParser::from_config(config).map_err(|e| PreTransformError::Parser(e.to_string()))
 }
 
+/// Build a ColumnOrientedParser from PreTransformConfig
+///
+/// Converts the enum-based PreTransformConfig into a working parser instance.
+/// This bridges the gap between SilverEtlConfig's PreTransformConfig and the
+/// neural-core ColumnOrientedParser.
+///
+/// # Arguments
+///
+/// * `config` - PreTransformConfig from silver_etl config
+///
+/// # Returns
+///
+/// Configured ColumnOrientedParser on success.
+///
+/// # Errors
+///
+/// Returns error if parser cannot be created from config.
+pub fn build_parser_from_config(
+    config: &neural_core::config::PreTransformConfig,
+) -> Result<ColumnOrientedParser, PreTransformError> {
+    use neural_core::config::PreTransformType;
+    use neural_core::parsers::{ColumnMapping, ParserType, TimestampFormat};
+    use std::collections::HashMap;
+
+    match &config.transform_type {
+        PreTransformType::ArrayExplosion(explosion) => {
+            // Convert MetricExplosionMapping to ColumnMapping
+            let columns: Vec<ColumnMapping> = explosion
+                .metrics
+                .iter()
+                .map(|m| ColumnMapping {
+                    metric_path: m.metric_path.clone(),
+                    field_name: m.target_column.clone(),
+                    values_path: Some(explosion.values_path.clone()),
+                    timestamp_path: Some(explosion.timestamp_field.clone()),
+                    value_path: Some(explosion.value_field.clone()),
+                })
+                .collect();
+
+            let column_config = ColumnOrientedConfig {
+                metrics_base_path: explosion.metrics_base_path.clone(),
+                columns,
+                timestamp_format: TimestampFormat::Iso8601Duration,
+                unit_conversions: HashMap::new(),
+            };
+
+            let base_config = ParserConfig {
+                parser_type: ParserType::ColumnOriented,
+                location_id_field: "location".to_string(),
+                default_location_id: Some("unknown".to_string()),
+                skip_fields: vec![],
+                field_mappings: None,
+                default_tags: HashMap::new(),
+                array_config: None,
+                column_config: Some(column_config),
+            };
+
+            ColumnOrientedParser::from_config(base_config)
+                .map_err(|e| PreTransformError::Parser(e.to_string()))
+        }
+    }
+}
+
 /// Get row count from pre_transformed table
 ///
 /// Utility function to verify pre-transform results.
@@ -318,7 +381,7 @@ pub struct PreTransformedRow {
 mod tests {
     use super::*;
     use neural_core::parsers::{ColumnMapping, ParserType, TimestampFormat};
-    use neural_core::Parser as _; // Import for .name() method
+    use neural_core::Parser as _NeuralParser; // Import for .name() method
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -842,5 +905,66 @@ mod tests {
         assert_eq!(rows.len(), 1);
         // ndp_id should be empty string
         assert_eq!(rows[0].ndp_id.as_ref().unwrap(), "");
+    }
+
+    // ============================================================
+    // Test: build_parser_from_config creates correct parser (London TDD)
+    // ============================================================
+    #[test]
+    fn test_build_parser_from_config_array_explosion() {
+        use neural_core::config::{
+            ArrayExplosionConfig, MetricExplosionMapping, PreTransformConfig, PreTransformType,
+        };
+
+        let config = PreTransformConfig {
+            transform_type: PreTransformType::ArrayExplosion(ArrayExplosionConfig {
+                metrics_base_path: "properties".to_string(),
+                timestamp_field: "validTime".to_string(),
+                value_field: "value".to_string(),
+                values_path: "values".to_string(),
+                metrics: vec![
+                    MetricExplosionMapping {
+                        metric_path: "temperature".to_string(),
+                        target_column: "temp_c".to_string(),
+                        column_type: "double_precision".to_string(),
+                    },
+                    MetricExplosionMapping {
+                        metric_path: "windSpeed".to_string(),
+                        target_column: "wind_speed_ms".to_string(),
+                        column_type: "double_precision".to_string(),
+                    },
+                ],
+            }),
+        };
+
+        let parser = build_parser_from_config(&config);
+        assert!(parser.is_ok(), "Should create parser from config");
+
+        let parser = parser.unwrap();
+        assert_eq!(parser.name(), "column_oriented");
+    }
+
+    #[test]
+    fn test_build_parser_from_config_with_defaults() {
+        use neural_core::config::{
+            ArrayExplosionConfig, MetricExplosionMapping, PreTransformConfig, PreTransformType,
+        };
+
+        let config = PreTransformConfig {
+            transform_type: PreTransformType::ArrayExplosion(ArrayExplosionConfig {
+                metrics_base_path: "data".to_string(),
+                timestamp_field: "validTime".to_string(),
+                value_field: "value".to_string(),
+                values_path: "values".to_string(),
+                metrics: vec![MetricExplosionMapping {
+                    metric_path: "metric1".to_string(),
+                    target_column: "col1".to_string(),
+                    column_type: "double_precision".to_string(),
+                }],
+            }),
+        };
+
+        let parser = build_parser_from_config(&config);
+        assert!(parser.is_ok());
     }
 }

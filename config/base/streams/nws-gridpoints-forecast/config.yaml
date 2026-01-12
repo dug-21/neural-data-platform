@@ -538,12 +538,56 @@ silver_etl:
   target_table: silver.weather_forecasts
 
   # Pre-transform configuration (DP-007)
-  # Parses raw_payload through ColumnOrientedParser to flatten columnar arrays
+  # Flattens columnar array data into individual rows before DuckDB processing
+  # Uses ArrayExplosion transform type with typed enum config
   pre_transform:
-    enabled: true
-    parser_type: column_oriented
-    # Reference to parser config in sources section
-    parser_config_ref: sources[0].parser
+    transform_type:
+      type: array_explosion
+      metrics_base_path: properties
+      timestamp_field: validTime
+      value_field: value
+      values_path: values
+      metrics:
+        # Temperature Suite (NWS units: Celsius)
+        - metric_path: temperature
+          target_column: temperature
+          type: double_precision
+        - metric_path: dewpoint
+          target_column: dewpoint
+          type: double_precision
+        - metric_path: apparentTemperature
+          target_column: apparent_temperature
+          type: double_precision
+        - metric_path: heatIndex
+          target_column: heat_index
+          type: double_precision
+        - metric_path: windChill
+          target_column: wind_chill
+          type: double_precision
+        # Wind Suite
+        - metric_path: windSpeed
+          target_column: wind_speed
+          type: double_precision
+        - metric_path: windGust
+          target_column: wind_gust
+          type: double_precision
+        - metric_path: windDirection
+          target_column: wind_direction
+          type: double_precision
+        # Moisture Suite
+        - metric_path: relativeHumidity
+          target_column: relative_humidity
+          type: double_precision
+        - metric_path: skyCover
+          target_column: sky_cover
+          type: double_precision
+        # Precipitation Suite
+        - metric_path: probabilityOfPrecipitation
+          target_column: precip_probability
+          type: double_precision
+        - metric_path: quantitativePrecipitation
+          target_column: precip_amount
+          type: double_precision
 
   # Primary timestamp: issue_time (when forecast was generated)
   # Bronze timestamp is microseconds since epoch

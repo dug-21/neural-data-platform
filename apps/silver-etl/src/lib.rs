@@ -44,7 +44,8 @@ pub use dq::DqSqlGenerator;
 pub use etl::{BronzeRawData, EtlError, EtlRunner, EtlStats};
 pub use metrics::EtlMetrics;
 pub use pre_transform::{
-    apply_pre_transform, build_parser, create_temp_table, PreTransformError, PreTransformResult,
+    apply_pre_transform, build_parser, build_parser_from_config, create_temp_table,
+    PreTransformError, PreTransformResult,
 };
 pub use schema_gen::{SchemaError, SchemaGenerator};
 pub use sql_gen::{SqlGenError, SqlGenerator};
