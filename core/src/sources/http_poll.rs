@@ -746,7 +746,10 @@ impl RawSource for HttpPollingSource {
             .buffer_unordered(MAX_CONCURRENT_FETCHES.min(sensor_count));
 
         // Collect successful results
-        let points: Vec<RawDataPoint> = fetch_futures.filter_map(|opt| async { opt }).collect().await;
+        let points: Vec<RawDataPoint> = fetch_futures
+            .filter_map(|opt| async { opt })
+            .collect()
+            .await;
 
         Ok(points)
     }

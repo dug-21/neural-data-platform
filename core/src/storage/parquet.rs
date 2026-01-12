@@ -96,9 +96,9 @@ impl ParquetStore {
 
         // Move CPU-intensive work to blocking thread pool
         tokio::task::spawn_blocking(move || {
-            let parent = path
-                .parent()
-                .ok_or_else(|| CoreError::Storage("Invalid path: no parent directory".to_string()))?;
+            let parent = path.parent().ok_or_else(|| {
+                CoreError::Storage("Invalid path: no parent directory".to_string())
+            })?;
             std::fs::create_dir_all(parent)?;
 
             // P2-02: Pre-allocate Vecs with known capacity to avoid reallocations
@@ -508,9 +508,9 @@ impl ParquetStore {
 
         // Move CPU-intensive work to blocking thread pool
         tokio::task::spawn_blocking(move || {
-            let parent = path
-                .parent()
-                .ok_or_else(|| CoreError::Storage("Invalid path: no parent directory".to_string()))?;
+            let parent = path.parent().ok_or_else(|| {
+                CoreError::Storage("Invalid path: no parent directory".to_string())
+            })?;
             std::fs::create_dir_all(parent)?;
 
             // P2-02: Pre-allocate Vecs with known capacity to avoid reallocations
