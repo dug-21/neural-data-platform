@@ -821,14 +821,14 @@ impl EtlRunner {
         watermark_after: Option<DateTime<Utc>>,
     ) -> Result<(u64, u64), EtlError> {
         // Count rows with any DQ flags in the new data window
+        // Use array_to_string for pattern matching (DuckDB-compatible via postgres extension)
         let mut sql = format!(
             r#"SELECT
-                COUNT(*) FILTER (WHERE array_length({}, 1) > 0) AS flagged,
-                COUNT(*) FILTER (WHERE array_length(
-                    ARRAY(SELECT unnest({}) WHERE unnest LIKE '%:reject%'), 1
-                ) > 0) AS rejected
-            FROM pg.{}"#,
-            dq_column, dq_column, table
+                COUNT(*) FILTER (WHERE array_length({dq}, 1) > 0) AS flagged,
+                COUNT(*) FILTER (WHERE array_to_string({dq}, ',') LIKE '%:reject%') AS rejected
+            FROM pg.{table}"#,
+            dq = dq_column,
+            table = table
         );
 
         // Add time window filter if we have watermarks
