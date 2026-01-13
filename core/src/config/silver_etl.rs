@@ -265,7 +265,7 @@ pub enum TransformConfig {
     },
 
     /// SQL expression transform
-    Expression { expr: String },
+    Expression { expression: String },
 
     /// Lookup table for categorical mappings
     Lookup { table: HashMap<String, String> },
@@ -279,7 +279,7 @@ pub enum TransformConfig {
     /// Computed field based on other columns
     Computed {
         depends_on: Vec<String>,
-        expr: String,
+        expression: String,
     },
 }
 
@@ -1481,12 +1481,12 @@ transform: {}
         // Expression transform
         let yaml = r#"
 type: expression
-expr: "(value - 32) * 5 / 9"
+expression: "(value - 32) * 5 / 9"
 "#;
         let transform: TransformConfig = serde_yaml::from_str(yaml).unwrap();
         match transform {
-            TransformConfig::Expression { expr } => {
-                assert!(expr.contains("value"));
+            TransformConfig::Expression { expression } => {
+                assert!(expression.contains("value"));
             }
             _ => panic!("Expected Expression transform"),
         }
@@ -1523,13 +1523,13 @@ path: "$.list[0].main.aqi"
         let yaml = r#"
 type: computed
 depends_on: [issue_time, valid_time]
-expr: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600"
+expression: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600"
 "#;
         let transform: TransformConfig = serde_yaml::from_str(yaml).unwrap();
         match transform {
-            TransformConfig::Computed { depends_on, expr } => {
+            TransformConfig::Computed { depends_on, expression } => {
                 assert_eq!(depends_on.len(), 2);
-                assert!(expr.contains("EPOCH"));
+                assert!(expression.contains("EPOCH"));
             }
             _ => panic!("Expected Computed transform"),
         }

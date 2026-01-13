@@ -97,9 +97,9 @@ impl SqlGenerator {
                     json_expr, type_cast, mapping.target_column
                 )
             }
-            Some(TransformConfig::Expression { expr }) => {
+            Some(TransformConfig::Expression { expression }) => {
                 // Replace {value} placeholder with source reference
-                let replaced = expr.replace("{value}", &source_ref);
+                let replaced = expression.replace("{value}", &source_ref);
                 format!(
                     "CAST({} AS {}) AS {}",
                     replaced, type_cast, mapping.target_column
@@ -113,9 +113,9 @@ impl SqlGenerator {
                 let ts_expr = self.generate_timestamp_transform_expr(&source_ref, format);
                 format!("{} AS {}", ts_expr, mapping.target_column)
             }
-            Some(TransformConfig::Computed { expr, .. }) => {
+            Some(TransformConfig::Computed { expression, .. }) => {
                 // Computed expressions are direct SQL
-                format!("({}) AS {}", expr, mapping.target_column)
+                format!("({}) AS {}", expression, mapping.target_column)
             }
             None => {
                 // No transform, just extract and cast
