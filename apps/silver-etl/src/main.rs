@@ -743,47 +743,7 @@ async fn migrate_schema(
     }
 
     // Execute DDL against TimescaleDB (already connected above)
-    // Parse statements properly - accumulate lines until semicolon, skip comment-only lines
-    let mut statements: Vec<String> = Vec::new();
-    let mut current_stmt = String::new();
-
-    for line in combined_ddl.lines() {
-        let trimmed = line.trim();
-
-        // Skip empty lines
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        // Skip pure comment lines (not part of a statement)
-        if trimmed.starts_with("--") && current_stmt.is_empty() {
-            continue;
-        }
-
-        // Accumulate lines into current statement
-        if !current_stmt.is_empty() {
-            current_stmt.push('\n');
-        }
-        current_stmt.push_str(trimmed);
-
-        // If line ends with semicolon, statement is complete
-        if trimmed.ends_with(';') {
-            // Remove trailing semicolon (we add it back during execution)
-            let stmt = current_stmt.trim_end_matches(';').trim().to_string();
-            if !stmt.is_empty() {
-                statements.push(stmt);
-            }
-            current_stmt.clear();
-        }
-    }
-
-    // Handle any remaining statement without trailing semicolon
-    if !current_stmt.is_empty() {
-        let stmt = current_stmt.trim_end_matches(';').trim().to_string();
-        if !stmt.is_empty() {
-            statements.push(stmt);
-        }
-    }
+    let statements = parse_ddl_statements(&combined_ddl);
 
     info!(
         statement_count = statements.len(),
@@ -985,6 +945,59 @@ struct StreamStatus {
     current_watermark: Option<String>,
 }
 
+/// Parse combined DDL string into individual executable statements
+///
+/// Handles:
+/// - Multi-line statements (CREATE TABLE, SELECT create_hypertable)
+/// - Comment lines (skipped when standalone, preserved when mid-statement)
+/// - Blank lines (skipped)
+///
+/// Statements are terminated by semicolons.
+fn parse_ddl_statements(combined_ddl: &str) -> Vec<String> {
+    let mut statements: Vec<String> = Vec::new();
+    let mut current_stmt = String::new();
+
+    for line in combined_ddl.lines() {
+        let trimmed = line.trim();
+
+        // Skip empty lines
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Skip pure comment lines (not part of a statement)
+        if trimmed.starts_with("--") && current_stmt.is_empty() {
+            continue;
+        }
+
+        // Accumulate lines into current statement
+        if !current_stmt.is_empty() {
+            current_stmt.push('\n');
+        }
+        current_stmt.push_str(trimmed);
+
+        // If line ends with semicolon, statement is complete
+        if trimmed.ends_with(';') {
+            // Remove trailing semicolon (we add it back during execution)
+            let stmt = current_stmt.trim_end_matches(';').trim().to_string();
+            if !stmt.is_empty() {
+                statements.push(stmt);
+            }
+            current_stmt.clear();
+        }
+    }
+
+    // Handle any remaining statement without trailing semicolon
+    if !current_stmt.is_empty() {
+        let stmt = current_stmt.trim_end_matches(';').trim().to_string();
+        if !stmt.is_empty() {
+            statements.push(stmt);
+        }
+    }
+
+    statements
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -994,6 +1007,129 @@ mod tests {
     fn test_cli_parsing() {
         // Verify CLI structure is valid
         Cli::command().debug_assert();
+    }
+
+    // =================================================================
+    // DDL Parsing Tests - ensure statements are correctly extracted
+    // =================================================================
+
+    #[test]
+    fn test_parse_ddl_simple_statements() {
+        let ddl = r#"
+CREATE SCHEMA IF NOT EXISTS silver;
+
+CREATE TABLE IF NOT EXISTS silver.test (id INT);
+
+CREATE INDEX idx_test ON silver.test (id);
+"#;
+        let statements = parse_ddl_statements(ddl);
+
+        assert_eq!(statements.len(), 3);
+        assert!(statements[0].contains("CREATE SCHEMA"));
+        assert!(statements[1].contains("CREATE TABLE"));
+        assert!(statements[2].contains("CREATE INDEX"));
+    }
+
+    #[test]
+    fn test_parse_ddl_with_comments_before_statements() {
+        // This was the bug - comments before statements caused them to be skipped
+        let ddl = r#"
+-- Schema comment
+CREATE SCHEMA IF NOT EXISTS silver;
+
+-- Table comment
+CREATE TABLE IF NOT EXISTS silver.test (
+    id INT,
+    name TEXT
+);
+
+-- Index comment
+CREATE INDEX idx_test ON silver.test (id);
+"#;
+        let statements = parse_ddl_statements(ddl);
+
+        assert_eq!(statements.len(), 3, "Should have 3 statements, got: {:?}", statements);
+        assert!(statements[0].starts_with("CREATE SCHEMA"), "First should be schema: {}", statements[0]);
+        assert!(statements[1].starts_with("CREATE TABLE"), "Second should be table: {}", statements[1]);
+        assert!(statements[2].starts_with("CREATE INDEX"), "Third should be index: {}", statements[2]);
+    }
+
+    #[test]
+    fn test_parse_ddl_multiline_create_table() {
+        let ddl = r#"
+CREATE TABLE IF NOT EXISTS silver.weather_observations (
+    ingestion_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    observation_time TIMESTAMPTZ NOT NULL,
+    ndp_id TEXT NOT NULL,
+    temperature_c DOUBLE PRECISION,
+    PRIMARY KEY (observation_time, ndp_id)
+);
+"#;
+        let statements = parse_ddl_statements(ddl);
+
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("ingestion_time"));
+        assert!(statements[0].contains("temperature_c"));
+        assert!(statements[0].contains("PRIMARY KEY"));
+    }
+
+    #[test]
+    fn test_parse_ddl_multiline_select() {
+        let ddl = r#"
+SELECT create_hypertable(
+    'silver.weather_observations',
+    'observation_time',
+    chunk_time_interval => INTERVAL '1 day',
+    if_not_exists => TRUE
+);
+"#;
+        let statements = parse_ddl_statements(ddl);
+
+        assert_eq!(statements.len(), 1);
+        assert!(statements[0].contains("create_hypertable"));
+        assert!(statements[0].contains("chunk_time_interval"));
+    }
+
+    #[test]
+    fn test_parse_ddl_realistic_migration() {
+        // Simulates actual migration output with schema, table, hypertable, indexes
+        let ddl = r#"
+-- Schema for outdoor-weather
+CREATE SCHEMA IF NOT EXISTS silver;
+
+-- Table for stream: outdoor-weather
+CREATE TABLE IF NOT EXISTS silver.weather_observations (
+    ingestion_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    observation_time TIMESTAMPTZ NOT NULL,
+    ndp_id TEXT NOT NULL,
+    temperature_c DOUBLE PRECISION NOT NULL,
+    humidity_pct DOUBLE PRECISION,
+    dq_flags TEXT[],
+    PRIMARY KEY (observation_time, ndp_id)
+);
+
+-- Hypertable for: silver.weather_observations
+SELECT create_hypertable(
+    'silver.weather_observations',
+    'observation_time',
+    chunk_time_interval => INTERVAL '1 day',
+    if_not_exists => TRUE
+);
+
+-- Indexes for: silver.weather_observations
+CREATE INDEX IF NOT EXISTS idx_weather_observations_time_id ON silver.weather_observations (observation_time, ndp_id);
+CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_observations (ingestion_time);
+"#;
+        let statements = parse_ddl_statements(ddl);
+
+        assert_eq!(statements.len(), 5, "Should have 5 statements (schema, table, hypertable, 2 indexes), got: {}", statements.len());
+
+        // Verify each statement type is present and correctly parsed
+        assert!(statements[0].contains("CREATE SCHEMA"), "Missing schema");
+        assert!(statements[1].contains("CREATE TABLE"), "Missing table");
+        assert!(statements[2].contains("create_hypertable"), "Missing hypertable");
+        assert!(statements[3].contains("CREATE INDEX") && statements[3].contains("time_id"), "Missing first index");
+        assert!(statements[4].contains("CREATE INDEX") && statements[4].contains("ingestion"), "Missing second index");
     }
 
     #[test]
