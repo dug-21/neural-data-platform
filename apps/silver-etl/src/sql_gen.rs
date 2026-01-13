@@ -1144,7 +1144,7 @@ mod tests {
             column_type: "double_precision".to_string(),
             nullable: true,
             transform: Some(TransformConfig::Expression {
-                expr: "({value} - 32) * 5 / 9".to_string(),
+                expression: "({value} - 32) * 5 / 9".to_string(),
             }),
             dq_rules: vec![],
         };
@@ -1195,7 +1195,7 @@ mod tests {
             nullable: true,
             transform: Some(TransformConfig::Computed {
                 depends_on: vec!["issue_time".to_string(), "valid_time".to_string()],
-                expr: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600".to_string(),
+                expression: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600".to_string(),
             }),
             dq_rules: vec![],
         };
