@@ -1,36 +1,18 @@
+# syntax=docker/dockerfile:1.4
 # Multi-stage Dockerfile for air-quality-app
-# Supports: linux/amd64 (Mac Intel, cloud), linux/arm64 (Mac M-series, Pi 5)
+# Uses BuildKit cache mounts for incremental compilation
+#
+# Build: docker build -t ndp/air-quality-app .
+# Build (no cache): docker build --no-cache -t ndp/air-quality-app .
 
-# Stage 1: Chef - prepare build environment
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+# Stage 1: Builder - compile with cached dependencies
+FROM rust:1-bookworm AS builder
 WORKDIR /app
-
-# Stage 2: Planner - analyze dependencies and generate recipe
-FROM chef AS planner
-COPY Cargo.toml Cargo.lock ./
-
-# Copy all workspace members
-COPY core ./core
-COPY apps ./apps
-COPY domains ./domains
-COPY config-client ./config-client
-
-RUN cargo chef prepare --recipe-path recipe.json
-
-# Stage 3: Builder - compile with cached dependencies
-FROM chef AS builder
 
 # Install build dependencies
 RUN apt-get update && \
-    apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    protobuf-compiler \
-    && rm -rf /var/lib/apt/lists/*
-
-# Build dependencies first (cached layer)
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+    apt-get install -y pkg-config libssl-dev protobuf-compiler && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy source code
 COPY Cargo.toml Cargo.lock ./
@@ -40,54 +22,44 @@ COPY domains ./domains
 COPY config-client ./config-client
 COPY config ./config
 
-# Build application
-RUN cargo build --release -p air-quality-app -j 2 && \
-    strip /app/target/release/air-quality-server
+# Build with cache mounts for incremental compilation
+# - /app/target: compiled artifacts persist across builds
+# - /usr/local/cargo/registry: downloaded crates persist
+RUN --mount=type=cache,target=/app/target,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    cargo build --release -p air-quality-app && \
+    cp /app/target/release/air-quality-server /usr/local/bin/ && \
+    strip /usr/local/bin/air-quality-server
 
-# Stage 4: Runtime - minimal final image
+# Stage 2: Runtime - minimal final image
 FROM debian:bookworm-slim AS runtime
 
-# Install runtime dependencies only
+# Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y \
-    ca-certificates \
-    curl \
-    libssl3 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    apt-get install -y ca-certificates curl libssl3 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
+# Create non-root user
 RUN useradd -m -u 1000 -s /bin/bash appuser && \
     mkdir -p /data /config && \
     chown -R appuser:appuser /data /config
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/air-quality-server /usr/local/bin/air-quality-server
+# Copy binary and configs
+COPY --from=builder /usr/local/bin/air-quality-server /usr/local/bin/
+COPY config/base/streams /config/streams
 
-# Copy stream configs for GitOps sync (AIR-005)
-COPY --from=builder /app/config/base/streams /config/streams
-
-# Set ownership
 RUN chown appuser:appuser /usr/local/bin/air-quality-server && \
     chown -R appuser:appuser /config
 
-# Switch to non-root user
 USER appuser
-
-# Expose ports
 EXPOSE 8080 9090
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Environment variables with defaults
 ENV RUST_LOG=info \
     ETCD_ENDPOINT=http://etcd:2379 \
     STREAM_CONFIG_DIR=/config/streams
 
-# Set working directory
 WORKDIR /app
-
-# Entrypoint
 ENTRYPOINT ["/usr/local/bin/air-quality-server"]

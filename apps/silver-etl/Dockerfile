@@ -1,37 +1,19 @@
+# syntax=docker/dockerfile:1.4
 # Multi-stage build for Silver ETL
 # Transforms Bronze (Parquet) to Silver (TimescaleDB)
+# Uses BuildKit cache mounts for incremental compilation
+#
+# Build: docker build -t ndp/silver-etl -f apps/silver-etl/Dockerfile .
+# Build (no cache): docker build --no-cache -t ndp/silver-etl -f apps/silver-etl/Dockerfile .
 
-# Stage 1: Chef - prepare build environment
-# Use bookworm-based image to match runtime glibc version
-FROM lukemathwalker/cargo-chef:latest-rust-1-bookworm AS chef
+# Stage 1: Builder - compile with cached dependencies
+FROM rust:1-bookworm AS builder
 WORKDIR /app
-
-# Stage 2: Planner - analyze dependencies and generate recipe
-FROM chef AS planner
-COPY Cargo.toml Cargo.lock ./
-
-# Copy all workspace members
-COPY core ./core
-COPY apps ./apps
-COPY domains ./domains
-COPY config-client ./config-client
-
-RUN cargo chef prepare --recipe-path recipe.json
-
-# Stage 3: Builder - compile with cached dependencies
-FROM chef AS builder
 
 # Install build dependencies
 RUN apt-get update && \
-    apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    protobuf-compiler \
-    && rm -rf /var/lib/apt/lists/*
-
-# Build dependencies first (cached layer)
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+    apt-get install -y pkg-config libssl-dev protobuf-compiler && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy source code
 COPY Cargo.toml Cargo.lock ./
@@ -41,45 +23,37 @@ COPY domains ./domains
 COPY config-client ./config-client
 COPY config ./config
 
-# Build silver-etl application
-RUN cargo build --release -p silver-etl -j 2 && \
-    strip /app/target/release/silver-etl
+# Build with cache mounts for incremental compilation
+RUN --mount=type=cache,target=/app/target,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    cargo build --release -p silver-etl && \
+    cp /app/target/release/silver-etl /usr/local/bin/ && \
+    strip /usr/local/bin/silver-etl
 
-# Stage 4: Runtime - minimal final image
+# Stage 2: Runtime - minimal final image
 FROM debian:bookworm-slim AS runtime
 
-# Install runtime dependencies only
+# Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y \
-    ca-certificates \
-    libssl3 \
-    libstdc++6 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    apt-get install -y ca-certificates libssl3 libstdc++6 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
+# Create non-root user
 RUN useradd -m -u 1000 -s /bin/bash appuser && \
     mkdir -p /data && \
     chown -R appuser:appuser /data
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/silver-etl /usr/local/bin/silver-etl
-
-# Set ownership
+# Copy binary
+COPY --from=builder /usr/local/bin/silver-etl /usr/local/bin/
 RUN chown appuser:appuser /usr/local/bin/silver-etl
 
-# Switch to non-root user
 USER appuser
 
-# Environment variables with defaults
 ENV RUST_LOG=info \
     ETCD_ENDPOINT=http://etcd:2379 \
     BRONZE_DATA_DIR=/data/raw \
     TIMESCALE_URL=postgresql://postgres:ndp_secure_password@timescaledb:5432/ndp
 
-# Set working directory
 WORKDIR /app
-
-# Entrypoint
 ENTRYPOINT ["silver-etl"]
 CMD ["run"]
