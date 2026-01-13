@@ -36,19 +36,25 @@ DEPLOY_ENV="${DEPLOY_ENV:-pi}"
 
 if [ "$DEPLOY_ENV" = "integration" ]; then
     COMPOSE_FILE="$REPO_ROOT/docker-compose.integration.yml"
-    ETCD_CONTAINER="integration-etcd"
-    TSDB_CONTAINER="integration-timescaledb"
     ENV_NAME="development"
+    # Container names for external scripts that can't use docker compose exec
+    ETCD_CONTAINER="integration-etcd"
 else
     COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
-    ETCD_CONTAINER="etcd"
-    TSDB_CONTAINER="$TSDB_CONTAINER"
     ENV_NAME="production"
+    # Container names for external scripts that can't use docker compose exec
+    ETCD_CONTAINER="etcd"
 fi
 
 # Helper to run docker compose with the correct file
 dc() {
     docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+# Helper for docker compose exec (uses service names, not container names)
+# Service names are consistent across compose files: etcd, timescaledb, etc.
+dcx() {
+    dc exec -T "$@"
 }
 
 # Colors for output
@@ -75,7 +81,7 @@ sync_config() {
     log "Syncing configuration to etcd..."
 
     # Wait for etcd to be ready
-    until docker exec $ETCD_CONTAINER etcdctl endpoint health >/dev/null 2>&1; do
+    until dcx etcd etcdctl endpoint health >/dev/null 2>&1; do
         warn "Waiting for etcd to be ready..."
         sleep 2
     done
@@ -92,14 +98,14 @@ init_streams() {
     log "Initializing stream configurations..."
 
     # Wait for etcd to be ready
-    until docker exec $ETCD_CONTAINER etcdctl endpoint health >/dev/null 2>&1; do
+    until dcx etcd etcdctl endpoint health >/dev/null 2>&1; do
         warn "Waiting for etcd to be ready..."
         sleep 2
     done
 
     # Check if streams are already initialized (informational only)
-    if docker exec $ETCD_CONTAINER etcdctl get --prefix "/air-quality/streams/" --keys-only >/dev/null 2>&1; then
-        stream_count=$(docker exec $ETCD_CONTAINER etcdctl get --prefix "/air-quality/streams/" --keys-only | grep -c "/id$" || echo "0")
+    if dcx etcd etcdctl get --prefix "/air-quality/streams/" --keys-only >/dev/null 2>&1; then
+        stream_count=$(dcx etcd etcdctl get --prefix "/air-quality/streams/" --keys-only | grep -c "/id$" || echo "0")
         if [ "$stream_count" -gt 0 ]; then
             log "Updating existing stream configurations ($stream_count streams found)"
         fi
@@ -118,7 +124,7 @@ sync_to_data_dictionary() {
     log "Syncing Data Dictionary to TimescaleDB..."
 
     # Check if TimescaleDB is running
-    until docker exec $TSDB_CONTAINER pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+    until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
         warn "Waiting for TimescaleDB to be ready..."
         sleep 2
     done
@@ -299,12 +305,12 @@ sync_to_data_dictionary() {
 
     # Execute sync
     log "Executing sync..."
-    if docker exec -i $TSDB_CONTAINER psql -U postgres -d ndp < "$SQL_FILE" > /dev/null 2>&1; then
+    if dcx timescaledb psql -U postgres -d ndp < "$SQL_FILE" > /dev/null 2>&1; then
         log "Data Dictionary sync successful"
         rm -f "$SQL_FILE"
 
         # Show summary
-        docker exec $TSDB_CONTAINER psql -U postgres -d ndp -c \
+        dcx timescaledb psql -U postgres -d ndp -c \
             "SELECT streams_synced, schemas_synced, attributes_synced, completed_at FROM data_dictionary.sync_status ORDER BY id DESC LIMIT 1;"
     else
         error "Data Dictionary sync failed"
@@ -374,20 +380,20 @@ status() {
 
     log "Health Checks:"
     echo "  MQTT Broker: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:1883 2>/dev/null || echo 'N/A (TCP only)')"
-    echo "  etcd:        $(docker exec $ETCD_CONTAINER etcdctl endpoint health 2>/dev/null || echo 'Not running')"
+    echo "  etcd:        $(dcx etcd etcdctl endpoint health 2>/dev/null || echo 'Not running')"
     echo "  Air Quality: $(curl -s http://localhost:8080/health 2>/dev/null || echo 'Not running')"
     echo "  MCP Server:  $(curl -sf http://localhost:9100/health 2>/dev/null && echo 'Running' || echo 'Not running')"
-    echo "  TimescaleDB: $(docker exec $TSDB_CONTAINER pg_isready -U postgres -d ndp 2>/dev/null && echo 'Running' || echo 'Not running')"
+    echo "  TimescaleDB: $(dcx timescaledb pg_isready -U postgres -d ndp 2>/dev/null && echo 'Running' || echo 'Not running')"
     echo "  Grafana:     $(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health 2>/dev/null || echo 'Not running')"
     echo ""
 
     log "Silver Layer Status:"
-    if docker exec $TSDB_CONTAINER pg_isready -U postgres -d ndp >/dev/null 2>&1; then
+    if dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; then
         # Check if silver schema exists
-        if docker exec $TSDB_CONTAINER psql -U postgres -d ndp -tAc "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'silver'" 2>/dev/null | grep -q "1"; then
+        if dcx timescaledb psql -U postgres -d ndp -tAc "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'silver'" 2>/dev/null | grep -q "1"; then
             echo "  Schema:      silver schema exists"
             # Count hypertables
-            hypertable_count=$(docker exec $TSDB_CONTAINER psql -U postgres -d ndp -tAc "SELECT COUNT(*) FROM timescaledb_information.hypertables WHERE hypertable_schema = 'silver'" 2>/dev/null || echo "0")
+            hypertable_count=$(dcx timescaledb psql -U postgres -d ndp -tAc "SELECT COUNT(*) FROM timescaledb_information.hypertables WHERE hypertable_schema = 'silver'" 2>/dev/null || echo "0")
             echo "  Hypertables: $hypertable_count"
         else
             echo "  Schema:      silver schema not created (run: ./deploy.sh silver-migrate)"
@@ -507,7 +513,7 @@ refresh() {
     init_streams
 
     # Sync data dictionary if TimescaleDB is running
-    if docker exec $TSDB_CONTAINER pg_isready -U postgres -d ndp >/dev/null 2>&1; then
+    if dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; then
         sync_to_data_dictionary
     fi
 
@@ -586,7 +592,7 @@ case "${1:-deploy}" in
     silver-etl)
         log "Running Silver ETL (Bronze -> TimescaleDB)..."
         # Ensure TimescaleDB is ready
-        until docker exec $TSDB_CONTAINER pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+        until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
             warn "Waiting for TimescaleDB to be ready..."
             sleep 2
         done
@@ -597,7 +603,7 @@ case "${1:-deploy}" in
     silver-migrate)
         log "Running Silver Layer migrations..."
         # Ensure TimescaleDB is ready
-        until docker exec $TSDB_CONTAINER pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+        until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
             warn "Waiting for TimescaleDB to be ready..."
             sleep 2
         done
@@ -608,7 +614,7 @@ case "${1:-deploy}" in
     silver-daemon)
         log "Starting Silver ETL daemon mode..."
         # Ensure TimescaleDB is ready
-        until docker exec $TSDB_CONTAINER pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+        until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
             warn "Waiting for TimescaleDB to be ready..."
             sleep 2
         done
