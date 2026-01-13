@@ -92,6 +92,12 @@ impl SchemaGenerator {
             columns.push(format!("    {} TEXT NOT NULL", id_field.target));
         }
 
+        // 3b. Add valid_timestamp if configured (used for forecasts with valid_time)
+        if let Some(ref valid_ts) = config.valid_timestamp {
+            let valid_ts_type = self.timestamp_type(&valid_ts.transform);
+            columns.push(format!("    {} {} NOT NULL", valid_ts.target_field, valid_ts_type));
+        }
+
         // 4. Add mapped fields from field_mappings
         for mapping in &config.field_mappings {
             let pg_type = self.to_postgres_type(&mapping.column_type)?;
@@ -452,5 +458,36 @@ mod tests {
         let gen = SchemaGenerator::new();
         let result = gen.extract_schema_name("no_schema_table");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_create_table_with_valid_timestamp() {
+        use neural_core::config::{ValidTimestampMapping, ValidTimestampSource};
+
+        let gen = SchemaGenerator::new();
+        let mut config = test_config();
+
+        // Add valid_timestamp (used for forecasts with issue_time + valid_time)
+        config.target_table = "silver.weather_forecasts".to_string();
+        config.timestamp.target_field = "issue_time".to_string();
+        config.valid_timestamp = Some(ValidTimestampMapping {
+            target_field: "valid_time".to_string(),
+            transform: TimestampTransform::NwsDuration,
+            source: ValidTimestampSource::ArrayExplosion,
+        });
+        config.deduplication.key_columns = vec![
+            "issue_time".to_string(),
+            "valid_time".to_string(),
+            "ndp_id".to_string(),
+        ];
+
+        let sql = gen.generate_create_table(&config).unwrap();
+
+        // Should have both timestamp columns
+        assert!(sql.contains("issue_time TIMESTAMPTZ NOT NULL"), "Missing issue_time column");
+        assert!(sql.contains("valid_time TIMESTAMPTZ NOT NULL"), "Missing valid_time column");
+
+        // Primary key should include all three columns
+        assert!(sql.contains("PRIMARY KEY (issue_time, valid_time, ndp_id)"), "Wrong PRIMARY KEY");
     }
 }
