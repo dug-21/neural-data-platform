@@ -719,8 +719,23 @@ async fn migrate_schema(
                 debug!("Statement executed successfully");
             }
             Err(e) => {
-                // Some errors are expected (e.g., table already exists without IF NOT EXISTS)
-                warn!(error = %e, statement = %stmt, "Statement failed");
+                // Extract detailed PostgreSQL error info for debugging
+                let db_error_detail = if let Some(db_err) = e.as_db_error() {
+                    format!(
+                        "code={}, message={}, detail={:?}, hint={:?}",
+                        db_err.code().code(),
+                        db_err.message(),
+                        db_err.detail(),
+                        db_err.hint()
+                    )
+                } else {
+                    format!("{}", e)
+                };
+                warn!(
+                    error = %db_error_detail,
+                    statement = %stmt,
+                    "Statement failed"
+                );
                 error_count += 1;
             }
         }
