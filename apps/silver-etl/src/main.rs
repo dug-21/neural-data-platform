@@ -743,28 +743,79 @@ async fn migrate_schema(
     }
 
     // Execute DDL against TimescaleDB (already connected above)
-    // Execute each statement
-    let statements: Vec<&str> = combined_ddl
-        .split(';')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty() && !s.starts_with("--"))
-        .collect();
+    // Parse statements properly - accumulate lines until semicolon, skip comment-only lines
+    let mut statements: Vec<String> = Vec::new();
+    let mut current_stmt = String::new();
+
+    for line in combined_ddl.lines() {
+        let trimmed = line.trim();
+
+        // Skip empty lines
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Skip pure comment lines (not part of a statement)
+        if trimmed.starts_with("--") && current_stmt.is_empty() {
+            continue;
+        }
+
+        // Accumulate lines into current statement
+        if !current_stmt.is_empty() {
+            current_stmt.push('\n');
+        }
+        current_stmt.push_str(trimmed);
+
+        // If line ends with semicolon, statement is complete
+        if trimmed.ends_with(';') {
+            // Remove trailing semicolon (we add it back during execution)
+            let stmt = current_stmt.trim_end_matches(';').trim().to_string();
+            if !stmt.is_empty() {
+                statements.push(stmt);
+            }
+            current_stmt.clear();
+        }
+    }
+
+    // Handle any remaining statement without trailing semicolon
+    if !current_stmt.is_empty() {
+        let stmt = current_stmt.trim_end_matches(';').trim().to_string();
+        if !stmt.is_empty() {
+            statements.push(stmt);
+        }
+    }
+
+    info!(
+        statement_count = statements.len(),
+        "Parsed DDL statements for execution"
+    );
 
     let mut success_count = 0;
     let mut error_count = 0;
 
-    for stmt in statements {
-        // Skip comments and empty lines
-        if stmt.starts_with("--") || stmt.is_empty() {
+    for stmt in &statements {
+        let stmt = stmt.trim();
+        // Skip if somehow empty
+        if stmt.is_empty() {
             continue;
         }
 
         debug!(statement = %stmt, "Executing DDL");
 
         match client.execute(&format!("{};", stmt), &[]).await {
-            Ok(_) => {
+            Ok(rows) => {
                 success_count += 1;
-                debug!("Statement executed successfully");
+                // Log successful statements at info level for debugging
+                let stmt_preview = if stmt.len() > 80 {
+                    format!("{}...", &stmt[..80])
+                } else {
+                    stmt.to_string()
+                };
+                info!(
+                    statement = %stmt_preview,
+                    rows_affected = rows,
+                    "Statement executed successfully"
+                );
             }
             Err(e) => {
                 // Extract detailed PostgreSQL error info for debugging
