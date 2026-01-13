@@ -602,6 +602,11 @@ async fn migrate_schema(
     let mut all_ddl = Vec::new();
     let mut schemas_created = std::collections::HashSet::new();
 
+    // Track tables we're creating in this migration run and their columns
+    // This handles multiple streams sharing the same target table
+    let mut tables_being_created: std::collections::HashMap<String, std::collections::HashSet<String>> =
+        std::collections::HashMap::new();
+
     for stream_id in &streams {
         info!(stream_id = %stream_id, "Processing stream");
 
@@ -615,8 +620,20 @@ async fn migrate_schema(
             .validate()
             .context(format!("Invalid configuration for stream '{}'", stream_id))?;
 
-        // Query existing columns for schema evolution
-        let existing_columns = query_existing_columns(&client, &config.target_table).await?;
+        // Query existing columns from database for schema evolution
+        let db_columns = query_existing_columns(&client, &config.target_table).await?;
+
+        // Combine with columns we're already creating in this migration run
+        // This handles multiple streams sharing the same target table
+        let pending_columns = tables_being_created
+            .get(&config.target_table)
+            .cloned()
+            .unwrap_or_default();
+
+        let mut existing_columns: Vec<String> = db_columns.clone();
+        existing_columns.extend(pending_columns.iter().cloned());
+        existing_columns.sort();
+        existing_columns.dedup();
 
         // Add schema creation (once per schema)
         let schema_ddl = schema_gen.generate_create_schema(&config)?;
@@ -633,27 +650,58 @@ async fn migrate_schema(
             schemas_created.insert(schema_name);
         }
 
-        // Add table creation
+        // Determine if this is the first stream creating this table in this migration
+        let table_exists_in_db = !db_columns.is_empty();
+        let table_being_created = tables_being_created.contains_key(&config.target_table);
+
+        // Add table creation (always include - IF NOT EXISTS handles existing tables)
         all_ddl.push(format!("-- Table for stream: {}", stream_id));
         all_ddl.push(schema_gen.generate_create_table(&config)?);
         all_ddl.push(String::new());
 
-        // Add ALTER TABLE for new columns (schema evolution)
-        let alter_statements = schema_gen.generate_add_columns(&config, &existing_columns)?;
-        if !alter_statements.is_empty() {
-            all_ddl.push(format!(
-                "-- Schema evolution: adding {} new column(s) to {}",
-                alter_statements.len(),
-                config.target_table
-            ));
-            for stmt in &alter_statements {
-                all_ddl.push(stmt.clone());
+        // Track columns from this stream's CREATE TABLE
+        // This must happen BEFORE generating ALTER TABLE so columns are considered "existing"
+        let table_columns = tables_being_created
+            .entry(config.target_table.clone())
+            .or_default();
+        for mapping in &config.field_mappings {
+            table_columns.insert(mapping.target_column.clone());
+        }
+        if config.dq_output.enabled {
+            table_columns.insert(config.dq_output.target_column.clone());
+        }
+        table_columns.insert(config.timestamp.target_field.clone());
+        for id_field in &config.identity_fields {
+            table_columns.insert(id_field.target.clone());
+        }
+
+        // Generate ALTER TABLE for schema evolution:
+        // - If table exists in DB: add columns not in db_columns
+        // - If table being created by prior stream: add columns not in pending_columns
+        // - If this is first stream creating table: CREATE TABLE handles all columns, no ALTER needed
+        if table_exists_in_db || table_being_created {
+            let alter_statements = schema_gen.generate_add_columns(&config, &existing_columns)?;
+            if !alter_statements.is_empty() {
+                all_ddl.push(format!(
+                    "-- Schema evolution: adding {} new column(s) to {}",
+                    alter_statements.len(),
+                    config.target_table
+                ));
+                for stmt in &alter_statements {
+                    all_ddl.push(stmt.clone());
+                }
+                all_ddl.push(String::new());
+                info!(
+                    stream_id = %stream_id,
+                    new_columns = alter_statements.len(),
+                    "Generated ALTER TABLE for new columns"
+                );
             }
-            all_ddl.push(String::new());
-            info!(
+        } else {
+            debug!(
                 stream_id = %stream_id,
-                new_columns = alter_statements.len(),
-                "Generated ALTER TABLE for new columns"
+                table = %config.target_table,
+                "First stream creating table - columns in CREATE TABLE, no ALTER TABLE needed"
             );
         }
 
