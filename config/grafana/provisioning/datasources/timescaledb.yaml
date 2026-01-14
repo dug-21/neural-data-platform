@@ -11,7 +11,7 @@ datasources:
   - name: timescaledb-silver
     uid: timescaledb-silver
     type: postgres
-    url: pi5-timescaledb:5432
+    url: timescaledb:5432
     database: ndp
     user: grafana_reader
     secureJsonData:
