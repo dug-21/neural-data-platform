@@ -13,7 +13,7 @@ datasources:
     uid: duckdb-ndp
     orgId: 1
     access: proxy
-    isDefault: true
+    isDefault: false
     editable: true
     jsonData:
       # Use in-memory DuckDB - dashboards query Parquet files directly via read_parquet()
