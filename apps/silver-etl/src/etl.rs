@@ -484,17 +484,27 @@ impl EtlRunner {
         let sql_gen = SqlGenerator::new();
         let dq_gen = DqSqlGenerator::new();
 
-        let sql = self
-            .generate_full_etl_sql(
+        // When pre-transform is enabled, use PIVOT SQL pattern that reads from
+        // the pre_transformed temp table (which has issue_time, valid_time, metric_name, value).
+        // When disabled, use standard ETL that reads directly from Bronze Parquet.
+        let sql = if use_pre_transform {
+            // Extract metric mappings from field_mappings config for PIVOT SQL
+            let metric_mappings = SqlGenerator::extract_metric_mappings(config);
+            sql_gen
+                .generate_pivot_sql(config, &metric_mappings)
+                .map_err(|e| EtlError::SqlGeneration(e.to_string()))?
+        } else {
+            self.generate_full_etl_sql(
                 &sql_gen,
                 &dq_gen,
                 config,
                 stream_id,
                 bronze_path,
                 watermark_before,
-                use_pre_transform,
+                false, // use_pre_transform is always false here
             )
-            .map_err(|e| EtlError::SqlGeneration(e.to_string()))?;
+            .map_err(|e| EtlError::SqlGeneration(e.to_string()))?
+        };
 
         debug!(stream_id = %stream_id, "Generated ETL SQL:\n{}", sql);
 
@@ -665,16 +675,24 @@ impl EtlRunner {
         let sql_gen = SqlGenerator::new();
         let dq_gen = DqSqlGenerator::new();
 
-        self.generate_full_etl_sql(
-            &sql_gen,
-            &dq_gen,
-            config,
-            stream_id,
-            bronze_path,
-            None,
-            use_pre_transform,
-        )
-        .map_err(|e| EtlError::SqlGeneration(e.to_string()))
+        // Use PIVOT SQL for pre-transformed data, standard ETL for direct Bronze reads
+        if use_pre_transform {
+            let metric_mappings = SqlGenerator::extract_metric_mappings(config);
+            sql_gen
+                .generate_pivot_sql(config, &metric_mappings)
+                .map_err(|e| EtlError::SqlGeneration(e.to_string()))
+        } else {
+            self.generate_full_etl_sql(
+                &sql_gen,
+                &dq_gen,
+                config,
+                stream_id,
+                bronze_path,
+                None,
+                false,
+            )
+            .map_err(|e| EtlError::SqlGeneration(e.to_string()))
+        }
     }
 
     /// Generate complete ETL SQL statement
