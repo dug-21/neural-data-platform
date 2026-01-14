@@ -17,6 +17,7 @@ datasources:
     secureJsonData:
       password: grafana_read_only
     jsonData:
+      database: ndp
       sslmode: disable
       maxOpenConns: 10
       connMaxLifetime: 14400
