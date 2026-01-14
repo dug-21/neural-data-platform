@@ -1,7 +1,7 @@
 apiVersion: 1
 
 datasources:
-  - name: NDP-TimescaleDB
+  - name: timescaledb-silver
     type: postgres
     url: pi5-timescaledb:5432
     database: ndp

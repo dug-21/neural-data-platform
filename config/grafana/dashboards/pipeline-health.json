@@ -1,0 +1,1176 @@
+{
+  "uid": "ndp-pipeline-health",
+  "title": "Pipeline Health - Silver Layer",
+  "description": "Operational monitoring dashboard for all Silver layer streams. Config-driven: automatically discovers streams from Silver tables.",
+  "tags": ["ndp", "pipeline", "health", "silver", "dp-008"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["10s", "30s", "1m", "5m", "15m"],
+    "time_options": ["6h", "24h", "7d"]
+  },
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "temp_unit",
+        "label": "Temperature Unit",
+        "description": "Display temperature in Celsius or Fahrenheit",
+        "type": "custom",
+        "query": "Celsius,Fahrenheit",
+        "current": {
+          "text": "Celsius",
+          "value": "Celsius"
+        },
+        "options": [
+          {
+            "text": "Celsius",
+            "value": "Celsius",
+            "selected": true
+          },
+          {
+            "text": "Fahrenheit",
+            "value": "Fahrenheit",
+            "selected": false
+          }
+        ],
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Annotations & Alerts",
+        "enable": true,
+        "hide": false,
+        "type": "dashboard",
+        "builtIn": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Stream Status Overview",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Stream Status Grid",
+      "description": "Shows status of all Silver layer streams with last record time and health indicator. Green = healthy, Yellow = warning (stale), Red = critical (very stale or no data).",
+      "gridPos": { "x": 0, "y": 1, "w": 24, "h": 8 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Stream Status Grid: Config-driven query that auto-discovers all Silver streams\n-- Queries each Silver table to get latest record, calculates freshness and status\n-- Thresholds: Based on expected update intervals per stream type\n--   air_quality_observations: ~30s expected, yellow >60s, red >120s\n--   weather_observations: ~10min expected, yellow >20min, red >40min\n--   outdoor_air_quality: ~10min expected, yellow >20min, red >40min\n--   weather_forecasts: ~1h expected, yellow >2h, red >4h\n\nWITH stream_stats AS (\n    -- Air Quality Observations (indoor sensors, ~30s updates)\n    SELECT \n        'air_quality_observations' AS stream_name,\n        'Air Quality (Indoor)' AS display_name,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        60 AS yellow_threshold_seconds,\n        120 AS red_threshold_seconds\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Weather Observations (NWS stations, ~10min updates)\n    SELECT \n        'weather_observations' AS stream_name,\n        'Weather Observations (NWS)' AS display_name,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        1200 AS yellow_threshold_seconds,  -- 20 minutes\n        2400 AS red_threshold_seconds       -- 40 minutes\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Outdoor Air Quality (OWM API, ~10min updates)\n    SELECT \n        'outdoor_air_quality' AS stream_name,\n        'Outdoor Air Quality (OWM)' AS display_name,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        1200 AS yellow_threshold_seconds,  -- 20 minutes\n        2400 AS red_threshold_seconds       -- 40 minutes\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Weather Forecasts (NWS gridpoints, ~1h updates)\n    SELECT \n        'weather_forecasts' AS stream_name,\n        'Weather Forecasts (NWS)' AS display_name,\n        MAX(ingestion_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        7200 AS yellow_threshold_seconds,   -- 2 hours\n        14400 AS red_threshold_seconds      -- 4 hours\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    display_name AS \"Stream\",\n    COALESCE(TO_CHAR(last_record_time, 'YYYY-MM-DD HH24:MI:SS'), 'No Data') AS \"Last Record\",\n    CASE \n        WHEN last_record_time IS NULL THEN 'No Data'\n        ELSE CONCAT(\n            EXTRACT(EPOCH FROM (NOW() - last_record_time))::INTEGER / 60,\n            'm ',\n            EXTRACT(EPOCH FROM (NOW() - last_record_time))::INTEGER % 60,\n            's ago'\n        )\n    END AS \"Time Since Last\",\n    total_records_24h AS \"Records (24h)\",\n    CASE \n        WHEN last_record_time IS NULL THEN 'CRITICAL'\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > red_threshold_seconds THEN 'CRITICAL'\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > yellow_threshold_seconds THEN 'WARNING'\n        ELSE 'HEALTHY'\n    END AS \"Status\"\nFROM stream_stats\nORDER BY \n    CASE \n        WHEN last_record_time IS NULL THEN 0\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > red_threshold_seconds THEN 1\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > yellow_threshold_seconds THEN 2\n        ELSE 3\n    END,\n    stream_name;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": ["sum"]
+        },
+        "sortBy": []
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Status" },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "HEALTHY": { "color": "green", "text": "HEALTHY" },
+                      "WARNING": { "color": "yellow", "text": "WARNING" },
+                      "CRITICAL": { "color": "red", "text": "CRITICAL" },
+                      "No Data": { "color": "dark-red", "text": "NO DATA" }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.align",
+                "value": "center"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Stream" },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 250
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Records (24h)" },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": "row",
+      "title": "Data Freshness",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "Air Quality Freshness",
+      "description": "Time since last indoor air quality reading. Expected: ~30 seconds. Yellow >1min, Red >2min.",
+      "gridPos": { "x": 0, "y": 10, "w": 6, "h": 5 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Air Quality Freshness: Time in seconds since last record\n-- Expected update interval: ~30 seconds (AirGradient MQTT)\n-- Thresholds: Green <60s, Yellow 60-120s, Red >120s\n\nSELECT \n    COALESCE(\n        EXTRACT(EPOCH FROM (NOW() - MAX(observation_time))),\n        9999  -- Return high value if no data\n    )::INTEGER AS \"Seconds Since Last\"\nFROM silver.air_quality_observations\nWHERE observation_time >= NOW() - INTERVAL '24 hours';",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "min": 0,
+          "max": 300,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 120 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": { "text": "No Data", "color": "dark-red" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "gauge",
+      "title": "Weather Obs Freshness",
+      "description": "Time since last NWS weather observation. Expected: ~10 minutes. Yellow >20min, Red >40min.",
+      "gridPos": { "x": 6, "y": 10, "w": 6, "h": 5 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Weather Observations Freshness: Time in seconds since last record\n-- Expected update interval: ~10 minutes (NWS HTTP poll)\n-- Thresholds: Green <1200s (20min), Yellow 1200-2400s, Red >2400s (40min)\n\nSELECT \n    COALESCE(\n        EXTRACT(EPOCH FROM (NOW() - MAX(observation_time))),\n        99999  -- Return high value if no data\n    )::INTEGER AS \"Seconds Since Last\"\nFROM silver.weather_observations\nWHERE observation_time >= NOW() - INTERVAL '24 hours';",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "min": 0,
+          "max": 3600,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1200 },
+              { "color": "red", "value": 2400 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": { "text": "No Data", "color": "dark-red" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "gauge",
+      "title": "Outdoor AQ Freshness",
+      "description": "Time since last outdoor air quality reading. Expected: ~10 minutes. Yellow >20min, Red >40min.",
+      "gridPos": { "x": 12, "y": 10, "w": 6, "h": 5 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Outdoor Air Quality Freshness: Time in seconds since last record\n-- Expected update interval: ~10 minutes (OpenWeatherMap HTTP poll)\n-- Thresholds: Green <1200s (20min), Yellow 1200-2400s, Red >2400s (40min)\n\nSELECT \n    COALESCE(\n        EXTRACT(EPOCH FROM (NOW() - MAX(observation_time))),\n        99999  -- Return high value if no data\n    )::INTEGER AS \"Seconds Since Last\"\nFROM silver.outdoor_air_quality\nWHERE observation_time >= NOW() - INTERVAL '24 hours';",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "min": 0,
+          "max": 3600,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1200 },
+              { "color": "red", "value": 2400 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": { "text": "No Data", "color": "dark-red" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "gauge",
+      "title": "Forecast Freshness",
+      "description": "Time since last weather forecast ingestion. Expected: ~1 hour. Yellow >2h, Red >4h.",
+      "gridPos": { "x": 18, "y": 10, "w": 6, "h": 5 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Weather Forecast Freshness: Time in seconds since last ingestion\n-- Expected update interval: ~1 hour (NWS gridpoints forecast)\n-- Uses ingestion_time since forecasts have future valid_times\n-- Thresholds: Green <7200s (2h), Yellow 7200-14400s, Red >14400s (4h)\n\nSELECT \n    COALESCE(\n        EXTRACT(EPOCH FROM (NOW() - MAX(ingestion_time))),\n        99999  -- Return high value if no data\n    )::INTEGER AS \"Seconds Since Last\"\nFROM silver.weather_forecasts\nWHERE ingestion_time >= NOW() - INTERVAL '24 hours';",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "min": 0,
+          "max": 18000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 7200 },
+              { "color": "red", "value": 14400 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": { "text": "No Data", "color": "dark-red" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Record Volume (24h)",
+      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "barchart",
+      "title": "Record Count by Stream (24h)",
+      "description": "Total number of records ingested in the last 24 hours per stream. Helps identify under-performing data sources.",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Record Volume: Count of records per stream in last 24 hours\n-- Config-driven: Dynamically queries all Silver tables\n-- Expected approximate counts (24h):\n--   air_quality: ~2880 (1 per 30s * 60min * 48h / 2)\n--   weather_obs: ~144 (1 per 10min * 24h)\n--   outdoor_aq: ~144 (1 per 10min * 24h)\n--   forecasts: ~24+ (depends on forecast horizon coverage)\n\nWITH stream_counts AS (\n    SELECT 'Air Quality' AS stream, COUNT(*) AS record_count\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Weather Obs' AS stream, COUNT(*) AS record_count\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Outdoor AQ' AS stream, COUNT(*) AS record_count\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Forecasts' AS stream, COUNT(*) AS record_count\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT stream, record_count\nFROM stream_counts\nORDER BY record_count DESC;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "colorByField": "stream"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Total Records (24h)",
+      "description": "Total count of all records across all Silver layer streams in the last 24 hours.",
+      "gridPos": { "x": 12, "y": 16, "w": 4, "h": 4 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Total Record Count: Sum across all Silver streams\n-- Quick health check: total should be in the thousands for 24h\n\nSELECT \n    (\n        (SELECT COUNT(*) FROM silver.air_quality_observations WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.weather_observations WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.outdoor_air_quality WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.weather_forecasts WHERE ingestion_time >= NOW() - INTERVAL '24 hours')\n    ) AS total_records;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 100 },
+              { "color": "yellow", "value": 500 },
+              { "color": "green", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Active Streams",
+      "description": "Number of streams with data in the last 24 hours.",
+      "gridPos": { "x": 16, "y": 16, "w": 4, "h": 4 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Active Streams Count: Number of streams with recent data\n-- Expected: 4 (all streams operational)\n-- Less than 4 indicates a stream is not receiving data\n\nSELECT COUNT(*) AS active_streams FROM (\n    SELECT 1 AS stream_active\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n) AS active;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "max": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "red", "value": 0 },
+              { "color": "orange", "value": 1 },
+              { "color": "yellow", "value": 3 },
+              { "color": "green", "value": 4 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Oldest Record Age",
+      "description": "Age of the oldest unfresh record across all streams. Identifies the most stale data source.",
+      "gridPos": { "x": 20, "y": 16, "w": 4, "h": 4 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Oldest Record Age: Maximum staleness across all streams\n-- Identifies the most delayed data source\n-- Useful for quick health check: if this is green, all streams are fresh\n\nSELECT MAX(seconds_since_last) AS max_staleness_seconds FROM (\n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(ingestion_time)))::INTEGER AS seconds_since_last\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n) AS staleness;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1200 },
+              { "color": "orange", "value": 3600 },
+              { "color": "red", "value": 7200 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Records per Stream (Detailed)",
+      "description": "Detailed breakdown of record counts with expected vs actual comparison.",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 4 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Detailed Record Stats: Compare actual vs expected counts\n-- Expected counts based on typical update intervals:\n--   air_quality: 2880 (1/30s * 86400s)\n--   weather_obs: 144 (1/10min * 24h)\n--   outdoor_aq: 144 (1/10min * 24h)\n--   forecasts: 24 (1/hour * 24h, minimum)\n\nWITH stats AS (\n    SELECT \n        'Air Quality' AS stream,\n        COUNT(*) AS actual,\n        2880 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 2880 * 100, 1) AS completeness_pct\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Weather Obs' AS stream,\n        COUNT(*) AS actual,\n        144 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 144 * 100, 1) AS completeness_pct\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Outdoor AQ' AS stream,\n        COUNT(*) AS actual,\n        144 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 144 * 100, 1) AS completeness_pct\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Forecasts' AS stream,\n        COUNT(*) AS actual,\n        24 AS expected,\n        ROUND(LEAST(COUNT(*)::NUMERIC / 24 * 100, 100), 1) AS completeness_pct\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    stream AS \"Stream\",\n    actual AS \"Actual\",\n    expected AS \"Expected\",\n    completeness_pct AS \"Completeness %\"\nFROM stats\nORDER BY completeness_pct ASC;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": { "type": "auto" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Completeness %" },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "lcd",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "orange", "value": 50 },
+                    { "color": "yellow", "value": 80 },
+                    { "color": "green", "value": 95 }
+                  ]
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Actual" },
+            "properties": [
+              { "id": "custom.align", "value": "right" },
+              { "id": "custom.width", "value": 80 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Expected" },
+            "properties": [
+              { "id": "custom.align", "value": "right" },
+              { "id": "custom.width", "value": 80 }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Data Quality",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "DQ Flag Summary",
+      "description": "Shows percentage of records with data quality flags per stream. Lower is better. DQ flags indicate records that failed validation rules.",
+      "gridPos": { "x": 0, "y": 25, "w": 12, "h": 6 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- DQ Flag Summary: Percentage of records with non-null, non-empty dq_flags\n-- Lower is better - indicates cleaner data\n-- dq_flags is TEXT[] array containing rule violation identifiers\n-- Records with dq_flags indicate data that passed but with warnings\n\nWITH dq_stats AS (\n    SELECT \n        'Air Quality' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Weather Obs' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Outdoor AQ' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Forecasts' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    stream AS \"Stream\",\n    total_records AS \"Total Records\",\n    flagged_records AS \"Flagged Records\",\n    CASE \n        WHEN total_records = 0 THEN 0\n        ELSE ROUND(flagged_records::NUMERIC / total_records * 100, 2)\n    END AS \"DQ Flag %\"\nFROM dq_stats\nORDER BY \n    CASE WHEN total_records = 0 THEN 0 ELSE flagged_records::NUMERIC / total_records END DESC;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": { "type": "auto" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "DQ Flag %" },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 5 },
+                    { "color": "orange", "value": 15 },
+                    { "color": "red", "value": 30 }
+                  ]
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "center"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Total Records" },
+            "properties": [
+              { "id": "custom.align", "value": "right" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Flagged Records" },
+            "properties": [
+              { "id": "custom.align", "value": "right" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": "piechart",
+      "title": "DQ Flag Distribution",
+      "description": "Breakdown of flagged vs clean records across all streams.",
+      "gridPos": { "x": 12, "y": 25, "w": 6, "h": 6 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- DQ Flag Distribution: Overall clean vs flagged records\n-- Aggregates across all Silver tables\n-- Useful for quick assessment of overall data quality\n\nWITH totals AS (\n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n),\naggregated AS (\n    SELECT SUM(total) AS total_records, SUM(flagged) AS flagged_records\n    FROM totals\n)\nSELECT 'Clean Records' AS category, (total_records - flagged_records) AS count FROM aggregated\nUNION ALL\nSELECT 'Flagged Records' AS category, flagged_records AS count FROM aggregated;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "pieType": "pie",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "displayLabels": ["name", "percent"]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Clean Records" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Flagged Records" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Overall DQ Rate",
+      "description": "Percentage of all records that have DQ flags. Target: <5%.",
+      "gridPos": { "x": 18, "y": 25, "w": 6, "h": 6 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Overall DQ Rate: Percentage of all records with DQ flags\n-- Target: <5% is excellent, <15% is acceptable, >30% needs investigation\n-- Calculates across all Silver tables weighted by record count\n\nWITH totals AS (\n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    CASE \n        WHEN SUM(total) = 0 THEN 0\n        ELSE ROUND(SUM(flagged)::NUMERIC / SUM(total) * 100, 2)\n    END AS dq_rate_pct\nFROM totals;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 14,
+          "valueSize": 40
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "orange", "value": 15 },
+              { "color": "red", "value": 30 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "type": "row",
+      "title": "Ingestion Timeline",
+      "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Ingestion Timeline (Records per Hour)",
+      "description": "Stacked area chart showing record count over time by stream. Helps identify gaps or spikes in data ingestion.",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 10 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Ingestion Timeline: Hourly record counts per stream\n-- Uses time_bucket for efficient grouping (TimescaleDB function)\n-- Shows data volume patterns and identifies gaps\n-- Formatted for Grafana time series: time column + value columns\n\nWITH hourly_counts AS (\n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Air Quality' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.air_quality_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Weather Obs' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.weather_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Outdoor AQ' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', ingestion_time) AS time,\n        'Forecasts' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= $__timeFrom()::timestamptz\n      AND ingestion_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n)\nSELECT \n    time,\n    stream AS metric,\n    record_count AS value\nFROM hourly_counts\nORDER BY time, stream;",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["sum", "mean", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "barAlignment": 0,
+            "lineWidth": 2,
+            "fillOpacity": 40,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "insertNulls": false,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "axisCenteredZero": false,
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Air Quality" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Weather Obs" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Outdoor AQ" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Forecasts" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Sample Temperature Data (with Unit Toggle)",
+      "gridPos": { "x": 0, "y": 42, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Recent Temperature Readings",
+      "description": "Sample temperature data showing the temp_unit variable in action. Demonstrates Celsius/Fahrenheit toggle capability.",
+      "gridPos": { "x": 0, "y": 43, "w": 24, "h": 8 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- Temperature with Unit Toggle: Demonstrates temp_unit variable\n-- Uses conditional conversion based on dashboard variable\n-- ${temp_unit} is replaced by Grafana with 'Celsius' or 'Fahrenheit'\n-- Conversion formula: F = (C * 9/5) + 32\n\nWITH temp_data AS (\n    SELECT \n        time_bucket('15 minutes', observation_time) AS time,\n        'Indoor' AS source,\n        AVG(\n            CASE \n                WHEN '${temp_unit}' = 'Fahrenheit' \n                THEN (COALESCE(temperature_c_compensated, temperature_c) * 9.0/5.0) + 32\n                ELSE COALESCE(temperature_c_compensated, temperature_c)\n            END\n        ) AS temperature\n    FROM silver.air_quality_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n      AND temperature_c IS NOT NULL\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('15 minutes', observation_time) AS time,\n        'Outdoor' AS source,\n        AVG(\n            CASE \n                WHEN '${temp_unit}' = 'Fahrenheit' \n                THEN (temperature_c * 9.0/5.0) + 32\n                ELSE temperature_c\n            END\n        ) AS temperature\n    FROM silver.weather_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n      AND temperature_c IS NOT NULL\n    GROUP BY 1\n)\nSELECT \n    time,\n    source AS metric,\n    ROUND(temperature::NUMERIC, 1) AS value\nFROM temp_data\nWHERE temperature IS NOT NULL\nORDER BY time, source;",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": ["mean", "min", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": 3600000,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "stacking": {
+              "mode": "none"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "Temperature (${temp_unit})",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 18 },
+              { "color": "yellow", "value": 26 },
+              { "color": "red", "value": 35 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Indoor" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Outdoor" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*" },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "${temp_unit:raw}"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "NDP Dashboards",
+      "type": "dashboards",
+      "tags": ["ndp"],
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ]
+}

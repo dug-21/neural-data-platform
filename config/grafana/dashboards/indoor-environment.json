@@ -1,0 +1,774 @@
+{
+  "uid": "ndp-indoor-environment",
+  "title": "Indoor Environment + Outdoor Context + Ventilation",
+  "description": "What's my indoor air quality and should I open windows?",
+  "tags": ["ndp", "indoor", "outdoor", "ventilation", "silver"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "temp_unit",
+        "type": "custom",
+        "label": "Temperature Unit",
+        "current": {
+          "text": "Celsius",
+          "value": "Celsius"
+        },
+        "options": [
+          {"text": "Celsius", "value": "Celsius", "selected": true},
+          {"text": "Fahrenheit", "value": "Fahrenheit", "selected": false}
+        ],
+        "query": "Celsius,Fahrenheit"
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Current Status",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Indoor Temperature",
+      "description": "Current indoor temperature with 6h sparkline",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Indoor Temperature: Current value with unit conversion\n-- Source: air_quality_observations from AirGradient sensor\nSELECT\n    observation_time AS time,\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS value\nFROM silver.air_quality_observations\nWHERE observation_time >= NOW() - INTERVAL '6 hours'\n  AND temperature_c IS NOT NULL\nORDER BY observation_time ASC",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null},
+              {"color": "green", "value": 18},
+              {"color": "yellow", "value": 26},
+              {"color": "red", "value": 30}
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "Indoor Humidity",
+      "description": "Current indoor humidity. Comfort range: 30-60%",
+      "gridPos": {"x": 4, "y": 1, "w": 3, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Indoor Humidity: Current value\n-- Comfort range: 30-60% (green)\n-- Source: air_quality_observations from AirGradient sensor\nSELECT\n    humidity_pct AS value\nFROM silver.air_quality_observations\nWHERE humidity_pct IS NOT NULL\nORDER BY observation_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "orange", "value": null},
+              {"color": "green", "value": 30},
+              {"color": "orange", "value": 60},
+              {"color": "red", "value": 80}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Indoor CO2",
+      "description": "CO2 concentration. <800 Good, 800-1200 Elevated, >1200 High",
+      "gridPos": {"x": 7, "y": 1, "w": 3, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Indoor CO2: Current value with threshold coloring\n-- Thresholds: <800 green (good), 800-1200 yellow (elevated), >1200 red (high)\n-- Source: air_quality_observations from AirGradient sensor\nSELECT\n    co2 AS value\nFROM silver.air_quality_observations\nWHERE co2 IS NOT NULL\nORDER BY observation_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ppm",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 800},
+              {"color": "red", "value": 1200}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Indoor PM2.5",
+      "description": "PM2.5 concentration. EPA thresholds: <12 Good, 12-35 Moderate, 35-55 USG, >55 Unhealthy",
+      "gridPos": {"x": 10, "y": 1, "w": 3, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Indoor PM2.5: Current value with EPA thresholds\n-- EPA AQI breakpoints for PM2.5:\n--   0-12 ug/m3: Good (green)\n--   12-35 ug/m3: Moderate (yellow)\n--   35-55 ug/m3: Unhealthy for Sensitive Groups (orange)\n--   >55 ug/m3: Unhealthy (red)\n-- Source: air_quality_observations from AirGradient sensor\nSELECT\n    pm25 AS value\nFROM silver.air_quality_observations\nWHERE pm25 IS NOT NULL\nORDER BY observation_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "conc",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 12},
+              {"color": "orange", "value": 35},
+              {"color": "red", "value": 55}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Outdoor Temperature",
+      "description": "Current outdoor temperature with feels-like",
+      "gridPos": {"x": 13, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Outdoor Temperature: Current value with unit conversion\n-- Includes feels-like temperature in subtext\n-- Source: weather_observations (OWM or NWS)\nSELECT\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS \"Temperature\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN (COALESCE(heat_index_c, wind_chill_c, temperature_c) * 9.0/5.0) + 32\n        ELSE COALESCE(heat_index_c, wind_chill_c, temperature_c)\n    END AS \"Feels Like\"\nFROM silver.weather_observations\nWHERE temperature_c IS NOT NULL\nORDER BY observation_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": "/^Temperature$/"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null},
+              {"color": "green", "value": 18},
+              {"color": "yellow", "value": 26},
+              {"color": "red", "value": 32}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Outdoor Humidity",
+      "description": "Current outdoor humidity",
+      "gridPos": {"x": 17, "y": 1, "w": 3, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Outdoor Humidity: Current value\n-- High humidity (>70%) discourages window opening\n-- Source: weather_observations\nSELECT\n    humidity_pct AS value\nFROM silver.weather_observations\nWHERE humidity_pct IS NOT NULL\nORDER BY observation_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "red", "value": 85}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Outdoor AQI",
+      "description": "EPA AQI: 0-50 Good, 51-100 Moderate, 101-150 USG, >150 Unhealthy",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Outdoor AQI: EPA scale (0-500)\n-- Computed from PM2.5 if aqi_epa not available\n-- EPA AQI Categories:\n--   0-50: Good (green)\n--   51-100: Moderate (yellow)\n--   101-150: Unhealthy for Sensitive Groups (orange)\n--   151-200: Unhealthy (red)\n--   201-300: Very Unhealthy (purple)\n--   301-500: Hazardous (maroon)\n-- Source: outdoor_air_quality\nSELECT\n    -- Use aqi_epa if available, otherwise compute from PM2.5\n    -- Simple linear approximation: AQI ~= PM2.5 * 2.4 for PM2.5 < 55\n    COALESCE(\n        aqi_epa,\n        CASE\n            WHEN pm25 <= 12 THEN (pm25 / 12.0) * 50\n            WHEN pm25 <= 35 THEN 50 + ((pm25 - 12) / 23.0) * 50\n            WHEN pm25 <= 55 THEN 100 + ((pm25 - 35) / 20.0) * 50\n            WHEN pm25 <= 150 THEN 150 + ((pm25 - 55) / 95.0) * 50\n            ELSE 200 + ((pm25 - 150) / 100.0) * 100\n        END\n    )::INTEGER AS value\nFROM silver.outdoor_air_quality\nWHERE pm25 IS NOT NULL OR aqi_epa IS NOT NULL\nORDER BY observation_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 51},
+              {"color": "orange", "value": 101},
+              {"color": "red", "value": 151},
+              {"color": "purple", "value": 201},
+              {"color": "dark-red", "value": 301}
+            ]
+          },
+          "mappings": [
+            {"type": "range", "options": {"from": 0, "to": 50, "result": {"index": 0, "text": "Good"}}},
+            {"type": "range", "options": {"from": 51, "to": 100, "result": {"index": 1, "text": "Moderate"}}},
+            {"type": "range", "options": {"from": 101, "to": 150, "result": {"index": 2, "text": "USG"}}},
+            {"type": "range", "options": {"from": 151, "to": 200, "result": {"index": 3, "text": "Unhealthy"}}}
+          ]
+        }
+      }
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Ventilation Decision",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Ventilation Recommendation",
+      "description": "Should you open windows for fresh air?",
+      "gridPos": {"x": 0, "y": 6, "w": 8, "h": 6},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- VENTILATION DECISION LOGIC\n-- Recommends \"OPEN WINDOWS\" when ALL conditions are met:\n--   1. Indoor CO2 > 800 ppm (would benefit from fresh air)\n--   2. Outdoor temp: 18-26C (65-79F) comfort range\n--   3. Outdoor humidity < 70%\n--   4. Outdoor AQI < 50 (Good)\n--   5. Precipitation probability < 20% in next 2 hours\n--\n-- Returns 1 for OPEN WINDOWS, 0 for KEEP CLOSED\n-- The reason text is shown in a separate panel\n\nWITH indoor_data AS (\n    SELECT\n        co2,\n        pm25 as indoor_pm25\n    FROM silver.air_quality_observations\n    WHERE co2 IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\noutdoor_weather AS (\n    SELECT\n        temperature_c,\n        humidity_pct\n    FROM silver.weather_observations\n    WHERE temperature_c IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\noutdoor_aq AS (\n    SELECT\n        COALESCE(\n            aqi_epa,\n            CASE\n                WHEN pm25 <= 12 THEN (pm25 / 12.0) * 50\n                WHEN pm25 <= 35 THEN 50 + ((pm25 - 12) / 23.0) * 50\n                WHEN pm25 <= 55 THEN 100 + ((pm25 - 35) / 20.0) * 50\n                ELSE 150\n            END\n        ) AS aqi_value,\n        pm25 as outdoor_pm25\n    FROM silver.outdoor_air_quality\n    WHERE pm25 IS NOT NULL OR aqi_epa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\nforecast_data AS (\n    SELECT\n        AVG(precip_probability_pct) AS precip_prob_2h\n    FROM silver.weather_forecasts\n    WHERE valid_time BETWEEN NOW() AND NOW() + INTERVAL '2 hours'\n      AND precip_probability_pct IS NOT NULL\n),\nventilation_check AS (\n    SELECT\n        i.co2,\n        ow.temperature_c,\n        ow.humidity_pct,\n        oaq.aqi_value,\n        COALESCE(f.precip_prob_2h, 0) AS precip_prob,\n        -- Check each condition\n        (i.co2 > 800) AS co2_elevated,\n        (ow.temperature_c BETWEEN 18 AND 26) AS temp_comfortable,\n        (ow.humidity_pct < 70) AS humidity_ok,\n        (oaq.aqi_value < 50) AS aqi_good,\n        (COALESCE(f.precip_prob_2h, 0) < 20) AS no_rain_expected\n    FROM indoor_data i\n    CROSS JOIN outdoor_weather ow\n    CROSS JOIN outdoor_aq oaq\n    CROSS JOIN forecast_data f\n)\nSELECT\n    CASE\n        WHEN co2_elevated\n             AND temp_comfortable\n             AND humidity_ok\n             AND aqi_good\n             AND no_rain_expected\n        THEN 1\n        ELSE 0\n    END AS value\nFROM ventilation_check",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "KEEP CLOSED", "color": "red", "index": 0}}},
+            {"type": "value", "options": {"1": {"text": "OPEN WINDOWS", "color": "green", "index": 1}}}
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Ventilation Factors",
+      "description": "Status of each factor in the ventilation decision",
+      "gridPos": {"x": 8, "y": 6, "w": 8, "h": 6},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- VENTILATION FACTORS TABLE\n-- Shows current status of each condition used in ventilation decision\n-- Criteria for \"OPEN WINDOWS\":\n--   1. Indoor CO2 > 800 ppm\n--   2. Outdoor temp: 18-26C\n--   3. Outdoor humidity < 70%\n--   4. Outdoor AQI < 50\n--   5. Precip probability < 20% (next 2h)\n\nWITH indoor_data AS (\n    SELECT co2\n    FROM silver.air_quality_observations\n    WHERE co2 IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\noutdoor_weather AS (\n    SELECT temperature_c, humidity_pct\n    FROM silver.weather_observations\n    WHERE temperature_c IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\noutdoor_aq AS (\n    SELECT\n        COALESCE(\n            aqi_epa,\n            CASE\n                WHEN pm25 <= 12 THEN (pm25 / 12.0) * 50\n                WHEN pm25 <= 35 THEN 50 + ((pm25 - 12) / 23.0) * 50\n                ELSE 100\n            END\n        )::INTEGER AS aqi_value\n    FROM silver.outdoor_air_quality\n    WHERE pm25 IS NOT NULL OR aqi_epa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\nforecast_data AS (\n    SELECT\n        COALESCE(AVG(precip_probability_pct), 0)::INTEGER AS precip_prob_2h\n    FROM silver.weather_forecasts\n    WHERE valid_time BETWEEN NOW() AND NOW() + INTERVAL '2 hours'\n)\nSELECT\n    'Indoor CO2' AS \"Factor\",\n    i.co2::TEXT || ' ppm' AS \"Current\",\n    '>800 ppm' AS \"Target\",\n    CASE WHEN i.co2 > 800 THEN 'Yes' ELSE 'No' END AS \"Met\"\nFROM indoor_data i\nUNION ALL\nSELECT\n    'Outdoor Temp',\n    ROUND(ow.temperature_c, 1)::TEXT || ' C',\n    '18-26 C',\n    CASE WHEN ow.temperature_c BETWEEN 18 AND 26 THEN 'Yes' ELSE 'No' END\nFROM outdoor_weather ow\nUNION ALL\nSELECT\n    'Outdoor Humidity',\n    ow.humidity_pct::INTEGER::TEXT || '%',\n    '<70%',\n    CASE WHEN ow.humidity_pct < 70 THEN 'Yes' ELSE 'No' END\nFROM outdoor_weather ow\nUNION ALL\nSELECT\n    'Outdoor AQI',\n    oaq.aqi_value::TEXT,\n    '<50 (Good)',\n    CASE WHEN oaq.aqi_value < 50 THEN 'Yes' ELSE 'No' END\nFROM outdoor_aq oaq\nUNION ALL\nSELECT\n    'Rain Forecast (2h)',\n    f.precip_prob_2h::TEXT || '%',\n    '<20%',\n    CASE WHEN f.precip_prob_2h < 20 THEN 'Yes' ELSE 'No' END\nFROM forecast_data f",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {"type": "auto"}
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Met"},
+            "properties": [
+              {"id": "custom.align", "value": "center"},
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"Yes": {"text": "Yes", "color": "green"}}},
+                  {"type": "value", "options": {"No": {"text": "No", "color": "red"}}}
+                ]
+              },
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Factor"},
+            "properties": [
+              {"id": "custom.width", "value": 150}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Upcoming Conditions (Next 6-12h)",
+      "description": "Weather forecast summary for planning",
+      "gridPos": {"x": 16, "y": 6, "w": 8, "h": 6},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- UPCOMING CONDITIONS\n-- Shows forecast summary for next 6-12 hours\n-- Helps plan when conditions might be suitable for ventilation\n\nWITH forecast_windows AS (\n    SELECT\n        CASE\n            WHEN valid_time < NOW() + INTERVAL '3 hours' THEN 'Next 3h'\n            WHEN valid_time < NOW() + INTERVAL '6 hours' THEN '3-6h'\n            WHEN valid_time < NOW() + INTERVAL '12 hours' THEN '6-12h'\n        END AS time_window,\n        temperature_c,\n        humidity_pct,\n        precip_probability_pct,\n        valid_time\n    FROM silver.weather_forecasts\n    WHERE valid_time BETWEEN NOW() AND NOW() + INTERVAL '12 hours'\n      AND temperature_c IS NOT NULL\n)\nSELECT\n    time_window AS \"Period\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN ROUND(MIN(temperature_c) * 9.0/5.0 + 32, 0)::TEXT || '-' ||\n             ROUND(MAX(temperature_c) * 9.0/5.0 + 32, 0)::TEXT || ' F'\n        ELSE ROUND(MIN(temperature_c), 0)::TEXT || '-' ||\n             ROUND(MAX(temperature_c), 0)::TEXT || ' C'\n    END AS \"Temp Range\",\n    ROUND(AVG(humidity_pct), 0)::TEXT || '%' AS \"Avg Humidity\",\n    ROUND(MAX(precip_probability_pct), 0)::TEXT || '%' AS \"Max Rain %\"\nFROM forecast_windows\nWHERE time_window IS NOT NULL\nGROUP BY time_window\nORDER BY\n    CASE time_window\n        WHEN 'Next 3h' THEN 1\n        WHEN '3-6h' THEN 2\n        WHEN '6-12h' THEN 3\n    END",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {"type": "auto"}
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Max Rain %"},
+            "properties": [
+              {"id": "custom.align", "value": "center"},
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 20},
+                    {"color": "red", "value": 50}
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Trends",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Indoor vs Outdoor Temperature",
+      "description": "Temperature comparison over time",
+      "gridPos": {"x": 0, "y": 13, "w": 12, "h": 8},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- INDOOR TEMPERATURE TREND\n-- Source: air_quality_observations from AirGradient sensor\n-- Time-bucketed to 5-minute intervals for smooth display\n\nSELECT\n    time_bucket('5 minutes', observation_time) AS time,\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN AVG(temperature_c) * 9.0/5.0 + 32\n        ELSE AVG(temperature_c)\n    END AS \"Indoor\"\nFROM silver.air_quality_observations\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= $__timeTo()::TIMESTAMPTZ\n  AND temperature_c IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "rawSql": "-- OUTDOOR TEMPERATURE TREND\n-- Source: weather_observations (OWM or NWS)\n-- Time-bucketed to 5-minute intervals for alignment with indoor data\n\nSELECT\n    time_bucket('5 minutes', observation_time) AS time,\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN AVG(temperature_c) * 9.0/5.0 + 32\n        ELSE AVG(temperature_c)\n    END AS \"Outdoor\"\nFROM silver.weather_observations\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= $__timeTo()::TIMESTAMPTZ\n  AND temperature_c IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "B",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "min", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Indoor"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Outdoor"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Indoor vs Outdoor PM2.5",
+      "description": "PM2.5 comparison with indoor/outdoor ratio",
+      "gridPos": {"x": 12, "y": 13, "w": 12, "h": 8},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- INDOOR PM2.5 TREND\n-- Source: air_quality_observations from AirGradient sensor\n-- EPA thresholds shown as reference lines\n\nSELECT\n    time_bucket('5 minutes', observation_time) AS time,\n    AVG(pm25) AS \"Indoor PM2.5\"\nFROM silver.air_quality_observations\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= $__timeTo()::TIMESTAMPTZ\n  AND pm25 IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "rawSql": "-- OUTDOOR PM2.5 TREND\n-- Source: outdoor_air_quality (OpenWeatherMap Air Pollution API)\n\nSELECT\n    time_bucket('5 minutes', observation_time) AS time,\n    AVG(pm25) AS \"Outdoor PM2.5\"\nFROM silver.outdoor_air_quality\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= $__timeTo()::TIMESTAMPTZ\n  AND pm25 IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "B",
+          "format": "time_series"
+        },
+        {
+          "rawSql": "-- INDOOR/OUTDOOR PM2.5 RATIO\n-- Ratio > 1 means indoor air is worse than outdoor\n-- Ratio < 1 means indoor air is better (filtration working)\n\nWITH indoor_pm AS (\n    SELECT\n        time_bucket('30 minutes', observation_time) AS bucket,\n        AVG(pm25) AS pm25\n    FROM silver.air_quality_observations\n    WHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n      AND observation_time <= $__timeTo()::TIMESTAMPTZ\n      AND pm25 IS NOT NULL\n    GROUP BY 1\n),\noutdoor_pm AS (\n    SELECT\n        time_bucket('30 minutes', observation_time) AS bucket,\n        AVG(pm25) AS pm25\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n      AND observation_time <= $__timeTo()::TIMESTAMPTZ\n      AND pm25 IS NOT NULL\n    GROUP BY 1\n)\nSELECT\n    COALESCE(i.bucket, o.bucket) AS time,\n    CASE\n        WHEN o.pm25 > 0 THEN ROUND((i.pm25 / o.pm25)::NUMERIC, 2)\n        ELSE NULL\n    END AS \"I/O Ratio\"\nFROM indoor_pm i\nFULL OUTER JOIN outdoor_pm o ON i.bucket = o.bucket\nWHERE i.pm25 IS NOT NULL AND o.pm25 IS NOT NULL\nORDER BY 1",
+          "refId": "C",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "conc",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 12},
+              {"color": "orange", "value": 35},
+              {"color": "red", "value": 55}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Indoor PM2.5"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Outdoor PM2.5"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "I/O Ratio"},
+            "properties": [
+              {"id": "unit", "value": "none"},
+              {"id": "custom.axisPlacement", "value": "right"},
+              {"id": "custom.drawStyle", "value": "line"},
+              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [5, 5]}},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}},
+              {"id": "custom.fillOpacity", "value": 0}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "CO2 Trend (24h)",
+      "description": "CO2 levels with threshold reference lines at 800 and 1200 ppm",
+      "gridPos": {"x": 0, "y": 21, "w": 12, "h": 8},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- CO2 TREND\n-- Source: air_quality_observations from AirGradient sensor\n-- Thresholds:\n--   <800 ppm: Good (outdoor baseline ~420 ppm)\n--   800-1200 ppm: Elevated - consider ventilation\n--   >1200 ppm: High - ventilation recommended\n\nSELECT\n    time_bucket('5 minutes', observation_time) AS time,\n    AVG(co2) AS \"CO2 (ppm)\"\nFROM silver.air_quality_observations\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= $__timeTo()::TIMESTAMPTZ\n  AND co2 IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "min", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ppm",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed+area"
+            }
+          },
+          "color": {"mode": "palette-classic"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 800},
+              {"color": "red", "value": 1200}
+            ]
+          },
+          "min": 400
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Humidity Comparison",
+      "description": "Indoor vs outdoor humidity with 60% indoor threshold",
+      "gridPos": {"x": 12, "y": 21, "w": 12, "h": 8},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- INDOOR HUMIDITY TREND\n-- Source: air_quality_observations from AirGradient sensor\n-- Comfort range: 30-60% (shown with threshold line at 60%)\n\nSELECT\n    time_bucket('5 minutes', observation_time) AS time,\n    AVG(humidity_pct) AS \"Indoor Humidity\"\nFROM silver.air_quality_observations\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= $__timeTo()::TIMESTAMPTZ\n  AND humidity_pct IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "rawSql": "-- OUTDOOR HUMIDITY TREND\n-- Source: weather_observations\n-- High outdoor humidity (>70%) is a factor against opening windows\n\nSELECT\n    time_bucket('5 minutes', observation_time) AS time,\n    AVG(humidity_pct) AS \"Outdoor Humidity\"\nFROM silver.weather_observations\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= $__timeTo()::TIMESTAMPTZ\n  AND humidity_pct IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "B",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "lastNotNull", "min", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 60},
+              {"color": "orange", "value": 70}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Indoor Humidity"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Outdoor Humidity"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "timepicker": {
+    "refresh_intervals": ["1m", "5m", "15m", "30m", "1h"],
+    "time_options": ["6h", "24h", "7d"]
+  }
+}
