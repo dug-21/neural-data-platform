@@ -3,6 +3,7 @@
 # Supports both Pi production and local integration environments
 #
 # Usage: ./deploy.sh [command] [options]
+#        ./deploy.sh --help              - Show detailed help
 #
 # Environment (set via DEPLOY_ENV):
 #   DEPLOY_ENV=pi          - Production on Raspberry Pi (default)
@@ -13,18 +14,40 @@
 #   DEPLOY_ENV=integration ./deploy.sh   - Deploy locally (integration)
 #   DEPLOY_ENV=integration ./deploy.sh status
 #
-# Commands:
-#   ./deploy.sh            - Full deploy (build + start)
-#   ./deploy.sh start      - Start services
-#   ./deploy.sh stop       - Stop services
-#   ./deploy.sh logs       - View logs
-#   ./deploy.sh status     - Check status
-#   ./deploy.sh update [--no-cache] [target]
-#     Examples:
-#       ./deploy.sh update              - Rebuild all (uses cache)
-#       ./deploy.sh update --no-cache   - Rebuild all (no cache)
-#       ./deploy.sh update silver       - Rebuild silver-etl only (uses cache)
-#       ./deploy.sh update --no-cache silver - Rebuild silver-etl (no cache)
+# Core Commands:
+#   deploy          - Full deploy (build + start all services)
+#   start           - Start all services
+#   stop            - Stop all services
+#   logs            - View logs (follows)
+#   status          - Check service health and URLs
+#   build           - Build Docker images only
+#
+# Update Commands:
+#   update [--no-cache] [target] - Pull latest from git and rebuild
+#                     Targets: app, mcp, silver, all (default)
+#   refresh         - Pull latest configs only (no rebuild, restarts Grafana)
+#
+# Configuration Commands:
+#   sync            - Sync configuration to etcd
+#   init-streams    - Initialize stream configurations in etcd
+#   list-streams    - List configured streams from etcd
+#   sync-dictionary - Sync entity schemas to TimescaleDB data dictionary
+#
+# Analytics Commands:
+#   analytics       - Start DuckDB + Grafana analytics stack
+#   rollback        - Stop and remove analytics stack (preserves volumes)
+#
+# Silver ETL Commands:
+#   silver-migrate       - Run Silver Layer TimescaleDB schema migrations
+#   silver-etl           - Run Silver ETL once (Bronze -> TimescaleDB)
+#   silver-daemon        - Start Silver ETL in daemon mode (continuous)
+#   silver-daemon-stop   - Stop Silver ETL daemon
+#   silver-daemon-logs   - View Silver ETL daemon logs (follows)
+#   silver-daemon-status - Check Silver ETL daemon status
+#
+# Environment Variables:
+#   DEPLOY_ENV           - pi (default) or integration
+#   SILVER_ETL_INTERVAL  - Daemon ETL interval in seconds (default: 300)
 
 set -e
 
@@ -527,6 +550,58 @@ refresh() {
 
 # Main
 case "${1:-deploy}" in
+    -h|--help|help)
+        echo "Neural Data Platform - Deployment Script"
+        echo ""
+        echo "Usage: $0 [command] [options]"
+        echo ""
+        echo "Environment (set via DEPLOY_ENV):"
+        echo "  DEPLOY_ENV=pi          - Production on Raspberry Pi (default)"
+        echo "  DEPLOY_ENV=integration - Local integration testing"
+        echo ""
+        echo "Core Commands:"
+        echo "  deploy          - Full deploy (build + start all services)"
+        echo "  start           - Start all services"
+        echo "  stop            - Stop all services"
+        echo "  logs            - View logs (follows)"
+        echo "  status          - Check service health and URLs"
+        echo "  build           - Build Docker images only"
+        echo ""
+        echo "Update Commands:"
+        echo "  update [--no-cache] [target] - Pull latest from git and rebuild"
+        echo "                    --no-cache: Force full rebuild (skip Docker cache)"
+        echo "                    Targets: app, mcp, silver, all (default)"
+        echo "  refresh         - Pull latest configs only (no rebuild, restarts Grafana)"
+        echo ""
+        echo "Configuration Commands:"
+        echo "  sync            - Sync configuration to etcd"
+        echo "  init-streams    - Initialize stream configurations in etcd"
+        echo "  list-streams    - List configured streams from etcd"
+        echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
+        echo ""
+        echo "Analytics Commands:"
+        echo "  analytics       - Start DuckDB + Grafana analytics stack"
+        echo "  rollback        - Stop and remove analytics stack (preserves volumes)"
+        echo ""
+        echo "Silver ETL Commands:"
+        echo "  silver-migrate       - Run Silver Layer TimescaleDB schema migrations"
+        echo "  silver-etl           - Run Silver ETL once (Bronze -> TimescaleDB)"
+        echo "  silver-daemon        - Start Silver ETL in daemon mode (continuous)"
+        echo "  silver-daemon-stop   - Stop Silver ETL daemon"
+        echo "  silver-daemon-logs   - View Silver ETL daemon logs (follows)"
+        echo "  silver-daemon-status - Check Silver ETL daemon status"
+        echo ""
+        echo "Environment Variables:"
+        echo "  DEPLOY_ENV           - pi (default) or integration"
+        echo "  SILVER_ETL_INTERVAL  - Daemon ETL interval in seconds (default: 300)"
+        echo ""
+        echo "Examples:"
+        echo "  $0                              - Deploy to Pi (production)"
+        echo "  DEPLOY_ENV=integration $0       - Deploy locally (integration)"
+        echo "  $0 status                       - Check service health"
+        echo "  $0 update --no-cache silver     - Force rebuild silver-etl"
+        exit 0
+        ;;
     deploy)
         check_prereqs
         build
@@ -647,36 +722,9 @@ case "${1:-deploy}" in
         fi
         ;;
     *)
-        echo "Usage: $0 {deploy|start|stop|logs|status|update|refresh|build|sync|init-streams|list-streams|sync-dictionary|analytics|rollback|silver-etl|silver-migrate|silver-daemon|silver-daemon-stop|silver-daemon-logs|silver-daemon-status}"
+        echo "Error: Unknown command '$1'"
         echo ""
-        echo "Commands:"
-        echo "  deploy          - Full deploy (build + start all services)"
-        echo "  start           - Start all services"
-        echo "  stop            - Stop all services"
-        echo "  logs            - View logs"
-        echo "  status          - Check service health and URLs"
-        echo "  update [--no-cache] [target] - Pull latest and rebuild"
-        echo "                    --no-cache: Force full rebuild (skip Docker cache)"
-        echo "                    Targets: app, mcp, silver, all (default)"
-        echo "  refresh         - Pull latest configs only (no rebuild)"
-        echo "  build           - Build Docker images"
-        echo "  sync            - Sync configuration to etcd"
-        echo "  init-streams    - Initialize stream configurations"
-        echo "  list-streams    - List configured streams"
-        echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
-        echo "  analytics       - Start DuckDB + Grafana analytics stack"
-        echo "  rollback        - Stop and remove analytics stack"
-        echo ""
-        echo "Silver ETL Commands:"
-        echo "  silver-etl         - Run Silver ETL once (Bronze -> TimescaleDB)"
-        echo "  silver-migrate     - Run Silver Layer TimescaleDB migrations"
-        echo "  silver-daemon      - Start Silver ETL in daemon mode (continuous)"
-        echo "  silver-daemon-stop - Stop Silver ETL daemon"
-        echo "  silver-daemon-logs - View Silver ETL daemon logs"
-        echo "  silver-daemon-status - Check Silver ETL daemon status"
-        echo ""
-        echo "Environment Variables:"
-        echo "  SILVER_ETL_INTERVAL - Daemon ETL interval in seconds (default: 300)"
+        echo "Run '$0 --help' for usage information."
         exit 1
         ;;
 esac
