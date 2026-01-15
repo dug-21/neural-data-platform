@@ -532,6 +532,7 @@ impl EtlRunner {
                 self.query_dq_stats(
                     &config.target_table,
                     &config.dq_output.target_column,
+                    &config.incremental.watermark_column,
                     watermark_before,
                     watermark_after,
                 )?
@@ -835,27 +836,11 @@ impl EtlRunner {
         &self,
         table: &str,
         dq_column: &str,
-        watermark_before: Option<DateTime<Utc>>,
+        watermark_column: &str,
+        _watermark_before: Option<DateTime<Utc>>,
         watermark_after: Option<DateTime<Utc>>,
     ) -> Result<(u64, u64), EtlError> {
-        // Count rows with any DQ flags in the new data window
-        // Use array_to_string for pattern matching (DuckDB-compatible via postgres extension)
-        let mut sql = format!(
-            r#"SELECT
-                COUNT(*) FILTER (WHERE array_length({dq}, 1) > 0) AS flagged,
-                COUNT(*) FILTER (WHERE array_to_string({dq}, ',') LIKE '%:reject%') AS rejected
-            FROM pg.{table}"#,
-            dq = dq_column,
-            table = table
-        );
-
-        // Add time window filter if we have watermarks
-        if let (Some(_before), Some(after)) = (watermark_before, watermark_after) {
-            sql.push_str(&format!(
-                " WHERE observation_time <= '{}'",
-                after.to_rfc3339()
-            ));
-        }
+        let sql = Self::build_dq_stats_sql(table, dq_column, watermark_column, watermark_after);
 
         match self.conn.query_row(&sql, [], |row| {
             let flagged: i64 = row.get(0).unwrap_or(0);
@@ -868,6 +853,34 @@ impl EtlRunner {
                 Ok((0, 0))
             }
         }
+    }
+
+    /// Build SQL for DQ statistics query (separated for testability)
+    fn build_dq_stats_sql(
+        table: &str,
+        dq_column: &str,
+        watermark_column: &str,
+        watermark_after: Option<DateTime<Utc>>,
+    ) -> String {
+        let mut sql = format!(
+            r#"SELECT
+                COUNT(*) FILTER (WHERE array_length({dq}, 1) > 0) AS flagged,
+                COUNT(*) FILTER (WHERE array_to_string({dq}, ',') LIKE '%:reject%') AS rejected
+            FROM pg.{table}"#,
+            dq = dq_column,
+            table = table
+        );
+
+        // Add time window filter if we have a watermark
+        if let Some(after) = watermark_after {
+            sql.push_str(&format!(
+                " WHERE {} <= '{}'",
+                watermark_column,
+                after.to_rfc3339()
+            ));
+        }
+
+        sql
     }
 }
 
@@ -1468,5 +1481,66 @@ mod tests {
 
         let file = std::fs::File::create(path).unwrap();
         ParquetWriter::new(file).finish(&mut df.clone()).unwrap();
+    }
+
+    // ============================================================
+    // Test: DQ stats query uses config-driven watermark column
+    // ============================================================
+    // This test verifies that the DQ stats query respects the configured
+    // watermark_column instead of hardcoding 'observation_time'.
+    // This is critical for streams like weather_forecasts that use 'issue_time'.
+    #[test]
+    fn test_dq_stats_uses_config_watermark_column() {
+        let timestamp = DateTime::parse_from_rfc3339("2026-01-15T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        // Test with issue_time (like weather_forecasts)
+        let sql_issue_time = EtlRunner::build_dq_stats_sql(
+            "silver.weather_forecasts",
+            "dq_flags",
+            "issue_time",
+            Some(timestamp),
+        );
+
+        assert!(
+            sql_issue_time.contains("WHERE issue_time <="),
+            "SQL should use issue_time in WHERE clause, got: {}",
+            sql_issue_time
+        );
+        assert!(
+            !sql_issue_time.contains("observation_time"),
+            "SQL should NOT contain hardcoded observation_time, got: {}",
+            sql_issue_time
+        );
+
+        // Test with observation_time (like air_quality)
+        let sql_obs_time = EtlRunner::build_dq_stats_sql(
+            "silver.air_quality",
+            "dq_flags",
+            "observation_time",
+            Some(timestamp),
+        );
+
+        assert!(
+            sql_obs_time.contains("WHERE observation_time <="),
+            "SQL should use observation_time in WHERE clause, got: {}",
+            sql_obs_time
+        );
+
+        // Test without watermark (no time filter WHERE clause)
+        let sql_no_watermark = EtlRunner::build_dq_stats_sql(
+            "silver.air_quality",
+            "dq_flags",
+            "observation_time",
+            None,
+        );
+
+        // Note: SQL contains "FILTER (WHERE ...)" which is different from a time filter
+        assert!(
+            !sql_no_watermark.contains("observation_time <="),
+            "SQL should NOT have time filter without watermark, got: {}",
+            sql_no_watermark
+        );
     }
 }
