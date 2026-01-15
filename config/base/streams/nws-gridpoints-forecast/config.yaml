@@ -581,6 +581,9 @@ silver_etl:
         - metric_path: skyCover
           target_column: sky_cover
           type: double_precision
+        - metric_path: visibility
+          target_column: visibility
+          type: double_precision
         # Precipitation Suite
         - metric_path: probabilityOfPrecipitation
           target_column: precip_probability
@@ -696,7 +699,7 @@ silver_etl:
           action: flag
 
     # Precipitation Suite
-    - source_path: probability_of_precipitation
+    - source_path: precip_probability
       target_column: precip_probability_pct
       type: double_precision
       nullable: true
@@ -707,7 +710,7 @@ silver_etl:
           action: clamp
           clamp_to_bounds: true
 
-    - source_path: quantitative_precipitation
+    - source_path: precip_amount
       target_column: precip_amount_mm
       type: double_precision
       nullable: true
