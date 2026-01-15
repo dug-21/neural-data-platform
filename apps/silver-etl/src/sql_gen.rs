@@ -1790,4 +1790,234 @@ mod tests {
             sql
         );
     }
+
+    // ============================================================
+    // Test: Execute pivot SQL in DuckDB and verify column count
+    // ============================================================
+    #[test]
+    fn test_pivot_sql_execution_column_count() {
+        use duckdb::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+
+        // Create pre_transformed table (same schema as ETL creates)
+        conn.execute_batch(
+            r#"
+            CREATE TABLE pre_transformed (
+                issue_time TIMESTAMPTZ,
+                valid_time TIMESTAMPTZ,
+                ndp_id VARCHAR,
+                location_id VARCHAR,
+                metric_name VARCHAR,
+                value DOUBLE
+            );
+
+            INSERT INTO pre_transformed VALUES
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'temperature', 15.5),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'dewpoint', 10.2),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'wind_speed', 25.0);
+            "#,
+        )
+        .unwrap();
+
+        // Run the pivot query (simplified version with fewer metrics)
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT
+                  current_timestamp AS ingestion_time,
+                  issue_time,
+                  ndp_id,
+                  valid_time,
+                  MAX(CASE WHEN metric_name = 'temperature' THEN value END) AS temperature_c,
+                  MAX(CASE WHEN metric_name = 'dewpoint' THEN value END) AS dewpoint_c,
+                  MAX(CASE WHEN metric_name = 'wind_speed' THEN value END) AS wind_speed_kmh,
+                  NULL::TEXT[] AS dq_flags
+                FROM pre_transformed
+                GROUP BY issue_time, ndp_id, valid_time
+                "#,
+            )
+            .unwrap();
+
+        let column_count = stmt.column_count();
+        println!("Pivot query produces {} columns", column_count);
+
+        // Get column names
+        let column_names: Vec<String> = (0..column_count)
+            .map(|i| stmt.column_name(i).unwrap().to_string())
+            .collect();
+        println!("Column names: {:?}", column_names);
+
+        assert_eq!(column_count, 8, "Pivot query should produce 8 columns");
+
+        // Execute and check we get results
+        let rows: Vec<_> = stmt
+            .query_map([], |row| {
+                let ndp_id: String = row.get(2)?;
+                Ok(ndp_id)
+            })
+            .unwrap()
+            .collect();
+
+        assert_eq!(rows.len(), 1, "Should have 1 pivoted row");
+        println!("Test passed: pivot produces correct column count");
+    }
+
+    // ============================================================
+    // Test: Export pivot result to CSV and count tab-separated fields
+    // ============================================================
+    #[test]
+    fn test_pivot_sql_csv_export_field_count() {
+        use duckdb::Connection;
+        use std::fs;
+
+        let conn = Connection::open_in_memory().unwrap();
+
+        conn.execute_batch(
+            r#"
+            CREATE TABLE pre_transformed (
+                issue_time TIMESTAMPTZ,
+                valid_time TIMESTAMPTZ,
+                ndp_id VARCHAR,
+                location_id VARCHAR,
+                metric_name VARCHAR,
+                value DOUBLE
+            );
+
+            INSERT INTO pre_transformed VALUES
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'temperature', 15.5),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'dewpoint', 10.2);
+            "#,
+        )
+        .unwrap();
+
+        // Export pivot query to CSV with tab delimiter (like COPY uses)
+        conn.execute_batch(
+            r#"
+            COPY (
+                SELECT
+                  current_timestamp AS ingestion_time,
+                  issue_time,
+                  ndp_id,
+                  valid_time,
+                  MAX(CASE WHEN metric_name = 'temperature' THEN value END) AS temperature_c,
+                  MAX(CASE WHEN metric_name = 'dewpoint' THEN value END) AS dewpoint_c,
+                  NULL::TEXT[] AS dq_flags
+                FROM pre_transformed
+                GROUP BY issue_time, ndp_id, valid_time
+            ) TO '/tmp/pivot_test_output.csv' (DELIMITER E'\t');
+            "#,
+        )
+        .unwrap();
+
+        // Read the output and count fields
+        let content = fs::read_to_string("/tmp/pivot_test_output.csv").unwrap();
+        println!("CSV output:\n{}", content);
+
+        let lines: Vec<&str> = content.trim().lines().collect();
+        assert!(!lines.is_empty(), "Should have output");
+
+        let field_count = lines[0].split('\t').count();
+        println!("Tab-separated field count: {}", field_count);
+
+        // Print each field for debugging
+        for (i, field) in lines[0].split('\t').enumerate() {
+            println!("  Field {}: '{}'", i, field);
+        }
+
+        assert_eq!(field_count, 7, "CSV should have 7 tab-separated fields");
+    }
+
+    // ============================================================
+    // Test: Full 18-column pivot SQL matching real ETL
+    // ============================================================
+    #[test]
+    fn test_pivot_sql_full_18_columns_csv_export() {
+        use duckdb::Connection;
+        use std::fs;
+
+        let conn = Connection::open_in_memory().unwrap();
+
+        conn.execute_batch(
+            r#"
+            CREATE TABLE pre_transformed (
+                issue_time TIMESTAMPTZ,
+                valid_time TIMESTAMPTZ,
+                ndp_id VARCHAR,
+                location_id VARCHAR,
+                metric_name VARCHAR,
+                value DOUBLE
+            );
+
+            -- Insert metrics matching actual config
+            INSERT INTO pre_transformed VALUES
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'temperature', 15.5),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'dewpoint', 10.2),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'apparent_temperature', 14.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'heat_index', 16.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'wind_chill', 13.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'wind_speed', 25.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'wind_direction', 180.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'wind_gust', 35.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'probability_of_precipitation', 20.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'quantitative_precipitation', 0.5),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'relative_humidity', 65.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'sky_cover', 50.0),
+                ('2026-01-15 12:00:00+00', '2026-01-15 13:00:00+00', 'weather-nws-002', 'loc1', 'visibility', 10000.0);
+            "#,
+        )
+        .unwrap();
+
+        // Export EXACT pivot query from dry-run (18 columns)
+        conn.execute_batch(
+            r#"
+            COPY (
+                SELECT
+                  current_timestamp AS ingestion_time,
+                  issue_time AS issue_time,
+                  ndp_id,
+                  valid_time AS valid_time,
+                  MAX(CASE WHEN metric_name = 'temperature' THEN value END) AS temperature_c,
+                  MAX(CASE WHEN metric_name = 'dewpoint' THEN value END) AS dewpoint_c,
+                  MAX(CASE WHEN metric_name = 'apparent_temperature' THEN value END) AS apparent_temp_c,
+                  MAX(CASE WHEN metric_name = 'heat_index' THEN value END) AS heat_index_c,
+                  MAX(CASE WHEN metric_name = 'wind_chill' THEN value END) AS wind_chill_c,
+                  MAX(CASE WHEN metric_name = 'wind_speed' THEN value END) AS wind_speed_kmh,
+                  MAX(CASE WHEN metric_name = 'wind_direction' THEN value END) AS wind_direction_deg,
+                  MAX(CASE WHEN metric_name = 'wind_gust' THEN value END) AS wind_gust_kmh,
+                  MAX(CASE WHEN metric_name = 'probability_of_precipitation' THEN value END) AS precip_probability_pct,
+                  MAX(CASE WHEN metric_name = 'quantitative_precipitation' THEN value END) AS precip_amount_mm,
+                  MAX(CASE WHEN metric_name = 'relative_humidity' THEN value END) AS humidity_pct,
+                  MAX(CASE WHEN metric_name = 'sky_cover' THEN value END) AS sky_cover_pct,
+                  MAX(CASE WHEN metric_name = 'visibility' THEN value END) AS visibility_m,
+                  NULL::TEXT[] AS dq_flags
+                FROM pre_transformed
+                GROUP BY issue_time, ndp_id, valid_time
+            ) TO '/tmp/pivot_full_18_output.csv' (DELIMITER E'\t');
+            "#,
+        )
+        .unwrap();
+
+        // Read the output and count fields - DON'T use trim() as it removes trailing tabs
+        let content = fs::read_to_string("/tmp/pivot_full_18_output.csv").unwrap();
+        println!("Full 18-column CSV output (escaped):\n{}", content.escape_debug());
+
+        // Split by newline manually to preserve trailing tabs
+        let lines: Vec<&str> = content.split('\n').collect();
+        assert!(lines.len() >= 2, "Should have header and data lines");
+
+        // Data line (second line, index 1)
+        let data_line = lines[1];
+        println!("Data line raw: '{}'", data_line.escape_debug());
+
+        let field_count = data_line.split('\t').count();
+        println!("Data line tab-separated field count: {}", field_count);
+
+        // Print each field
+        for (i, field) in data_line.split('\t').enumerate() {
+            println!("  Field {}: '{}'", i, field.escape_debug());
+        }
+
+        assert_eq!(field_count, 18, "CSV should have exactly 18 tab-separated fields");
+    }
 }
