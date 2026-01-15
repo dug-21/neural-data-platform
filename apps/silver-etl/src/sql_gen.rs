@@ -635,19 +635,21 @@ impl SqlGenerator {
         }
 
         // Build column list for INSERT
+        // IMPORTANT: Order must match table's physical column order for DuckDB COPY compatibility
+        // Table order: ingestion_time, issue_time, identity_fields (ndp_id), valid_time, metrics, dq_flags
         let mut columns: Vec<String> = vec![
             "ingestion_time".to_string(),
             config.timestamp.target_field.clone(), // issue_time
         ];
 
-        // Add valid_time if configured
-        if let Some(ref valid_ts) = config.valid_timestamp {
-            columns.push(valid_ts.target_field.clone());
-        }
-
-        // Add identity fields (ndp_id, location_id, etc.)
+        // Add identity fields BEFORE valid_time (matches table physical column order)
         for identity in &config.identity_fields {
             columns.push(identity.target.clone());
+        }
+
+        // Add valid_time if configured (after identity fields)
+        if let Some(ref valid_ts) = config.valid_timestamp {
+            columns.push(valid_ts.target_field.clone());
         }
 
         // Add metric columns
@@ -661,17 +663,13 @@ impl SqlGenerator {
         }
 
         // Build SELECT expressions
+        // IMPORTANT: Order must match INSERT column order (which matches table physical order)
         let mut select_exprs: Vec<String> = vec![
             "current_timestamp AS ingestion_time".to_string(),
             format!("{} AS {}", "issue_time", config.timestamp.target_field),
         ];
 
-        // Add valid_time expression
-        if let Some(ref valid_ts) = config.valid_timestamp {
-            select_exprs.push(format!("valid_time AS {}", valid_ts.target_field));
-        }
-
-        // Identity fields from pre_transformed
+        // Identity fields BEFORE valid_time (matches table physical column order)
         for identity in &config.identity_fields {
             let source_col = self.identity_source_to_pre_transformed_column(&identity.source);
             if source_col == identity.target {
@@ -679,6 +677,11 @@ impl SqlGenerator {
             } else {
                 select_exprs.push(format!("{} AS {}", source_col, identity.target));
             }
+        }
+
+        // Add valid_time expression (after identity fields)
+        if let Some(ref valid_ts) = config.valid_timestamp {
+            select_exprs.push(format!("valid_time AS {}", valid_ts.target_field));
         }
 
         // Pivot expressions for each metric
@@ -699,13 +702,14 @@ impl SqlGenerator {
         }
 
         // Build GROUP BY columns (timestamps + identity fields)
+        // Order: issue_time, identity_fields, valid_time (matches SELECT order)
         let mut group_by_cols: Vec<String> = vec!["issue_time".to_string()];
-        if config.valid_timestamp.is_some() {
-            group_by_cols.push("valid_time".to_string());
-        }
         for identity in &config.identity_fields {
             let source_col = self.identity_source_to_pre_transformed_column(&identity.source);
             group_by_cols.push(source_col);
+        }
+        if config.valid_timestamp.is_some() {
+            group_by_cols.push("valid_time".to_string());
         }
 
         // Build the PostgreSQL target table with pg. prefix
@@ -1442,10 +1446,10 @@ mod tests {
             sql
         );
 
-        // Verify GROUP BY clause
+        // Verify GROUP BY clause (order: issue_time, identity_fields, valid_time)
         assert!(
-            sql.contains("GROUP BY issue_time, valid_time, ndp_id"),
-            "Should GROUP BY key columns, got: {}",
+            sql.contains("GROUP BY issue_time, ndp_id, valid_time"),
+            "Should GROUP BY key columns in correct order, got: {}",
             sql
         );
 
@@ -1660,17 +1664,17 @@ mod tests {
         let gen = SqlGenerator::new();
         let sql = gen.generate_pivot_sql(&config, &mappings).unwrap();
 
-        // Verify both identity fields in INSERT columns
+        // Verify both identity fields in INSERT columns (before valid_time)
         assert!(
-            sql.contains("ndp_id, location_id, temperature_c"),
-            "Should include both identity fields, got: {}",
+            sql.contains("ndp_id, location_id, valid_time"),
+            "Should include identity fields before valid_time, got: {}",
             sql
         );
 
-        // Verify GROUP BY includes location_id
+        // Verify GROUP BY includes location_id (identity fields before valid_time)
         assert!(
-            sql.contains("GROUP BY issue_time, valid_time, ndp_id, location_id"),
-            "Should GROUP BY all identity fields, got: {}",
+            sql.contains("GROUP BY issue_time, ndp_id, location_id, valid_time"),
+            "Should GROUP BY all identity fields in correct order, got: {}",
             sql
         );
     }
