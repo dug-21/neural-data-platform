@@ -613,7 +613,7 @@ impl SqlGenerator {
     ///     MAX(CASE WHEN metric_name = 'temperature' THEN value END) AS temperature_c,
     ///     MAX(CASE WHEN metric_name = 'wind_speed' THEN value END) AS wind_speed_kmh
     /// FROM pre_transformed
-    /// GROUP BY issue_time, valid_time, ndp_id
+    /// GROUP BY issue_time, ndp_id, valid_time
     /// ON CONFLICT (issue_time, valid_time, ndp_id) DO UPDATE SET ...
     /// ```
     ///
@@ -636,19 +636,21 @@ impl SqlGenerator {
         }
 
         // Build column list for INSERT
+        // CRITICAL: Order must match physical table column order for DuckDB postgres COPY
+        // Physical table: ingestion_time, issue_time, ndp_id, valid_time, metrics, dq_flags
         let mut columns: Vec<String> = vec![
             "ingestion_time".to_string(),
             config.timestamp.target_field.clone(), // issue_time
         ];
 
-        // Add valid_time if configured
-        if let Some(ref valid_ts) = config.valid_timestamp {
-            columns.push(valid_ts.target_field.clone());
-        }
-
-        // Add identity fields (ndp_id, location_id, etc.)
+        // Add identity fields FIRST (ndp_id) - matches physical table order
         for identity in &config.identity_fields {
             columns.push(identity.target.clone());
+        }
+
+        // Add valid_time AFTER identity fields
+        if let Some(ref valid_ts) = config.valid_timestamp {
+            columns.push(valid_ts.target_field.clone());
         }
 
         // Add metric columns
@@ -662,17 +664,13 @@ impl SqlGenerator {
         }
 
         // Build SELECT expressions
+        // CRITICAL: Order must match INSERT column order (physical table order)
         let mut select_exprs: Vec<String> = vec![
             "current_timestamp AS ingestion_time".to_string(),
             format!("{} AS {}", "issue_time", config.timestamp.target_field),
         ];
 
-        // Add valid_time expression
-        if let Some(ref valid_ts) = config.valid_timestamp {
-            select_exprs.push(format!("valid_time AS {}", valid_ts.target_field));
-        }
-
-        // Identity fields from pre_transformed
+        // Identity fields FIRST (ndp_id) - matches physical table order
         for identity in &config.identity_fields {
             let source_col = self.identity_source_to_pre_transformed_column(&identity.source);
             if source_col == identity.target {
@@ -680,6 +678,11 @@ impl SqlGenerator {
             } else {
                 select_exprs.push(format!("{} AS {}", source_col, identity.target));
             }
+        }
+
+        // Add valid_time AFTER identity fields
+        if let Some(ref valid_ts) = config.valid_timestamp {
+            select_exprs.push(format!("valid_time AS {}", valid_ts.target_field));
         }
 
         // Pivot expressions for each metric
@@ -701,13 +704,14 @@ impl SqlGenerator {
         }
 
         // Build GROUP BY columns (timestamps + identity fields)
+        // Order matches SELECT: issue_time, identity_fields, valid_time
         let mut group_by_cols: Vec<String> = vec!["issue_time".to_string()];
-        if config.valid_timestamp.is_some() {
-            group_by_cols.push("valid_time".to_string());
-        }
         for identity in &config.identity_fields {
             let source_col = self.identity_source_to_pre_transformed_column(&identity.source);
             group_by_cols.push(source_col);
+        }
+        if config.valid_timestamp.is_some() {
+            group_by_cols.push("valid_time".to_string());
         }
 
         // Build the PostgreSQL target table with pg. prefix
@@ -1446,7 +1450,7 @@ mod tests {
 
         // Verify GROUP BY clause
         assert!(
-            sql.contains("GROUP BY issue_time, valid_time, ndp_id"),
+            sql.contains("GROUP BY issue_time, ndp_id, valid_time"),
             "Should GROUP BY key columns, got: {}",
             sql
         );
@@ -1662,16 +1666,16 @@ mod tests {
         let gen = SqlGenerator::new();
         let sql = gen.generate_pivot_sql(&config, &mappings).unwrap();
 
-        // Verify both identity fields in INSERT columns
+        // Verify both identity fields in INSERT columns (before valid_time)
         assert!(
-            sql.contains("valid_time, ndp_id, location_id"),
-            "Should include both identity fields, got: {}",
+            sql.contains("ndp_id, location_id, valid_time"),
+            "Should include identity fields before valid_time, got: {}",
             sql
         );
 
         // Verify GROUP BY includes location_id
         assert!(
-            sql.contains("GROUP BY issue_time, valid_time, ndp_id, location_id"),
+            sql.contains("GROUP BY issue_time, ndp_id, location_id, valid_time"),
             "Should GROUP BY all identity fields, got: {}",
             sql
         );
@@ -1830,7 +1834,7 @@ mod tests {
                   MAX(CASE WHEN metric_name = 'wind_speed' THEN value END) AS wind_speed_kmh,
                   NULL::TEXT[] AS dq_flags
                 FROM pre_transformed
-                GROUP BY issue_time, valid_time, ndp_id
+                GROUP BY issue_time, ndp_id, valid_time
                 "#,
             )
             .unwrap();
@@ -1900,7 +1904,7 @@ mod tests {
                   MAX(CASE WHEN metric_name = 'dewpoint' THEN value END) AS dewpoint_c,
                   NULL::TEXT[] AS dq_flags
                 FROM pre_transformed
-                GROUP BY issue_time, valid_time, ndp_id
+                GROUP BY issue_time, ndp_id, valid_time
             ) TO '/tmp/pivot_test_output.csv' (DELIMITER E'\t');
             "#,
         )
@@ -1988,7 +1992,7 @@ mod tests {
                   MAX(CASE WHEN metric_name = 'visibility' THEN value END) AS visibility_m,
                   NULL::TEXT[] AS dq_flags
                 FROM pre_transformed
-                GROUP BY issue_time, valid_time, ndp_id
+                GROUP BY issue_time, ndp_id, valid_time
             ) TO '/tmp/pivot_full_18_output.csv' (DELIMITER E'\t');
             "#,
         )
