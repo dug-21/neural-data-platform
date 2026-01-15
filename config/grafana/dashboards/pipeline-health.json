@@ -186,7 +186,7 @@
       "id": 4,
       "type": "gauge",
       "title": "Air Quality Freshness",
-      "description": "Time since last indoor air quality reading. Expected: ~30 seconds. Yellow >1min, Red >2min.",
+      "description": "Time since last indoor air quality reading. Expected: ~30 seconds. Yellow >5min, Red >6min.",
       "gridPos": { "x": 0, "y": 10, "w": 6, "h": 5 },
       "datasource": {
         "type": "postgres",
@@ -198,7 +198,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Air Quality Freshness: Time in seconds since last record\n-- Expected update interval: ~30 seconds (AirGradient MQTT)\n-- Thresholds: Green <60s, Yellow 60-120s, Red >120s\n\nSELECT \n    COALESCE(\n        EXTRACT(EPOCH FROM (NOW() - MAX(observation_time))),\n        9999  -- Return high value if no data\n    )::INTEGER AS \"Seconds Since Last\"\nFROM silver.air_quality_observations\nWHERE observation_time >= NOW() - INTERVAL '24 hours';",
+          "rawSql": "-- Air Quality Freshness: Time in seconds since last record\n-- Expected update interval: ~30 seconds (AirGradient MQTT)\n-- Thresholds: Green <240s, Yellow 241-300s, Red >301s\n\nSELECT \n    COALESCE(\n        EXTRACT(EPOCH FROM (NOW() - MAX(observation_time))),\n        9999  -- Return high value if no data\n    )::INTEGER AS \"Seconds Since Last\"\nFROM silver.air_quality_observations\nWHERE observation_time >= NOW() - INTERVAL '24 hours';",
           "refId": "A",
           "format": "table"
         }
