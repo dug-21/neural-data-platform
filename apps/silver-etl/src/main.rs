@@ -161,6 +161,10 @@ enum Commands {
         /// Specific stream to process (omit for all enabled streams)
         #[arg(short, long)]
         stream: Option<String>,
+
+        /// Enable ETL run statistics persistence to TimescaleDB (dp-011)
+        #[arg(long, env = "SILVER_ETL_PERSISTENCE", default_value = "false")]
+        enable_persistence: bool,
     },
 }
 
@@ -221,7 +225,8 @@ async fn main() -> Result<()> {
         Commands::Daemon {
             interval,
             ref stream,
-        } => run_daemon(&cli, *interval, stream.clone()).await,
+            enable_persistence,
+        } => run_daemon(&cli, *interval, stream.clone(), *enable_persistence).await,
     };
 
     // Handle result and set exit code
@@ -870,10 +875,11 @@ fn export_metrics(registry: &Registry) -> Result<i32> {
 }
 
 /// Run ETL in daemon mode with graceful shutdown
-async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>) -> Result<i32> {
+async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>, enable_persistence: bool) -> Result<i32> {
     info!(
         interval_secs = interval,
         stream = stream.as_deref().unwrap_or("all"),
+        enable_persistence = enable_persistence,
         "Starting daemon mode"
     );
 
@@ -902,9 +908,41 @@ async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>) -> Result<
         ..Default::default()
     };
 
-    // Create daemon runner
-    let mut daemon = DaemonRunner::new(executor, daemon_config, shutdown_rx);
+    // Create daemon runner with optional persistence (dp-011)
+    // Persistence requires TIMESCALE_URL and migration 003_etl_runs.sql
+    let result = if enable_persistence {
+        if let Some(url) = &cli.timescale_url {
+            match silver_etl::DuckDbRunPersistence::new(url) {
+                Ok(persistence) => {
+                    info!("ETL run persistence enabled (dp-011)");
+                    let mut daemon = DaemonRunner::with_persistence(executor, daemon_config, shutdown_rx, persistence);
+                    run_daemon_loop(&mut daemon, shutdown_tx).await
+                }
+                Err(e) => {
+                    warn!(error = %e, "Failed to create persistence, falling back to no-op");
+                    let mut daemon = DaemonRunner::new(executor, daemon_config, shutdown_rx);
+                    run_daemon_loop(&mut daemon, shutdown_tx).await
+                }
+            }
+        } else {
+            warn!("SILVER_ETL_PERSISTENCE=true but no TIMESCALE_URL provided, persistence disabled");
+            let mut daemon = DaemonRunner::new(executor, daemon_config, shutdown_rx);
+            run_daemon_loop(&mut daemon, shutdown_tx).await
+        }
+    } else {
+        let mut daemon = DaemonRunner::new(executor, daemon_config, shutdown_rx);
+        run_daemon_loop(&mut daemon, shutdown_tx).await
+    };
 
+    result
+}
+
+/// Helper to run the daemon loop with shutdown handling
+async fn run_daemon_loop<E, P>(daemon: &mut DaemonRunner<E, P>, shutdown_tx: watch::Sender<bool>) -> Result<i32>
+where
+    E: silver_etl::daemon::EtlExecutor + 'static,
+    P: silver_etl::EtlRunPersistence + 'static,
+{
     // Spawn task to handle shutdown signals
     let shutdown_handle = tokio::spawn(async move {
         // Wait for Ctrl+C
@@ -1278,9 +1316,10 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
     fn test_daemon_command_parsing() {
         let cli = Cli::parse_from(["silver-etl", "daemon"]);
         match cli.command {
-            Commands::Daemon { interval, stream } => {
+            Commands::Daemon { interval, stream, enable_persistence } => {
                 assert_eq!(interval, 300); // Default interval
                 assert!(stream.is_none());
+                assert!(!enable_persistence); // Default: disabled
             }
             _ => panic!("Expected Daemon command"),
         }
@@ -1290,9 +1329,10 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
     fn test_daemon_with_custom_interval() {
         let cli = Cli::parse_from(["silver-etl", "daemon", "--interval", "60"]);
         match cli.command {
-            Commands::Daemon { interval, stream } => {
+            Commands::Daemon { interval, stream, enable_persistence } => {
                 assert_eq!(interval, 60);
                 assert!(stream.is_none());
+                assert!(!enable_persistence);
             }
             _ => panic!("Expected Daemon command"),
         }
@@ -1302,9 +1342,10 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
     fn test_daemon_with_stream() {
         let cli = Cli::parse_from(["silver-etl", "daemon", "--stream", "air-quality"]);
         match cli.command {
-            Commands::Daemon { interval, stream } => {
+            Commands::Daemon { interval, stream, enable_persistence } => {
                 assert_eq!(interval, 300);
                 assert_eq!(stream, Some("air-quality".to_string()));
+                assert!(!enable_persistence);
             }
             _ => panic!("Expected Daemon command"),
         }
@@ -1321,9 +1362,37 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
             "outdoor-weather",
         ]);
         match cli.command {
-            Commands::Daemon { interval, stream } => {
+            Commands::Daemon { interval, stream, enable_persistence } => {
                 assert_eq!(interval, 120);
                 assert_eq!(stream, Some("outdoor-weather".to_string()));
+                assert!(!enable_persistence);
+            }
+            _ => panic!("Expected Daemon command"),
+        }
+    }
+
+    #[test]
+    fn test_daemon_with_persistence_flag() {
+        let cli = Cli::parse_from(["silver-etl", "daemon", "--enable-persistence"]);
+        match cli.command {
+            Commands::Daemon { interval, stream, enable_persistence } => {
+                assert_eq!(interval, 300);
+                assert!(stream.is_none());
+                assert!(enable_persistence); // Enabled via flag
+            }
+            _ => panic!("Expected Daemon command"),
+        }
+    }
+
+    #[test]
+    fn test_daemon_with_persistence_env_true() {
+        // Test that "true" string from env var parses correctly
+        std::env::set_var("SILVER_ETL_PERSISTENCE", "true");
+        let cli = Cli::parse_from(["silver-etl", "daemon"]);
+        std::env::remove_var("SILVER_ETL_PERSISTENCE");
+        match cli.command {
+            Commands::Daemon { interval, stream, enable_persistence } => {
+                assert!(enable_persistence); // Enabled via env var
             }
             _ => panic!("Expected Daemon command"),
         }
