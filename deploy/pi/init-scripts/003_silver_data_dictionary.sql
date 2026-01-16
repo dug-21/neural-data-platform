@@ -168,12 +168,13 @@ CREATE TABLE IF NOT EXISTS data_dictionary.silver_dq_rules (
 
     -- Audit columns
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    -- Natural key: one rule definition per (table, column, rule_name)
-    -- Note: silver_column can be NULL for cross-field rules
-    UNIQUE(silver_table, COALESCE(silver_column, ''), rule_name)
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    -- Note: Unique constraint handled by index below (COALESCE not allowed in UNIQUE)
 );
+
+-- Unique index to handle NULL silver_column for cross-field rules
+CREATE UNIQUE INDEX IF NOT EXISTS idx_silver_dq_rules_unique
+    ON data_dictionary.silver_dq_rules(silver_table, COALESCE(silver_column, ''), rule_name);
 
 COMMENT ON TABLE data_dictionary.silver_dq_rules IS
     'Data quality rules applied during Bronze-to-Silver ETL';
