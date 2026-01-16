@@ -250,7 +250,7 @@ services:
       - BRONZE_DATA_DIR=/data/raw
       - TIMESCALE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-ndp_secure_password}@timescaledb:5432/ndp
       # Enable ETL run statistics persistence (dp-011). Requires migration 003_etl_runs.sql
-      - SILVER_ETL_PERSISTENCE=false
+      - SILVER_ETL_PERSISTENCE=true
     depends_on:
       timescaledb:
         condition: service_healthy
