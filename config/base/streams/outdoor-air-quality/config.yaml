@@ -184,6 +184,8 @@ entity_schemas:
 silver_etl:
   enabled: true
   target_table: silver.outdoor_air_quality
+  description: "Outdoor air quality from OpenWeatherMap Air Pollution API"
+  grain: "One row per observation (~10 minute intervals)"
 
   # Timestamp mapping from Bronze to Silver
   timestamp:
@@ -202,6 +204,8 @@ silver_etl:
     - source_path: raw_payload.list[0].main.aqi
       target_column: aqi_owm
       type: smallint
+      unit: "1-5 scale"
+      description: "OpenWeatherMap Air Quality Index"
       nullable: false
       dq_rules:
         - rule: range_check
@@ -214,6 +218,8 @@ silver_etl:
     - source_path: raw_payload.list[0].main.aqi
       target_column: aqi_epa
       type: smallint
+      unit: "0-500 scale"
+      description: "EPA Air Quality Index (derived from OWM)"
       nullable: true
       transform:
         type: expression
@@ -230,6 +236,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.pm2_5
       target_column: pm25
       type: double_precision
+      unit: "ug/m3"
+      description: "PM2.5 particulate matter"
       nullable: false
       dq_rules:
         - rule: range_check
@@ -240,6 +248,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.pm10
       target_column: pm10
       type: double_precision
+      unit: "ug/m3"
+      description: "PM10 particulate matter"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -250,6 +260,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.co
       target_column: co_ugm3
       type: double_precision
+      unit: "ug/m3"
+      description: "Carbon monoxide concentration"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -260,6 +272,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.no
       target_column: no_ugm3
       type: double_precision
+      unit: "ug/m3"
+      description: "Nitrogen monoxide concentration"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -270,6 +284,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.no2
       target_column: no2_ugm3
       type: double_precision
+      unit: "ug/m3"
+      description: "Nitrogen dioxide concentration"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -280,6 +296,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.o3
       target_column: o3_ugm3
       type: double_precision
+      unit: "ug/m3"
+      description: "Ozone concentration"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -290,6 +308,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.so2
       target_column: so2_ugm3
       type: double_precision
+      unit: "ug/m3"
+      description: "Sulfur dioxide concentration"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -300,6 +320,8 @@ silver_etl:
     - source_path: raw_payload.list[0].components.nh3
       target_column: nh3_ugm3
       type: double_precision
+      unit: "ug/m3"
+      description: "Ammonia concentration"
       nullable: true
       dq_rules:
         - rule: range_check

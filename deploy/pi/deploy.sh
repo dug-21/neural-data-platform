@@ -156,7 +156,7 @@ sync_to_data_dictionary() {
     local SQL_FILE="/tmp/data_dictionary_sync_$$.sql"
 
     # Helper function to extract YAML values (compatible with both Python yq and Go yq)
-    # Falls back to grep/sed if yq is unavailable
+    # Falls back to Python if yq is unavailable, then grep/sed for simple top-level keys
     yaml_get() {
         local file="$1"
         local key="$2"
@@ -174,7 +174,33 @@ sync_to_data_dictionary() {
             fi
         fi
 
-        # Fallback to grep/sed if yq failed or not installed
+        # Fallback to Python for nested keys if yq failed or not installed
+        if [ -z "$result" ] || [ "$result" = "null" ]; then
+            if command -v python3 &> /dev/null; then
+                result=$(python3 -c "
+import yaml
+import sys
+try:
+    with open('$file') as f:
+        data = yaml.safe_load(f)
+    keys = '$key'.split('.')
+    val = data
+    for k in keys:
+        if val is None:
+            val = None
+            break
+        val = val.get(k) if isinstance(val, dict) else None
+    if val is None:
+        print('$default')
+    else:
+        print(val)
+except Exception:
+    print('$default')
+" 2>/dev/null)
+            fi
+        fi
+
+        # Final fallback to grep/sed for simple top-level keys only
         if [ -z "$result" ] || [ "$result" = "null" ]; then
             result=$(grep -E "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//' | tr -d '"' || echo "$default")
         fi
@@ -201,6 +227,33 @@ sync_to_data_dictionary() {
             fi
         fi
 
+        # Fallback to Python if yq not available or failed
+        if ! [[ "$result" =~ ^[0-9]+$ ]] || [ "$result" = "0" ]; then
+            if command -v python3 &> /dev/null; then
+                result=$(python3 -c "
+import yaml
+try:
+    with open('$file') as f:
+        data = yaml.safe_load(f)
+    keys = '$key'.split('.')
+    val = data
+    for k in keys:
+        if val is None:
+            break
+        if k.endswith(']'):
+            # Handle array index in key path
+            arr_key = k[:k.index('[')]
+            idx = int(k[k.index('[')+1:-1])
+            val = val.get(arr_key, [])[idx] if isinstance(val, dict) else None
+        else:
+            val = val.get(k) if isinstance(val, dict) else None
+    print(len(val) if isinstance(val, list) else 0)
+except Exception:
+    print(0)
+" 2>/dev/null || echo "0")
+            fi
+        fi
+
         # Validate it's a number
         if ! [[ "$result" =~ ^[0-9]+$ ]]; then
             result=0
@@ -221,6 +274,41 @@ sync_to_data_dictionary() {
                 result=$(yq eval "$path // \"$default\"" "$file" 2>/dev/null)
             else
                 result=$(yq -r "$path // \"$default\"" "$file" 2>/dev/null)
+            fi
+        fi
+
+        # Fallback to Python if yq not available or failed
+        if [ -z "$result" ] || [ "$result" = "null" ]; then
+            if command -v python3 &> /dev/null; then
+                result=$(python3 -c "
+import yaml
+import re
+try:
+    with open('$file') as f:
+        data = yaml.safe_load(f)
+    # Parse path like .silver_etl.field_mappings[0].source_path
+    path = '$path'.lstrip('.')
+    # Split by . but preserve array indices
+    parts = re.split(r'\.(?![^\[]*\])', path)
+    val = data
+    for part in parts:
+        if val is None:
+            break
+        # Check for array index
+        match = re.match(r'(.+)\[(\d+)\]$', part)
+        if match:
+            key, idx = match.groups()
+            val = val.get(key, []) if isinstance(val, dict) else val
+            val = val[int(idx)] if isinstance(val, list) and len(val) > int(idx) else None
+        else:
+            val = val.get(part) if isinstance(val, dict) else None
+    if val is None:
+        print('$default')
+    else:
+        print(val)
+except Exception:
+    print('$default')
+" 2>/dev/null)
             fi
         fi
 
@@ -313,13 +401,348 @@ sync_to_data_dictionary() {
             fi
         done
 
+        # ========================================================================
+        # SILVER LAYER METADATA SYNC
+        # Uses UPSERT (ON CONFLICT DO UPDATE) since multiple streams can feed
+        # the same Silver table (e.g., outdoor-weather + nws-observations -> weather_observations)
+        # ========================================================================
+
+        echo ""
+        echo "-- ============================================"
+        echo "-- SILVER LAYER DATA DICTIONARY"
+        echo "-- ============================================"
+        echo ""
+
+        # Declare associative arrays for two-pass collection
+        # SILVER_TABLES[target_table] = "stream1 stream2 ..."
+        # SILVER_DESCRIPTIONS[target_table] = "description"
+        # SILVER_GRAINS[target_table] = "grain"
+        # SILVER_TIMESTAMP_COLS[target_table] = "observation_time"
+        declare -A SILVER_TABLES
+        declare -A SILVER_DESCRIPTIONS
+        declare -A SILVER_GRAINS
+        declare -A SILVER_TIMESTAMP_COLS
+
+        local silver_table_count=0
+        local silver_column_count=0
+        local silver_lineage_count=0
+        local silver_dq_rule_count=0
+
+        # ---------------------------------------------------------------------------
+        # PASS 1: Collect all Silver-enabled streams and group by target table
+        # ---------------------------------------------------------------------------
+        for config_dir in "$CONFIG_DIR"/*/; do
+            if [ -f "$config_dir/config.yaml" ]; then
+                local stream_id=$(basename "$config_dir")
+                local config_file="$config_dir/config.yaml"
+
+                # Check if silver_etl is enabled
+                local silver_enabled=$(yaml_get "$config_file" "silver_etl.enabled" "false")
+                if [ "$silver_enabled" != "true" ]; then
+                    continue
+                fi
+
+                # Get target table
+                local target_table=$(yaml_get "$config_file" "silver_etl.target_table" "")
+                if [ -z "$target_table" ] || [ "$target_table" = "null" ]; then
+                    continue
+                fi
+
+                # Accumulate streams for this table
+                if [ -n "${SILVER_TABLES[$target_table]}" ]; then
+                    SILVER_TABLES[$target_table]="${SILVER_TABLES[$target_table]} $stream_id"
+                else
+                    SILVER_TABLES[$target_table]="$stream_id"
+
+                    # First stream defines the table metadata (can be overridden)
+                    local silver_desc=$(yaml_get "$config_file" "silver_etl.description" "")
+                    local silver_grain=$(yaml_get "$config_file" "silver_etl.grain" "")
+                    local timestamp_col=$(yaml_get "$config_file" "silver_etl.timestamp.target_field" "observation_time")
+
+                    SILVER_DESCRIPTIONS[$target_table]="$silver_desc"
+                    SILVER_GRAINS[$target_table]="$silver_grain"
+                    SILVER_TIMESTAMP_COLS[$target_table]="$timestamp_col"
+                fi
+            fi
+        done
+
+        # ---------------------------------------------------------------------------
+        # PASS 2: Generate UPSERT SQL for silver_tables
+        # ---------------------------------------------------------------------------
+        for target_table in "${!SILVER_TABLES[@]}"; do
+            local streams="${SILVER_TABLES[$target_table]}"
+            local description="${SILVER_DESCRIPTIONS[$target_table]}"
+            local grain="${SILVER_GRAINS[$target_table]}"
+            local timestamp_col="${SILVER_TIMESTAMP_COLS[$target_table]}"
+
+            # Extract schema name from fully-qualified table name
+            local schema_name="${target_table%%.*}"
+
+            # Build PostgreSQL array literal from space-separated stream list
+            local pg_array="ARRAY["
+            local first=true
+            for s in $streams; do
+                if [ "$first" = true ]; then
+                    pg_array="${pg_array}'$s'"
+                    first=false
+                else
+                    pg_array="${pg_array},'$s'"
+                fi
+            done
+            pg_array="${pg_array}]"
+
+            # Escape single quotes for SQL
+            description=$(echo "$description" | sed "s/'/''/g")
+            grain=$(echo "$grain" | sed "s/'/''/g")
+
+            # Handle NULL for optional fields
+            local desc_sql="'$description'"
+            local grain_sql="'$grain'"
+            [ -z "$description" ] || [ "$description" = "null" ] && desc_sql="NULL"
+            [ -z "$grain" ] || [ "$grain" = "null" ] && grain_sql="NULL"
+
+            echo "-- Silver table: $target_table (sources: $streams)"
+            echo "INSERT INTO data_dictionary.silver_tables (table_name, schema_name, description, grain, source_streams, hypertable_column)"
+            echo "VALUES ('$target_table', '$schema_name', $desc_sql, $grain_sql, $pg_array, '$timestamp_col')"
+            echo "ON CONFLICT (table_name) DO UPDATE SET"
+            echo "    description = EXCLUDED.description,"
+            echo "    grain = EXCLUDED.grain,"
+            echo "    source_streams = EXCLUDED.source_streams,"
+            echo "    hypertable_column = EXCLUDED.hypertable_column,"
+            echo "    updated_at = NOW();"
+            echo ""
+
+            silver_table_count=$((silver_table_count + 1))
+        done
+
+        # ---------------------------------------------------------------------------
+        # PASS 3: Generate silver_columns, silver_lineage, silver_dq_rules per stream
+        # ---------------------------------------------------------------------------
+        for config_dir in "$CONFIG_DIR"/*/; do
+            if [ -f "$config_dir/config.yaml" ]; then
+                local stream_id=$(basename "$config_dir")
+                local config_file="$config_dir/config.yaml"
+
+                # Check if silver_etl is enabled
+                local silver_enabled=$(yaml_get "$config_file" "silver_etl.enabled" "false")
+                if [ "$silver_enabled" != "true" ]; then
+                    continue
+                fi
+
+                local target_table=$(yaml_get "$config_file" "silver_etl.target_table" "")
+                if [ -z "$target_table" ] || [ "$target_table" = "null" ]; then
+                    continue
+                fi
+
+                echo "-- Stream: $stream_id -> $target_table"
+                echo ""
+
+                # Process field_mappings for columns, lineage, and column-level DQ rules
+                local fm_count=$(yaml_array_len "$config_file" "silver_etl.field_mappings")
+
+                for i in $(seq 0 $((fm_count - 1))); do
+                    local source_path=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].source_path" "")
+                    local target_column=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].target_column" "")
+                    local col_type=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].type" "text")
+                    local col_unit=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].unit" "")
+                    local col_desc=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].description" "")
+                    local col_nullable=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].nullable" "true")
+
+                    # Skip if no target_column defined
+                    [ -z "$target_column" ] || [ "$target_column" = "null" ] && continue
+
+                    # Map type names to PostgreSQL types
+                    local pg_type="TEXT"
+                    case "$col_type" in
+                        double_precision) pg_type="DOUBLE PRECISION" ;;
+                        smallint) pg_type="SMALLINT" ;;
+                        integer|int) pg_type="INTEGER" ;;
+                        bigint) pg_type="BIGINT" ;;
+                        text) pg_type="TEXT" ;;
+                        timestamptz) pg_type="TIMESTAMPTZ" ;;
+                        boolean|bool) pg_type="BOOLEAN" ;;
+                        jsonb) pg_type="JSONB" ;;
+                        *) pg_type="TEXT" ;;
+                    esac
+
+                    # Escape and handle NULLs
+                    col_desc=$(echo "$col_desc" | sed "s/'/''/g")
+                    local unit_sql="'$col_unit'"
+                    local desc_sql="'$col_desc'"
+                    [ -z "$col_unit" ] || [ "$col_unit" = "null" ] && unit_sql="NULL"
+                    [ -z "$col_desc" ] || [ "$col_desc" = "null" ] && desc_sql="NULL"
+
+                    # Convert nullable string to boolean
+                    local nullable_bool="true"
+                    [ "$col_nullable" = "false" ] && nullable_bool="false"
+
+                    # UPSERT silver_columns
+                    echo "INSERT INTO data_dictionary.silver_columns (table_name, column_name, data_type, unit, description, nullable, sort_order)"
+                    echo "VALUES ('$target_table', '$target_column', '$pg_type', $unit_sql, $desc_sql, $nullable_bool, $i)"
+                    echo "ON CONFLICT (table_name, column_name) DO UPDATE SET"
+                    echo "    data_type = EXCLUDED.data_type,"
+                    echo "    unit = EXCLUDED.unit,"
+                    echo "    description = EXCLUDED.description,"
+                    echo "    nullable = EXCLUDED.nullable,"
+                    echo "    sort_order = EXCLUDED.sort_order,"
+                    echo "    updated_at = NOW();"
+
+                    silver_column_count=$((silver_column_count + 1))
+
+                    # Determine transformation type
+                    local transform_type="direct"
+                    local has_transform=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].transform.type" "")
+                    [ -n "$has_transform" ] && [ "$has_transform" != "null" ] && transform_type="$has_transform"
+
+                    # UPSERT silver_lineage
+                    echo "INSERT INTO data_dictionary.silver_lineage (silver_table, silver_column, source_stream, source_path, transformation)"
+                    echo "VALUES ('$target_table', '$target_column', '$stream_id', '$source_path', '$transform_type')"
+                    echo "ON CONFLICT (silver_table, silver_column, source_stream) DO UPDATE SET"
+                    echo "    source_path = EXCLUDED.source_path,"
+                    echo "    transformation = EXCLUDED.transformation,"
+                    echo "    updated_at = NOW();"
+
+                    silver_lineage_count=$((silver_lineage_count + 1))
+
+                    # Process column-level DQ rules
+                    local dq_count=$(yaml_array_len "$config_file" "silver_etl.field_mappings[$i].dq_rules")
+                    for j in $(seq 0 $((dq_count - 1))); do
+                        local rule_name=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].dq_rules[$j].rule" "")
+                        local rule_action=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].dq_rules[$j].action" "flag")
+
+                        [ -z "$rule_name" ] || [ "$rule_name" = "null" ] && continue
+
+                        # Build rule_params JSONB from available fields
+                        local rule_params="{"
+                        local param_first=true
+
+                        # Extract common DQ rule parameters
+                        local dq_min=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].dq_rules[$j].min" "")
+                        local dq_max=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].dq_rules[$j].max" "")
+                        local dq_clamp=$(yaml_array_get "$config_file" ".silver_etl.field_mappings[$i].dq_rules[$j].clamp_to_bounds" "")
+
+                        if [ -n "$dq_min" ] && [ "$dq_min" != "null" ]; then
+                            [ "$param_first" = false ] && rule_params="${rule_params},"
+                            rule_params="${rule_params}\"min\":$dq_min"
+                            param_first=false
+                        fi
+                        if [ -n "$dq_max" ] && [ "$dq_max" != "null" ]; then
+                            [ "$param_first" = false ] && rule_params="${rule_params},"
+                            rule_params="${rule_params}\"max\":$dq_max"
+                            param_first=false
+                        fi
+                        if [ -n "$dq_clamp" ] && [ "$dq_clamp" != "null" ]; then
+                            [ "$param_first" = false ] && rule_params="${rule_params},"
+                            rule_params="${rule_params}\"clamp_to_bounds\":$dq_clamp"
+                            param_first=false
+                        fi
+
+                        rule_params="${rule_params}}"
+
+                        echo "INSERT INTO data_dictionary.silver_dq_rules (silver_table, silver_column, rule_name, rule_params, action)"
+                        echo "VALUES ('$target_table', '$target_column', '$rule_name', '$rule_params'::jsonb, '$rule_action')"
+                        echo "ON CONFLICT (silver_table, COALESCE(silver_column, ''), rule_name) DO UPDATE SET"
+                        echo "    rule_params = EXCLUDED.rule_params,"
+                        echo "    action = EXCLUDED.action,"
+                        echo "    updated_at = NOW();"
+
+                        silver_dq_rule_count=$((silver_dq_rule_count + 1))
+                    done
+
+                    echo ""
+                done
+
+                # Process table-level DQ rules (cross-field, freshness, rate_of_change, etc.)
+                local table_dq_count=$(yaml_array_len "$config_file" "silver_etl.dq_rules")
+
+                if [ "$table_dq_count" -gt 0 ]; then
+                    echo "-- Table-level DQ rules for $target_table (from $stream_id)"
+
+                    for k in $(seq 0 $((table_dq_count - 1))); do
+                        local rule_type=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].rule" "")
+                        local rule_action=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].action" "flag")
+
+                        [ -z "$rule_type" ] || [ "$rule_type" = "null" ] && continue
+
+                        # For cross-field rules, use the 'name' field as rule_name
+                        # For other rules, use rule type + field as identifier
+                        local rule_name=""
+                        local rule_params="{"
+                        local param_first=true
+                        local silver_column="NULL"  # Table-level rules have no specific column
+
+                        case "$rule_type" in
+                            cross_field_check)
+                                rule_name=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].name" "")
+                                local expression=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].expression" "" | sed "s/'/''/g")
+                                local message=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].message" "")
+
+                                rule_params="\"expression\":\"$expression\""
+                                [ -n "$message" ] && [ "$message" != "null" ] && rule_params="${rule_params},\"message\":\"$message\""
+                                ;;
+                            freshness_check)
+                                local field=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].field" "")
+                                local max_age=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].max_age" "")
+                                local max_future=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].max_future" "")
+                                local reference=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].reference" "")
+
+                                rule_name="freshness_check_${field}"
+                                rule_params="\"field\":\"$field\""
+                                [ -n "$max_age" ] && [ "$max_age" != "null" ] && rule_params="${rule_params},\"max_age\":\"$max_age\""
+                                [ -n "$max_future" ] && [ "$max_future" != "null" ] && rule_params="${rule_params},\"max_future\":\"$max_future\""
+                                [ -n "$reference" ] && [ "$reference" != "null" ] && rule_params="${rule_params},\"reference\":\"$reference\""
+                                ;;
+                            rate_of_change)
+                                local field=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].field" "")
+                                local max_change=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].max_change_per_minute" "")
+
+                                rule_name="rate_of_change_${field}"
+                                rule_params="\"field\":\"$field\""
+                                [ -n "$max_change" ] && [ "$max_change" != "null" ] && rule_params="${rule_params},\"max_change_per_minute\":$max_change"
+                                ;;
+                            completeness_check)
+                                local level=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].level" "")
+                                local field=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].field" "")
+                                local min_comp=$(yaml_array_get "$config_file" ".silver_etl.dq_rules[$k].min_completeness" "")
+
+                                rule_name="completeness_check_${field}"
+                                rule_params="\"level\":\"$level\",\"field\":\"$field\""
+                                [ -n "$min_comp" ] && [ "$min_comp" != "null" ] && rule_params="${rule_params},\"min_completeness\":$min_comp"
+                                ;;
+                            *)
+                                # Generic handling for unknown rule types
+                                rule_name="${rule_type}"
+                                rule_params=""
+                                ;;
+                        esac
+
+                        rule_params="{${rule_params}}"
+
+                        [ -z "$rule_name" ] && continue
+
+                        echo "INSERT INTO data_dictionary.silver_dq_rules (silver_table, silver_column, rule_name, rule_params, action)"
+                        echo "VALUES ('$target_table', $silver_column, '$rule_name', '$rule_params'::jsonb, '$rule_action')"
+                        echo "ON CONFLICT (silver_table, COALESCE(silver_column, ''), rule_name) DO UPDATE SET"
+                        echo "    rule_params = EXCLUDED.rule_params,"
+                        echo "    action = EXCLUDED.action,"
+                        echo "    updated_at = NOW();"
+
+                        silver_dq_rule_count=$((silver_dq_rule_count + 1))
+                    done
+                    echo ""
+                fi
+            fi
+        done
+
         echo "-- Update sync status"
         echo "UPDATE data_dictionary.sync_status"
         echo "SET completed_at = NOW(),"
         echo "    status = 'success',"
         echo "    streams_synced = (SELECT COUNT(*) FROM data_dictionary.streams),"
         echo "    schemas_synced = (SELECT COUNT(*) FROM data_dictionary.entity_schemas),"
-        echo "    attributes_synced = (SELECT COUNT(*) FROM data_dictionary.entity_schema_attributes)"
+        echo "    attributes_synced = (SELECT COUNT(*) FROM data_dictionary.entity_schema_attributes),"
+        echo "    silver_tables_synced = (SELECT COUNT(*) FROM data_dictionary.silver_tables),"
+        echo "    silver_columns_synced = (SELECT COUNT(*) FROM data_dictionary.silver_columns)"
         echo "WHERE status = 'running' AND completed_at IS NULL;"
         echo ""
         echo "COMMIT;"
@@ -332,9 +755,9 @@ sync_to_data_dictionary() {
         log "Data Dictionary sync successful"
         rm -f "$SQL_FILE"
 
-        # Show summary
+        # Show summary (Bronze + Silver)
         dcx timescaledb psql -U postgres -d ndp -c \
-            "SELECT streams_synced, schemas_synced, attributes_synced, completed_at FROM data_dictionary.sync_status ORDER BY id DESC LIMIT 1;"
+            "SELECT streams_synced AS bronze_streams, schemas_synced AS bronze_schemas, attributes_synced AS bronze_attrs, silver_tables_synced AS silver_tables, silver_columns_synced AS silver_cols, completed_at FROM data_dictionary.sync_status ORDER BY id DESC LIMIT 1;"
     else
         error "Data Dictionary sync failed"
         rm -f "$SQL_FILE"

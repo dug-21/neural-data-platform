@@ -152,6 +152,8 @@ entity_schemas:
 silver_etl:
   enabled: true
   target_table: silver.air_quality_observations
+  description: "Indoor air quality measurements from AirGradient sensors"
+  grain: "One row per sensor reading (~1 minute intervals)"
 
   # Timestamp mapping from Bronze to Silver
   timestamp:
@@ -169,6 +171,8 @@ silver_etl:
     - source_path: raw_payload.pm02Compensated
       target_column: pm25
       type: double_precision
+      unit: "ug/m3"
+      description: "PM2.5 particulate matter concentration (humidity-compensated)"
       nullable: false
       dq_rules:
         - rule: range_check
@@ -179,6 +183,8 @@ silver_etl:
     - source_path: raw_payload.pm10
       target_column: pm10
       type: double_precision
+      unit: "ug/m3"
+      description: "PM10 particulate matter concentration"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -189,6 +195,8 @@ silver_etl:
     - source_path: raw_payload.rco2
       target_column: co2
       type: smallint
+      unit: "ppm"
+      description: "Carbon dioxide concentration"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -199,6 +207,8 @@ silver_etl:
     - source_path: raw_payload.atmpCompensated
       target_column: temperature_c
       type: double_precision
+      unit: "Celsius"
+      description: "Ambient temperature (sensor-compensated)"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -209,6 +219,8 @@ silver_etl:
     - source_path: raw_payload.rhumCompensated
       target_column: humidity_pct
       type: double_precision
+      unit: "%"
+      description: "Relative humidity (compensated)"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -220,6 +232,8 @@ silver_etl:
     - source_path: raw_payload.tvoc_index
       target_column: tvoc_index
       type: smallint
+      unit: "index"
+      description: "Total VOC index (1-500 scale)"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -231,6 +245,8 @@ silver_etl:
     - source_path: raw_payload.nox_index
       target_column: nox_index
       type: smallint
+      unit: "index"
+      description: "NOx index (1-500 scale)"
       nullable: true
       dq_rules:
         - rule: range_check

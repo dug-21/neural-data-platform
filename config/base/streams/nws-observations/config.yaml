@@ -283,6 +283,8 @@ entity_schemas:
 silver_etl:
   enabled: true
   target_table: silver.weather_observations
+  description: "Weather observations from NWS stations"
+  grain: "One row per observation per station"
 
   # Timestamp mapping - use observation timestamp from API
   timestamp:
@@ -300,6 +302,8 @@ silver_etl:
     - source_path: raw_payload.properties.temperature.value
       target_column: temperature_c
       type: double_precision
+      unit: "Celsius"
+      description: "Air temperature from NWS station"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -310,6 +314,8 @@ silver_etl:
     - source_path: raw_payload.properties.dewpoint.value
       target_column: dewpoint_c
       type: double_precision
+      unit: "Celsius"
+      description: "Dew point temperature"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -320,6 +326,8 @@ silver_etl:
     - source_path: raw_payload.properties.relativeHumidity.value
       target_column: humidity_pct
       type: double_precision
+      unit: "%"
+      description: "Relative humidity"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -331,6 +339,8 @@ silver_etl:
     - source_path: raw_payload.properties.windSpeed.value
       target_column: wind_speed_kmh
       type: double_precision
+      unit: "km/h"
+      description: "Wind speed"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -341,6 +351,8 @@ silver_etl:
     - source_path: raw_payload.properties.windDirection.value
       target_column: wind_direction_deg
       type: double_precision
+      unit: "degrees"
+      description: "Wind direction"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -352,6 +364,8 @@ silver_etl:
     - source_path: raw_payload.properties.windGust.value
       target_column: wind_gust_kmh
       type: double_precision
+      unit: "km/h"
+      description: "Wind gust speed"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -362,6 +376,8 @@ silver_etl:
     - source_path: raw_payload.properties.barometricPressure.value
       target_column: pressure_pa
       type: double_precision
+      unit: "Pa"
+      description: "Barometric pressure"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -372,6 +388,8 @@ silver_etl:
     - source_path: raw_payload.properties.visibility.value
       target_column: visibility_m
       type: double_precision
+      unit: "meters"
+      description: "Visibility distance"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -382,6 +400,8 @@ silver_etl:
     - source_path: raw_payload.properties.heatIndex.value
       target_column: heat_index_c
       type: double_precision
+      unit: "Celsius"
+      description: "Heat index temperature"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -392,6 +412,8 @@ silver_etl:
     - source_path: raw_payload.properties.windChill.value
       target_column: wind_chill_c
       type: double_precision
+      unit: "Celsius"
+      description: "Wind chill temperature"
       nullable: true
       dq_rules:
         - rule: range_check

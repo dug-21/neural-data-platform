@@ -536,6 +536,8 @@ entity_schemas:
 silver_etl:
   enabled: true
   target_table: silver.weather_forecasts
+  description: "Weather forecasts from NWS gridpoint API with lead time tracking"
+  grain: "One row per forecast hour per issue time"
 
   # Pre-transform configuration (DP-007)
   # Flattens columnar array data into individual rows before DuckDB processing
@@ -619,6 +621,8 @@ silver_etl:
     - source_path: temperature
       target_column: temperature_c
       type: double_precision
+      unit: "Celsius"
+      description: "Forecast temperature"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -629,6 +633,8 @@ silver_etl:
     - source_path: dewpoint
       target_column: dewpoint_c
       type: double_precision
+      unit: "Celsius"
+      description: "Forecast dew point"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -639,6 +645,8 @@ silver_etl:
     - source_path: apparent_temperature
       target_column: apparent_temp_c
       type: double_precision
+      unit: "Celsius"
+      description: "Forecast apparent temperature"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -649,6 +657,8 @@ silver_etl:
     - source_path: heat_index
       target_column: heat_index_c
       type: double_precision
+      unit: "Celsius"
+      description: "Forecast heat index"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -659,6 +669,8 @@ silver_etl:
     - source_path: wind_chill
       target_column: wind_chill_c
       type: double_precision
+      unit: "Celsius"
+      description: "Forecast wind chill"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -670,6 +682,8 @@ silver_etl:
     - source_path: wind_speed
       target_column: wind_speed_kmh
       type: double_precision
+      unit: "km/h"
+      description: "Forecast wind speed"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -680,6 +694,8 @@ silver_etl:
     - source_path: wind_direction
       target_column: wind_direction_deg
       type: double_precision
+      unit: "degrees"
+      description: "Forecast wind direction"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -691,6 +707,8 @@ silver_etl:
     - source_path: wind_gust
       target_column: wind_gust_kmh
       type: double_precision
+      unit: "km/h"
+      description: "Forecast wind gust"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -702,6 +720,8 @@ silver_etl:
     - source_path: precip_probability
       target_column: precip_probability_pct
       type: double_precision
+      unit: "%"
+      description: "Probability of precipitation"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -713,6 +733,8 @@ silver_etl:
     - source_path: precip_amount
       target_column: precip_amount_mm
       type: double_precision
+      unit: "mm"
+      description: "Forecast precipitation amount"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -724,6 +746,8 @@ silver_etl:
     - source_path: relative_humidity
       target_column: humidity_pct
       type: double_precision
+      unit: "%"
+      description: "Forecast relative humidity"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -735,6 +759,8 @@ silver_etl:
     - source_path: sky_cover
       target_column: sky_cover_pct
       type: double_precision
+      unit: "%"
+      description: "Forecast cloud cover"
       nullable: true
       dq_rules:
         - rule: range_check
@@ -746,6 +772,8 @@ silver_etl:
     - source_path: visibility
       target_column: visibility_m
       type: double_precision
+      unit: "meters"
+      description: "Forecast visibility"
       nullable: true
       dq_rules:
         - rule: range_check
