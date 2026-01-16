@@ -25,6 +25,7 @@
 //! - `dq`: DQ rule evaluation and flag generation
 //! - `etl`: ETL execution engine
 //! - `metrics`: Prometheus metrics
+//! - `persistence`: ETL run statistics persistence (dp-011)
 //! - `pre_transform`: Pre-transform stage for columnar array data (dp-007)
 
 // Module declarations
@@ -33,6 +34,7 @@ pub mod daemon;
 pub mod dq;
 pub mod etl;
 pub mod metrics;
+pub mod persistence;
 pub mod pre_transform;
 pub mod schema_gen;
 pub mod sql_gen;
@@ -40,6 +42,10 @@ pub mod sql_gen;
 // Re-export main types for library consumers
 pub use config::ConfigLoader;
 pub use daemon::{DaemonConfig, DaemonError, DaemonRunner, EtlExecutor, RealEtlExecutor};
+pub use persistence::{
+    DuckDbRunPersistence, EtlRunMode, EtlRunPersistence, EtlRunRecord, EtlRunStatus,
+    NoOpPersistence, PersistenceError,
+};
 pub use dq::DqSqlGenerator;
 pub use etl::{BronzeRawData, EtlError, EtlRunner, EtlStats};
 pub use metrics::EtlMetrics;

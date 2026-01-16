@@ -20,11 +20,13 @@
 use std::sync::Mutex;
 use std::time::Duration;
 use tokio::sync::watch;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 use crate::config::ConfigLoader;
 use crate::etl::{EtlRunner, EtlStats};
 use crate::metrics::EtlMetrics;
+use crate::persistence::{EtlRunMode, EtlRunPersistence, NoOpPersistence};
 
 /// Trait for ETL execution - enables mocking in tests (London TDD style)
 ///
@@ -63,6 +65,8 @@ pub struct DaemonConfig {
     pub max_consecutive_failures: u32,
     /// Backoff multiplier on failure
     pub backoff_multiplier: f64,
+    /// ETL run mode for persistence tracking (dp-011)
+    pub run_mode: EtlRunMode,
 }
 
 impl Default for DaemonConfig {
@@ -72,6 +76,7 @@ impl Default for DaemonConfig {
             stream_filter: None,
             max_consecutive_failures: 3,
             backoff_multiplier: 2.0,
+            run_mode: EtlRunMode::Daemon,
         }
     }
 }
@@ -88,19 +93,46 @@ pub struct DaemonCycleStats {
 }
 
 /// Daemon runner for continuous ETL execution
-pub struct DaemonRunner<E: EtlExecutor> {
+///
+/// Supports optional persistence of run statistics (dp-011).
+/// When persistence is enabled, each stream run is tracked with:
+/// - `daemon_cycle_id`: Links all runs within the same cycle
+/// - Statistics: rows processed, flagged, rejected
+/// - Watermarks: for incremental load tracking
+/// - Error context: for debugging failures
+pub struct DaemonRunner<E: EtlExecutor, P: EtlRunPersistence = NoOpPersistence> {
     executor: Mutex<E>,
     config: DaemonConfig,
     shutdown_rx: watch::Receiver<bool>,
+    /// Optional persistence for run statistics (dp-011)
+    persistence: P,
 }
 
-impl<E: EtlExecutor + 'static> DaemonRunner<E> {
-    /// Create a new daemon runner
+impl<E: EtlExecutor + 'static> DaemonRunner<E, NoOpPersistence> {
+    /// Create a new daemon runner without persistence (backwards compatible)
     pub fn new(executor: E, config: DaemonConfig, shutdown_rx: watch::Receiver<bool>) -> Self {
         Self {
             executor: Mutex::new(executor),
             config,
             shutdown_rx,
+            persistence: NoOpPersistence::new(),
+        }
+    }
+}
+
+impl<E: EtlExecutor + 'static, P: EtlRunPersistence + 'static> DaemonRunner<E, P> {
+    /// Create a new daemon runner with persistence (dp-011)
+    pub fn with_persistence(
+        executor: E,
+        config: DaemonConfig,
+        shutdown_rx: watch::Receiver<bool>,
+        persistence: P,
+    ) -> Self {
+        Self {
+            executor: Mutex::new(executor),
+            config,
+            shutdown_rx,
+            persistence,
         }
     }
 
@@ -168,9 +200,17 @@ impl<E: EtlExecutor + 'static> DaemonRunner<E> {
     }
 
     /// Execute a single ETL cycle
+    ///
+    /// Integrates with persistence layer (dp-011) to track run statistics.
+    /// Persistence failures are handled gracefully - they log warnings but
+    /// do NOT fail the ETL cycle.
     fn run_cycle(&self) -> Result<DaemonCycleStats, DaemonError> {
         let start = std::time::Instant::now();
         let mut stats = DaemonCycleStats::default();
+
+        // Generate cycle ID for linking all stream runs in this cycle (dp-011)
+        let daemon_cycle_id = Uuid::new_v4();
+        debug!(cycle_id = %daemon_cycle_id, "Starting ETL cycle");
 
         // Check for shutdown before starting
         if *self.shutdown_rx.borrow() {
@@ -191,18 +231,48 @@ impl<E: EtlExecutor + 'static> DaemonRunner<E> {
 
         stats.streams_processed = streams.len();
 
-        // Process each stream
+        // Process each stream with persistence tracking
         for stream_id in &streams {
             // Check for shutdown between streams
             if *self.shutdown_rx.borrow() {
                 return Err(DaemonError::Shutdown);
             }
 
+            // Start run record (dp-011) - graceful degradation on failure
+            let run_id = match self.persistence.start_run(
+                stream_id,
+                self.config.run_mode,
+                Some(daemon_cycle_id),
+            ) {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    // CRITICAL: Persistence failure must NOT fail ETL
+                    warn!(
+                        stream_id = %stream_id,
+                        error = %e,
+                        "Failed to start run record - continuing without persistence"
+                    );
+                    None
+                }
+            };
+
             match executor.run_stream(stream_id) {
                 Ok(etl_stats) => {
                     stats.streams_succeeded += 1;
                     stats.total_rows_processed += etl_stats.rows_processed;
                     stats.total_rows_flagged += etl_stats.rows_with_dq_flags;
+
+                    // Complete run record (dp-011) - graceful degradation
+                    if let Some(id) = run_id {
+                        if let Err(e) = self.persistence.complete_run(id, &etl_stats) {
+                            warn!(
+                                run_id = %id,
+                                stream_id = %stream_id,
+                                error = %e,
+                                "Failed to complete run record"
+                            );
+                        }
+                    }
 
                     // Update Prometheus metrics
                     if let Some(metrics) = EtlMetrics::get() {
@@ -219,11 +289,37 @@ impl<E: EtlExecutor + 'static> DaemonRunner<E> {
                 Err(e) => {
                     stats.streams_failed += 1;
                     warn!(stream_id = %stream_id, error = %e, "Stream ETL failed");
+
+                    // Fail run record (dp-011) - graceful degradation
+                    if let Some(id) = run_id {
+                        let context = serde_json::json!({
+                            "stage": "etl_execution",
+                            "stream_id": stream_id,
+                        });
+                        if let Err(persist_err) =
+                            self.persistence.fail_run(id, &e.to_string(), Some(context))
+                        {
+                            warn!(
+                                run_id = %id,
+                                stream_id = %stream_id,
+                                error = %persist_err,
+                                "Failed to record run failure"
+                            );
+                        }
+                    }
                 }
             }
         }
 
         stats.cycle_duration_ms = start.elapsed().as_millis() as u64;
+
+        debug!(
+            cycle_id = %daemon_cycle_id,
+            streams_processed = stats.streams_processed,
+            streams_succeeded = stats.streams_succeeded,
+            duration_ms = stats.cycle_duration_ms,
+            "ETL cycle completed"
+        );
 
         // Update daemon-level metrics
         if let Some(metrics) = EtlMetrics::get() {
@@ -290,6 +386,7 @@ impl EtlExecutor for RealEtlExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::persistence::{MockEtlRunPersistence, PersistenceError};
     use mockall::predicate::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -531,5 +628,246 @@ mod tests {
         assert!(config.stream_filter.is_none());
         assert_eq!(config.max_consecutive_failures, 3);
         assert_eq!(config.backoff_multiplier, 2.0);
+        assert_eq!(config.run_mode, EtlRunMode::Daemon);
+    }
+
+    // =========================================================================
+    // dp-011: Persistence Integration Tests (London TDD)
+    // =========================================================================
+
+    #[test]
+    fn test_daemon_with_persistence_calls_start_run() {
+        // Arrange
+        let mut mock_executor = MockEtlExecutor::new();
+        let mut mock_persistence = MockEtlRunPersistence::new();
+
+        mock_executor
+            .expect_list_enabled_streams()
+            .returning(|| Ok(vec!["air-quality".to_string()]));
+
+        mock_executor
+            .expect_run_stream()
+            .returning(|_| Ok(make_stats(100, 5, 0)));
+
+        // Verify start_run is called with correct stream_id and mode
+        mock_persistence
+            .expect_start_run()
+            .with(
+                eq("air-quality"),
+                eq(EtlRunMode::Daemon),
+                function(|opt: &Option<Uuid>| opt.is_some()), // cycle_id present
+            )
+            .times(1)
+            .returning(|_, _, _| Ok(Uuid::new_v4()));
+
+        // Verify complete_run is called on success
+        mock_persistence
+            .expect_complete_run()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let config = DaemonConfig::default();
+        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+
+        // Act
+        let stats = daemon.run_cycle().unwrap();
+
+        // Assert
+        assert_eq!(stats.streams_succeeded, 1);
+    }
+
+    #[test]
+    fn test_daemon_with_persistence_calls_fail_run_on_error() {
+        // Arrange
+        let mut mock_executor = MockEtlExecutor::new();
+        let mut mock_persistence = MockEtlRunPersistence::new();
+
+        mock_executor
+            .expect_list_enabled_streams()
+            .returning(|| Ok(vec!["air-quality".to_string()]));
+
+        mock_executor
+            .expect_run_stream()
+            .returning(|_| Err(DaemonError::Etl("Connection refused".to_string())));
+
+        mock_persistence
+            .expect_start_run()
+            .returning(|_, _, _| Ok(Uuid::new_v4()));
+
+        // Verify fail_run is called with error message
+        mock_persistence
+            .expect_fail_run()
+            .with(
+                always(),
+                function(|msg: &str| msg.contains("Connection refused")),
+                function(|ctx: &Option<serde_json::Value>| ctx.is_some()),
+            )
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let config = DaemonConfig::default();
+        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+
+        // Act
+        let stats = daemon.run_cycle().unwrap();
+
+        // Assert: ETL failed but cycle succeeded
+        assert_eq!(stats.streams_failed, 1);
+    }
+
+    #[test]
+    fn test_daemon_continues_when_persistence_start_fails() {
+        // Arrange: CRITICAL - persistence failure must NOT fail ETL
+        let mut mock_executor = MockEtlExecutor::new();
+        let mut mock_persistence = MockEtlRunPersistence::new();
+
+        mock_executor
+            .expect_list_enabled_streams()
+            .returning(|| Ok(vec!["air-quality".to_string()]));
+
+        // ETL should succeed even if persistence fails
+        mock_executor
+            .expect_run_stream()
+            .returning(|_| Ok(make_stats(100, 0, 0)));
+
+        // start_run fails (database unavailable)
+        mock_persistence
+            .expect_start_run()
+            .returning(|_, _, _| Err(PersistenceError::Connection("Database unavailable".into())));
+
+        // complete_run should NOT be called (no run_id)
+        mock_persistence.expect_complete_run().times(0);
+
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let config = DaemonConfig::default();
+        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+
+        // Act
+        let result = daemon.run_cycle();
+
+        // Assert: ETL cycle succeeds despite persistence failure
+        assert!(result.is_ok(), "Cycle should succeed when persistence fails");
+        let stats = result.unwrap();
+        assert_eq!(stats.streams_succeeded, 1);
+        assert_eq!(stats.total_rows_processed, 100);
+    }
+
+    #[test]
+    fn test_daemon_continues_when_persistence_complete_fails() {
+        // Arrange
+        let mut mock_executor = MockEtlExecutor::new();
+        let mut mock_persistence = MockEtlRunPersistence::new();
+
+        mock_executor
+            .expect_list_enabled_streams()
+            .returning(|| Ok(vec!["air-quality".to_string()]));
+
+        mock_executor
+            .expect_run_stream()
+            .returning(|_| Ok(make_stats(100, 0, 0)));
+
+        mock_persistence
+            .expect_start_run()
+            .returning(|_, _, _| Ok(Uuid::new_v4()));
+
+        // complete_run fails
+        mock_persistence
+            .expect_complete_run()
+            .returning(|_, _| Err(PersistenceError::SqlExecution("Disk full".into())));
+
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let config = DaemonConfig::default();
+        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+
+        // Act
+        let result = daemon.run_cycle();
+
+        // Assert: ETL cycle succeeds despite persistence failure
+        assert!(result.is_ok());
+        let stats = result.unwrap();
+        assert_eq!(stats.streams_succeeded, 1);
+    }
+
+    #[test]
+    fn test_daemon_shares_cycle_id_across_streams() {
+        // Arrange
+        let mut mock_executor = MockEtlExecutor::new();
+        let mut mock_persistence = MockEtlRunPersistence::new();
+        let captured_cycle_ids = Arc::new(std::sync::Mutex::new(Vec::<Uuid>::new()));
+        let capture_clone = captured_cycle_ids.clone();
+
+        mock_executor
+            .expect_list_enabled_streams()
+            .returning(|| Ok(vec!["stream-a".to_string(), "stream-b".to_string()]));
+
+        mock_executor
+            .expect_run_stream()
+            .returning(|_| Ok(make_stats(50, 0, 0)));
+
+        // Capture cycle_ids from both start_run calls
+        mock_persistence
+            .expect_start_run()
+            .times(2)
+            .returning(move |_, _, cycle_id| {
+                if let Some(id) = cycle_id {
+                    capture_clone.lock().unwrap().push(id);
+                }
+                Ok(Uuid::new_v4())
+            });
+
+        mock_persistence
+            .expect_complete_run()
+            .times(2)
+            .returning(|_, _| Ok(()));
+
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let config = DaemonConfig::default();
+        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+
+        // Act
+        daemon.run_cycle().unwrap();
+
+        // Assert: Both streams share the same cycle_id
+        let cycle_ids = captured_cycle_ids.lock().unwrap();
+        assert_eq!(cycle_ids.len(), 2);
+        assert_eq!(cycle_ids[0], cycle_ids[1], "All streams in cycle should share the same cycle_id");
+    }
+
+    #[test]
+    fn test_daemon_uses_configured_run_mode() {
+        // Arrange
+        let mut mock_executor = MockEtlExecutor::new();
+        let mut mock_persistence = MockEtlRunPersistence::new();
+
+        mock_executor
+            .expect_list_enabled_streams()
+            .returning(|| Ok(vec!["air-quality".to_string()]));
+
+        mock_executor
+            .expect_run_stream()
+            .returning(|_| Ok(make_stats(100, 0, 0)));
+
+        // Verify Manual mode is passed to persistence
+        mock_persistence
+            .expect_start_run()
+            .with(always(), eq(EtlRunMode::Manual), always())
+            .times(1)
+            .returning(|_, _, _| Ok(Uuid::new_v4()));
+
+        mock_persistence
+            .expect_complete_run()
+            .returning(|_, _| Ok(()));
+
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let config = DaemonConfig {
+            run_mode: EtlRunMode::Manual,
+            ..Default::default()
+        };
+        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+
+        // Act & Assert (mock expectations verify behavior)
+        daemon.run_cycle().unwrap();
     }
 }
