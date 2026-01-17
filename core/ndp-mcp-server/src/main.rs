@@ -1,7 +1,8 @@
-//! Bronze MCP Server - Entry Point
+//! NDP MCP Server - Entry Point
 //!
-//! This is the main entry point for the NDP Bronze layer MCP server.
-//! It exposes Bronze layer data exploration tools via the Model Context Protocol.
+//! This is the main entry point for the NDP MCP server, providing data exploration
+//! tools for both Bronze (Parquet) and Silver (TimescaleDB) layers via the
+//! Model Context Protocol.
 //!
 //! # Architecture
 //!
@@ -22,6 +23,15 @@
 //! - `NDP_ETCD_ENDPOINTS`: etcd endpoints, comma-separated (default: "http://localhost:2379")
 //! - `NDP_RAW_PATH`: Bronze layer data path (default: "/data/raw")
 //! - `RUST_LOG`: Log level (default: "info")
+//!
+//! # TimescaleDB (Optional - enables Silver layer tools)
+//!
+//! - `NDP_TIMESCALE_URL`: PostgreSQL connection URL (optional)
+//! - `NDP_TIMESCALE_MAX_CONNECTIONS`: Max pool connections (default: 5)
+//! - `NDP_TIMESCALE_CONNECT_TIMEOUT_SECS`: Connection timeout (default: 10)
+//!
+//! When `NDP_TIMESCALE_URL` is set, all 15 MCP tools are enabled (Bronze + Silver).
+//! Without it, only the 4 Bronze layer tools are available.
 
 mod config;
 mod error;
@@ -50,12 +60,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer().json())
         .init();
 
+    let has_timescale = config.has_timescale();
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         listen_addr = %config.listen_addr,
         raw_path = %config.raw_path,
         etcd_endpoints = ?config.etcd_endpoints,
-        "Starting NDP Bronze MCP Server"
+        timescale_enabled = has_timescale,
+        "Starting NDP MCP Server"
     );
 
     // Create StreamRegistry via config-client (preferred approach)
@@ -63,20 +75,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let registry = config.create_stream_registry().await?;
     tracing::info!("StreamRegistry connected successfully");
 
-    // Create application state with StreamRegistry adapter
-    let state = Arc::new(AppState::with_registry(config.clone(), registry));
+    // Create router based on configuration
+    // dp-010 BUG-001 fix: Use TimescaleDB adapters when NDP_TIMESCALE_URL is set
+    let app = if has_timescale {
+        tracing::info!(
+            url = %config.timescale_url.as_ref().map(|_| "[redacted]").unwrap_or("none"),
+            max_connections = config.timescale_max_connections,
+            "Initializing TimescaleDB storage adapters..."
+        );
 
-    tracing::debug!(
-        raw_path = %config.raw_path,
-        "Initialized LocalParquetStorage"
-    );
-    tracing::debug!(
-        etcd_endpoints = ?config.etcd_endpoints,
-        "Initialized StreamRegistryAdapter"
-    );
+        let state = AppState::with_timescale(config.clone(), registry).await?;
+        tracing::info!("All 15 MCP tools enabled (Bronze + Silver + Dictionary + ETL)");
+        create_router(Arc::new(state))
+    } else {
+        tracing::info!("No TimescaleDB URL configured - Bronze-only mode (4 tools)");
+        let state = Arc::new(AppState::with_registry(config.clone(), registry));
 
-    // Create router with all routes
-    let app = create_router(state);
+        tracing::debug!(
+            raw_path = %config.raw_path,
+            "Initialized LocalParquetStorage"
+        );
+        tracing::debug!(
+            etcd_endpoints = ?config.etcd_endpoints,
+            "Initialized StreamRegistryAdapter"
+        );
+
+        create_router(state)
+    };
 
     // Create TCP listener
     let listener = tokio::net::TcpListener::bind(&config.listen_addr).await?;

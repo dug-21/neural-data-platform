@@ -129,9 +129,11 @@ services:
         reservations:
           memory: 128M
 
-  # NDP MCP Server - Bronze Layer MCP Interface (DP-005)
-  # Provides Model Context Protocol access to Parquet data
-  # Memory target: <50MB runtime (64MB limit with buffer)
+  # NDP MCP Server - Bronze + Silver Layer MCP Interface (DP-005, DP-010)
+  # Provides Model Context Protocol access to Parquet and TimescaleDB data
+  # When NDP_TIMESCALE_URL is set: all 15 tools enabled (Bronze + Silver + Dictionary + ETL)
+  # Without NDP_TIMESCALE_URL: Bronze-only mode (4 tools)
+  # Memory target: <50MB runtime (64MB limit with buffer), 96MB with TimescaleDB pools
   ndp-mcp-server:
     build:
       context: ../..
@@ -147,8 +149,15 @@ services:
       - NDP_RAW_PATH=/data/raw
       - NDP_ETCD_ENDPOINTS=http://etcd:2379
       - NDP_MCP_LISTEN=0.0.0.0:9100
+      # TimescaleDB configuration (dp-010 BUG-001 fix)
+      # Enables Silver, Dictionary, and ETL tools (11 additional tools)
+      - NDP_TIMESCALE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-ndp_secure_password}@timescaledb:5432/ndp
+      - NDP_TIMESCALE_MAX_CONNECTIONS=5
+      - NDP_TIMESCALE_CONNECT_TIMEOUT_SECS=10
     depends_on:
       etcd:
+        condition: service_healthy
+      timescaledb:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -160,7 +169,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 64M
+          memory: 96M
 
   # Grafana - Data Visualization & Dashboards (DP-001, DP-002)
   # Uses DuckDB plugin for Bronze layer Parquet queries

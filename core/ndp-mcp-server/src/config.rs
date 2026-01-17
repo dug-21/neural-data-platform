@@ -31,6 +31,18 @@ pub struct AppConfig {
 
     /// Log level for tracing subscriber
     pub log_level: String,
+
+    /// TimescaleDB connection URL (optional - Silver layer features)
+    ///
+    /// When set, enables Silver, Dictionary, and ETL MCP tools.
+    /// Format: postgresql://user:password@host:port/database
+    pub timescale_url: Option<String>,
+
+    /// Maximum connections in TimescaleDB pool (default: 5)
+    pub timescale_max_connections: u32,
+
+    /// Connection timeout in seconds (default: 10)
+    pub timescale_connect_timeout_secs: u64,
 }
 
 impl AppConfig {
@@ -42,11 +54,26 @@ impl AppConfig {
     /// - `NDP_ETCD_ENDPOINTS`: Comma-separated etcd endpoints (default: "http://localhost:2379")
     /// - `NDP_RAW_PATH`: Bronze layer data directory (default: "/data/raw")
     /// - `RUST_LOG`: Log level filter (default: "info")
+    /// - `NDP_TIMESCALE_URL`: TimescaleDB connection URL (optional)
+    /// - `NDP_TIMESCALE_MAX_CONNECTIONS`: Max pool connections (default: 5)
+    /// - `NDP_TIMESCALE_CONNECT_TIMEOUT_SECS`: Connection timeout (default: 10)
     ///
     /// # Errors
     ///
     /// Returns `McpError::Config` if environment parsing fails.
     pub fn from_env() -> McpResult<Self> {
+        // Parse optional TimescaleDB max connections
+        let timescale_max_connections = std::env::var("NDP_TIMESCALE_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5);
+
+        // Parse optional TimescaleDB connect timeout
+        let timescale_connect_timeout_secs = std::env::var("NDP_TIMESCALE_CONNECT_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10);
+
         Ok(Self {
             listen_addr: std::env::var("NDP_MCP_LISTEN")
                 .unwrap_or_else(|_| "0.0.0.0:9100".to_string()),
@@ -61,7 +88,19 @@ impl AppConfig {
             raw_path: std::env::var("NDP_RAW_PATH").unwrap_or_else(|_| "/data/raw".to_string()),
 
             log_level: std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
+
+            // TimescaleDB configuration (optional - enables Silver layer)
+            timescale_url: std::env::var("NDP_TIMESCALE_URL").ok(),
+            timescale_max_connections,
+            timescale_connect_timeout_secs,
         })
+    }
+
+    /// Check if TimescaleDB is configured.
+    ///
+    /// Returns true if NDP_TIMESCALE_URL is set, enabling Silver layer features.
+    pub fn has_timescale(&self) -> bool {
+        self.timescale_url.is_some()
     }
 
     /// Validate configuration values.
@@ -172,6 +211,9 @@ impl Default for AppConfig {
             etcd_endpoints: vec!["http://localhost:2379".to_string()],
             raw_path: "/data/raw".to_string(),
             log_level: "info".to_string(),
+            timescale_url: None,
+            timescale_max_connections: 5,
+            timescale_connect_timeout_secs: 10,
         }
     }
 }
@@ -187,6 +229,9 @@ mod tests {
         assert_eq!(config.etcd_endpoints, vec!["http://localhost:2379"]);
         assert_eq!(config.raw_path, "/data/raw");
         assert_eq!(config.log_level, "info");
+        assert!(config.timescale_url.is_none());
+        assert_eq!(config.timescale_max_connections, 5);
+        assert_eq!(config.timescale_connect_timeout_secs, 10);
     }
 
     #[test]
@@ -212,5 +257,27 @@ mod tests {
     fn test_validate_success() {
         let config = AppConfig::default();
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_has_timescale_false_when_not_configured() {
+        let config = AppConfig::default();
+        assert!(!config.has_timescale());
+    }
+
+    #[test]
+    fn test_has_timescale_true_when_configured() {
+        let config = AppConfig {
+            timescale_url: Some("postgresql://user:pass@localhost:5432/ndp".to_string()),
+            ..Default::default()
+        };
+        assert!(config.has_timescale());
+    }
+
+    #[test]
+    fn test_timescale_defaults() {
+        let config = AppConfig::default();
+        assert_eq!(config.timescale_max_connections, 5);
+        assert_eq!(config.timescale_connect_timeout_secs, 10);
     }
 }

@@ -265,6 +265,96 @@ impl
     }
 }
 
+// =============================================================================
+// Full TimescaleDB constructor (dp-010 BUG-001 Phase 2)
+// =============================================================================
+
+use crate::error::McpError;
+use crate::storage::{
+    TimescaleDictionaryStore, TimescaleEtlRunStore, TimescalePoolConfig, TimescaleSilverStorage,
+};
+
+impl
+    AppState<
+        LocalParquetStorage,
+        StreamRegistryAdapter,
+        TimescaleSilverStorage,
+        TimescaleDictionaryStore,
+        TimescaleEtlRunStore,
+    >
+{
+    /// Create application state with full Silver layer support.
+    ///
+    /// Uses TimescaleDB for Silver, Dictionary, and ETL storage.
+    /// All 15 MCP tools will be fully functional.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Application configuration (must have `timescale_url` set)
+    /// * `registry` - StreamRegistry instance from config-client
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::Config` if `timescale_url` is not configured.
+    /// Returns `McpError::StorageError` if TimescaleDB connection fails.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let config = AppConfig::from_env()?;
+    /// let registry = config.create_stream_registry().await?;
+    /// if config.has_timescale() {
+    ///     let state = AppState::with_timescale(config, registry).await?;
+    /// }
+    /// ```
+    pub async fn with_timescale(
+        config: AppConfig,
+        registry: StreamRegistry,
+    ) -> Result<Self, McpError> {
+        let timescale_url = config
+            .timescale_url
+            .as_ref()
+            .ok_or_else(|| McpError::Config("NDP_TIMESCALE_URL is required".to_string()))?;
+
+        tracing::info!(
+            max_connections = config.timescale_max_connections,
+            timeout_secs = config.timescale_connect_timeout_secs,
+            "Creating TimescaleDB storage adapters"
+        );
+
+        // Create pool configuration from AppConfig
+        let pool_config = TimescalePoolConfig {
+            max_size: config.timescale_max_connections,
+            min_idle: Some(1),
+            connection_timeout_secs: config.timescale_connect_timeout_secs,
+            idle_timeout_secs: 30,
+        };
+
+        // Create Bronze storage (local Parquet)
+        let storage = Arc::new(LocalParquetStorage::new(&config.raw_path));
+        let config_store = Arc::new(StreamRegistryAdapter::new(registry));
+
+        // Create TimescaleDB adapters
+        let silver_storage = Arc::new(
+            TimescaleSilverStorage::with_config(timescale_url, pool_config).await?,
+        );
+        let dictionary_store = Arc::new(TimescaleDictionaryStore::new(timescale_url).await?);
+        let etl_store = Arc::new(TimescaleEtlRunStore::new(timescale_url).await?);
+
+        let handler = Arc::new(McpHandler::new(
+            storage,
+            config_store,
+            silver_storage,
+            dictionary_store,
+            etl_store,
+        ));
+
+        tracing::info!("TimescaleDB storage adapters ready - all 15 MCP tools enabled");
+
+        Ok(Self { config, handler })
+    }
+}
+
 /// Create the axum router with all routes configured.
 ///
 /// # Routes

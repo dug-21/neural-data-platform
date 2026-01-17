@@ -15,9 +15,9 @@
 //! ## Implementations (Adapters)
 //!
 //! - `LocalParquetStorage` - Local filesystem adapter for Bronze
-//! - Future: `TimescaleStorage` - TimescaleDB adapter for Silver
-//! - Future: `DictionaryClient` - Combined etcd/TimescaleDB adapter
-//! - Future: `EtlRunClient` - TimescaleDB adapter for ETL history
+//! - `TimescaleSilverStorage` - TimescaleDB adapter for Silver (dp-010)
+//! - `TimescaleDictionaryStore` - TimescaleDB adapter for data dictionary (dp-010)
+//! - `TimescaleEtlRunStore` - TimescaleDB adapter for ETL history (dp-010)
 //!
 //! # Directory Structure
 //!
@@ -31,6 +31,9 @@
 //! ```
 
 mod local;
+mod timescale_dictionary;
+mod timescale_etl;
+mod timescale_silver;
 mod traits;
 mod types;
 
@@ -38,6 +41,11 @@ mod types;
 pub use local::LocalParquetStorage;
 pub use traits::BronzeStorage;
 pub use types::{ParquetSchemaInfo, StreamStorageInfo};
+
+// TimescaleDB adapter exports (dp-010)
+pub use timescale_dictionary::TimescaleDictionaryStore;
+pub use timescale_etl::TimescaleEtlRunStore;
+pub use timescale_silver::{TimescalePoolConfig, TimescaleSilverStorage};
 
 // Silver layer exports (dp-010)
 pub use traits::SilverStorage;
