@@ -428,7 +428,7 @@ impl EtlRunPersistence for DuckDbRunPersistence {
                 duration_ms = EXTRACT(EPOCH FROM (NOW()::TIMESTAMP - started_at::TIMESTAMP))::BIGINT * 1000,
                 status = 'failed',
                 error_message = $2,
-                error_context = $3::JSONB
+                error_context = $3::JSON
             WHERE id = $1::UUID
         "#;
 
