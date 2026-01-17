@@ -1,0 +1,794 @@
+{
+  "uid": "ndp-personal-forecast",
+  "title": "Personal Weather Forecast",
+  "description": "What's the weather going to be? NWS forecast dashboard showing temperature, wind, humidity, dewpoint, cloud cover, and pressure with configurable units.",
+  "tags": ["ndp", "forecast", "weather", "personal", "silver"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": {
+    "from": "now-6h",
+    "to": "now+48h"
+  },
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "temp_unit",
+        "type": "custom",
+        "label": "Temperature Unit",
+        "description": "Choose temperature display unit",
+        "current": {
+          "text": "Celsius",
+          "value": "Celsius"
+        },
+        "options": [
+          {"text": "Celsius", "value": "Celsius", "selected": true},
+          {"text": "Fahrenheit", "value": "Fahrenheit", "selected": false}
+        ],
+        "query": "Celsius,Fahrenheit"
+      },
+      {
+        "name": "wind_unit",
+        "type": "custom",
+        "label": "Wind Speed Unit",
+        "description": "Choose wind speed display unit",
+        "current": {
+          "text": "km/h",
+          "value": "kmh"
+        },
+        "options": [
+          {"text": "km/h", "value": "kmh", "selected": true},
+          {"text": "mph", "value": "mph", "selected": false},
+          {"text": "m/s", "value": "ms", "selected": false}
+        ],
+        "query": "kmh,mph,ms"
+      },
+      {
+        "name": "pressure_unit",
+        "type": "custom",
+        "label": "Pressure Unit",
+        "description": "Choose pressure display unit",
+        "current": {
+          "text": "hPa",
+          "value": "hPa"
+        },
+        "options": [
+          {"text": "hPa", "value": "hPa", "selected": true},
+          {"text": "inHg", "value": "inHg", "selected": false}
+        ],
+        "query": "hPa,inHg"
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Current Conditions & Latest Forecast",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Temperature",
+      "description": "Current forecast temperature with feels-like. Shows heat index when hot, wind chill when cold.",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 5},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Current/Next Forecast Temperature with Feels-Like\n-- Uses smart display: heat_index when hot, wind_chill when cold, apparent otherwise\nWITH latest_forecast AS (\n    SELECT\n        temperature_c,\n        apparent_temperature_c,\n        heat_index_c,\n        wind_chill_c,\n        -- Smart display temperature selection\n        COALESCE(\n            CASE\n                WHEN heat_index_c IS NOT NULL AND heat_index_c > temperature_c + 2 THEN heat_index_c\n                WHEN wind_chill_c IS NOT NULL AND wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                ELSE apparent_temperature_c\n            END,\n            temperature_c\n        ) AS display_temp\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n      AND temperature_c IS NOT NULL\n    ORDER BY valid_time ASC, issue_time DESC\n    LIMIT 1\n)\nSELECT\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS \"Air Temp\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (display_temp * 9.0/5.0) + 32\n        ELSE display_temp\n    END AS \"Feels Like\"\nFROM latest_forecast",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": "/^Air Temp$/"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null},
+              {"color": "super-light-blue", "value": 0},
+              {"color": "green", "value": 10},
+              {"color": "yellow", "value": 25},
+              {"color": "orange", "value": 32},
+              {"color": "red", "value": 38}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Wind",
+      "description": "Wind speed and direction with gust information",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 5},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Current/Next Forecast Wind with Direction and Gust\nWITH latest_forecast AS (\n    SELECT\n        wind_speed_kmh,\n        wind_gust_kmh,\n        wind_direction_deg,\n        CASE\n            WHEN wind_direction_deg IS NULL THEN 'VAR'\n            WHEN wind_direction_deg >= 337.5 OR wind_direction_deg < 22.5 THEN 'N'\n            WHEN wind_direction_deg < 67.5 THEN 'NE'\n            WHEN wind_direction_deg < 112.5 THEN 'E'\n            WHEN wind_direction_deg < 157.5 THEN 'SE'\n            WHEN wind_direction_deg < 202.5 THEN 'S'\n            WHEN wind_direction_deg < 247.5 THEN 'SW'\n            WHEN wind_direction_deg < 292.5 THEN 'W'\n            ELSE 'NW'\n        END AS wind_cardinal\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n      AND wind_speed_kmh IS NOT NULL\n    ORDER BY valid_time ASC, issue_time DESC\n    LIMIT 1\n)\nSELECT\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(wind_speed_kmh * 0.621371)\n        WHEN 'ms' THEN ROUND(wind_speed_kmh / 3.6, 1)\n        ELSE ROUND(wind_speed_kmh)\n    END AS \"Speed\",\n    wind_cardinal AS \"Direction\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh) * 0.621371)\n        WHEN 'ms' THEN ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh) / 3.6, 1)\n        ELSE ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh))\n    END AS \"Gust\"\nFROM latest_forecast",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": "/^Speed$/"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitykmh",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 20},
+              {"color": "orange", "value": 40},
+              {"color": "red", "value": 60}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "Humidity",
+      "description": "Forecast relative humidity. Comfort range: 30-60%",
+      "gridPos": {"x": 8, "y": 1, "w": 3, "h": 5},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Current/Next Forecast Humidity\nSELECT humidity_pct AS value\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '2 hours'\n  AND humidity_pct IS NOT NULL\nORDER BY valid_time ASC, issue_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "orange", "value": null},
+              {"color": "green", "value": 30},
+              {"color": "yellow", "value": 60},
+              {"color": "orange", "value": 80}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Dewpoint",
+      "description": "Forecast dewpoint temperature. Key comfort indicator: <15C comfortable, >20C muggy",
+      "gridPos": {"x": 11, "y": 1, "w": 3, "h": 5},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Current/Next Forecast Dewpoint\nSELECT\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (dewpoint_c * 9.0/5.0) + 32\n        ELSE dewpoint_c\n    END AS value\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '2 hours'\n  AND dewpoint_c IS NOT NULL\nORDER BY valid_time ASC, issue_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null},
+              {"color": "green", "value": 10},
+              {"color": "yellow", "value": 15},
+              {"color": "orange", "value": 20},
+              {"color": "red", "value": 24}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Cloud Cover",
+      "description": "Sky condition from forecast cloud cover percentage",
+      "gridPos": {"x": 14, "y": 1, "w": 4, "h": 5},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Current/Next Forecast Sky Cover with Interpretation\n-- NWS standard cloud cover breakpoints:\n--   0-6%: Clear/Sunny\n--   7-25%: Mostly Clear/Mostly Sunny\n--   26-50%: Partly Cloudy\n--   51-87%: Mostly Cloudy\n--   88-100%: Cloudy/Overcast\nSELECT\n    sky_cover_pct AS \"Cover %\",\n    CASE\n        WHEN sky_cover_pct <= 6 THEN 'Clear'\n        WHEN sky_cover_pct <= 25 THEN 'Mostly Clear'\n        WHEN sky_cover_pct <= 50 THEN 'Partly Cloudy'\n        WHEN sky_cover_pct <= 87 THEN 'Mostly Cloudy'\n        ELSE 'Cloudy'\n    END AS \"Condition\"\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '2 hours'\n  AND sky_cover_pct IS NOT NULL\nORDER BY valid_time ASC, issue_time DESC\nLIMIT 1",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": "/^Condition$/"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"Clear": {"text": "Clear", "color": "super-light-blue"}}},
+            {"type": "value", "options": {"Mostly Clear": {"text": "Mostly Clear", "color": "light-blue"}}},
+            {"type": "value", "options": {"Partly Cloudy": {"text": "Partly Cloudy", "color": "super-light-yellow"}}},
+            {"type": "value", "options": {"Mostly Cloudy": {"text": "Mostly Cloudy", "color": "light-orange"}}},
+            {"type": "value", "options": {"Cloudy": {"text": "Cloudy", "color": "dark-orange"}}}
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Pressure",
+      "description": "Current observed barometric pressure with 3-hour trend",
+      "gridPos": {"x": 18, "y": 1, "w": 3, "h": 5},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Current Pressure from Observations (forecasts don't include pressure)\n-- With 3-hour trend calculation\nWITH current_obs AS (\n    SELECT\n        observation_time,\n        pressure_pa\n    FROM silver.weather_observations\n    WHERE pressure_pa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\npast_obs AS (\n    SELECT\n        pressure_pa\n    FROM silver.weather_observations\n    WHERE observation_time <= (SELECT observation_time FROM current_obs) - INTERVAL '3 hours'\n      AND observation_time >= (SELECT observation_time FROM current_obs) - INTERVAL '3.5 hours'\n      AND pressure_pa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n)\nSELECT\n    CASE '${pressure_unit}'\n        WHEN 'inHg' THEN ROUND((c.pressure_pa / 100.0) * 0.02953, 2)\n        ELSE ROUND(c.pressure_pa / 100.0, 1)\n    END AS \"Pressure\",\n    CASE\n        WHEN p.pressure_pa IS NULL THEN 'N/A'\n        WHEN c.pressure_pa - p.pressure_pa > 200 THEN 'Rising Fast'\n        WHEN c.pressure_pa - p.pressure_pa > 50 THEN 'Rising'\n        WHEN c.pressure_pa - p.pressure_pa < -200 THEN 'Falling Fast'\n        WHEN c.pressure_pa - p.pressure_pa < -50 THEN 'Falling'\n        ELSE 'Steady'\n    END AS \"Trend\"\nFROM current_obs c\nCROSS JOIN past_obs p",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": "/^Pressure$/"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurehpa",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "purple", "value": null},
+              {"color": "blue", "value": 1000},
+              {"color": "green", "value": 1013},
+              {"color": "orange", "value": 1025}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Rain Chance",
+      "description": "Probability of precipitation in next few hours",
+      "gridPos": {"x": 21, "y": 1, "w": 3, "h": 5},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Max Precipitation Probability in Next 6 Hours\nSELECT\n    MAX(precip_prob_pct)::INTEGER AS value\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '6 hours'\n  AND precip_prob_pct IS NOT NULL",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 20},
+              {"color": "orange", "value": 50},
+              {"color": "red", "value": 80}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "48-Hour Forecast Timeline",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Temperature Forecast",
+      "description": "Forecast temperature over next 48 hours with feels-like overlay",
+      "gridPos": {"x": 0, "y": 7, "w": 24, "h": 8},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Temperature Forecast Timeline (48 hours)\n-- Shows air temperature and feels-like (apparent temperature)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        temperature_c,\n        COALESCE(\n            CASE\n                WHEN heat_index_c > temperature_c + 2 THEN heat_index_c\n                WHEN wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                ELSE apparent_temperature_c\n            END,\n            temperature_c\n        ) AS feels_like_c,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n      AND temperature_c IS NOT NULL\n)\nSELECT\n    valid_time AS time,\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS \"Temperature\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (feels_like_c * 9.0/5.0) + 32\n        ELSE feels_like_c\n    END AS \"Feels Like\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["min", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true,
+            "axisLabel": "Temperature (${temp_unit})"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null},
+              {"color": "green", "value": 15},
+              {"color": "yellow", "value": 25},
+              {"color": "orange", "value": 32},
+              {"color": "red", "value": 38}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Temperature"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Feels Like"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}},
+              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [5, 5]}},
+              {"id": "custom.fillOpacity", "value": 0}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Wind & Gusts Forecast",
+      "description": "Wind speed and gust forecast over next 48 hours",
+      "gridPos": {"x": 0, "y": 15, "w": 12, "h": 7},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Wind Speed Forecast Timeline (48 hours)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        wind_speed_kmh,\n        wind_gust_kmh,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n      AND wind_speed_kmh IS NOT NULL\n)\nSELECT\n    valid_time AS time,\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN wind_speed_kmh * 0.621371\n        WHEN 'ms' THEN wind_speed_kmh / 3.6\n        ELSE wind_speed_kmh\n    END AS \"Wind Speed\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN COALESCE(wind_gust_kmh, wind_speed_kmh) * 0.621371\n        WHEN 'ms' THEN COALESCE(wind_gust_kmh, wind_speed_kmh) / 3.6\n        ELSE COALESCE(wind_gust_kmh, wind_speed_kmh)\n    END AS \"Gusts\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitykmh",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 25},
+              {"color": "orange", "value": 45},
+              {"color": "red", "value": 65}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Wind Speed"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Gusts"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
+              {"id": "custom.fillOpacity", "value": 5}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Precipitation & Cloud Cover",
+      "description": "Chance of rain and cloud cover over next 48 hours",
+      "gridPos": {"x": 12, "y": 15, "w": 12, "h": 7},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Precipitation Probability and Cloud Cover (48 hours)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        precip_prob_pct,\n        sky_cover_pct,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n)\nSELECT\n    valid_time AS time,\n    COALESCE(precip_prob_pct, 0) AS \"Rain Chance %\",\n    COALESCE(sky_cover_pct, 0) AS \"Cloud Cover %\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Rain Chance %"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}},
+              {"id": "custom.fillOpacity", "value": 40}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Cloud Cover %"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "dark-purple"}},
+              {"id": "custom.fillOpacity", "value": 10},
+              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [5, 5]}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Humidity & Dewpoint Forecast",
+      "description": "Humidity and dewpoint trends for comfort assessment",
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 7},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Humidity and Dewpoint Forecast (48 hours)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        humidity_pct,\n        dewpoint_c,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n)\nSELECT\n    valid_time AS time,\n    humidity_pct AS \"Humidity %\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (dewpoint_c * 9.0/5.0) + 32\n        ELSE dewpoint_c\n    END AS \"Dewpoint\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "max"]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Humidity %"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}},
+              {"id": "custom.axisPlacement", "value": "left"},
+              {"id": "min", "value": 0},
+              {"id": "max", "value": 100}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Dewpoint"},
+            "properties": [
+              {"id": "unit", "value": "celsius"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}},
+              {"id": "custom.axisPlacement", "value": "right"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Pressure Trend (Observed)",
+      "description": "Barometric pressure from observations - key indicator for weather changes",
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 7},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- Pressure from Observations (24-hour history)\n-- Pressure isn't forecast by NWS gridpoints, so we show observed trend\nSELECT\n    time_bucket('30 minutes', observation_time) AS time,\n    CASE '${pressure_unit}'\n        WHEN 'inHg' THEN AVG(pressure_pa / 100.0) * 0.02953\n        ELSE AVG(pressure_pa / 100.0)\n    END AS \"Pressure\"\nFROM silver.weather_observations\nWHERE observation_time >= $__timeFrom()::TIMESTAMPTZ\n  AND observation_time <= NOW()\n  AND pressure_pa IS NOT NULL\nGROUP BY 1\nORDER BY 1",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["min", "max", "lastNotNull"]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurehpa",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "color": {"mode": "fixed", "fixedColor": "purple"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null},
+              {"color": "green", "value": 1013}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Extended Forecast (7 Days)",
+      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "7-Day Forecast Summary",
+      "description": "Daily high/low temperatures, precipitation chance, and conditions for the next 7 days",
+      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 8},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- 7-Day Forecast Summary Table\n-- Aggregates hourly forecasts into daily summaries\nWITH daily_forecasts AS (\n    SELECT\n        DATE(valid_time AT TIME ZONE 'UTC') AS forecast_date,\n        temperature_c,\n        max_temperature_c,\n        min_temperature_c,\n        humidity_pct,\n        wind_speed_kmh,\n        wind_gust_kmh,\n        precip_prob_pct,\n        sky_cover_pct,\n        short_forecast,\n        ROW_NUMBER() OVER (\n            PARTITION BY DATE(valid_time AT TIME ZONE 'UTC'), date_trunc('hour', valid_time)\n            ORDER BY issue_time DESC\n        ) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= DATE_TRUNC('day', NOW())\n      AND valid_time <= NOW() + INTERVAL '7 days'\n)\nSELECT\n    TO_CHAR(forecast_date, 'Dy, Mon DD') AS \"Day\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN ROUND(MAX(COALESCE(max_temperature_c, temperature_c)) * 9.0/5.0 + 32)::TEXT || ' F'\n        ELSE ROUND(MAX(COALESCE(max_temperature_c, temperature_c)))::TEXT || ' C'\n    END AS \"High\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN ROUND(MIN(COALESCE(min_temperature_c, temperature_c)) * 9.0/5.0 + 32)::TEXT || ' F'\n        ELSE ROUND(MIN(COALESCE(min_temperature_c, temperature_c)))::TEXT || ' C'\n    END AS \"Low\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(AVG(wind_speed_kmh) * 0.621371)::TEXT || ' mph'\n        WHEN 'ms' THEN ROUND(AVG(wind_speed_kmh) / 3.6, 1)::TEXT || ' m/s'\n        ELSE ROUND(AVG(wind_speed_kmh))::TEXT || ' km/h'\n    END AS \"Wind\",\n    ROUND(AVG(humidity_pct))::TEXT || '%' AS \"Humidity\",\n    ROUND(MAX(precip_prob_pct))::TEXT || '%' AS \"Rain Chance\",\n    CASE\n        WHEN AVG(sky_cover_pct) <= 25 THEN 'Sunny'\n        WHEN AVG(sky_cover_pct) <= 50 THEN 'Partly Cloudy'\n        WHEN AVG(sky_cover_pct) <= 75 THEN 'Mostly Cloudy'\n        ELSE 'Cloudy'\n    END AS \"Sky\",\n    -- Get a representative short forecast (mode from midday hours)\n    MODE() WITHIN GROUP (ORDER BY short_forecast) AS \"Forecast\"\nFROM daily_forecasts\nWHERE rn = 1\nGROUP BY forecast_date\nORDER BY forecast_date\nLIMIT 7",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {"type": "auto"}
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Day"},
+            "properties": [
+              {"id": "custom.width", "value": 120}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "High"},
+            "properties": [
+              {"id": "custom.align", "value": "center"},
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"color": "blue", "value": null},
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 25},
+                {"color": "orange", "value": 32},
+                {"color": "red", "value": 38}
+              ]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Low"},
+            "properties": [
+              {"id": "custom.align", "value": "center"},
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"color": "purple", "value": null},
+                {"color": "blue", "value": 0},
+                {"color": "green", "value": 10},
+                {"color": "yellow", "value": 20}
+              ]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Rain Chance"},
+            "properties": [
+              {"id": "custom.align", "value": "center"},
+              {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "basic"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"color": "transparent", "value": null},
+                {"color": "super-light-blue", "value": 20},
+                {"color": "light-blue", "value": 50},
+                {"color": "blue", "value": 80}
+              ]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Sky"},
+            "properties": [
+              {"id": "custom.align", "value": "center"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Forecast"},
+            "properties": [
+              {"id": "custom.width", "value": 200}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "timepicker": {
+    "refresh_intervals": ["1m", "5m", "15m", "30m", "1h"],
+    "time_options": ["24h", "48h", "7d"]
+  },
+  "links": [
+    {
+      "title": "NDP Dashboards",
+      "type": "dashboards",
+      "tags": ["ndp"],
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true
+    }
+  ]
+}
