@@ -425,7 +425,7 @@ impl EtlRunPersistence for DuckDbRunPersistence {
             UPDATE pg.silver.etl_runs
             SET
                 completed_at = NOW(),
-                duration_ms = EXTRACT(EPOCH FROM (NOW() - started_at))::BIGINT * 1000,
+                duration_ms = EXTRACT(EPOCH FROM (NOW()::TIMESTAMP - started_at::TIMESTAMP))::BIGINT * 1000,
                 status = 'failed',
                 error_message = $2,
                 error_context = $3::JSONB
