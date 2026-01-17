@@ -27,27 +27,43 @@ use tower_http::trace::TraceLayer;
 use crate::config::AppConfig;
 use crate::etcd::{ConfigStore, StreamRegistryAdapter};
 use crate::mcp::{JsonRpcRequest, McpHandler};
-use crate::storage::{BronzeStorage, LocalParquetStorage};
+use crate::storage::{
+    BronzeStorage, DictionaryStore, EtlRunStore, LocalParquetStorage, SilverStorage,
+};
 
 /// Application state shared across all request handlers.
 ///
 /// Contains references to configuration and storage/config clients.
 /// Wrapped in Arc for thread-safe sharing.
-pub struct AppState<S = LocalParquetStorage, C = StreamRegistryAdapter>
+///
+/// # Type Parameters
+///
+/// - `B`: Bronze layer storage (e.g., LocalParquetStorage)
+/// - `C`: Configuration store (e.g., StreamRegistryAdapter)
+/// - `S`: Silver layer storage (e.g., TimescaleStorage)
+/// - `D`: Dictionary store (e.g., DictionaryClient)
+/// - `E`: ETL run store (e.g., EtlRunClient)
+pub struct AppState<B, C, S, D, E>
 where
-    S: BronzeStorage + Send + Sync + 'static,
+    B: BronzeStorage + Send + Sync + 'static,
     C: ConfigStore + Send + Sync + 'static,
+    S: SilverStorage + Send + Sync + 'static,
+    D: DictionaryStore + Send + Sync + 'static,
+    E: EtlRunStore + Send + Sync + 'static,
 {
     /// Application configuration
     pub config: AppConfig,
     /// MCP request handler with storage and config dependencies
-    pub handler: Arc<McpHandler<S, C>>,
+    pub handler: Arc<McpHandler<B, C, S, D, E>>,
 }
 
-impl<S, C> Clone for AppState<S, C>
+impl<B, C, S, D, E> Clone for AppState<B, C, S, D, E>
 where
-    S: BronzeStorage + Send + Sync + 'static,
+    B: BronzeStorage + Send + Sync + 'static,
     C: ConfigStore + Send + Sync + 'static,
+    S: SilverStorage + Send + Sync + 'static,
+    D: DictionaryStore + Send + Sync + 'static,
+    E: EtlRunStore + Send + Sync + 'static,
 {
     fn clone(&self) -> Self {
         Self {
@@ -57,11 +73,167 @@ where
     }
 }
 
-impl AppState<LocalParquetStorage, StreamRegistryAdapter> {
+impl<B, C, S, D, E> AppState<B, C, S, D, E>
+where
+    B: BronzeStorage + Send + Sync + 'static,
+    C: ConfigStore + Send + Sync + 'static,
+    S: SilverStorage + Send + Sync + 'static,
+    D: DictionaryStore + Send + Sync + 'static,
+    E: EtlRunStore + Send + Sync + 'static,
+{
+    /// Create application state with custom dependencies.
+    ///
+    /// Used for testing with mock implementations or production with real adapters.
+    pub fn with_handler(config: AppConfig, handler: Arc<McpHandler<B, C, S, D, E>>) -> Self {
+        Self { config, handler }
+    }
+}
+
+// =============================================================================
+// Convenience constructor for Bronze-only (legacy/Phase 1)
+// =============================================================================
+
+/// Placeholder Silver storage for Bronze-only mode.
+///
+/// Returns errors for all operations. Used when Silver layer is not available.
+pub struct NoOpSilverStorage;
+
+#[async_trait::async_trait]
+impl SilverStorage for NoOpSilverStorage {
+    async fn list_tables(&self) -> crate::error::McpResult<Vec<crate::storage::SilverTableInfo>> {
+        Err(crate::error::McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+
+    async fn describe_table(
+        &self,
+        _table_name: &str,
+    ) -> crate::error::McpResult<crate::storage::SilverTableDescription> {
+        Err(crate::error::McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+
+    async fn sample(
+        &self,
+        _table_name: &str,
+        _n: usize,
+        _filters: Option<crate::storage::SampleFilters>,
+    ) -> crate::error::McpResult<Vec<serde_json::Value>> {
+        Err(crate::error::McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+
+    async fn get_stats(
+        &self,
+        _table_name: &str,
+    ) -> crate::error::McpResult<crate::storage::SilverTableStats> {
+        Err(crate::error::McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+}
+
+/// Placeholder Dictionary store for Bronze-only mode.
+pub struct NoOpDictionaryStore;
+
+#[async_trait::async_trait]
+impl DictionaryStore for NoOpDictionaryStore {
+    async fn search(
+        &self,
+        _query: &str,
+        _layer: Option<String>,
+    ) -> crate::error::McpResult<Vec<crate::storage::DictionaryEntry>> {
+        Err(crate::error::McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+
+    async fn describe_column(
+        &self,
+        _table_or_stream: &str,
+        _column_name: &str,
+    ) -> crate::error::McpResult<crate::storage::ColumnDescription> {
+        Err(crate::error::McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+
+    async fn trace_lineage(
+        &self,
+        _silver_table: &str,
+        _silver_column: &str,
+    ) -> crate::error::McpResult<crate::storage::LineageTrace> {
+        Err(crate::error::McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+
+    async fn list_dq_rules(
+        &self,
+        _table: Option<String>,
+        _column: Option<String>,
+    ) -> crate::error::McpResult<Vec<crate::storage::DqRuleInfo>> {
+        Err(crate::error::McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+}
+
+/// Placeholder ETL run store for Bronze-only mode.
+pub struct NoOpEtlRunStore;
+
+#[async_trait::async_trait]
+impl EtlRunStore for NoOpEtlRunStore {
+    async fn get_status(
+        &self,
+        _stream_id: Option<String>,
+    ) -> crate::error::McpResult<Vec<crate::storage::EtlStreamStatus>> {
+        Err(crate::error::McpError::StorageError(
+            "ETL store not configured".to_string(),
+        ))
+    }
+
+    async fn get_history(
+        &self,
+        _stream_id: &str,
+        _limit: usize,
+        _since: Option<chrono::DateTime<chrono::Utc>>,
+        _status_filter: Option<String>,
+    ) -> crate::error::McpResult<crate::storage::EtlHistoryResult> {
+        Err(crate::error::McpError::StorageError(
+            "ETL store not configured".to_string(),
+        ))
+    }
+
+    async fn get_freshness(
+        &self,
+        _layer: Option<String>,
+    ) -> crate::error::McpResult<crate::storage::FreshnessReport> {
+        Err(crate::error::McpError::StorageError(
+            "ETL store not configured".to_string(),
+        ))
+    }
+}
+
+impl
+    AppState<
+        LocalParquetStorage,
+        StreamRegistryAdapter,
+        NoOpSilverStorage,
+        NoOpDictionaryStore,
+        NoOpEtlRunStore,
+    >
+{
     /// Create new application state with StreamRegistry from config-client.
     ///
     /// Uses the shared config-client crate for etcd access.
     /// The StreamRegistry provides cached access to stream configurations.
+    ///
+    /// This constructor creates a Bronze-only server. Silver, Dictionary,
+    /// and ETL tools will return "not configured" errors.
     ///
     /// # Arguments
     ///
@@ -78,21 +250,17 @@ impl AppState<LocalParquetStorage, StreamRegistryAdapter> {
     pub fn with_registry(config: AppConfig, registry: StreamRegistry) -> Self {
         let storage = Arc::new(LocalParquetStorage::new(&config.raw_path));
         let config_store = Arc::new(StreamRegistryAdapter::new(registry));
-        let handler = Arc::new(McpHandler::new(storage, config_store));
+        let silver_storage = Arc::new(NoOpSilverStorage);
+        let dictionary_store = Arc::new(NoOpDictionaryStore);
+        let etl_store = Arc::new(NoOpEtlRunStore);
+        let handler = Arc::new(McpHandler::new(
+            storage,
+            config_store,
+            silver_storage,
+            dictionary_store,
+            etl_store,
+        ));
 
-        Self { config, handler }
-    }
-}
-
-impl<S, C> AppState<S, C>
-where
-    S: BronzeStorage + Send + Sync + 'static,
-    C: ConfigStore + Send + Sync + 'static,
-{
-    /// Create application state with custom dependencies.
-    ///
-    /// Used for testing with mock implementations.
-    pub fn with_handler(config: AppConfig, handler: Arc<McpHandler<S, C>>) -> Self {
         Self { config, handler }
     }
 }
@@ -107,14 +275,17 @@ where
 /// # Middleware
 ///
 /// - TraceLayer: Request/response tracing for observability
-pub fn create_router<S, C>(state: Arc<AppState<S, C>>) -> Router
+pub fn create_router<B, C, S, D, E>(state: Arc<AppState<B, C, S, D, E>>) -> Router
 where
-    S: BronzeStorage + Send + Sync + 'static,
+    B: BronzeStorage + Send + Sync + 'static,
     C: ConfigStore + Send + Sync + 'static,
+    S: SilverStorage + Send + Sync + 'static,
+    D: DictionaryStore + Send + Sync + 'static,
+    E: EtlRunStore + Send + Sync + 'static,
 {
     Router::new()
-        .route("/mcp", post(mcp_handler::<S, C>))
-        .route("/health", get(health_check::<S, C>))
+        .route("/mcp", post(mcp_handler::<B, C, S, D, E>))
+        .route("/health", get(health_check::<B, C, S, D, E>))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -129,13 +300,16 @@ where
 /// the full protocol logic including tool execution.
 ///
 /// Returns JSON-RPC 2.0 formatted responses.
-async fn mcp_handler<S, C>(
-    State(state): State<Arc<AppState<S, C>>>,
+async fn mcp_handler<B, C, S, D, E>(
+    State(state): State<Arc<AppState<B, C, S, D, E>>>,
     Json(request): Json<JsonRpcRequest>,
 ) -> impl IntoResponse
 where
-    S: BronzeStorage + Send + Sync + 'static,
+    B: BronzeStorage + Send + Sync + 'static,
     C: ConfigStore + Send + Sync + 'static,
+    S: SilverStorage + Send + Sync + 'static,
+    D: DictionaryStore + Send + Sync + 'static,
+    E: EtlRunStore + Send + Sync + 'static,
 {
     let response = state.handler.handle(request).await;
     Json(response)
@@ -179,12 +353,15 @@ pub struct ComponentStatus {
 ///
 /// Returns server health status with version information.
 /// Used by load balancers and orchestrators for health monitoring.
-async fn health_check<S, C>(
-    State(_state): State<Arc<AppState<S, C>>>,
+async fn health_check<B, C, S, D, E>(
+    State(_state): State<Arc<AppState<B, C, S, D, E>>>,
 ) -> (StatusCode, Json<HealthResponse>)
 where
-    S: BronzeStorage + Send + Sync + 'static,
+    B: BronzeStorage + Send + Sync + 'static,
     C: ConfigStore + Send + Sync + 'static,
+    S: SilverStorage + Send + Sync + 'static,
+    D: DictionaryStore + Send + Sync + 'static,
+    E: EtlRunStore + Send + Sync + 'static,
 {
     // TODO: Add actual component health checks in Phase 4
     let response = HealthResponse {
@@ -201,13 +378,30 @@ mod tests {
     use super::*;
     use crate::etcd::MockConfigStore;
     use crate::mcp::JsonRpcResponse;
-    use crate::storage::MockBronzeStorage;
+    use crate::storage::{MockBronzeStorage, MockDictionaryStore, MockEtlRunStore, MockSilverStorage};
 
-    fn create_test_state() -> Arc<AppState<MockBronzeStorage, MockConfigStore>> {
+    fn create_test_state() -> Arc<
+        AppState<
+            MockBronzeStorage,
+            MockConfigStore,
+            MockSilverStorage,
+            MockDictionaryStore,
+            MockEtlRunStore,
+        >,
+    > {
         let config = AppConfig::default();
         let storage = Arc::new(MockBronzeStorage::new());
         let config_store = Arc::new(MockConfigStore::new());
-        let handler = Arc::new(McpHandler::new(storage, config_store));
+        let silver_storage = Arc::new(MockSilverStorage::new());
+        let dictionary_store = Arc::new(MockDictionaryStore::new());
+        let etl_store = Arc::new(MockEtlRunStore::new());
+        let handler = Arc::new(McpHandler::new(
+            storage,
+            config_store,
+            silver_storage,
+            dictionary_store,
+            etl_store,
+        ));
         Arc::new(AppState::with_handler(config, handler))
     }
 

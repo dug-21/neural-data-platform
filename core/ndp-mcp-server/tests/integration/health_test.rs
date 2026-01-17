@@ -11,12 +11,19 @@ use serde_json::Value;
 use std::sync::Arc;
 
 use ndp_mcp_server::etcd::{ConfigStore, StreamConfig};
-use ndp_mcp_server::storage::{BronzeStorage, StreamStorageInfo};
+use ndp_mcp_server::storage::{
+    BronzeStorage, ColumnDescription, DictionaryEntry, DictionaryStore, DqRuleInfo,
+    EtlHistoryResult, EtlRunStore, EtlStreamStatus, FreshnessReport, LineageTrace, SampleFilters,
+    SilverStorage, SilverTableDescription, SilverTableInfo, SilverTableStats, StreamStorageInfo,
+};
 use ndp_mcp_server::{create_router, AppConfig, AppState, McpError, McpHandler, McpResult};
 
 // Mock implementations for testing
 struct MockStorage;
 struct MockConfigStore;
+struct MockSilverStorage;
+struct MockDictionaryStore;
+struct MockEtlRunStore;
 
 #[async_trait::async_trait]
 impl BronzeStorage for MockStorage {
@@ -57,6 +64,104 @@ impl ConfigStore for MockConfigStore {
     }
 }
 
+#[async_trait::async_trait]
+impl SilverStorage for MockSilverStorage {
+    async fn list_tables(&self) -> McpResult<Vec<SilverTableInfo>> {
+        Err(McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+
+    async fn describe_table(&self, _table_name: &str) -> McpResult<SilverTableDescription> {
+        Err(McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+
+    async fn sample(
+        &self,
+        _table_name: &str,
+        _n: usize,
+        _filters: Option<SampleFilters>,
+    ) -> McpResult<Vec<Value>> {
+        Err(McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+
+    async fn get_stats(&self, _table_name: &str) -> McpResult<SilverTableStats> {
+        Err(McpError::StorageError(
+            "Silver layer not configured".to_string(),
+        ))
+    }
+}
+
+#[async_trait::async_trait]
+impl DictionaryStore for MockDictionaryStore {
+    async fn search(&self, _query: &str, _layer: Option<String>) -> McpResult<Vec<DictionaryEntry>> {
+        Err(McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+
+    async fn describe_column(
+        &self,
+        _table_or_stream: &str,
+        _column_name: &str,
+    ) -> McpResult<ColumnDescription> {
+        Err(McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+
+    async fn trace_lineage(
+        &self,
+        _silver_table: &str,
+        _silver_column: &str,
+    ) -> McpResult<LineageTrace> {
+        Err(McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+
+    async fn list_dq_rules(
+        &self,
+        _table: Option<String>,
+        _column: Option<String>,
+    ) -> McpResult<Vec<DqRuleInfo>> {
+        Err(McpError::StorageError(
+            "Dictionary not configured".to_string(),
+        ))
+    }
+}
+
+#[async_trait::async_trait]
+impl EtlRunStore for MockEtlRunStore {
+    async fn get_status(&self, _stream_id: Option<String>) -> McpResult<Vec<EtlStreamStatus>> {
+        Err(McpError::StorageError(
+            "ETL store not configured".to_string(),
+        ))
+    }
+
+    async fn get_history(
+        &self,
+        _stream_id: &str,
+        _limit: usize,
+        _since: Option<chrono::DateTime<chrono::Utc>>,
+        _status_filter: Option<String>,
+    ) -> McpResult<EtlHistoryResult> {
+        Err(McpError::StorageError(
+            "ETL store not configured".to_string(),
+        ))
+    }
+
+    async fn get_freshness(&self, _layer: Option<String>) -> McpResult<FreshnessReport> {
+        Err(McpError::StorageError(
+            "ETL store not configured".to_string(),
+        ))
+    }
+}
+
 /// Helper function to create test server.
 ///
 /// Creates an axum TestServer with the application router configured
@@ -65,7 +170,16 @@ async fn create_test_server() -> TestServer {
     let config = AppConfig::default();
     let storage = Arc::new(MockStorage);
     let config_store = Arc::new(MockConfigStore);
-    let handler = Arc::new(McpHandler::new(storage, config_store));
+    let silver_storage = Arc::new(MockSilverStorage);
+    let dictionary_store = Arc::new(MockDictionaryStore);
+    let etl_store = Arc::new(MockEtlRunStore);
+    let handler = Arc::new(McpHandler::new(
+        storage,
+        config_store,
+        silver_storage,
+        dictionary_store,
+        etl_store,
+    ));
     let state = Arc::new(AppState::with_handler(config, handler));
     let app = create_router(state);
 
