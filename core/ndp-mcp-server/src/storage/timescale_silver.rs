@@ -245,7 +245,7 @@ impl SilverStorage for TimescaleSilverStorage {
                 d.grain,
                 d.source_streams,
                 COALESCE(h.is_hypertable, FALSE) AS is_hypertable,
-                COALESCE(d.chunk_interval, '1 day') AS chunk_interval,
+                COALESCE(d.chunk_interval::TEXT, '1 day') AS chunk_interval,
                 r.row_count,
                 h.total_bytes,
                 h.chunk_count
@@ -319,7 +319,7 @@ impl SilverStorage for TimescaleSilverStorage {
                 grain,
                 source_streams,
                 hypertable_column,
-                chunk_interval
+                chunk_interval::TEXT AS chunk_interval
             FROM data_dictionary.silver_tables
             WHERE table_name = $1
         "#;
