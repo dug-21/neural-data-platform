@@ -1,7 +1,7 @@
 {
   "uid": "ndp-personal-forecast",
   "title": "Personal Weather Forecast",
-  "description": "What's the weather going to be? NWS forecast dashboard showing temperature, wind, humidity, dewpoint, cloud cover, and pressure with configurable units.",
+  "description": "What's the weather going to be? NWS forecast dashboard merging hourly and gridpoints data for reliable coverage.",
   "tags": ["ndp", "forecast", "weather", "personal", "silver"],
   "timezone": "browser",
   "refresh": "5m",
@@ -10,7 +10,7 @@
     "to": "now+48h"
   },
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "graphTooltip": 1,
   "templating": {
@@ -78,12 +78,12 @@
       "id": 1,
       "type": "stat",
       "title": "Temperature",
-      "description": "Current forecast temperature with feels-like. Shows heat index when hot, wind chill when cold.",
+      "description": "Current forecast temperature with feels-like. Merges hourly (reliable) and gridpoints (extras) sources.",
       "gridPos": {"x": 0, "y": 1, "w": 4, "h": 5},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Current/Next Forecast Temperature with Feels-Like\n-- Uses smart display: heat_index when hot, wind_chill when cold, apparent otherwise\nWITH latest_forecast AS (\n    SELECT\n        temperature_c,\n        apparent_temperature_c,\n        heat_index_c,\n        wind_chill_c,\n        -- Smart display temperature selection\n        COALESCE(\n            CASE\n                WHEN heat_index_c IS NOT NULL AND heat_index_c > temperature_c + 2 THEN heat_index_c\n                WHEN wind_chill_c IS NOT NULL AND wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                ELSE apparent_temperature_c\n            END,\n            temperature_c\n        ) AS display_temp\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n      AND temperature_c IS NOT NULL\n    ORDER BY valid_time ASC, issue_time DESC\n    LIMIT 1\n)\nSELECT\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS \"Air Temp\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (display_temp * 9.0/5.0) + 32\n        ELSE display_temp\n    END AS \"Feels Like\"\nFROM latest_forecast",
+          "rawSql": "-- Current Temperature: Merge both forecast sources\n-- Prefers nws-forecast-hourly (always has temp), falls back to gridpoints\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        -- Prefer hourly (more reliable), fall back to gridpoints\n        COALESCE(\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS temperature_c,\n        COALESCE(\n            MAX(apparent_temperature_c) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(apparent_temperature_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS apparent_temperature_c,\n        -- Heat index and wind chill only from gridpoints\n        MAX(heat_index_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast') AS heat_index_c,\n        MAX(wind_chill_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast') AS wind_chill_c\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n    GROUP BY valid_time\n    ORDER BY valid_time ASC\n    LIMIT 1\n)\nSELECT\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS \"Air Temp\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (\n            COALESCE(\n                CASE\n                    WHEN heat_index_c > temperature_c + 2 THEN heat_index_c\n                    WHEN wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                    ELSE apparent_temperature_c\n                END,\n                temperature_c\n            ) * 9.0/5.0) + 32\n        ELSE COALESCE(\n            CASE\n                WHEN heat_index_c > temperature_c + 2 THEN heat_index_c\n                WHEN wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                ELSE apparent_temperature_c\n            END,\n            temperature_c\n        )\n    END AS \"Feels Like\"\nFROM merged_forecast\nWHERE temperature_c IS NOT NULL",
           "refId": "A",
           "format": "table"
         }
@@ -122,12 +122,12 @@
       "id": 2,
       "type": "stat",
       "title": "Wind",
-      "description": "Wind speed and direction with gust information",
+      "description": "Wind speed and direction with gust. Merges both forecast sources.",
       "gridPos": {"x": 4, "y": 1, "w": 4, "h": 5},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Current/Next Forecast Wind with Direction and Gust\nWITH latest_forecast AS (\n    SELECT\n        wind_speed_kmh,\n        wind_gust_kmh,\n        wind_direction_deg,\n        CASE\n            WHEN wind_direction_deg IS NULL THEN 'VAR'\n            WHEN wind_direction_deg >= 337.5 OR wind_direction_deg < 22.5 THEN 'N'\n            WHEN wind_direction_deg < 67.5 THEN 'NE'\n            WHEN wind_direction_deg < 112.5 THEN 'E'\n            WHEN wind_direction_deg < 157.5 THEN 'SE'\n            WHEN wind_direction_deg < 202.5 THEN 'S'\n            WHEN wind_direction_deg < 247.5 THEN 'SW'\n            WHEN wind_direction_deg < 292.5 THEN 'W'\n            ELSE 'NW'\n        END AS wind_cardinal\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n      AND wind_speed_kmh IS NOT NULL\n    ORDER BY valid_time ASC, issue_time DESC\n    LIMIT 1\n)\nSELECT\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(wind_speed_kmh * 0.621371)\n        WHEN 'ms' THEN ROUND(wind_speed_kmh / 3.6, 1)\n        ELSE ROUND(wind_speed_kmh)\n    END AS \"Speed\",\n    wind_cardinal AS \"Direction\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh) * 0.621371)\n        WHEN 'ms' THEN ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh) / 3.6, 1)\n        ELSE ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh))\n    END AS \"Gust\"\nFROM latest_forecast",
+          "rawSql": "-- Current Wind: Merge both forecast sources\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(wind_speed_kmh) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(wind_speed_kmh) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS wind_speed_kmh,\n        COALESCE(\n            MAX(wind_gust_kmh) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(wind_gust_kmh) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS wind_gust_kmh,\n        COALESCE(\n            MAX(wind_direction_deg) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(wind_direction_deg) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS wind_direction_deg\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n    GROUP BY valid_time\n    ORDER BY valid_time ASC\n    LIMIT 1\n)\nSELECT\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(wind_speed_kmh * 0.621371)\n        WHEN 'ms' THEN ROUND(wind_speed_kmh / 3.6, 1)\n        ELSE ROUND(wind_speed_kmh)\n    END AS \"Speed\",\n    CASE\n        WHEN wind_direction_deg IS NULL THEN 'VAR'\n        WHEN wind_direction_deg >= 337.5 OR wind_direction_deg < 22.5 THEN 'N'\n        WHEN wind_direction_deg < 67.5 THEN 'NE'\n        WHEN wind_direction_deg < 112.5 THEN 'E'\n        WHEN wind_direction_deg < 157.5 THEN 'SE'\n        WHEN wind_direction_deg < 202.5 THEN 'S'\n        WHEN wind_direction_deg < 247.5 THEN 'SW'\n        WHEN wind_direction_deg < 292.5 THEN 'W'\n        ELSE 'NW'\n    END AS \"Direction\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh) * 0.621371)\n        WHEN 'ms' THEN ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh) / 3.6, 1)\n        ELSE ROUND(COALESCE(wind_gust_kmh, wind_speed_kmh))\n    END AS \"Gust\"\nFROM merged_forecast\nWHERE wind_speed_kmh IS NOT NULL",
           "refId": "A",
           "format": "table"
         }
@@ -164,12 +164,12 @@
       "id": 3,
       "type": "gauge",
       "title": "Humidity",
-      "description": "Forecast relative humidity. Comfort range: 30-60%",
+      "description": "Forecast relative humidity. Merges both sources. Comfort range: 30-60%",
       "gridPos": {"x": 8, "y": 1, "w": 3, "h": 5},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Current/Next Forecast Humidity\nSELECT humidity_pct AS value\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '2 hours'\n  AND humidity_pct IS NOT NULL\nORDER BY valid_time ASC, issue_time DESC\nLIMIT 1",
+          "rawSql": "-- Current Humidity: Merge both forecast sources\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(humidity_pct) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(humidity_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS humidity_pct\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n    GROUP BY valid_time\n    ORDER BY valid_time ASC\n    LIMIT 1\n)\nSELECT humidity_pct AS value\nFROM merged_forecast\nWHERE humidity_pct IS NOT NULL",
           "refId": "A",
           "format": "table"
         }
@@ -205,12 +205,12 @@
       "id": 4,
       "type": "stat",
       "title": "Dewpoint",
-      "description": "Forecast dewpoint temperature. Key comfort indicator: <15C comfortable, >20C muggy",
+      "description": "Forecast dewpoint. <15C comfortable, >20C muggy. Merges both sources.",
       "gridPos": {"x": 11, "y": 1, "w": 3, "h": 5},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Current/Next Forecast Dewpoint\nSELECT\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (dewpoint_c * 9.0/5.0) + 32\n        ELSE dewpoint_c\n    END AS value\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '2 hours'\n  AND dewpoint_c IS NOT NULL\nORDER BY valid_time ASC, issue_time DESC\nLIMIT 1",
+          "rawSql": "-- Current Dewpoint: Merge both forecast sources\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(dewpoint_c) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(dewpoint_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS dewpoint_c\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n    GROUP BY valid_time\n    ORDER BY valid_time ASC\n    LIMIT 1\n)\nSELECT\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (dewpoint_c * 9.0/5.0) + 32\n        ELSE dewpoint_c\n    END AS value\nFROM merged_forecast\nWHERE dewpoint_c IS NOT NULL",
           "refId": "A",
           "format": "table"
         }
@@ -247,12 +247,12 @@
       "id": 5,
       "type": "stat",
       "title": "Cloud Cover",
-      "description": "Sky condition from forecast cloud cover percentage",
+      "description": "Sky condition from gridpoints forecast (when available). Falls back to short_forecast text.",
       "gridPos": {"x": 14, "y": 1, "w": 4, "h": 5},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Current/Next Forecast Sky Cover with Interpretation\n-- NWS standard cloud cover breakpoints:\n--   0-6%: Clear/Sunny\n--   7-25%: Mostly Clear/Mostly Sunny\n--   26-50%: Partly Cloudy\n--   51-87%: Mostly Cloudy\n--   88-100%: Cloudy/Overcast\nSELECT\n    sky_cover_pct AS \"Cover %\",\n    CASE\n        WHEN sky_cover_pct <= 6 THEN 'Clear'\n        WHEN sky_cover_pct <= 25 THEN 'Mostly Clear'\n        WHEN sky_cover_pct <= 50 THEN 'Partly Cloudy'\n        WHEN sky_cover_pct <= 87 THEN 'Mostly Cloudy'\n        ELSE 'Cloudy'\n    END AS \"Condition\"\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '2 hours'\n  AND sky_cover_pct IS NOT NULL\nORDER BY valid_time ASC, issue_time DESC\nLIMIT 1",
+          "rawSql": "-- Cloud Cover: Primarily from gridpoints, with short_forecast fallback\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        -- sky_cover_pct only from gridpoints\n        MAX(sky_cover_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast') AS sky_cover_pct,\n        -- short_forecast from hourly as fallback\n        COALESCE(\n            MAX(short_forecast) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(short_forecast) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS short_forecast\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '2 hours'\n    GROUP BY valid_time\n    ORDER BY valid_time ASC\n    LIMIT 1\n)\nSELECT\n    COALESCE(sky_cover_pct, 0)::INTEGER AS \"Cover %\",\n    CASE\n        WHEN sky_cover_pct IS NOT NULL THEN\n            CASE\n                WHEN sky_cover_pct <= 6 THEN 'Clear'\n                WHEN sky_cover_pct <= 25 THEN 'Mostly Clear'\n                WHEN sky_cover_pct <= 50 THEN 'Partly Cloudy'\n                WHEN sky_cover_pct <= 87 THEN 'Mostly Cloudy'\n                ELSE 'Cloudy'\n            END\n        ELSE COALESCE(short_forecast, 'N/A')\n    END AS \"Condition\"\nFROM merged_forecast",
           "refId": "A",
           "format": "table"
         }
@@ -285,12 +285,12 @@
       "id": 6,
       "type": "stat",
       "title": "Pressure",
-      "description": "Current observed barometric pressure with 3-hour trend",
+      "description": "Current observed barometric pressure with 3-hour trend (forecasts don't include pressure)",
       "gridPos": {"x": 18, "y": 1, "w": 3, "h": 5},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Current Pressure from Observations (forecasts don't include pressure)\n-- With 3-hour trend calculation\nWITH current_obs AS (\n    SELECT\n        observation_time,\n        pressure_pa\n    FROM silver.weather_observations\n    WHERE pressure_pa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\npast_obs AS (\n    SELECT\n        pressure_pa\n    FROM silver.weather_observations\n    WHERE observation_time <= (SELECT observation_time FROM current_obs) - INTERVAL '3 hours'\n      AND observation_time >= (SELECT observation_time FROM current_obs) - INTERVAL '3.5 hours'\n      AND pressure_pa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n)\nSELECT\n    CASE '${pressure_unit}'\n        WHEN 'inHg' THEN ROUND((c.pressure_pa / 100.0) * 0.02953, 2)\n        ELSE ROUND(c.pressure_pa / 100.0, 1)\n    END AS \"Pressure\",\n    CASE\n        WHEN p.pressure_pa IS NULL THEN 'N/A'\n        WHEN c.pressure_pa - p.pressure_pa > 200 THEN 'Rising Fast'\n        WHEN c.pressure_pa - p.pressure_pa > 50 THEN 'Rising'\n        WHEN c.pressure_pa - p.pressure_pa < -200 THEN 'Falling Fast'\n        WHEN c.pressure_pa - p.pressure_pa < -50 THEN 'Falling'\n        ELSE 'Steady'\n    END AS \"Trend\"\nFROM current_obs c\nCROSS JOIN past_obs p",
+          "rawSql": "-- Current Pressure from Observations (forecasts don't include pressure)\n-- With 3-hour trend calculation\nWITH current_obs AS (\n    SELECT\n        observation_time,\n        pressure_pa\n    FROM silver.weather_observations\n    WHERE pressure_pa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n),\npast_obs AS (\n    SELECT\n        pressure_pa\n    FROM silver.weather_observations\n    WHERE observation_time <= (SELECT observation_time FROM current_obs) - INTERVAL '3 hours'\n      AND observation_time >= (SELECT observation_time FROM current_obs) - INTERVAL '3.5 hours'\n      AND pressure_pa IS NOT NULL\n    ORDER BY observation_time DESC\n    LIMIT 1\n)\nSELECT\n    CASE '${pressure_unit}'\n        WHEN 'inHg' THEN ROUND((c.pressure_pa / 100.0) * 0.02953, 2)\n        ELSE ROUND(c.pressure_pa / 100.0, 1)\n    END AS \"Pressure\",\n    CASE\n        WHEN p.pressure_pa IS NULL THEN 'N/A'\n        WHEN c.pressure_pa - p.pressure_pa > 200 THEN 'Rising Fast'\n        WHEN c.pressure_pa - p.pressure_pa > 50 THEN 'Rising'\n        WHEN c.pressure_pa - p.pressure_pa < -200 THEN 'Falling Fast'\n        WHEN c.pressure_pa - p.pressure_pa < -50 THEN 'Falling'\n        ELSE 'Steady'\n    END AS \"Trend\"\nFROM current_obs c\nLEFT JOIN past_obs p ON true",
           "refId": "A",
           "format": "table"
         }
@@ -327,12 +327,12 @@
       "id": 7,
       "type": "stat",
       "title": "Rain Chance",
-      "description": "Probability of precipitation in next few hours",
+      "description": "Max precipitation probability in next 6 hours. Merges both sources.",
       "gridPos": {"x": 21, "y": 1, "w": 3, "h": 5},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Max Precipitation Probability in Next 6 Hours\nSELECT\n    MAX(precip_prob_pct)::INTEGER AS value\nFROM silver.weather_forecasts\nWHERE valid_time >= NOW()\n  AND valid_time <= NOW() + INTERVAL '6 hours'\n  AND precip_prob_pct IS NOT NULL",
+          "rawSql": "-- Rain Chance: Max from both sources in next 6 hours\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(precip_prob_pct) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(precip_prob_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS precip_prob_pct\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '6 hours'\n    GROUP BY valid_time\n)\nSELECT COALESCE(MAX(precip_prob_pct), 0)::INTEGER AS value\nFROM merged_forecast",
           "refId": "A",
           "format": "table"
         }
@@ -375,12 +375,12 @@
       "id": 8,
       "type": "timeseries",
       "title": "Temperature Forecast",
-      "description": "Forecast temperature over next 48 hours with feels-like overlay",
+      "description": "Forecast temperature over next 48 hours. Merges hourly (reliable) and gridpoints (extras) sources.",
       "gridPos": {"x": 0, "y": 7, "w": 24, "h": 8},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Temperature Forecast Timeline (48 hours)\n-- Shows air temperature and feels-like (apparent temperature)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        temperature_c,\n        COALESCE(\n            CASE\n                WHEN heat_index_c > temperature_c + 2 THEN heat_index_c\n                WHEN wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                ELSE apparent_temperature_c\n            END,\n            temperature_c\n        ) AS feels_like_c,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n      AND temperature_c IS NOT NULL\n)\nSELECT\n    valid_time AS time,\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS \"Temperature\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (feels_like_c * 9.0/5.0) + 32\n        ELSE feels_like_c\n    END AS \"Feels Like\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "rawSql": "-- Temperature Forecast Timeline (48 hours) - Merged Sources\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS temperature_c,\n        COALESCE(\n            MAX(apparent_temperature_c) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(apparent_temperature_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS apparent_temperature_c,\n        MAX(heat_index_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast') AS heat_index_c,\n        MAX(wind_chill_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast') AS wind_chill_c\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n    GROUP BY valid_time\n)\nSELECT\n    valid_time AS time,\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (temperature_c * 9.0/5.0) + 32\n        ELSE temperature_c\n    END AS \"Temperature\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (\n            COALESCE(\n                CASE\n                    WHEN heat_index_c > temperature_c + 2 THEN heat_index_c\n                    WHEN wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                    ELSE apparent_temperature_c\n                END,\n                temperature_c\n            ) * 9.0/5.0) + 32\n        ELSE COALESCE(\n            CASE\n                WHEN heat_index_c > temperature_c + 2 THEN heat_index_c\n                WHEN wind_chill_c < temperature_c - 2 THEN wind_chill_c\n                ELSE apparent_temperature_c\n            END,\n            temperature_c\n        )\n    END AS \"Feels Like\"\nFROM merged_forecast\nWHERE temperature_c IS NOT NULL\nORDER BY valid_time",
           "refId": "A",
           "format": "time_series"
         }
@@ -444,12 +444,12 @@
       "id": 9,
       "type": "timeseries",
       "title": "Wind & Gusts Forecast",
-      "description": "Wind speed and gust forecast over next 48 hours",
+      "description": "Wind speed and gust forecast over next 48 hours. Merges both sources.",
       "gridPos": {"x": 0, "y": 15, "w": 12, "h": 7},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Wind Speed Forecast Timeline (48 hours)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        wind_speed_kmh,\n        wind_gust_kmh,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n      AND wind_speed_kmh IS NOT NULL\n)\nSELECT\n    valid_time AS time,\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN wind_speed_kmh * 0.621371\n        WHEN 'ms' THEN wind_speed_kmh / 3.6\n        ELSE wind_speed_kmh\n    END AS \"Wind Speed\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN COALESCE(wind_gust_kmh, wind_speed_kmh) * 0.621371\n        WHEN 'ms' THEN COALESCE(wind_gust_kmh, wind_speed_kmh) / 3.6\n        ELSE COALESCE(wind_gust_kmh, wind_speed_kmh)\n    END AS \"Gusts\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "rawSql": "-- Wind Speed Forecast Timeline (48 hours) - Merged Sources\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(wind_speed_kmh) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(wind_speed_kmh) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS wind_speed_kmh,\n        COALESCE(\n            MAX(wind_gust_kmh) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(wind_gust_kmh) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS wind_gust_kmh\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n    GROUP BY valid_time\n)\nSELECT\n    valid_time AS time,\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN wind_speed_kmh * 0.621371\n        WHEN 'ms' THEN wind_speed_kmh / 3.6\n        ELSE wind_speed_kmh\n    END AS \"Wind Speed\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN COALESCE(wind_gust_kmh, wind_speed_kmh) * 0.621371\n        WHEN 'ms' THEN COALESCE(wind_gust_kmh, wind_speed_kmh) / 3.6\n        ELSE COALESCE(wind_gust_kmh, wind_speed_kmh)\n    END AS \"Gusts\"\nFROM merged_forecast\nWHERE wind_speed_kmh IS NOT NULL\nORDER BY valid_time",
           "refId": "A",
           "format": "time_series"
         }
@@ -510,12 +510,12 @@
       "id": 10,
       "type": "timeseries",
       "title": "Precipitation & Cloud Cover",
-      "description": "Chance of rain and cloud cover over next 48 hours",
+      "description": "Chance of rain and cloud cover over next 48 hours. Merges both sources.",
       "gridPos": {"x": 12, "y": 15, "w": 12, "h": 7},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Precipitation Probability and Cloud Cover (48 hours)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        precip_prob_pct,\n        sky_cover_pct,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n)\nSELECT\n    valid_time AS time,\n    COALESCE(precip_prob_pct, 0) AS \"Rain Chance %\",\n    COALESCE(sky_cover_pct, 0) AS \"Cloud Cover %\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "rawSql": "-- Precipitation Probability and Cloud Cover (48 hours) - Merged Sources\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(precip_prob_pct) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(precip_prob_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS precip_prob_pct,\n        -- Cloud cover only from gridpoints\n        MAX(sky_cover_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast') AS sky_cover_pct\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n    GROUP BY valid_time\n)\nSELECT\n    valid_time AS time,\n    COALESCE(precip_prob_pct, 0) AS \"Rain Chance %\",\n    sky_cover_pct AS \"Cloud Cover %\"\nFROM merged_forecast\nORDER BY valid_time",
           "refId": "A",
           "format": "time_series"
         }
@@ -560,7 +560,8 @@
             "properties": [
               {"id": "color", "value": {"mode": "fixed", "fixedColor": "dark-purple"}},
               {"id": "custom.fillOpacity", "value": 10},
-              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [5, 5]}}
+              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [5, 5]}},
+              {"id": "custom.connectNulls", "value": false}
             ]
           }
         ]
@@ -570,12 +571,12 @@
       "id": 11,
       "type": "timeseries",
       "title": "Humidity & Dewpoint Forecast",
-      "description": "Humidity and dewpoint trends for comfort assessment",
+      "description": "Humidity and dewpoint trends for comfort assessment. Merges both sources.",
       "gridPos": {"x": 0, "y": 22, "w": 12, "h": 7},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Humidity and Dewpoint Forecast (48 hours)\nWITH ranked_forecasts AS (\n    SELECT\n        valid_time,\n        humidity_pct,\n        dewpoint_c,\n        ROW_NUMBER() OVER (PARTITION BY valid_time ORDER BY issue_time DESC) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n)\nSELECT\n    valid_time AS time,\n    humidity_pct AS \"Humidity %\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (dewpoint_c * 9.0/5.0) + 32\n        ELSE dewpoint_c\n    END AS \"Dewpoint\"\nFROM ranked_forecasts\nWHERE rn = 1\nORDER BY valid_time",
+          "rawSql": "-- Humidity and Dewpoint Forecast (48 hours) - Merged Sources\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(humidity_pct) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(humidity_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS humidity_pct,\n        COALESCE(\n            MAX(dewpoint_c) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(dewpoint_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS dewpoint_c\n    FROM silver.weather_forecasts\n    WHERE valid_time >= NOW()\n      AND valid_time <= NOW() + INTERVAL '48 hours'\n    GROUP BY valid_time\n)\nSELECT\n    valid_time AS time,\n    humidity_pct AS \"Humidity %\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit' THEN (dewpoint_c * 9.0/5.0) + 32\n        ELSE dewpoint_c\n    END AS \"Dewpoint\"\nFROM merged_forecast\nWHERE humidity_pct IS NOT NULL OR dewpoint_c IS NOT NULL\nORDER BY valid_time",
           "refId": "A",
           "format": "time_series"
         }
@@ -689,12 +690,12 @@
       "id": 13,
       "type": "table",
       "title": "7-Day Forecast Summary",
-      "description": "Daily high/low temperatures, precipitation chance, and conditions for the next 7 days",
+      "description": "Daily summary merging both forecast sources for best coverage",
       "gridPos": {"x": 0, "y": 30, "w": 24, "h": 8},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- 7-Day Forecast Summary Table\n-- Aggregates hourly forecasts into daily summaries\nWITH daily_forecasts AS (\n    SELECT\n        DATE(valid_time AT TIME ZONE 'UTC') AS forecast_date,\n        temperature_c,\n        max_temperature_c,\n        min_temperature_c,\n        humidity_pct,\n        wind_speed_kmh,\n        wind_gust_kmh,\n        precip_prob_pct,\n        sky_cover_pct,\n        short_forecast,\n        ROW_NUMBER() OVER (\n            PARTITION BY DATE(valid_time AT TIME ZONE 'UTC'), date_trunc('hour', valid_time)\n            ORDER BY issue_time DESC\n        ) AS rn\n    FROM silver.weather_forecasts\n    WHERE valid_time >= DATE_TRUNC('day', NOW())\n      AND valid_time <= NOW() + INTERVAL '7 days'\n)\nSELECT\n    TO_CHAR(forecast_date, 'Dy, Mon DD') AS \"Day\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN ROUND(MAX(COALESCE(max_temperature_c, temperature_c)) * 9.0/5.0 + 32)::TEXT || ' F'\n        ELSE ROUND(MAX(COALESCE(max_temperature_c, temperature_c)))::TEXT || ' C'\n    END AS \"High\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN ROUND(MIN(COALESCE(min_temperature_c, temperature_c)) * 9.0/5.0 + 32)::TEXT || ' F'\n        ELSE ROUND(MIN(COALESCE(min_temperature_c, temperature_c)))::TEXT || ' C'\n    END AS \"Low\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(AVG(wind_speed_kmh) * 0.621371)::TEXT || ' mph'\n        WHEN 'ms' THEN ROUND(AVG(wind_speed_kmh) / 3.6, 1)::TEXT || ' m/s'\n        ELSE ROUND(AVG(wind_speed_kmh))::TEXT || ' km/h'\n    END AS \"Wind\",\n    ROUND(AVG(humidity_pct))::TEXT || '%' AS \"Humidity\",\n    ROUND(MAX(precip_prob_pct))::TEXT || '%' AS \"Rain Chance\",\n    CASE\n        WHEN AVG(sky_cover_pct) <= 25 THEN 'Sunny'\n        WHEN AVG(sky_cover_pct) <= 50 THEN 'Partly Cloudy'\n        WHEN AVG(sky_cover_pct) <= 75 THEN 'Mostly Cloudy'\n        ELSE 'Cloudy'\n    END AS \"Sky\",\n    -- Get a representative short forecast (mode from midday hours)\n    MODE() WITHIN GROUP (ORDER BY short_forecast) AS \"Forecast\"\nFROM daily_forecasts\nWHERE rn = 1\nGROUP BY forecast_date\nORDER BY forecast_date\nLIMIT 7",
+          "rawSql": "-- 7-Day Forecast Summary - Merged Sources\n-- Aggregates hourly forecasts into daily summaries, preferring hourly source\nWITH merged_forecast AS (\n    SELECT\n        valid_time,\n        COALESCE(\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS temperature_c,\n        COALESCE(\n            MAX(max_temperature_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast'),\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-forecast-hourly')\n        ) AS max_temperature_c,\n        COALESCE(\n            MAX(min_temperature_c) FILTER (WHERE source_stream = 'nws-gridpoints-forecast'),\n            MAX(temperature_c) FILTER (WHERE source_stream = 'nws-forecast-hourly')\n        ) AS min_temperature_c,\n        COALESCE(\n            MAX(humidity_pct) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(humidity_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS humidity_pct,\n        COALESCE(\n            MAX(wind_speed_kmh) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(wind_speed_kmh) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS wind_speed_kmh,\n        COALESCE(\n            MAX(precip_prob_pct) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(precip_prob_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS precip_prob_pct,\n        MAX(sky_cover_pct) FILTER (WHERE source_stream = 'nws-gridpoints-forecast') AS sky_cover_pct,\n        COALESCE(\n            MAX(short_forecast) FILTER (WHERE source_stream = 'nws-forecast-hourly'),\n            MAX(short_forecast) FILTER (WHERE source_stream = 'nws-gridpoints-forecast')\n        ) AS short_forecast\n    FROM silver.weather_forecasts\n    WHERE valid_time >= DATE_TRUNC('day', NOW())\n      AND valid_time <= NOW() + INTERVAL '7 days'\n    GROUP BY valid_time\n),\ndaily_forecasts AS (\n    SELECT\n        DATE(valid_time AT TIME ZONE 'UTC') AS forecast_date,\n        temperature_c,\n        max_temperature_c,\n        min_temperature_c,\n        humidity_pct,\n        wind_speed_kmh,\n        precip_prob_pct,\n        sky_cover_pct,\n        short_forecast\n    FROM merged_forecast\n)\nSELECT\n    TO_CHAR(forecast_date, 'Dy, Mon DD') AS \"Day\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN ROUND(MAX(COALESCE(max_temperature_c, temperature_c)) * 9.0/5.0 + 32)::TEXT || ' F'\n        ELSE ROUND(MAX(COALESCE(max_temperature_c, temperature_c)))::TEXT || ' C'\n    END AS \"High\",\n    CASE\n        WHEN '${temp_unit}' = 'Fahrenheit'\n        THEN ROUND(MIN(COALESCE(min_temperature_c, temperature_c)) * 9.0/5.0 + 32)::TEXT || ' F'\n        ELSE ROUND(MIN(COALESCE(min_temperature_c, temperature_c)))::TEXT || ' C'\n    END AS \"Low\",\n    CASE '${wind_unit}'\n        WHEN 'mph' THEN ROUND(AVG(wind_speed_kmh) * 0.621371)::TEXT || ' mph'\n        WHEN 'ms' THEN ROUND(AVG(wind_speed_kmh) / 3.6, 1)::TEXT || ' m/s'\n        ELSE ROUND(AVG(wind_speed_kmh))::TEXT || ' km/h'\n    END AS \"Wind\",\n    ROUND(AVG(humidity_pct))::TEXT || '%' AS \"Humidity\",\n    ROUND(MAX(precip_prob_pct))::TEXT || '%' AS \"Rain Chance\",\n    CASE\n        WHEN AVG(sky_cover_pct) IS NOT NULL THEN\n            CASE\n                WHEN AVG(sky_cover_pct) <= 25 THEN 'Sunny'\n                WHEN AVG(sky_cover_pct) <= 50 THEN 'Partly Cloudy'\n                WHEN AVG(sky_cover_pct) <= 75 THEN 'Mostly Cloudy'\n                ELSE 'Cloudy'\n            END\n        ELSE 'N/A'\n    END AS \"Sky\",\n    MODE() WITHIN GROUP (ORDER BY short_forecast) AS \"Forecast\"\nFROM daily_forecasts\nWHERE temperature_c IS NOT NULL\nGROUP BY forecast_date\nORDER BY forecast_date\nLIMIT 7",
           "refId": "A",
           "format": "table"
         }
