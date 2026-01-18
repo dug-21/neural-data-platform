@@ -312,54 +312,23 @@ async fn initialize_multi_stream_coordinator(
     // Create source manager (EventBus will be set during coordinator.start())
     let source_manager = Arc::new(RwLock::new(SourceManager::new(registry.clone())));
 
-    // Create coordinator
+    // Create coordinator (but don't start yet - subscribers must be ready first)
     let coordinator = Arc::new(IngestionCoordinator::new(
         router,
         source_manager,
         1000, // buffer size
     ));
 
-    // Start coordinator
-    coordinator
-        .start()
-        .await
-        .map_err(|e| format!("Failed to start coordinator: {}", e))?;
-
-    tracing::info!("Multi-stream coordinator started successfully");
-
-    // Create monitoring task
-    let coord_clone = coordinator.clone();
-    let monitor_task = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
-        loop {
-            interval.tick().await;
-            if coord_clone.is_running().await {
-                let health = coord_clone.get_source_health().await;
-                tracing::debug!("Coordinator health: {} sources active", health.len());
-            } else {
-                tracing::warn!("Coordinator stopped unexpectedly");
-                break;
-            }
-        }
-    });
-
     // ==========================================================================
-    // DP-012: EventBus Subscriber Infrastructure
+    // DP-012: CRITICAL - Register and start subscribers BEFORE sources
     // ==========================================================================
-    // Create SubscriberCoordinator with EventBus from IngestionCoordinator.
-    // This is ADDITIVE - the existing mpsc-based RawStorageWriter continues to work.
-    // The EventBus broadcasts events to subscribers for parallel processing.
-    //
-    // NOTE: BronzeSubscriber is currently disabled because sources do not yet
-    // publish to EventBus. Phase 2 will add EventBus publishing to SourceManager.
-    // For now, we just set up the infrastructure.
+    // tokio::broadcast drops messages when there are no subscribers.
+    // We MUST start subscribers before starting sources to avoid data loss.
 
     let event_bus = coordinator.event_bus();
     let mut subscriber_coordinator = SubscriberCoordinator::new(event_bus);
 
-    // Create BronzeSubscriber with default config
-    // This subscriber will write to the same ParquetStore as RawStorageWriter
-    // once sources publish to EventBus.
+    // Create and register BronzeSubscriber
     let bronze_config = BronzeSubscriberConfig {
         batch_size: 50,
         flush_interval_secs: 30,
@@ -368,7 +337,6 @@ async fn initialize_multi_stream_coordinator(
     };
     let bronze_subscriber = BronzeSubscriber::new("bronze-parquet", bronze_config, store.clone());
 
-    // Register subscriber with coordinator
     if let Err(e) = subscriber_coordinator.register(Box::new(bronze_subscriber)) {
         tracing::warn!("Failed to register BronzeSubscriber: {}", e);
     } else {
@@ -391,18 +359,39 @@ async fn initialize_multi_stream_coordinator(
         }
     }
 
-    // TODO: EventNotifier and ThresholdProcessor require MQTT output implementation
-    // They are disabled by default via EVENT_NOTIFIER_ENABLED=false
-
-    // Start subscriber coordinator (spawns subscriber tasks)
+    // Start subscriber coordinator BEFORE sources (spawns subscriber tasks)
     if let Err(e) = subscriber_coordinator.start_all().await {
         tracing::warn!("Failed to start SubscriberCoordinator: {}", e);
     } else {
         tracing::info!(
-            "SubscriberCoordinator started with {} subscribers",
+            "SubscriberCoordinator started with {} subscribers - ready to receive events",
             subscriber_coordinator.subscriber_count()
         );
     }
+
+    // NOW start coordinator (sources will publish to EventBus with subscribers ready)
+    coordinator
+        .start()
+        .await
+        .map_err(|e| format!("Failed to start coordinator: {}", e))?;
+
+    tracing::info!("Multi-stream coordinator started successfully");
+
+    // Create monitoring task
+    let coord_clone = coordinator.clone();
+    let monitor_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if coord_clone.is_running().await {
+                let health = coord_clone.get_source_health().await;
+                tracing::debug!("Coordinator health: {} sources active", health.len());
+            } else {
+                tracing::warn!("Coordinator stopped unexpectedly");
+                break;
+            }
+        }
+    });
 
     // Create subscriber monitoring task
     let subscriber_task = tokio::spawn(async move {
