@@ -84,9 +84,7 @@ impl TimescaleEtlRunStore {
     }
 
     /// Get a connection from the pool.
-    async fn get_conn(
-        &self,
-    ) -> McpResult<PooledConnection<'_, PostgresConnectionManager<NoTls>>> {
+    async fn get_conn(&self) -> McpResult<PooledConnection<'_, PostgresConnectionManager<NoTls>>> {
         self.pool
             .get()
             .await
@@ -308,7 +306,9 @@ impl EtlRunStore for TimescaleEtlRunStore {
             let id: uuid::Uuid = row.get("id");
             let started_at: DateTime<Utc> = row.get("started_at");
             let status: String = row.get("status");
-            let run_mode: String = row.get::<_, Option<String>>("run_mode").unwrap_or_else(|| "daemon".to_string());
+            let run_mode: String = row
+                .get::<_, Option<String>>("run_mode")
+                .unwrap_or_else(|| "daemon".to_string());
 
             let mut detail = EtlRunDetail::new(id.to_string(), started_at, &status, &run_mode);
 
@@ -405,10 +405,9 @@ impl EtlRunStore for TimescaleEtlRunStore {
                 ORDER BY stream_id, started_at DESC
             "#;
 
-            let bronze_rows = conn
-                .query(bronze_query, &[])
-                .await
-                .map_err(|e| McpError::StorageError(format!("Bronze freshness query failed: {}", e)))?;
+            let bronze_rows = conn.query(bronze_query, &[]).await.map_err(|e| {
+                McpError::StorageError(format!("Bronze freshness query failed: {}", e))
+            })?;
 
             for row in bronze_rows {
                 let stream_id: String = row.get("stream_id");
@@ -513,12 +512,16 @@ impl EtlRunStore for TimescaleEtlRunStore {
                 }
                 Err(e) => {
                     // Silver tables might not exist yet - warn but don't fail
-                    warn!("Silver freshness query failed (tables may not exist): {}", e);
+                    warn!(
+                        "Silver freshness query failed (tables may not exist): {}",
+                        e
+                    );
                 }
             }
         }
 
-        let summary = FreshnessSummary::new(bronze_count, silver_count, stale_count, critical_count);
+        let summary =
+            FreshnessSummary::new(bronze_count, silver_count, stale_count, critical_count);
 
         debug!(
             bronze = bronze_count,
@@ -689,10 +692,7 @@ mod tests {
                 let started = Utc.with_ymd_and_hms(2026, 1, 17, 5, 0, 0).unwrap();
                 Ok(EtlHistoryResult::new(stream_id)
                     .with_runs(vec![EtlRunDetail::new(
-                        "run-003",
-                        started,
-                        "failed",
-                        "daemon",
+                        "run-003", started, "failed", "daemon",
                     )
                     .with_error("Connection timeout", None)])
                     .with_summary(HistorySummary::new(1, 1)))
@@ -822,8 +822,14 @@ mod tests {
 
     #[test]
     fn test_freshness_status_critical() {
-        assert_eq!(TimescaleEtlRunStore::freshness_status(Some(1800)), "critical");
-        assert_eq!(TimescaleEtlRunStore::freshness_status(Some(3600)), "critical");
+        assert_eq!(
+            TimescaleEtlRunStore::freshness_status(Some(1800)),
+            "critical"
+        );
+        assert_eq!(
+            TimescaleEtlRunStore::freshness_status(Some(3600)),
+            "critical"
+        );
     }
 
     #[test]
@@ -888,10 +894,7 @@ mod tests {
                 let started = Utc::now();
                 Ok(EtlHistoryResult::new(stream_id)
                     .with_runs(vec![EtlRunDetail::new(
-                        "run-fail",
-                        started,
-                        "failed",
-                        "daemon",
+                        "run-fail", started, "failed", "daemon",
                     )
                     .with_error("Connection refused", None)])
                     .with_summary(HistorySummary::new(1, 4)))
@@ -935,9 +938,11 @@ mod tests {
     async fn test_get_status_handles_storage_error() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_status()
-            .times(1)
-            .returning(|_| Err(McpError::StorageError("Database connection failed".to_string())));
+        mock.expect_get_status().times(1).returning(|_| {
+            Err(McpError::StorageError(
+                "Database connection failed".to_string(),
+            ))
+        });
 
         let result = mock.get_status(None).await;
         assert!(result.is_err());
@@ -961,9 +966,11 @@ mod tests {
     async fn test_get_freshness_handles_storage_error() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_freshness()
-            .times(1)
-            .returning(|_| Err(McpError::StorageError("Connection pool exhausted".to_string())));
+        mock.expect_get_freshness().times(1).returning(|_| {
+            Err(McpError::StorageError(
+                "Connection pool exhausted".to_string(),
+            ))
+        });
 
         let result = mock.get_freshness(None).await;
         assert!(result.is_err());

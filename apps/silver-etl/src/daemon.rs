@@ -668,7 +668,8 @@ mod tests {
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
         let config = DaemonConfig::default();
-        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+        let daemon =
+            DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
 
         // Act
         let stats = daemon.run_cycle().unwrap();
@@ -708,7 +709,8 @@ mod tests {
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
         let config = DaemonConfig::default();
-        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+        let daemon =
+            DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
 
         // Act
         let stats = daemon.run_cycle().unwrap();
@@ -742,13 +744,17 @@ mod tests {
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
         let config = DaemonConfig::default();
-        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+        let daemon =
+            DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
 
         // Act
         let result = daemon.run_cycle();
 
         // Assert: ETL cycle succeeds despite persistence failure
-        assert!(result.is_ok(), "Cycle should succeed when persistence fails");
+        assert!(
+            result.is_ok(),
+            "Cycle should succeed when persistence fails"
+        );
         let stats = result.unwrap();
         assert_eq!(stats.streams_succeeded, 1);
         assert_eq!(stats.total_rows_processed, 100);
@@ -779,7 +785,8 @@ mod tests {
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
         let config = DaemonConfig::default();
-        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+        let daemon =
+            DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
 
         // Act
         let result = daemon.run_cycle();
@@ -824,7 +831,8 @@ mod tests {
 
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
         let config = DaemonConfig::default();
-        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+        let daemon =
+            DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
 
         // Act
         daemon.run_cycle().unwrap();
@@ -832,7 +840,10 @@ mod tests {
         // Assert: Both streams share the same cycle_id
         let cycle_ids = captured_cycle_ids.lock().unwrap();
         assert_eq!(cycle_ids.len(), 2);
-        assert_eq!(cycle_ids[0], cycle_ids[1], "All streams in cycle should share the same cycle_id");
+        assert_eq!(
+            cycle_ids[0], cycle_ids[1],
+            "All streams in cycle should share the same cycle_id"
+        );
     }
 
     #[test]
@@ -865,7 +876,8 @@ mod tests {
             run_mode: EtlRunMode::Manual,
             ..Default::default()
         };
-        let daemon = DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
+        let daemon =
+            DaemonRunner::with_persistence(mock_executor, config, shutdown_rx, mock_persistence);
 
         // Act & Assert (mock expectations verify behavior)
         daemon.run_cycle().unwrap();

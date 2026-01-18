@@ -486,10 +486,7 @@ mod tests {
 
         mock.expect_get_history()
             .withf(move |stream, limit, since_opt, status| {
-                stream == "air-quality"
-                    && *limit == 10
-                    && since_opt.is_some()
-                    && status.is_none()
+                stream == "air-quality" && *limit == 10 && since_opt.is_some() && status.is_none()
             })
             .times(1)
             .returning(|stream_id, _, _, _| {

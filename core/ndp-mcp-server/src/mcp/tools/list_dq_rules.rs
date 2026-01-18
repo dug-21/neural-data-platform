@@ -165,7 +165,9 @@ where
     };
 
     // Get DQ rules from dictionary
-    let rules = dictionary.list_dq_rules(table.clone(), column.clone()).await?;
+    let rules = dictionary
+        .list_dq_rules(table.clone(), column.clone())
+        .await?;
 
     // Build response with correct scope mapping
     let rule_results: Vec<DqRuleResult> = rules
@@ -224,13 +226,8 @@ mod tests {
                         .with_rule_params(json!({"min": 0, "max": 500})),
                     DqRuleInfo::new("air_quality_readings", "not_null", "reject", "column")
                         .with_silver_column("timestamp"),
-                    DqRuleInfo::new(
-                        "outdoor_weather_readings",
-                        "range_check",
-                        "flag",
-                        "column",
-                    )
-                    .with_silver_column("temperature"),
+                    DqRuleInfo::new("outdoor_weather_readings", "range_check", "flag", "column")
+                        .with_silver_column("temperature"),
                 ])
             });
 
@@ -318,10 +315,7 @@ mod tests {
         assert_eq!(response.table, Some("air_quality_readings".to_string()));
         assert_eq!(response.column, Some("pm25".to_string()));
         assert_eq!(response.rule_count, 1);
-        assert_eq!(
-            response.rules[0].silver_column,
-            Some("pm25".to_string())
-        );
+        assert_eq!(response.rules[0].silver_column, Some("pm25".to_string()));
     }
 
     #[tokio::test]
@@ -473,22 +467,20 @@ mod tests {
     async fn test_list_dq_rules_rule_params_preserved() {
         let mut mock = MockDictionaryStore::new();
 
-        mock.expect_list_dq_rules()
-            .times(1)
-            .returning(|_, _| {
-                Ok(vec![DqRuleInfo::new(
-                    "air_quality_readings",
-                    "range_check",
-                    "flag",
-                    "column",
-                )
-                .with_silver_column("pm25")
-                .with_rule_params(json!({
-                    "min": 0,
-                    "max": 500,
-                    "unit": "ug/m3"
-                }))])
-            });
+        mock.expect_list_dq_rules().times(1).returning(|_, _| {
+            Ok(vec![DqRuleInfo::new(
+                "air_quality_readings",
+                "range_check",
+                "flag",
+                "column",
+            )
+            .with_silver_column("pm25")
+            .with_rule_params(json!({
+                "min": 0,
+                "max": 500,
+                "unit": "ug/m3"
+            }))])
+        });
 
         let args = json!({});
 

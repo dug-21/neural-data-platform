@@ -2000,7 +2000,10 @@ mod tests {
 
         // Read the output and count fields - DON'T use trim() as it removes trailing tabs
         let content = fs::read_to_string("/tmp/pivot_full_18_output.csv").unwrap();
-        println!("Full 18-column CSV output (escaped):\n{}", content.escape_debug());
+        println!(
+            "Full 18-column CSV output (escaped):\n{}",
+            content.escape_debug()
+        );
 
         // Split by newline manually to preserve trailing tabs
         let lines: Vec<&str> = content.split('\n').collect();
@@ -2018,6 +2021,9 @@ mod tests {
             println!("  Field {}: '{}'", i, field.escape_debug());
         }
 
-        assert_eq!(field_count, 18, "CSV should have exactly 18 tab-separated fields");
+        assert_eq!(
+            field_count, 18,
+            "CSV should have exactly 18 tab-separated fields"
+        );
     }
 }

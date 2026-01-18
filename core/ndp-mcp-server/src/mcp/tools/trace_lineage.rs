@@ -238,12 +238,10 @@ mod tests {
             )
             .times(1)
             .returning(|_, _| {
-                Ok(LineageTrace::new(
-                    "air_quality_readings",
-                    "ingestion_time",
-                    "TIMESTAMPTZ",
+                Ok(
+                    LineageTrace::new("air_quality_readings", "ingestion_time", "TIMESTAMPTZ")
+                        .with_lineage(vec![]),
                 )
-                .with_lineage(vec![]))
             });
 
         let args = json!({

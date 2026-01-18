@@ -246,12 +246,15 @@ impl DuckDbRunPersistence {
 
         // Load postgres extension
         conn.execute_batch("INSTALL postgres; LOAD postgres;")
-            .map_err(|e| PersistenceError::Connection(format!("Failed to load postgres extension: {}", e)))?;
+            .map_err(|e| {
+                PersistenceError::Connection(format!("Failed to load postgres extension: {}", e))
+            })?;
 
         // Attach PostgreSQL database
         let attach_sql = format!("ATTACH '{}' AS pg (TYPE postgres)", pg_conn_str);
-        conn.execute_batch(&attach_sql)
-            .map_err(|e| PersistenceError::Connection(format!("Failed to attach PostgreSQL: {}", e)))?;
+        conn.execute_batch(&attach_sql).map_err(|e| {
+            PersistenceError::Connection(format!("Failed to attach PostgreSQL: {}", e))
+        })?;
 
         // Verify table exists
         match conn.execute("SELECT 1 FROM pg.silver.etl_runs LIMIT 1", []) {
@@ -259,7 +262,8 @@ impl DuckDbRunPersistence {
             Err(e) => {
                 if e.to_string().contains("does not exist") {
                     return Err(PersistenceError::Connection(
-                        "Table silver.etl_runs does not exist. Run migration 003_etl_runs.sql".to_string()
+                        "Table silver.etl_runs does not exist. Run migration 003_etl_runs.sql"
+                            .to_string(),
                     ));
                 }
                 // Table might be empty, that's OK
@@ -285,7 +289,8 @@ impl DuckDbRunPersistence {
             Err(e) => {
                 if e.to_string().contains("does not exist") {
                     return Err(PersistenceError::Connection(
-                        "Table silver.etl_runs does not exist or PostgreSQL not attached".to_string()
+                        "Table silver.etl_runs does not exist or PostgreSQL not attached"
+                            .to_string(),
                     ));
                 }
                 // Table might be empty, that's OK
@@ -736,9 +741,7 @@ mod tests {
             .returning(|_, _| Ok(()));
 
         // Execute in order
-        let id = mock
-            .start_run("test", EtlRunMode::Manual, None)
-            .unwrap();
+        let id = mock.start_run("test", EtlRunMode::Manual, None).unwrap();
         assert_eq!(id, run_id);
 
         let stats = make_test_stats("test", 50);
@@ -793,8 +796,7 @@ mod tests {
         assert!(json.contains("success"));
         assert!(json.contains("daemon"));
 
-        let deserialized: EtlRunRecord =
-            serde_json::from_str(&json).expect("Should deserialize");
+        let deserialized: EtlRunRecord = serde_json::from_str(&json).expect("Should deserialize");
         assert_eq!(deserialized.stream_id, "air-quality");
         assert_eq!(deserialized.status, EtlRunStatus::Success);
     }

@@ -152,7 +152,9 @@ impl DictionaryStore for TimescaleDictionaryStore {
     #[instrument(skip(self), fields(query, layer))]
     async fn search(&self, query: &str, layer: Option<String>) -> McpResult<Vec<DictionaryEntry>> {
         if query.is_empty() {
-            return Err(McpError::InvalidRequest("query cannot be empty".to_string()));
+            return Err(McpError::InvalidRequest(
+                "query cannot be empty".to_string(),
+            ));
         }
 
         let conn = self.get_conn().await?;
@@ -422,10 +424,11 @@ impl DictionaryStore for TimescaleDictionaryStore {
         );
 
         // Build query based on filters
-        let (query, params): (&str, Vec<&(dyn tokio_postgres::types::ToSql + Sync)>) =
-            match (&table, &column) {
-                (None, None) => (
-                    r#"
+        let (query, params): (&str, Vec<&(dyn tokio_postgres::types::ToSql + Sync)>) = match (
+            &table, &column,
+        ) {
+            (None, None) => (
+                r#"
                     SELECT
                         silver_table,
                         silver_column,
@@ -440,10 +443,10 @@ impl DictionaryStore for TimescaleDictionaryStore {
                              rule_name
                     LIMIT 100
                     "#,
-                    vec![],
-                ),
-                (Some(t), None) => (
-                    r#"
+                vec![],
+            ),
+            (Some(t), None) => (
+                r#"
                     SELECT
                         silver_table,
                         silver_column,
@@ -458,10 +461,10 @@ impl DictionaryStore for TimescaleDictionaryStore {
                              rule_name
                     LIMIT 100
                     "#,
-                    vec![t],
-                ),
-                (Some(t), Some(c)) => (
-                    r#"
+                vec![t],
+            ),
+            (Some(t), Some(c)) => (
+                r#"
                     SELECT
                         silver_table,
                         silver_column,
@@ -475,10 +478,10 @@ impl DictionaryStore for TimescaleDictionaryStore {
                     ORDER BY rule_name
                     LIMIT 100
                     "#,
-                    vec![t, c],
-                ),
-                (None, Some(_)) => unreachable!(), // Already handled above
-            };
+                vec![t, c],
+            ),
+            (None, Some(_)) => unreachable!(), // Already handled above
+        };
 
         let rows = conn
             .query(query, &params)
@@ -569,7 +572,9 @@ impl TimescaleDictionaryStore {
 
         // Add source info if lineage exists
         if let Some(stream) = row.get::<_, Option<String>>("source_stream") {
-            let path = row.get::<_, Option<String>>("source_path").unwrap_or_default();
+            let path = row
+                .get::<_, Option<String>>("source_path")
+                .unwrap_or_default();
             let mut source = SourceInfo::new(stream, path);
             if let Some(transformation) = row.get::<_, Option<String>>("transformation") {
                 source = source.with_transformation(transformation);
@@ -767,9 +772,7 @@ mod tests {
     async fn test_search_returns_empty_for_no_matches() {
         let mut mock = MockDictionaryStore::new();
 
-        mock.expect_search()
-            .times(1)
-            .returning(|_, _| Ok(vec![]));
+        mock.expect_search().times(1).returning(|_, _| Ok(vec![]));
 
         let results = mock.search("nonexistent", None).await.unwrap();
 
@@ -784,7 +787,9 @@ mod tests {
             .withf(|query, _| query.is_empty())
             .times(1)
             .returning(|_, _| {
-                Err(McpError::InvalidRequest("query cannot be empty".to_string()))
+                Err(McpError::InvalidRequest(
+                    "query cannot be empty".to_string(),
+                ))
             });
 
         let result = mock.search("", None).await;
@@ -803,19 +808,28 @@ mod tests {
             .withf(|table, col| table == "air_quality_observations" && col == "pm25")
             .times(1)
             .returning(|_, _| {
-                Ok(
-                    ColumnDescription::new("silver", "air_quality_observations", "pm25", "DOUBLE PRECISION")
-                        .with_unit("ug/m3")
-                        .with_description("PM2.5 particulate matter concentration (humidity-compensated)")
-                        .with_nullable(false)
-                        .with_source(SourceInfo::new("air-quality", "raw_payload.pm02Compensated").with_transformation("direct"))
-                        .with_dq_rules(vec![
-                            DqRuleInfo::new("air_quality_observations", "range_check", "flag", "column")
-                                .with_silver_column("pm25")
-                                .with_rule_params(json!({"min": 0.0, "max": 1000.0}))
-                        ])
-                        .with_validation_range(ValidationRange::bounded(0.0, 1000.0))
+                Ok(ColumnDescription::new(
+                    "silver",
+                    "air_quality_observations",
+                    "pm25",
+                    "DOUBLE PRECISION",
                 )
+                .with_unit("ug/m3")
+                .with_description("PM2.5 particulate matter concentration (humidity-compensated)")
+                .with_nullable(false)
+                .with_source(
+                    SourceInfo::new("air-quality", "raw_payload.pm02Compensated")
+                        .with_transformation("direct"),
+                )
+                .with_dq_rules(vec![DqRuleInfo::new(
+                    "air_quality_observations",
+                    "range_check",
+                    "flag",
+                    "column",
+                )
+                .with_silver_column("pm25")
+                .with_rule_params(json!({"min": 0.0, "max": 1000.0}))])
+                .with_validation_range(ValidationRange::bounded(0.0, 1000.0)))
             });
 
         let result = mock
@@ -839,11 +853,13 @@ mod tests {
             .withf(|table, col| table == "air-quality" && col == "temperature")
             .times(1)
             .returning(|_, _| {
-                Ok(ColumnDescription::new("bronze", "air-quality", "temperature", "float")
-                    .with_unit("celsius")
-                    .with_description("Ambient temperature")
-                    .with_nullable(true)
-                    .with_validation_range(ValidationRange::bounded(-40.0, 85.0)))
+                Ok(
+                    ColumnDescription::new("bronze", "air-quality", "temperature", "float")
+                        .with_unit("celsius")
+                        .with_description("Ambient temperature")
+                        .with_nullable(true)
+                        .with_validation_range(ValidationRange::bounded(-40.0, 85.0)),
+                )
             });
 
         let result = mock
@@ -869,7 +885,9 @@ mod tests {
                 )))
             });
 
-        let result = mock.describe_column("nonexistent_table", "any_column").await;
+        let result = mock
+            .describe_column("nonexistent_table", "any_column")
+            .await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), McpError::StreamNotFound(_)));
@@ -975,18 +993,14 @@ mod tests {
     async fn test_trace_lineage_table_not_found() {
         let mut mock = MockDictionaryStore::new();
 
-        mock.expect_trace_lineage()
-            .times(1)
-            .returning(|table, _| {
-                Err(McpError::StreamNotFound(format!(
-                    "Silver table '{}' not found",
-                    table
-                )))
-            });
+        mock.expect_trace_lineage().times(1).returning(|table, _| {
+            Err(McpError::StreamNotFound(format!(
+                "Silver table '{}' not found",
+                table
+            )))
+        });
 
-        let result = mock
-            .trace_lineage("nonexistent_table", "column")
-            .await;
+        let result = mock.trace_lineage("nonexistent_table", "column").await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), McpError::StreamNotFound(_)));
@@ -1120,9 +1134,7 @@ mod tests {
                 ))
             });
 
-        let result = mock
-            .list_dq_rules(None, Some("pm25".to_string()))
-            .await;
+        let result = mock.list_dq_rules(None, Some("pm25".to_string())).await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), McpError::InvalidRequest(_)));
@@ -1132,24 +1144,22 @@ mod tests {
     async fn test_list_dq_rules_includes_cross_field() {
         let mut mock = MockDictionaryStore::new();
 
-        mock.expect_list_dq_rules()
-            .times(1)
-            .returning(|_, _| {
-                Ok(vec![
-                    DqRuleInfo::new("air_quality_observations", "range_check", "flag", "column")
-                        .with_silver_column("pm25"),
-                    DqRuleInfo::new(
-                        "air_quality_observations",
-                        "pm10_gte_pm25",
-                        "flag",
-                        "cross-field",
-                    )
-                    .with_rule_params(json!({
-                        "expression": "pm10 IS NULL OR pm25 IS NULL OR pm10 >= pm25",
-                        "message": "pm10_less_than_pm25"
-                    })),
-                ])
-            });
+        mock.expect_list_dq_rules().times(1).returning(|_, _| {
+            Ok(vec![
+                DqRuleInfo::new("air_quality_observations", "range_check", "flag", "column")
+                    .with_silver_column("pm25"),
+                DqRuleInfo::new(
+                    "air_quality_observations",
+                    "pm10_gte_pm25",
+                    "flag",
+                    "cross-field",
+                )
+                .with_rule_params(json!({
+                    "expression": "pm10 IS NULL OR pm25 IS NULL OR pm10 >= pm25",
+                    "message": "pm10_less_than_pm25"
+                })),
+            ])
+        });
 
         let rules = mock
             .list_dq_rules(Some("air_quality_observations".to_string()), None)
@@ -1207,12 +1217,10 @@ mod tests {
             .times(1)
             .in_sequence(&mut seq)
             .returning(|_, _| {
-                Ok(LineageTrace::new(
-                    "air_quality_observations",
-                    "pm25",
-                    "DOUBLE PRECISION",
+                Ok(
+                    LineageTrace::new("air_quality_observations", "pm25", "DOUBLE PRECISION")
+                        .with_lineage(vec![LineageSource::new("air-quality", "raw_payload.pm25")]),
                 )
-                .with_lineage(vec![LineageSource::new("air-quality", "raw_payload.pm25")]))
             });
 
         // Execute workflow
@@ -1238,11 +1246,11 @@ mod tests {
     async fn test_search_propagates_storage_error() {
         let mut mock = MockDictionaryStore::new();
 
-        mock.expect_search()
-            .times(1)
-            .returning(|_, _| {
-                Err(McpError::StorageError("Database connection failed".to_string()))
-            });
+        mock.expect_search().times(1).returning(|_, _| {
+            Err(McpError::StorageError(
+                "Database connection failed".to_string(),
+            ))
+        });
 
         let result = mock.search("test", None).await;
 
@@ -1256,9 +1264,7 @@ mod tests {
 
         mock.expect_describe_column()
             .times(1)
-            .returning(|_, _| {
-                Err(McpError::StorageError("Query timeout".to_string()))
-            });
+            .returning(|_, _| Err(McpError::StorageError("Query timeout".to_string())));
 
         let result = mock.describe_column("table", "column").await;
 
@@ -1270,11 +1276,11 @@ mod tests {
     async fn test_trace_lineage_propagates_storage_error() {
         let mut mock = MockDictionaryStore::new();
 
-        mock.expect_trace_lineage()
-            .times(1)
-            .returning(|_, _| {
-                Err(McpError::StorageError("Connection pool exhausted".to_string()))
-            });
+        mock.expect_trace_lineage().times(1).returning(|_, _| {
+            Err(McpError::StorageError(
+                "Connection pool exhausted".to_string(),
+            ))
+        });
 
         let result = mock.trace_lineage("table", "column").await;
 
@@ -1288,9 +1294,7 @@ mod tests {
 
         mock.expect_list_dq_rules()
             .times(1)
-            .returning(|_, _| {
-                Err(McpError::StorageError("Database unavailable".to_string()))
-            });
+            .returning(|_, _| Err(McpError::StorageError("Database unavailable".to_string())));
 
         let result = mock.list_dq_rules(None, None).await;
 

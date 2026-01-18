@@ -107,7 +107,10 @@ fn flush_batch(conn: &Connection, batch: &[BatchRow]) -> Result<usize, PreTransf
     }
 
     // Build multi-row INSERT: INSERT INTO t VALUES (?,?,?,?,?,?), (?,?,?,?,?,?), ...
-    let placeholders: Vec<String> = batch.iter().map(|_| "(?, ?, ?, ?, ?, ?)".to_string()).collect();
+    let placeholders: Vec<String> = batch
+        .iter()
+        .map(|_| "(?, ?, ?, ?, ?, ?)".to_string())
+        .collect();
     let sql = format!(
         "INSERT INTO pre_transformed (issue_time, valid_time, ndp_id, location_id, metric_name, value) VALUES {}",
         placeholders.join(", ")
@@ -1091,7 +1094,10 @@ mod tests {
 
         let result = result.unwrap();
         // Should have exactly 1500 rows (spanning 2 batches: 1000 + 500)
-        assert_eq!(result.row_count, 1500, "Should insert all 1500 rows across batches");
+        assert_eq!(
+            result.row_count, 1500,
+            "Should insert all 1500 rows across batches"
+        );
 
         // Verify actual data in table
         let count = get_pre_transformed_count(&conn).unwrap();
@@ -1159,7 +1165,10 @@ mod tests {
         assert!(result.is_ok());
 
         let result = result.unwrap();
-        assert_eq!(result.row_count, 1000, "Should insert exactly BATCH_SIZE rows");
+        assert_eq!(
+            result.row_count, 1000,
+            "Should insert exactly BATCH_SIZE rows"
+        );
 
         let count = get_pre_transformed_count(&conn).unwrap();
         assert_eq!(count, 1000);

@@ -95,7 +95,10 @@ impl SchemaGenerator {
         // 3b. Add valid_timestamp if configured (used for forecasts with valid_time)
         if let Some(ref valid_ts) = config.valid_timestamp {
             let valid_ts_type = self.timestamp_type(&valid_ts.transform);
-            columns.push(format!("    {} {} NOT NULL", valid_ts.target_field, valid_ts_type));
+            columns.push(format!(
+                "    {} {} NOT NULL",
+                valid_ts.target_field, valid_ts_type
+            ));
         }
 
         // 4. Add mapped fields from field_mappings
@@ -484,10 +487,19 @@ mod tests {
         let sql = gen.generate_create_table(&config).unwrap();
 
         // Should have both timestamp columns
-        assert!(sql.contains("issue_time TIMESTAMPTZ NOT NULL"), "Missing issue_time column");
-        assert!(sql.contains("valid_time TIMESTAMPTZ NOT NULL"), "Missing valid_time column");
+        assert!(
+            sql.contains("issue_time TIMESTAMPTZ NOT NULL"),
+            "Missing issue_time column"
+        );
+        assert!(
+            sql.contains("valid_time TIMESTAMPTZ NOT NULL"),
+            "Missing valid_time column"
+        );
 
         // Primary key should include all three columns
-        assert!(sql.contains("PRIMARY KEY (issue_time, valid_time, ndp_id)"), "Wrong PRIMARY KEY");
+        assert!(
+            sql.contains("PRIMARY KEY (issue_time, valid_time, ndp_id)"),
+            "Wrong PRIMARY KEY"
+        );
     }
 }

@@ -38,9 +38,7 @@ use std::env;
 // Note: The actual TimescaleDB implementations will be added in BUG-001 Phase 1
 // These are currently unused because tests have placeholder implementations
 #[allow(unused_imports)]
-use ndp_mcp_server::storage::{
-    DictionaryStore, EtlRunStore, SampleFilters, SilverStorage,
-};
+use ndp_mcp_server::storage::{DictionaryStore, EtlRunStore, SampleFilters, SilverStorage};
 
 // Suppress warnings for unused test helper in placeholder tests
 #[allow(dead_code)]
@@ -52,7 +50,7 @@ use ndp_mcp_server::storage::{
 fn test_db_url() -> String {
     env::var("TEST_DATABASE_URL").expect(
         "TEST_DATABASE_URL environment variable must be set for integration tests.\n\
-         Example: export TEST_DATABASE_URL=\"postgresql://ndp:password@localhost:5432/ndp\""
+         Example: export TEST_DATABASE_URL=\"postgresql://ndp:password@localhost:5432/ndp\"",
     )
 }
 

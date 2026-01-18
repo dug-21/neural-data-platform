@@ -105,6 +105,29 @@ pub struct SilverEtlConfig {
     pub incremental: IncrementalConfig,
 }
 
+impl Default for SilverEtlConfig {
+    /// Create a default (disabled) Silver ETL config
+    ///
+    /// Note: This is primarily for test convenience. Production configs should
+    /// be explicitly configured via YAML.
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            target_table: "silver.default".to_string(),
+            target_schema: None,
+            timestamp: TimestampMapping::default(),
+            valid_timestamp: None,
+            pre_transform: None,
+            identity_fields: Vec::new(),
+            field_mappings: Vec::new(),
+            dq_rules: Vec::new(),
+            dq_output: DqOutputConfig::default(),
+            deduplication: DeduplicationConfig::default(),
+            incremental: IncrementalConfig::default(),
+        }
+    }
+}
+
 impl SilverEtlConfig {
     /// Validate configuration
     pub fn validate(&self) -> Result<(), SilverConfigError> {
@@ -152,6 +175,16 @@ pub struct TimestampMapping {
 
     /// Transform to apply to timestamp
     pub transform: TimestampTransform,
+}
+
+impl Default for TimestampMapping {
+    fn default() -> Self {
+        Self {
+            source_field: "timestamp".to_string(),
+            target_field: "observation_time".to_string(),
+            transform: TimestampTransform::MicrosecondsToTimestamp,
+        }
+    }
 }
 
 /// Timestamp transform types
@@ -1527,7 +1560,10 @@ expression: "EXTRACT(EPOCH FROM valid_time - issue_time) / 3600"
 "#;
         let transform: TransformConfig = serde_yaml::from_str(yaml).unwrap();
         match transform {
-            TransformConfig::Computed { depends_on, expression } => {
+            TransformConfig::Computed {
+                depends_on,
+                expression,
+            } => {
                 assert_eq!(depends_on.len(), 2);
                 assert!(expression.contains("EPOCH"));
             }

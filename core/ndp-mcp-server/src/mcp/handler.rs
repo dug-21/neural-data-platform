@@ -543,10 +543,7 @@ where
     }
 
     /// Execute describe_silver_table tool.
-    async fn execute_describe_silver_table(
-        &self,
-        args: Option<Value>,
-    ) -> McpResult<McpToolResult> {
+    async fn execute_describe_silver_table(&self, args: Option<Value>) -> McpResult<McpToolResult> {
         let parsed_args = tools::describe_silver_table::parse_args(args)?;
         tools::describe_silver_table::execute(self.silver_storage.as_ref(), parsed_args).await
     }
@@ -630,7 +627,9 @@ where
 mod tests {
     use super::*;
     use crate::etcd::MockConfigStore;
-    use crate::storage::{MockBronzeStorage, MockDictionaryStore, MockEtlRunStore, MockSilverStorage};
+    use crate::storage::{
+        MockBronzeStorage, MockDictionaryStore, MockEtlRunStore, MockSilverStorage,
+    };
 
     fn create_test_handler() -> McpHandler<
         MockBronzeStorage,

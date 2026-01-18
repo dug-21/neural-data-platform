@@ -253,9 +253,7 @@ mod tests {
     async fn test_sample_silver_data_empty_result() {
         let mut storage = MockSilverStorage::new();
 
-        storage
-            .expect_sample()
-            .returning(|_, _, _| Ok(vec![]));
+        storage.expect_sample().returning(|_, _, _| Ok(vec![]));
 
         let args = SampleSilverDataArgs {
             table_name: "empty_table".to_string(),

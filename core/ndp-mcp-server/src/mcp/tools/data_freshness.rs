@@ -336,14 +336,12 @@ mod tests {
     async fn test_data_freshness_empty_result() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_freshness()
-            .times(1)
-            .returning(|_| {
-                let now = Utc::now();
-                Ok(FreshnessReport::new(now)
-                    .with_freshness(vec![])
-                    .with_summary(FreshnessSummary::new(0, 0, 0, 0)))
-            });
+        mock.expect_get_freshness().times(1).returning(|_| {
+            let now = Utc::now();
+            Ok(FreshnessReport::new(now)
+                .with_freshness(vec![])
+                .with_summary(FreshnessSummary::new(0, 0, 0, 0)))
+        });
 
         let args = DataFreshnessArgs::default();
         let result = execute(&mock, args).await.unwrap();
@@ -359,9 +357,11 @@ mod tests {
     async fn test_data_freshness_propagates_storage_error() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_freshness()
-            .times(1)
-            .returning(|_| Err(McpError::StorageError("Database connection failed".to_string())));
+        mock.expect_get_freshness().times(1).returning(|_| {
+            Err(McpError::StorageError(
+                "Database connection failed".to_string(),
+            ))
+        });
 
         let args = DataFreshnessArgs::default();
         let result = execute(&mock, args).await;
@@ -374,16 +374,14 @@ mod tests {
     async fn test_data_freshness_detects_stale_data() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_freshness()
-            .times(1)
-            .returning(|_| {
-                let now = Utc::now();
-                let stale_timestamp = now - chrono::Duration::hours(2);
-                Ok(FreshnessReport::new(now)
-                    .with_freshness(vec![FreshnessEntry::new("bronze", "air-quality", "stale")
-                        .with_latest_timestamp(stale_timestamp, now)])
-                    .with_summary(FreshnessSummary::new(1, 0, 1, 0)))
-            });
+        mock.expect_get_freshness().times(1).returning(|_| {
+            let now = Utc::now();
+            let stale_timestamp = now - chrono::Duration::hours(2);
+            Ok(FreshnessReport::new(now)
+                .with_freshness(vec![FreshnessEntry::new("bronze", "air-quality", "stale")
+                    .with_latest_timestamp(stale_timestamp, now)])
+                .with_summary(FreshnessSummary::new(1, 0, 1, 0)))
+        });
 
         let args = DataFreshnessArgs::default();
         let result = execute(&mock, args).await.unwrap();
@@ -399,20 +397,18 @@ mod tests {
     async fn test_data_freshness_critical_entries() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_freshness()
-            .times(1)
-            .returning(|_| {
-                let now = Utc::now();
-                let critical_timestamp = now - chrono::Duration::hours(6);
-                Ok(FreshnessReport::new(now)
-                    .with_freshness(vec![FreshnessEntry::new(
-                        "silver",
-                        "outdoor_weather_readings",
-                        "critical",
-                    )
-                    .with_latest_timestamp(critical_timestamp, now)])
-                    .with_summary(FreshnessSummary::new(0, 1, 0, 1)))
-            });
+        mock.expect_get_freshness().times(1).returning(|_| {
+            let now = Utc::now();
+            let critical_timestamp = now - chrono::Duration::hours(6);
+            Ok(FreshnessReport::new(now)
+                .with_freshness(vec![FreshnessEntry::new(
+                    "silver",
+                    "outdoor_weather_readings",
+                    "critical",
+                )
+                .with_latest_timestamp(critical_timestamp, now)])
+                .with_summary(FreshnessSummary::new(0, 1, 0, 1)))
+        });
 
         let args = DataFreshnessArgs::default();
         let result = execute(&mock, args).await.unwrap();

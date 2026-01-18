@@ -105,7 +105,11 @@ impl SilverStorage for MockSilverStorage {
 
 #[async_trait::async_trait]
 impl DictionaryStore for MockDictionaryStore {
-    async fn search(&self, _query: &str, _layer: Option<String>) -> McpResult<Vec<DictionaryEntry>> {
+    async fn search(
+        &self,
+        _query: &str,
+        _layer: Option<String>,
+    ) -> McpResult<Vec<DictionaryEntry>> {
         Err(McpError::StorageError(
             "Dictionary not configured".to_string(),
         ))

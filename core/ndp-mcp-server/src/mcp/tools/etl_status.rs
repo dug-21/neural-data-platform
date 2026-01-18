@@ -270,9 +270,11 @@ mod tests {
     async fn test_etl_status_propagates_storage_error() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_status()
-            .times(1)
-            .returning(|_| Err(McpError::StorageError("Database connection failed".to_string())));
+        mock.expect_get_status().times(1).returning(|_| {
+            Err(McpError::StorageError(
+                "Database connection failed".to_string(),
+            ))
+        });
 
         let args = EtlStatusArgs::default();
         let result = execute(&mock, args).await;
@@ -285,19 +287,17 @@ mod tests {
     async fn test_etl_status_serializes_last_run_correctly() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_status()
-            .times(1)
-            .returning(|_| {
-                let started = Utc.with_ymd_and_hms(2026, 1, 17, 10, 0, 0).unwrap();
-                let completed = Utc.with_ymd_and_hms(2026, 1, 17, 10, 0, 5).unwrap();
-                Ok(vec![EtlStreamStatus::new("air-quality", "warning")
-                    .with_last_run(
-                        EtlRunInfo::new("run-123", started)
-                            .with_completed_at(completed)
-                            .with_row_counts(500, 10, 3),
-                    )
-                    .with_runs_last_24h(RunStats::new(24, 20, 4))])
-            });
+        mock.expect_get_status().times(1).returning(|_| {
+            let started = Utc.with_ymd_and_hms(2026, 1, 17, 10, 0, 0).unwrap();
+            let completed = Utc.with_ymd_and_hms(2026, 1, 17, 10, 0, 5).unwrap();
+            Ok(vec![EtlStreamStatus::new("air-quality", "warning")
+                .with_last_run(
+                    EtlRunInfo::new("run-123", started)
+                        .with_completed_at(completed)
+                        .with_row_counts(500, 10, 3),
+                )
+                .with_runs_last_24h(RunStats::new(24, 20, 4))])
+        });
 
         let args = EtlStatusArgs::default();
         let result = execute(&mock, args).await.unwrap();
@@ -317,12 +317,10 @@ mod tests {
     async fn test_etl_status_handles_no_last_run() {
         let mut mock = MockEtlRunStore::new();
 
-        mock.expect_get_status()
-            .times(1)
-            .returning(|_| {
-                Ok(vec![EtlStreamStatus::new("new-stream", "unknown")
-                    .with_runs_last_24h(RunStats::new(0, 0, 0))])
-            });
+        mock.expect_get_status().times(1).returning(|_| {
+            Ok(vec![EtlStreamStatus::new("new-stream", "unknown")
+                .with_runs_last_24h(RunStats::new(0, 0, 0))])
+        });
 
         let args = EtlStatusArgs::default();
         let result = execute(&mock, args).await.unwrap();

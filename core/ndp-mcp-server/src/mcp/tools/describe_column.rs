@@ -149,27 +149,25 @@ mod tests {
             )
             .times(1)
             .returning(|_, _| {
-                Ok(
-                    ColumnDescription::new(
-                        "silver",
-                        "air_quality_readings",
-                        "pm25",
-                        "DOUBLE PRECISION",
-                    )
-                    .with_unit("ug/m3")
-                    .with_description("PM2.5 particulate matter concentration")
-                    .with_nullable(true)
-                    .with_source(SourceInfo::new("air-quality", "$.pm25"))
-                    .with_dq_rules(vec![DqRuleInfo::new(
-                        "air_quality_readings",
-                        "range_check",
-                        "flag",
-                        "column",
-                    )
-                    .with_silver_column("pm25")
-                    .with_rule_params(json!({"min": 0, "max": 500}))])
-                    .with_validation_range(ValidationRange::bounded(0.0, 500.0)),
+                Ok(ColumnDescription::new(
+                    "silver",
+                    "air_quality_readings",
+                    "pm25",
+                    "DOUBLE PRECISION",
                 )
+                .with_unit("ug/m3")
+                .with_description("PM2.5 particulate matter concentration")
+                .with_nullable(true)
+                .with_source(SourceInfo::new("air-quality", "$.pm25"))
+                .with_dq_rules(vec![DqRuleInfo::new(
+                    "air_quality_readings",
+                    "range_check",
+                    "flag",
+                    "column",
+                )
+                .with_silver_column("pm25")
+                .with_rule_params(json!({"min": 0, "max": 500}))])
+                .with_validation_range(ValidationRange::bounded(0.0, 500.0)))
             });
 
         let args = json!({
@@ -203,14 +201,11 @@ mod tests {
             )
             .times(1)
             .returning(|_, _| {
-                Ok(ColumnDescription::new(
-                    "bronze",
-                    "air-quality",
-                    "temperature",
-                    "number",
+                Ok(
+                    ColumnDescription::new("bronze", "air-quality", "temperature", "number")
+                        .with_unit("celsius")
+                        .with_description("Temperature reading from sensor"),
                 )
-                .with_unit("celsius")
-                .with_description("Temperature reading from sensor"))
             });
 
         let args = json!({

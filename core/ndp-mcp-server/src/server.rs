@@ -335,9 +335,8 @@ impl
         let config_store = Arc::new(StreamRegistryAdapter::new(registry));
 
         // Create TimescaleDB adapters
-        let silver_storage = Arc::new(
-            TimescaleSilverStorage::with_config(timescale_url, pool_config).await?,
-        );
+        let silver_storage =
+            Arc::new(TimescaleSilverStorage::with_config(timescale_url, pool_config).await?);
         let dictionary_store = Arc::new(TimescaleDictionaryStore::new(timescale_url).await?);
         let etl_store = Arc::new(TimescaleEtlRunStore::new(timescale_url).await?);
 
@@ -468,7 +467,9 @@ mod tests {
     use super::*;
     use crate::etcd::MockConfigStore;
     use crate::mcp::JsonRpcResponse;
-    use crate::storage::{MockBronzeStorage, MockDictionaryStore, MockEtlRunStore, MockSilverStorage};
+    use crate::storage::{
+        MockBronzeStorage, MockDictionaryStore, MockEtlRunStore, MockSilverStorage,
+    };
 
     fn create_test_state() -> Arc<
         AppState<

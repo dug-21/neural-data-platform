@@ -198,7 +198,9 @@ pub fn parse_args(args: Option<serde_json::Value>) -> McpResult<DescribeSilverTa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{HypertableInfo, MockSilverStorage, SilverColumnInfo, SilverTableDescription};
+    use crate::storage::{
+        HypertableInfo, MockSilverStorage, SilverColumnInfo, SilverTableDescription,
+    };
 
     #[tokio::test]
     async fn test_describe_silver_table_success() {
@@ -321,10 +323,12 @@ mod tests {
         let mut storage = MockSilverStorage::new();
 
         storage.expect_describe_table().returning(|_| {
-            Ok(SilverTableDescription::new("regular_table").with_columns(vec![
-                SilverColumnInfo::new("id", "INTEGER"),
-                SilverColumnInfo::new("name", "TEXT"),
-            ]))
+            Ok(
+                SilverTableDescription::new("regular_table").with_columns(vec![
+                    SilverColumnInfo::new("id", "INTEGER"),
+                    SilverColumnInfo::new("name", "TEXT"),
+                ]),
+            )
         });
 
         let args = DescribeSilverTableArgs {

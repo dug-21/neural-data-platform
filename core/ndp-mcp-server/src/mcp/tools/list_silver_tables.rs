@@ -180,9 +180,11 @@ mod tests {
     async fn test_list_silver_tables_storage_error() {
         let mut storage = MockSilverStorage::new();
 
-        storage
-            .expect_list_tables()
-            .returning(|| Err(McpError::StorageError("Database connection failed".to_string())));
+        storage.expect_list_tables().returning(|| {
+            Err(McpError::StorageError(
+                "Database connection failed".to_string(),
+            ))
+        });
 
         let result = execute(&storage).await;
         assert!(result.is_err());

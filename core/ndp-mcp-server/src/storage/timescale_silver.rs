@@ -132,7 +132,10 @@ impl TimescaleSilverStorage {
     ///
     /// Returns `McpError::StorageError` if connection fails.
     pub async fn with_config(database_url: &str, config: TimescalePoolConfig) -> McpResult<Self> {
-        info!("Creating TimescaleSilverStorage pool with max_size={}", config.max_size);
+        info!(
+            "Creating TimescaleSilverStorage pool with max_size={}",
+            config.max_size
+        );
 
         let manager = PostgresConnectionManager::new_from_stringlike(database_url, NoTls)
             .map_err(|e| McpError::StorageError(format!("Invalid database URL: {}", e)))?;
@@ -144,7 +147,9 @@ impl TimescaleSilverStorage {
             .idle_timeout(Some(Duration::from_secs(config.idle_timeout_secs)))
             .build(manager)
             .await
-            .map_err(|e| McpError::StorageError(format!("Failed to create connection pool: {}", e)))?;
+            .map_err(|e| {
+                McpError::StorageError(format!("Failed to create connection pool: {}", e))
+            })?;
 
         // Test the connection
         {
@@ -303,12 +308,18 @@ impl SilverStorage for TimescaleSilverStorage {
                 WHERE table_schema = 'silver' AND table_name = $1
             ) AS exists
         "#;
-        let exists_row = conn.query_one(exists_query, &[&table_name]).await.map_err(|e| {
-            McpError::StorageError(format!("Failed to check table existence: {}", e))
-        })?;
+        let exists_row = conn
+            .query_one(exists_query, &[&table_name])
+            .await
+            .map_err(|e| {
+                McpError::StorageError(format!("Failed to check table existence: {}", e))
+            })?;
         let exists: bool = exists_row.get("exists");
         if !exists {
-            return Err(McpError::StreamNotFound(format!("Table not found: silver.{}", table_name)));
+            return Err(McpError::StreamNotFound(format!(
+                "Table not found: silver.{}",
+                table_name
+            )));
         }
 
         // Query table metadata from data dictionary
@@ -323,10 +334,13 @@ impl SilverStorage for TimescaleSilverStorage {
             FROM data_dictionary.silver_tables
             WHERE table_name = $1
         "#;
-        let table_row = conn.query_opt(table_query, &[&table_name]).await.map_err(|e| {
-            warn!("Data dictionary query failed, using fallback: {}", e);
-            McpError::StorageError(format!("Failed to query table metadata: {}", e))
-        })?;
+        let table_row = conn
+            .query_opt(table_query, &[&table_name])
+            .await
+            .map_err(|e| {
+                warn!("Data dictionary query failed, using fallback: {}", e);
+                McpError::StorageError(format!("Failed to query table metadata: {}", e))
+            })?;
 
         // Query column definitions from data dictionary with fallback
         let columns_query = r#"
@@ -345,29 +359,28 @@ impl SilverStorage for TimescaleSilverStorage {
         let column_rows = conn.query(columns_query, &[&table_name]).await;
 
         let columns: Vec<SilverColumnInfo> = match column_rows {
-            Ok(rows) if !rows.is_empty() => {
-                rows.iter()
-                    .map(|row| {
-                        let column_name: String = row.get("column_name");
-                        let data_type: String = row.get("data_type");
-                        let unit: Option<String> = row.get("unit");
-                        let description: Option<String> = row.get("description");
-                        let nullable: bool = row.get("nullable");
-                        let is_primary_key: bool = row.get("is_primary_key");
+            Ok(rows) if !rows.is_empty() => rows
+                .iter()
+                .map(|row| {
+                    let column_name: String = row.get("column_name");
+                    let data_type: String = row.get("data_type");
+                    let unit: Option<String> = row.get("unit");
+                    let description: Option<String> = row.get("description");
+                    let nullable: bool = row.get("nullable");
+                    let is_primary_key: bool = row.get("is_primary_key");
 
-                        let mut col = SilverColumnInfo::new(&column_name, &data_type)
-                            .with_nullable(nullable)
-                            .with_primary_key(is_primary_key);
-                        if let Some(u) = unit {
-                            col = col.with_unit(u);
-                        }
-                        if let Some(d) = description {
-                            col = col.with_description(d);
-                        }
-                        col
-                    })
-                    .collect()
-            }
+                    let mut col = SilverColumnInfo::new(&column_name, &data_type)
+                        .with_nullable(nullable)
+                        .with_primary_key(is_primary_key);
+                    if let Some(u) = unit {
+                        col = col.with_unit(u);
+                    }
+                    if let Some(d) = description {
+                        col = col.with_description(d);
+                    }
+                    col
+                })
+                .collect(),
             _ => {
                 // Fallback to information_schema
                 debug!("Using information_schema fallback for columns");
@@ -381,9 +394,12 @@ impl SilverStorage for TimescaleSilverStorage {
                     WHERE table_schema = 'silver' AND table_name = $1
                     ORDER BY ordinal_position
                 "#;
-                let fallback_rows = conn.query(fallback_query, &[&table_name]).await.map_err(|e| {
-                    McpError::StorageError(format!("Failed to query column schema: {}", e))
-                })?;
+                let fallback_rows =
+                    conn.query(fallback_query, &[&table_name])
+                        .await
+                        .map_err(|e| {
+                            McpError::StorageError(format!("Failed to query column schema: {}", e))
+                        })?;
 
                 fallback_rows
                     .iter()
@@ -412,7 +428,11 @@ impl SilverStorage for TimescaleSilverStorage {
                 AND d.dimension_number = 1
             WHERE ht.hypertable_schema = 'silver' AND ht.hypertable_name = $1
         "#;
-        let hypertable_row = conn.query_opt(hypertable_query, &[&table_name]).await.ok().flatten();
+        let hypertable_row = conn
+            .query_opt(hypertable_query, &[&table_name])
+            .await
+            .ok()
+            .flatten();
 
         // Build description
         let mut desc = SilverTableDescription::new(table_name).with_columns(columns);
@@ -441,7 +461,11 @@ impl SilverStorage for TimescaleSilverStorage {
             );
         }
 
-        debug!("Described table {} with {} columns", table_name, desc.columns.len());
+        debug!(
+            "Described table {} with {} columns",
+            table_name,
+            desc.columns.len()
+        );
         Ok(desc)
     }
 
@@ -470,12 +494,18 @@ impl SilverStorage for TimescaleSilverStorage {
                 WHERE table_schema = 'silver' AND table_name = $1
             ) AS exists
         "#;
-        let exists_row = conn.query_one(exists_query, &[&table_name]).await.map_err(|e| {
-            McpError::StorageError(format!("Failed to check table existence: {}", e))
-        })?;
+        let exists_row = conn
+            .query_one(exists_query, &[&table_name])
+            .await
+            .map_err(|e| {
+                McpError::StorageError(format!("Failed to check table existence: {}", e))
+            })?;
         let exists: bool = exists_row.get("exists");
         if !exists {
-            return Err(McpError::StreamNotFound(format!("Table not found: silver.{}", table_name)));
+            return Err(McpError::StreamNotFound(format!(
+                "Table not found: silver.{}",
+                table_name
+            )));
         }
 
         // Build dynamic query with filters
@@ -500,12 +530,17 @@ impl SilverStorage for TimescaleSilverStorage {
         }
 
         // Order and limit
-        query.push_str(&format!(" ORDER BY {} DESC LIMIT ${}", time_column, param_idx));
+        query.push_str(&format!(
+            " ORDER BY {} DESC LIMIT ${}",
+            time_column, param_idx
+        ));
         params.push(Box::new(limit as i64));
 
         // Execute query
-        let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
-            params.iter().map(|p| p.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+        let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = params
+            .iter()
+            .map(|p| p.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
+            .collect();
 
         let rows = conn.query(&query, &param_refs[..]).await.map_err(|e| {
             error!("Sample query failed: {}", e);
@@ -514,9 +549,7 @@ impl SilverStorage for TimescaleSilverStorage {
 
         let results: Vec<Value> = rows
             .iter()
-            .filter_map(|row| {
-                row.get::<_, Option<Value>>("row_data")
-            })
+            .filter_map(|row| row.get::<_, Option<Value>>("row_data"))
             .collect();
 
         debug!("Sampled {} rows from {}", results.len(), table_name);
@@ -541,12 +574,18 @@ impl SilverStorage for TimescaleSilverStorage {
                 WHERE table_schema = 'silver' AND table_name = $1
             ) AS exists
         "#;
-        let exists_row = conn.query_one(exists_query, &[&table_name]).await.map_err(|e| {
-            McpError::StorageError(format!("Failed to check table existence: {}", e))
-        })?;
+        let exists_row = conn
+            .query_one(exists_query, &[&table_name])
+            .await
+            .map_err(|e| {
+                McpError::StorageError(format!("Failed to check table existence: {}", e))
+            })?;
         let exists: bool = exists_row.get("exists");
         if !exists {
-            return Err(McpError::StreamNotFound(format!("Table not found: silver.{}", table_name)));
+            return Err(McpError::StreamNotFound(format!(
+                "Table not found: silver.{}",
+                table_name
+            )));
         }
 
         // Query basic stats
@@ -561,9 +600,10 @@ impl SilverStorage for TimescaleSilverStorage {
             time_col = time_column,
             table = table_name
         );
-        let stats_row = conn.query_one(&stats_query, &[]).await.map_err(|e| {
-            McpError::StorageError(format!("Failed to query table stats: {}", e))
-        })?;
+        let stats_row = conn
+            .query_one(&stats_query, &[])
+            .await
+            .map_err(|e| McpError::StorageError(format!("Failed to query table stats: {}", e)))?;
 
         let row_count: i64 = stats_row.get("row_count");
         let time_min: Option<DateTime<Utc>> = stats_row.get("time_min");
@@ -577,10 +617,17 @@ impl SilverStorage for TimescaleSilverStorage {
             FROM timescaledb_information.chunks c
             WHERE c.hypertable_schema = 'silver' AND c.hypertable_name = $1
         "#;
-        let chunk_row = conn.query_opt(chunk_query, &[&table_name]).await.ok().flatten();
+        let chunk_row = conn
+            .query_opt(chunk_query, &[&table_name])
+            .await
+            .ok()
+            .flatten();
 
         let (chunk_count, total_bytes) = match chunk_row {
-            Some(row) => (row.get::<_, i64>("chunk_count"), row.get::<_, i64>("total_bytes")),
+            Some(row) => (
+                row.get::<_, i64>("chunk_count"),
+                row.get::<_, i64>("total_bytes"),
+            ),
             None => (0, 0),
         };
 
@@ -592,7 +639,11 @@ impl SilverStorage for TimescaleSilverStorage {
             FROM data_dictionary.silver_dq_rules
             WHERE silver_table = $1
         "#;
-        let dq_row = conn.query_opt(dq_query, &[&table_name]).await.ok().flatten();
+        let dq_row = conn
+            .query_opt(dq_query, &[&table_name])
+            .await
+            .ok()
+            .flatten();
         let dq_summary = dq_row.map(|row| {
             DqSummary::new(
                 row.get::<_, i64>("total_rules") as i32,
@@ -613,7 +664,10 @@ impl SilverStorage for TimescaleSilverStorage {
             stats = stats.with_dq_summary(dq);
         }
 
-        debug!("Stats for {}: {} rows, {} chunks", table_name, row_count, chunk_count);
+        debug!(
+            "Stats for {}: {} rows, {} chunks",
+            table_name, row_count, chunk_count
+        );
         Ok(stats)
     }
 }
@@ -775,12 +829,10 @@ mod tests {
                 SilverColumnInfo::new("observation_time", "TIMESTAMPTZ")
                     .with_nullable(false)
                     .with_primary_key(true),
-                SilverColumnInfo::new("pm25", "DOUBLE PRECISION")
-                    .with_unit("ug/m3"),
+                SilverColumnInfo::new("pm25", "DOUBLE PRECISION").with_unit("ug/m3"),
             ])
             .with_hypertable_info(
-                HypertableInfo::new("observation_time", "1 day")
-                    .with_chunk_count(15),
+                HypertableInfo::new("observation_time", "1 day").with_chunk_count(15),
             );
 
         assert_eq!(desc.table_name, "air_quality_observations");
@@ -808,8 +860,8 @@ mod tests {
 
     #[test]
     fn test_silver_table_info_serialization() {
-        let info = SilverTableInfo::new("test_table")
-            .with_hypertable(true, Some("1 day".to_string()));
+        let info =
+            SilverTableInfo::new("test_table").with_hypertable(true, Some("1 day".to_string()));
 
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains("test_table"));
@@ -842,7 +894,9 @@ mod integration_tests {
     #[ignore] // Requires running TimescaleDB
     async fn test_create_storage_and_list_tables() {
         let url = test_db_url().expect("NDP_TEST_TIMESCALE_URL must be set");
-        let storage = TimescaleSilverStorage::new(&url).await.expect("Failed to create storage");
+        let storage = TimescaleSilverStorage::new(&url)
+            .await
+            .expect("Failed to create storage");
 
         let tables = storage.list_tables().await.expect("Failed to list tables");
         // We expect at least the core Silver tables
@@ -858,7 +912,9 @@ mod integration_tests {
     #[ignore] // Requires running TimescaleDB
     async fn test_describe_existing_table() {
         let url = test_db_url().expect("NDP_TEST_TIMESCALE_URL must be set");
-        let storage = TimescaleSilverStorage::new(&url).await.expect("Failed to create storage");
+        let storage = TimescaleSilverStorage::new(&url)
+            .await
+            .expect("Failed to create storage");
 
         // This test assumes air_quality_observations exists
         let desc = storage.describe_table("air_quality_observations").await;
@@ -879,7 +935,9 @@ mod integration_tests {
     #[ignore] // Requires running TimescaleDB
     async fn test_describe_nonexistent_table() {
         let url = test_db_url().expect("NDP_TEST_TIMESCALE_URL must be set");
-        let storage = TimescaleSilverStorage::new(&url).await.expect("Failed to create storage");
+        let storage = TimescaleSilverStorage::new(&url)
+            .await
+            .expect("Failed to create storage");
 
         let result = storage.describe_table("nonexistent_table_xyz").await;
         assert!(matches!(result, Err(McpError::StreamNotFound(_))));
@@ -889,7 +947,9 @@ mod integration_tests {
     #[ignore] // Requires running TimescaleDB
     async fn test_sample_with_limit() {
         let url = test_db_url().expect("NDP_TEST_TIMESCALE_URL must be set");
-        let storage = TimescaleSilverStorage::new(&url).await.expect("Failed to create storage");
+        let storage = TimescaleSilverStorage::new(&url)
+            .await
+            .expect("Failed to create storage");
 
         // Sample with a small limit
         let result = storage.sample("air_quality_observations", 5, None).await;
@@ -909,7 +969,9 @@ mod integration_tests {
     #[ignore] // Requires running TimescaleDB
     async fn test_sample_clamps_to_max() {
         let url = test_db_url().expect("NDP_TEST_TIMESCALE_URL must be set");
-        let storage = TimescaleSilverStorage::new(&url).await.expect("Failed to create storage");
+        let storage = TimescaleSilverStorage::new(&url)
+            .await
+            .expect("Failed to create storage");
 
         // Request more than max (100)
         let result = storage.sample("air_quality_observations", 1000, None).await;
@@ -929,7 +991,9 @@ mod integration_tests {
     #[ignore] // Requires running TimescaleDB
     async fn test_get_stats() {
         let url = test_db_url().expect("NDP_TEST_TIMESCALE_URL must be set");
-        let storage = TimescaleSilverStorage::new(&url).await.expect("Failed to create storage");
+        let storage = TimescaleSilverStorage::new(&url)
+            .await
+            .expect("Failed to create storage");
 
         let result = storage.get_stats("air_quality_observations").await;
 

@@ -882,9 +882,13 @@ END"#
         let sql = gen.generate_check_sql(&rule);
 
         // DuckDB requires casting TIMESTAMPTZ to TIMESTAMP for interval arithmetic
-        assert!(sql.contains("observation_time::TIMESTAMP < (ingestion_time::TIMESTAMP - INTERVAL '2 hours')"));
+        assert!(sql.contains(
+            "observation_time::TIMESTAMP < (ingestion_time::TIMESTAMP - INTERVAL '2 hours')"
+        ));
         assert!(sql.contains("freshness_check:observation_time:stale"));
-        assert!(sql.contains("observation_time::TIMESTAMP > (ingestion_time::TIMESTAMP + INTERVAL '10 minutes')"));
+        assert!(sql.contains(
+            "observation_time::TIMESTAMP > (ingestion_time::TIMESTAMP + INTERVAL '10 minutes')"
+        ));
         assert!(sql.contains("freshness_check:observation_time:future"));
     }
 
@@ -994,7 +998,9 @@ END"#
         let sql = gen.generate_check_sql(&rule);
 
         // DuckDB requires casting TIMESTAMPTZ to TIMESTAMP for interval arithmetic
-        assert!(sql.contains("observation_time::TIMESTAMP < (NOW()::TIMESTAMP - INTERVAL '1 hour')"));
+        assert!(
+            sql.contains("observation_time::TIMESTAMP < (NOW()::TIMESTAMP - INTERVAL '1 hour')")
+        );
         assert!(sql.contains("freshness_check:observation_time:stale"));
         assert!(!sql.contains("future"));
     }

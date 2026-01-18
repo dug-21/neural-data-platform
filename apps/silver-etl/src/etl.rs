@@ -457,7 +457,8 @@ impl EtlRunner {
         if let Some(ref pre_transform_config) = config.pre_transform {
             info!(stream_id = %stream_id, "Applying pre-transform stage");
 
-            let raw_data = self.extract_bronze_raw_data(stream_id, bronze_path, watermark_before)?;
+            let raw_data =
+                self.extract_bronze_raw_data(stream_id, bronze_path, watermark_before)?;
 
             if !raw_data.raw_payloads.is_empty() {
                 let parser = build_parser_from_config(pre_transform_config)
@@ -1450,8 +1451,9 @@ mod tests {
         let runner = EtlRunner::new_in_memory().unwrap();
 
         // Set watermark AFTER the data timestamp - should return empty
-        let future_watermark =
-            DateTime::parse_from_rfc3339("2024-01-11T00:00:00Z").unwrap().with_timezone(&Utc);
+        let future_watermark = DateTime::parse_from_rfc3339("2024-01-11T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let raw_data = runner
             .extract_bronze_raw_data(
                 "test-stream",
