@@ -8,6 +8,8 @@ use air_quality_app::{
 use config_client::StreamRegistry;
 use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::ParquetStore;
+// DP-012: EventBus subscriber infrastructure
+use neural_core::{BronzeSubscriber, BronzeSubscriberConfig, SubscriberCoordinator};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
@@ -159,20 +161,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========== AIR-005: Multi-Stream Coordinator - ALL SOURCES (MQTT + HTTP) ==========
     // Initialize the multi-stream ingestion coordinator for all data sources
     // MQTT now routes through IngestionRouter for proper stream_id tagging
-    let coordinator_task =
+    //
+    // DP-012: Also initializes EventBus and SubscriberCoordinator for multi-consumer
+    // event broadcasting. BronzeSubscriber writes to Parquet via EventBus.
+    let (coordinator_task, subscriber_task) =
         match initialize_multi_stream_coordinator(&etcd_endpoint, store.clone()).await {
-            Ok((_coordinator, task)) => {
+            Ok((_coordinator, coord_task, sub_task)) => {
                 tracing::info!(
                     "Multi-stream coordinator initialized - managing all sources (MQTT + HTTP)"
                 );
-                Some(task)
+                tracing::info!("DP-012: SubscriberCoordinator started with BronzeSubscriber");
+                (Some(coord_task), Some(sub_task))
             }
             Err(e) => {
                 tracing::warn!(
                     "Multi-stream coordinator not available: {}. All data sources disabled.",
                     e
                 );
-                None
+                (None, None)
             }
         };
 
@@ -214,6 +220,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Wait for background tasks to complete
             if let Some(task) = coordinator_task {
+                tracing::debug!("Waiting for ingestion coordinator to stop...");
+                let _ = task.await;
+            }
+
+            // DP-012: Wait for subscriber coordinator to stop
+            if let Some(task) = subscriber_task {
+                tracing::debug!("Waiting for subscriber coordinator to stop...");
                 let _ = task.await;
             }
 
@@ -228,11 +241,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// This sets up HTTP polling sources for external APIs like OpenWeatherMap
 /// which provide outdoor weather and air quality data.
+///
+/// DP-012: Also initializes EventBus and SubscriberCoordinator with BronzeSubscriber
+/// for multi-consumer event broadcasting. The subscriber coordinator runs alongside
+/// the existing mpsc-based storage pipeline.
 async fn initialize_multi_stream_coordinator(
     etcd_endpoint: &str,
     store: Arc<ParquetStore>,
 ) -> Result<
-    (Arc<IngestionCoordinator>, tokio::task::JoinHandle<()>),
+    (
+        Arc<IngestionCoordinator>,
+        tokio::task::JoinHandle<()>,
+        tokio::task::JoinHandle<()>,
+    ),
     Box<dyn std::error::Error + Send + Sync>,
 > {
     // Initialize StreamRegistry for loading stream configurations
@@ -332,7 +353,71 @@ async fn initialize_multi_stream_coordinator(
         }
     });
 
-    Ok((coordinator, monitor_task))
+    // ==========================================================================
+    // DP-012: EventBus Subscriber Infrastructure
+    // ==========================================================================
+    // Create SubscriberCoordinator with EventBus from IngestionCoordinator.
+    // This is ADDITIVE - the existing mpsc-based RawStorageWriter continues to work.
+    // The EventBus broadcasts events to subscribers for parallel processing.
+    //
+    // NOTE: BronzeSubscriber is currently disabled because sources do not yet
+    // publish to EventBus. Phase 2 will add EventBus publishing to SourceManager.
+    // For now, we just set up the infrastructure.
+
+    let event_bus = coordinator.event_bus();
+    let mut subscriber_coordinator = SubscriberCoordinator::new(event_bus);
+
+    // Create BronzeSubscriber with default config
+    // This subscriber will write to the same ParquetStore as RawStorageWriter
+    // once sources publish to EventBus.
+    let bronze_config = BronzeSubscriberConfig {
+        batch_size: 50,
+        flush_interval_secs: 30,
+        max_retries: 3,
+        stream_filter: Vec::new(), // Accept all streams
+    };
+    let bronze_subscriber = BronzeSubscriber::new("bronze-parquet", bronze_config, store.clone());
+
+    // Register subscriber with coordinator
+    if let Err(e) = subscriber_coordinator.register(Box::new(bronze_subscriber)) {
+        tracing::warn!("Failed to register BronzeSubscriber: {}", e);
+    } else {
+        tracing::info!("BronzeSubscriber registered with SubscriberCoordinator");
+    }
+
+    // Start subscriber coordinator (spawns subscriber tasks)
+    if let Err(e) = subscriber_coordinator.start_all().await {
+        tracing::warn!("Failed to start SubscriberCoordinator: {}", e);
+    } else {
+        tracing::info!(
+            "SubscriberCoordinator started with {} subscribers",
+            subscriber_coordinator.subscriber_count()
+        );
+    }
+
+    // Create subscriber monitoring task
+    let subscriber_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            let health = subscriber_coordinator.health_check().await;
+            if health.overall_healthy {
+                tracing::debug!(
+                    "SubscriberCoordinator health: {} running, {} total",
+                    health.running_count,
+                    health.subscriber_count
+                );
+            } else {
+                tracing::warn!(
+                    "SubscriberCoordinator unhealthy: {} running of {} total",
+                    health.running_count,
+                    health.subscriber_count
+                );
+            }
+        }
+    });
+
+    Ok((coordinator, monitor_task, subscriber_task))
 }
 
 /// Create services with real ParquetStore

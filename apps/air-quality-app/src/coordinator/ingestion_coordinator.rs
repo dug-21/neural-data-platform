@@ -2,12 +2,15 @@
 //!
 //! Coordinates multiple data sources and manages their lifecycle.
 //! DP-004: Data flows directly from sources to RawStorageWriter via ingestion channel.
+//! DP-012: EventBus added for multi-consumer event broadcasting to subscribers.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
+
+use neural_core::{EventBus, EventBusConfig};
 
 use super::router::IngestionRouter;
 use super::source_manager::{SourceHealth, SourceManager};
@@ -32,6 +35,9 @@ pub enum CoordinatorError {
 ///
 /// DP-004: The coordinator manages source lifecycle. Data flows directly from
 /// sources to RawStorageWriter via the ingestion channel set by the caller.
+///
+/// DP-012: EventBus broadcasts events to multiple subscribers (Bronze, Silver, etc.)
+/// in parallel with the existing mpsc channel. This is ADDITIVE - both pathways coexist.
 pub struct IngestionCoordinator {
     #[allow(dead_code)]
     router: Arc<IngestionRouter>,
@@ -40,6 +46,8 @@ pub struct IngestionCoordinator {
     #[allow(dead_code)]
     shutdown_rx: Arc<RwLock<mpsc::Receiver<()>>>,
     is_running: Arc<AtomicBool>,
+    /// DP-012: EventBus for multi-consumer event broadcasting
+    event_bus: Arc<EventBus>,
 }
 
 impl IngestionCoordinator {
@@ -47,6 +55,10 @@ impl IngestionCoordinator {
     ///
     /// NOTE: The caller must set the ingestion sender on SourceManager BEFORE
     /// calling start(). This coordinator manages source lifecycle only.
+    ///
+    /// DP-012: Creates an EventBus with default configuration for multi-consumer
+    /// event broadcasting. Use `event_bus()` to get a reference for registering
+    /// subscribers via SubscriberCoordinator.
     pub fn new(
         router: Arc<IngestionRouter>,
         source_manager: Arc<RwLock<SourceManager>>,
@@ -54,13 +66,29 @@ impl IngestionCoordinator {
     ) -> Self {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
 
+        // DP-012: Create EventBus with default config (10,000 capacity, drop_oldest)
+        let event_bus = Arc::new(EventBus::new(EventBusConfig::default()));
+        debug!(
+            capacity = event_bus.config().capacity,
+            "EventBus created for IngestionCoordinator"
+        );
+
         Self {
             router,
             source_manager,
             shutdown_tx,
             shutdown_rx: Arc::new(RwLock::new(shutdown_rx)),
             is_running: Arc::new(AtomicBool::new(false)),
+            event_bus,
         }
+    }
+
+    /// Get a reference to the EventBus for subscriber registration
+    ///
+    /// DP-012: Use this to create a SubscriberCoordinator and register subscribers.
+    /// Subscribers will receive all events published after they subscribe.
+    pub fn event_bus(&self) -> Arc<EventBus> {
+        Arc::clone(&self.event_bus)
     }
 
     /// Start the coordinator
@@ -355,5 +383,37 @@ mod tests {
 
         // Cleanup
         let _ = coordinator.stop().await;
+    }
+
+    // ========== DP-012: EVENT BUS TESTS ==========
+
+    #[tokio::test]
+    async fn test_coordinator_has_event_bus() {
+        // Arrange
+        let (coordinator, _rx) = create_test_coordinator().await;
+
+        // Act
+        let event_bus = coordinator.event_bus();
+
+        // Assert - EventBus is created with default config
+        assert_eq!(event_bus.config().capacity, 10_000);
+        assert_eq!(event_bus.subscriber_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_event_bus_shared_across_clones() {
+        // Arrange
+        let (coordinator, _rx) = create_test_coordinator().await;
+
+        // Act - get event_bus twice
+        let bus1 = coordinator.event_bus();
+        let bus2 = coordinator.event_bus();
+
+        // Subscribe on one
+        let _subscriber = bus1.subscribe();
+
+        // Assert - subscriber count visible on both (same Arc)
+        assert_eq!(bus1.subscriber_count(), 1);
+        assert_eq!(bus2.subscriber_count(), 1);
     }
 }

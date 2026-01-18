@@ -61,6 +61,16 @@ pub struct HealthStatus {
     pub details: HashMap<String, String>,
 }
 
+impl Default for HealthStatus {
+    fn default() -> Self {
+        Self {
+            healthy: true,
+            message: String::new(),
+            details: HashMap::new(),
+        }
+    }
+}
+
 #[async_trait]
 pub trait Store: Send + Sync {
     async fn write(&self, point: TimeSeriesPoint) -> CoreResult<()>;
@@ -152,6 +162,7 @@ pub trait RawSource: Send + Sync {
 ///     .with_context(json!({"room": "office"}));
 /// store.write_raw(point).await?;
 /// ```
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait RawStore: Send + Sync {
     /// Write a single raw data point to Bronze storage

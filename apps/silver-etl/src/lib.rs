@@ -42,13 +42,13 @@ pub mod sql_gen;
 // Re-export main types for library consumers
 pub use config::ConfigLoader;
 pub use daemon::{DaemonConfig, DaemonError, DaemonRunner, EtlExecutor, RealEtlExecutor};
+pub use dq::DqSqlGenerator;
+pub use etl::{BronzeRawData, EtlError, EtlRunner, EtlStats};
+pub use metrics::EtlMetrics;
 pub use persistence::{
     DuckDbRunPersistence, EtlRunMode, EtlRunPersistence, EtlRunRecord, EtlRunStatus,
     NoOpPersistence, PersistenceError,
 };
-pub use dq::DqSqlGenerator;
-pub use etl::{BronzeRawData, EtlError, EtlRunner, EtlStats};
-pub use metrics::EtlMetrics;
 pub use pre_transform::{
     apply_pre_transform, build_parser, build_parser_from_config, create_temp_table,
     PreTransformError, PreTransformResult,

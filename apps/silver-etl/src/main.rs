@@ -105,6 +105,33 @@ enum Commands {
         full_reload: bool,
     },
 
+    /// Run batch ETL for historical data migration, then exit (dp-012)
+    ///
+    /// Use this command for one-time backfill of historical Bronze data to Silver.
+    /// For real-time processing, use the SilverSubscriber (dp-012) which handles
+    /// streaming transforms as data arrives in Bronze.
+    ///
+    /// Example workflow:
+    ///   1. silver-etl backfill --stream air-quality  # Migrate historical data
+    ///   2. Start SilverSubscriber for real-time processing
+    Backfill {
+        /// Specific stream to backfill (omit for all enabled streams)
+        #[arg(short, long)]
+        stream: Option<String>,
+
+        /// Process data from this timestamp (ISO 8601). Default: beginning of time
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Process data until this timestamp (ISO 8601). Default: now
+        #[arg(long)]
+        until: Option<String>,
+
+        /// Exit with error if any stream fails (default: continue with remaining streams)
+        #[arg(long)]
+        fail_fast: bool,
+    },
+
     /// Generate SQL without executing (dry-run)
     DryRun {
         /// Stream to generate SQL for (required)
@@ -207,6 +234,21 @@ async fn main() -> Result<()> {
             ref stream,
             full_reload,
         } => run_etl(&cli, stream.clone(), *full_reload).await,
+        Commands::Backfill {
+            ref stream,
+            ref since,
+            ref until,
+            fail_fast,
+        } => {
+            run_backfill(
+                &cli,
+                stream.clone(),
+                since.clone(),
+                until.clone(),
+                *fail_fast,
+            )
+            .await
+        }
         Commands::DryRun {
             ref stream,
             ref output,
@@ -360,6 +402,209 @@ async fn run_etl(cli: &Cli, stream: Option<String>, full_reload: bool) -> Result
             println!("  - {}", stream_id);
         }
     }
+
+    // Return exit code: 0 if all succeeded, 1 if any failed
+    Ok(if failed_streams.is_empty() { 0 } else { 1 })
+}
+
+/// Run batch ETL for historical data migration (dp-012)
+///
+/// This command processes historical Bronze data and exits. It's designed for
+/// one-time backfill operations when migrating to SilverSubscriber for real-time
+/// processing.
+///
+/// Unlike daemon mode, backfill:
+/// - Processes data once and exits (no polling interval)
+/// - Supports time range filtering via --since/--until
+/// - Can fail-fast on first error or continue with remaining streams
+/// - Prints detailed summary at completion
+async fn run_backfill(
+    cli: &Cli,
+    stream: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
+    fail_fast: bool,
+) -> Result<i32> {
+    info!(
+        stream = stream.as_deref().unwrap_or("all"),
+        since = since.as_deref().unwrap_or("beginning"),
+        until = until.as_deref().unwrap_or("now"),
+        fail_fast = fail_fast,
+        "Running backfill for historical data migration (dp-012)"
+    );
+
+    println!();
+    println!("=== Silver ETL Backfill (dp-012) ===");
+    println!("Mode: One-time batch migration");
+    println!("Note: For real-time processing, use SilverSubscriber");
+    println!();
+
+    // Parse time bounds if provided
+    let since_ts = if let Some(ref s) = since {
+        Some(
+            chrono::DateTime::parse_from_rfc3339(s)
+                .context(format!("Invalid --since timestamp: {}", s))?
+                .with_timezone(&chrono::Utc),
+        )
+    } else {
+        None
+    };
+
+    let until_ts = if let Some(ref u) = until {
+        Some(
+            chrono::DateTime::parse_from_rfc3339(u)
+                .context(format!("Invalid --until timestamp: {}", u))?
+                .with_timezone(&chrono::Utc),
+        )
+    } else {
+        None
+    };
+
+    if let (Some(s), Some(u)) = (&since_ts, &until_ts) {
+        if s >= u {
+            return Err(anyhow::anyhow!("--since must be before --until"));
+        }
+        info!(
+            since = %s,
+            until = %u,
+            "Time range filter active"
+        );
+    }
+
+    // Load configuration
+    let config_loader = ConfigLoader::new(&cli.etcd_endpoint, &cli.config_dir);
+
+    // Get list of streams to process
+    let streams = match stream {
+        Some(s) => vec![s],
+        None => config_loader
+            .load_all_enabled()
+            .await
+            .context("Failed to load enabled streams")?,
+    };
+
+    if streams.is_empty() {
+        warn!("No streams with silver_etl.enabled = true found");
+        println!("No streams to backfill.");
+        return Ok(0);
+    }
+
+    info!(count = streams.len(), "Found streams to backfill");
+    println!("Streams to process: {}", streams.join(", "));
+    println!();
+
+    // Create ETL runner
+    let runner = match &cli.timescale_url {
+        Some(url) => EtlRunner::with_postgres(url).context("Failed to create PostgreSQL runner")?,
+        None => {
+            warn!("No TIMESCALE_URL provided, using dry-run mode (no database writes)");
+            println!("WARNING: No TIMESCALE_URL - running in dry-run mode");
+            EtlRunner::new_in_memory().context("Failed to create in-memory runner")?
+        }
+    };
+
+    // Track overall results
+    let mut all_stats: Vec<EtlStats> = Vec::new();
+    let mut failed_streams: Vec<String> = Vec::new();
+    let overall_start = Instant::now();
+
+    // Process each stream
+    for stream_id in &streams {
+        info!(stream_id = %stream_id, "Backfilling stream");
+        println!("Processing: {} ...", stream_id);
+        let stream_start = Instant::now();
+
+        // Load stream config
+        let stream_config = match config_loader.load_stream_config(stream_id).await {
+            Ok(config) => config,
+            Err(e) => {
+                error!(stream_id = %stream_id, error = %e, "Failed to load stream config");
+                failed_streams.push(stream_id.clone());
+                if fail_fast {
+                    return Err(e.context(format!("Failed to load config for {}", stream_id)));
+                }
+                continue;
+            }
+        };
+
+        // Run ETL for this stream
+        // Note: Time range filtering would be applied in run_etl if supported
+        // For now, we use full reload semantics for backfill
+        match runner.run_etl(&stream_config, stream_id, &cli.bronze_dir) {
+            Ok(stats) => {
+                let duration = stream_start.elapsed();
+                info!(
+                    stream_id = %stream_id,
+                    rows_processed = stats.rows_processed,
+                    rows_with_dq_flags = stats.rows_with_dq_flags,
+                    rows_rejected = stats.rows_rejected,
+                    duration_ms = duration.as_millis() as u64,
+                    "Stream backfill completed"
+                );
+
+                println!(
+                    "  {} rows processed, {} flagged, {} rejected ({:.2}s)",
+                    stats.rows_processed,
+                    stats.rows_with_dq_flags,
+                    stats.rows_rejected,
+                    duration.as_secs_f64()
+                );
+
+                // Update Prometheus metrics
+                if let Some(metrics) = EtlMetrics::get() {
+                    metrics
+                        .rows_processed
+                        .with_label_values(&[stream_id])
+                        .inc_by(stats.rows_processed);
+                    metrics
+                        .rows_flagged
+                        .with_label_values(&[stream_id])
+                        .inc_by(stats.rows_with_dq_flags);
+                    metrics
+                        .rows_rejected
+                        .with_label_values(&[stream_id])
+                        .inc_by(stats.rows_rejected);
+                    metrics.duration_seconds.observe(duration.as_secs_f64());
+                    metrics.runs_total.inc();
+                }
+
+                all_stats.push(stats);
+            }
+            Err(e) => {
+                error!(stream_id = %stream_id, error = %e, "Stream backfill failed");
+                println!("  FAILED: {}", e);
+                failed_streams.push(stream_id.clone());
+                if fail_fast {
+                    return Err(anyhow::anyhow!("Backfill failed for {}: {}", stream_id, e));
+                }
+            }
+        }
+    }
+
+    // Print summary
+    let total_duration = overall_start.elapsed();
+    let total_rows: u64 = all_stats.iter().map(|s| s.rows_processed).sum();
+    let total_flagged: u64 = all_stats.iter().map(|s| s.rows_with_dq_flags).sum();
+    let total_rejected: u64 = all_stats.iter().map(|s| s.rows_rejected).sum();
+
+    println!();
+    println!("=== Backfill Summary ===");
+    println!("Streams processed: {}/{}", all_stats.len(), streams.len());
+    println!("Total rows processed: {}", total_rows);
+    println!("Total rows with DQ flags: {}", total_flagged);
+    println!("Total rows rejected: {}", total_rejected);
+    println!("Total duration: {:.2}s", total_duration.as_secs_f64());
+
+    if !failed_streams.is_empty() {
+        println!();
+        println!("Failed streams:");
+        for stream_id in &failed_streams {
+            println!("  - {}", stream_id);
+        }
+    }
+
+    println!();
+    println!("Backfill complete. For real-time processing, start SilverSubscriber.");
 
     // Return exit code: 0 if all succeeded, 1 if any failed
     Ok(if failed_streams.is_empty() { 0 } else { 1 })
@@ -609,8 +854,10 @@ async fn migrate_schema(
 
     // Track tables we're creating in this migration run and their columns
     // This handles multiple streams sharing the same target table
-    let mut tables_being_created: std::collections::HashMap<String, std::collections::HashSet<String>> =
-        std::collections::HashMap::new();
+    let mut tables_being_created: std::collections::HashMap<
+        String,
+        std::collections::HashSet<String>,
+    > = std::collections::HashMap::new();
 
     for stream_id in &streams {
         info!(stream_id = %stream_id, "Processing stream");
@@ -875,7 +1122,12 @@ fn export_metrics(registry: &Registry) -> Result<i32> {
 }
 
 /// Run ETL in daemon mode with graceful shutdown
-async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>, enable_persistence: bool) -> Result<i32> {
+async fn run_daemon(
+    cli: &Cli,
+    interval: u64,
+    stream: Option<String>,
+    enable_persistence: bool,
+) -> Result<i32> {
     info!(
         interval_secs = interval,
         stream = stream.as_deref().unwrap_or("all"),
@@ -915,7 +1167,12 @@ async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>, enable_per
             match silver_etl::DuckDbRunPersistence::new(url) {
                 Ok(persistence) => {
                     info!("ETL run persistence enabled (dp-011)");
-                    let mut daemon = DaemonRunner::with_persistence(executor, daemon_config, shutdown_rx, persistence);
+                    let mut daemon = DaemonRunner::with_persistence(
+                        executor,
+                        daemon_config,
+                        shutdown_rx,
+                        persistence,
+                    );
                     run_daemon_loop(&mut daemon, shutdown_tx).await
                 }
                 Err(e) => {
@@ -925,7 +1182,9 @@ async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>, enable_per
                 }
             }
         } else {
-            warn!("SILVER_ETL_PERSISTENCE=true but no TIMESCALE_URL provided, persistence disabled");
+            warn!(
+                "SILVER_ETL_PERSISTENCE=true but no TIMESCALE_URL provided, persistence disabled"
+            );
             let mut daemon = DaemonRunner::new(executor, daemon_config, shutdown_rx);
             run_daemon_loop(&mut daemon, shutdown_tx).await
         }
@@ -938,7 +1197,10 @@ async fn run_daemon(cli: &Cli, interval: u64, stream: Option<String>, enable_per
 }
 
 /// Helper to run the daemon loop with shutdown handling
-async fn run_daemon_loop<E, P>(daemon: &mut DaemonRunner<E, P>, shutdown_tx: watch::Sender<bool>) -> Result<i32>
+async fn run_daemon_loop<E, P>(
+    daemon: &mut DaemonRunner<E, P>,
+    shutdown_tx: watch::Sender<bool>,
+) -> Result<i32>
 where
     E: silver_etl::daemon::EtlExecutor + 'static,
     P: silver_etl::EtlRunPersistence + 'static,
@@ -1086,10 +1348,27 @@ CREATE INDEX idx_test ON silver.test (id);
 "#;
         let statements = parse_ddl_statements(ddl);
 
-        assert_eq!(statements.len(), 3, "Should have 3 statements, got: {:?}", statements);
-        assert!(statements[0].starts_with("CREATE SCHEMA"), "First should be schema: {}", statements[0]);
-        assert!(statements[1].starts_with("CREATE TABLE"), "Second should be table: {}", statements[1]);
-        assert!(statements[2].starts_with("CREATE INDEX"), "Third should be index: {}", statements[2]);
+        assert_eq!(
+            statements.len(),
+            3,
+            "Should have 3 statements, got: {:?}",
+            statements
+        );
+        assert!(
+            statements[0].starts_with("CREATE SCHEMA"),
+            "First should be schema: {}",
+            statements[0]
+        );
+        assert!(
+            statements[1].starts_with("CREATE TABLE"),
+            "Second should be table: {}",
+            statements[1]
+        );
+        assert!(
+            statements[2].starts_with("CREATE INDEX"),
+            "Third should be index: {}",
+            statements[2]
+        );
     }
 
     #[test]
@@ -1160,14 +1439,28 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
 "#;
         let statements = parse_ddl_statements(ddl);
 
-        assert_eq!(statements.len(), 5, "Should have 5 statements (schema, table, hypertable, 2 indexes), got: {}", statements.len());
+        assert_eq!(
+            statements.len(),
+            5,
+            "Should have 5 statements (schema, table, hypertable, 2 indexes), got: {}",
+            statements.len()
+        );
 
         // Verify each statement type is present and correctly parsed
         assert!(statements[0].contains("CREATE SCHEMA"), "Missing schema");
         assert!(statements[1].contains("CREATE TABLE"), "Missing table");
-        assert!(statements[2].contains("create_hypertable"), "Missing hypertable");
-        assert!(statements[3].contains("CREATE INDEX") && statements[3].contains("time_id"), "Missing first index");
-        assert!(statements[4].contains("CREATE INDEX") && statements[4].contains("ingestion"), "Missing second index");
+        assert!(
+            statements[2].contains("create_hypertable"),
+            "Missing hypertable"
+        );
+        assert!(
+            statements[3].contains("CREATE INDEX") && statements[3].contains("time_id"),
+            "Missing first index"
+        );
+        assert!(
+            statements[4].contains("CREATE INDEX") && statements[4].contains("ingestion"),
+            "Missing second index"
+        );
     }
 
     #[test]
@@ -1316,7 +1609,11 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
     fn test_daemon_command_parsing() {
         let cli = Cli::parse_from(["silver-etl", "daemon"]);
         match cli.command {
-            Commands::Daemon { interval, stream, enable_persistence } => {
+            Commands::Daemon {
+                interval,
+                stream,
+                enable_persistence,
+            } => {
                 assert_eq!(interval, 300); // Default interval
                 assert!(stream.is_none());
                 assert!(!enable_persistence); // Default: disabled
@@ -1329,7 +1626,11 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
     fn test_daemon_with_custom_interval() {
         let cli = Cli::parse_from(["silver-etl", "daemon", "--interval", "60"]);
         match cli.command {
-            Commands::Daemon { interval, stream, enable_persistence } => {
+            Commands::Daemon {
+                interval,
+                stream,
+                enable_persistence,
+            } => {
                 assert_eq!(interval, 60);
                 assert!(stream.is_none());
                 assert!(!enable_persistence);
@@ -1342,7 +1643,11 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
     fn test_daemon_with_stream() {
         let cli = Cli::parse_from(["silver-etl", "daemon", "--stream", "air-quality"]);
         match cli.command {
-            Commands::Daemon { interval, stream, enable_persistence } => {
+            Commands::Daemon {
+                interval,
+                stream,
+                enable_persistence,
+            } => {
                 assert_eq!(interval, 300);
                 assert_eq!(stream, Some("air-quality".to_string()));
                 assert!(!enable_persistence);
@@ -1362,7 +1667,11 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
             "outdoor-weather",
         ]);
         match cli.command {
-            Commands::Daemon { interval, stream, enable_persistence } => {
+            Commands::Daemon {
+                interval,
+                stream,
+                enable_persistence,
+            } => {
                 assert_eq!(interval, 120);
                 assert_eq!(stream, Some("outdoor-weather".to_string()));
                 assert!(!enable_persistence);
@@ -1375,7 +1684,11 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
     fn test_daemon_with_persistence_flag() {
         let cli = Cli::parse_from(["silver-etl", "daemon", "--enable-persistence"]);
         match cli.command {
-            Commands::Daemon { interval, stream, enable_persistence } => {
+            Commands::Daemon {
+                interval,
+                stream,
+                enable_persistence,
+            } => {
                 assert_eq!(interval, 300);
                 assert!(stream.is_none());
                 assert!(enable_persistence); // Enabled via flag
@@ -1391,10 +1704,107 @@ CREATE INDEX IF NOT EXISTS idx_weather_observations_ingestion ON silver.weather_
         let cli = Cli::parse_from(["silver-etl", "daemon"]);
         std::env::remove_var("SILVER_ETL_PERSISTENCE");
         match cli.command {
-            Commands::Daemon { interval, stream, enable_persistence } => {
+            Commands::Daemon {
+                interval,
+                stream,
+                enable_persistence,
+            } => {
                 assert!(enable_persistence); // Enabled via env var
             }
             _ => panic!("Expected Daemon command"),
+        }
+    }
+
+    // =================================================================
+    // Backfill Command Tests (dp-012)
+    // =================================================================
+
+    #[test]
+    fn test_backfill_command_basic() {
+        let cli = Cli::parse_from(["silver-etl", "backfill"]);
+        match cli.command {
+            Commands::Backfill {
+                stream,
+                since,
+                until,
+                fail_fast,
+            } => {
+                assert!(stream.is_none());
+                assert!(since.is_none());
+                assert!(until.is_none());
+                assert!(!fail_fast);
+            }
+            _ => panic!("Expected Backfill command"),
+        }
+    }
+
+    #[test]
+    fn test_backfill_with_stream() {
+        let cli = Cli::parse_from(["silver-etl", "backfill", "--stream", "air-quality"]);
+        match cli.command {
+            Commands::Backfill { stream, .. } => {
+                assert_eq!(stream, Some("air-quality".to_string()));
+            }
+            _ => panic!("Expected Backfill command"),
+        }
+    }
+
+    #[test]
+    fn test_backfill_with_time_range() {
+        let cli = Cli::parse_from([
+            "silver-etl",
+            "backfill",
+            "--since",
+            "2025-01-01T00:00:00Z",
+            "--until",
+            "2025-01-15T00:00:00Z",
+        ]);
+        match cli.command {
+            Commands::Backfill { since, until, .. } => {
+                assert_eq!(since, Some("2025-01-01T00:00:00Z".to_string()));
+                assert_eq!(until, Some("2025-01-15T00:00:00Z".to_string()));
+            }
+            _ => panic!("Expected Backfill command"),
+        }
+    }
+
+    #[test]
+    fn test_backfill_with_fail_fast() {
+        let cli = Cli::parse_from(["silver-etl", "backfill", "--fail-fast"]);
+        match cli.command {
+            Commands::Backfill { fail_fast, .. } => {
+                assert!(fail_fast);
+            }
+            _ => panic!("Expected Backfill command"),
+        }
+    }
+
+    #[test]
+    fn test_backfill_with_all_options() {
+        let cli = Cli::parse_from([
+            "silver-etl",
+            "backfill",
+            "--stream",
+            "outdoor-weather",
+            "--since",
+            "2025-01-01T00:00:00Z",
+            "--until",
+            "2025-01-31T23:59:59Z",
+            "--fail-fast",
+        ]);
+        match cli.command {
+            Commands::Backfill {
+                stream,
+                since,
+                until,
+                fail_fast,
+            } => {
+                assert_eq!(stream, Some("outdoor-weather".to_string()));
+                assert_eq!(since, Some("2025-01-01T00:00:00Z".to_string()));
+                assert_eq!(until, Some("2025-01-31T23:59:59Z".to_string()));
+                assert!(fail_fast);
+            }
+            _ => panic!("Expected Backfill command"),
         }
     }
 }

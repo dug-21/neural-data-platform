@@ -1,0 +1,44 @@
+# Threshold alert processor configuration for dp-012
+# GitOps managed - synced to etcd at /processors/threshold-alerts/*
+#
+# This processor monitors Silver layer data streams and triggers
+# alerts when values exceed configured thresholds.
+#
+# Alert levels:
+#   - warning: Elevated but not immediately dangerous
+#   - critical: Requires immediate attention
+#
+# Cooldown prevents alert fatigue by suppressing repeated alerts
+# for the same condition within the specified window.
+
+processors:
+  threshold-alerts:
+    enabled: true
+
+    # Threshold definitions by stream and field
+    thresholds:
+      # Indoor air quality (AirGradient sensors)
+      - stream_id: air-quality
+        field: pm25
+        warning: 35.0      # EPA "Unhealthy for Sensitive Groups"
+        critical: 55.0     # EPA "Unhealthy"
+        cooldown_seconds: 300
+
+      - stream_id: air-quality
+        field: pm10
+        warning: 150.0     # EPA "Unhealthy for Sensitive Groups"
+        critical: 250.0    # EPA "Unhealthy"
+        cooldown_seconds: 300
+
+      # Outdoor air quality (OpenWeatherMap/PurpleAir)
+      - stream_id: outdoor-air-quality
+        field: pm25
+        warning: 35.0
+        critical: 55.0
+        cooldown_seconds: 300
+
+    # Notification configuration
+    notifications:
+      mqtt:
+        topic: "ndp/alerts/threshold"
+        include_context: true  # Include stream metadata in alert payload
