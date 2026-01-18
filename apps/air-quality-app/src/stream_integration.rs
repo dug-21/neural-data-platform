@@ -55,6 +55,10 @@ pub async fn load_from_stream_config(
         server: server_config,
         mqtt: mqtt_config,
         storage: storage_config,
+        // DP-012: EventNotifier and ThresholdProcessor disabled by default
+        // Enable via environment variables: EVENT_NOTIFIER_ENABLED=true
+        event_notifier: None,
+        threshold_processor: None,
     })
 }
 

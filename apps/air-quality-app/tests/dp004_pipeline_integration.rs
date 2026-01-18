@@ -182,13 +182,13 @@ async fn test_source_manager_uses_ingestion_sender() {
     );
     let mut manager = SourceManager::new(registry);
 
-    // Set up ingestion sender (dp-004 Bronze layer)
-    let (tx, _rx) = mpsc::channel::<RawDataPoint>(100);
-    manager.set_ingestion_sender(tx);
+    // DP-012: Set up EventBus (replaces mpsc channel)
+    let event_bus = Arc::new(neural_core::EventBus::new(neural_core::EventBusConfig::default()));
+    manager.set_event_bus(event_bus);
 
-    // THEN: Manager should have ingestion sender configured
+    // THEN: Manager should have EventBus configured
     // The actual spawning would require mock HTTP server, so we verify setup
-    assert!(true, "SourceManager accepted ingestion_sender");
+    assert!(true, "SourceManager accepted EventBus");
 }
 
 // ============================================================================
@@ -261,65 +261,65 @@ async fn test_production_data_path_is_raw() {
 // This is a code-level test to verify the main pipeline is wired correctly.
 
 #[tokio::test]
-async fn test_main_uses_raw_data_point_channel() {
-    // Read the main.rs file and check for RawDataPoint channel
+async fn test_main_uses_eventbus_for_data_flow() {
+    // DP-012: Verify main.rs uses EventBus for data flow
     let main_rs = std::fs::read_to_string(
         "/workspaces/neural-data-platform/apps/air-quality-app/src/main.rs",
     )
     .expect("Failed to read main.rs");
 
-    // Check that main.rs uses RawDataPoint channel
-    let uses_raw_channel = main_rs.contains("mpsc::channel::<RawDataPoint>")
-        || main_rs.contains("channel::<RawDataPoint>");
+    // Check that main.rs uses EventBus (DP-012 architecture)
+    let uses_eventbus = main_rs.contains("EventBus")
+        && main_rs.contains("BronzeSubscriber")
+        && main_rs.contains("SubscriberCoordinator");
 
     assert!(
-        uses_raw_channel,
-        "main.rs should use mpsc::channel::<RawDataPoint> for dp-004 ingestion"
+        uses_eventbus,
+        "main.rs should use EventBus for DP-012 data flow"
     );
 
-    // Check that main.rs has dp-004 raw storage pipeline
-    let has_raw_pipeline = main_rs.contains("DP-004")
-        && main_rs.contains("RawStorageWriter")
-        && main_rs.contains("set_ingestion_sender");
+    // Check that main.rs has DP-012 comment indicating EventBus is sole data flow
+    let has_dp012_integration = main_rs.contains("DP-012 FULL INTEGRATION")
+        || main_rs.contains("EventBus is the SOLE data flow");
 
     assert!(
-        has_raw_pipeline,
-        "main.rs should have DP-004 raw storage pipeline with RawStorageWriter"
+        has_dp012_integration,
+        "main.rs should have DP-012 EventBus integration"
     );
 }
 
 // ============================================================================
-// AT-PIPELINE-010: Main.rs Uses RawStorageWriter for Storage
+// AT-PIPELINE-010: Main.rs Uses BronzeSubscriber for Storage (DP-012)
 // ============================================================================
 //
 // GIVEN: The main.rs writes data to storage
 // WHEN: We check the storage mechanism used
-// THEN: It should use RawStorageWriter (which internally uses write_raw_batch)
+// THEN: It should use BronzeSubscriber via EventBus (replaces RawStorageWriter)
 //
-// This verifies the storage layer is wired to the new RawStore interface.
+// DP-012: This verifies the storage layer uses EventBus subscriber pattern.
 
 #[tokio::test]
-async fn test_main_uses_raw_store() {
+async fn test_main_uses_bronze_subscriber() {
     let main_rs = std::fs::read_to_string(
         "/workspaces/neural-data-platform/apps/air-quality-app/src/main.rs",
     )
     .expect("Failed to read main.rs");
 
-    // Check that main.rs uses RawStorageWriter (which uses write_raw_batch internally)
-    let uses_raw_storage_writer = main_rs.contains("RawStorageWriter");
+    // DP-012: Check that main.rs uses BronzeSubscriber (replaces RawStorageWriter)
+    let uses_bronze_subscriber = main_rs.contains("BronzeSubscriber");
 
     assert!(
-        uses_raw_storage_writer,
-        "main.rs should use RawStorageWriter for dp-004 Bronze layer storage"
+        uses_bronze_subscriber,
+        "main.rs should use BronzeSubscriber for DP-012 Bronze layer storage"
     );
 
-    // Verify the RawStorageWriter is actually spawned
-    let raw_writer_spawned =
-        main_rs.contains("RawStorageWriter::new") && main_rs.contains("writer.run()");
+    // DP-012: Verify the BronzeSubscriber is registered with SubscriberCoordinator
+    let bronze_subscriber_registered =
+        main_rs.contains("BronzeSubscriber::new") && main_rs.contains("subscriber_coordinator.register");
 
     assert!(
-        raw_writer_spawned,
-        "main.rs should spawn RawStorageWriter for dp-004 storage pipeline"
+        bronze_subscriber_registered,
+        "main.rs should register BronzeSubscriber with SubscriberCoordinator"
     );
 }
 

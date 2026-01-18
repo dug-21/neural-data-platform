@@ -30,4 +30,6 @@ pub use transform::transform_to_silver;
 pub use dq_evaluator::{evaluate_and_apply_dq_rules, evaluate_dq_rules};
 
 // Re-export output types
-pub use outputs::{InMemorySilverOutput, SilverOutput, SilverOutputError, TimescaleOutput};
+pub use outputs::{
+    InMemorySilverOutput, SilverOutput, SilverOutputError, TimescaleConfig, TimescaleOutput,
+};

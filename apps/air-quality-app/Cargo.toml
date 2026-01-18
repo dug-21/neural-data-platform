@@ -15,8 +15,8 @@ path = "src/mcp_main.rs"
 required-features = ["mcp"]
 
 [dependencies]
-# Core dependencies
-neural_core = { path = "../../core", package = "platform-core" }
+# Core dependencies - timescale feature for real Silver ETL
+neural_core = { path = "../../core", package = "platform-core", features = ["timescale"] }
 air-quality = { path = "../../domains/air-quality" }
 config-client = { path = "../../config-client" }
 

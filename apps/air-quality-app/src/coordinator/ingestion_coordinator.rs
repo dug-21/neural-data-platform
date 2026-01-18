@@ -1,8 +1,12 @@
 //! Ingestion Coordinator
 //!
 //! Coordinates multiple data sources and manages their lifecycle.
-//! DP-004: Data flows directly from sources to RawStorageWriter via ingestion channel.
-//! DP-012: EventBus added for multi-consumer event broadcasting to subscribers.
+//! DP-012: EventBus is the SOLE data flow mechanism. Sources publish to EventBus,
+//! and subscribers (BronzeSubscriber, SilverSubscriber, etc.) receive events.
+//!
+//! Architecture change from dp-004:
+//! - BEFORE: Sources -> mpsc -> RawStorageWriter -> ParquetStore
+//! - AFTER:  Sources -> EventBus -> BronzeSubscriber -> ParquetStore
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,11 +37,9 @@ pub enum CoordinatorError {
 
 /// Coordinates multi-stream data ingestion
 ///
-/// DP-004: The coordinator manages source lifecycle. Data flows directly from
-/// sources to RawStorageWriter via the ingestion channel set by the caller.
-///
-/// DP-012: EventBus broadcasts events to multiple subscribers (Bronze, Silver, etc.)
-/// in parallel with the existing mpsc channel. This is ADDITIVE - both pathways coexist.
+/// DP-012: EventBus is the SOLE data flow mechanism. Sources publish to EventBus,
+/// and subscribers (BronzeSubscriber, SilverSubscriber, etc.) handle storage.
+/// The mpsc channel is REMOVED - EventBus replaces it entirely.
 pub struct IngestionCoordinator {
     #[allow(dead_code)]
     router: Arc<IngestionRouter>,
@@ -47,18 +49,17 @@ pub struct IngestionCoordinator {
     shutdown_rx: Arc<RwLock<mpsc::Receiver<()>>>,
     is_running: Arc<AtomicBool>,
     /// DP-012: EventBus for multi-consumer event broadcasting
+    /// This is the SOLE data flow mechanism - no mpsc channel
     event_bus: Arc<EventBus>,
 }
 
 impl IngestionCoordinator {
     /// Create a new ingestion coordinator
     ///
-    /// NOTE: The caller must set the ingestion sender on SourceManager BEFORE
-    /// calling start(). This coordinator manages source lifecycle only.
-    ///
-    /// DP-012: Creates an EventBus with default configuration for multi-consumer
-    /// event broadcasting. Use `event_bus()` to get a reference for registering
-    /// subscribers via SubscriberCoordinator.
+    /// DP-012: Creates an EventBus that is the SOLE data flow mechanism.
+    /// Sources publish to EventBus, and subscribers handle storage.
+    /// Use `event_bus()` to get a reference for registering subscribers
+    /// via SubscriberCoordinator.
     pub fn new(
         router: Arc<IngestionRouter>,
         source_manager: Arc<RwLock<SourceManager>>,
@@ -67,10 +68,11 @@ impl IngestionCoordinator {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
 
         // DP-012: Create EventBus with default config (10,000 capacity, drop_oldest)
+        // This is the SOLE data flow mechanism - no mpsc channel
         let event_bus = Arc::new(EventBus::new(EventBusConfig::default()));
         debug!(
             capacity = event_bus.config().capacity,
-            "EventBus created for IngestionCoordinator"
+            "EventBus created for IngestionCoordinator (SOLE data flow)"
         );
 
         Self {
@@ -93,8 +95,8 @@ impl IngestionCoordinator {
 
     /// Start the coordinator
     ///
-    /// IMPORTANT: The ingestion sender must be set on SourceManager before calling this.
-    /// Data flows directly from sources to the storage writer via that sender.
+    /// DP-012: Sets the EventBus on SourceManager and starts all sources.
+    /// Sources will publish to EventBus, which broadcasts to all subscribers.
     pub async fn start(&self) -> Result<(), CoordinatorError> {
         info!("Starting ingestion coordinator");
 
@@ -108,17 +110,20 @@ impl IngestionCoordinator {
             return Ok(());
         }
 
-        // DP-004: Don't overwrite the ingestion sender - it's already set by main.rs
-        // to point to the RawStorageWriter channel.
-
-        // Start source manager (sources will send to the pre-configured channel)
+        // DP-012: Set EventBus on SourceManager - this is the SOLE data flow mechanism
         let mut sm = self.source_manager.write().await;
+        sm.set_event_bus(Arc::clone(&self.event_bus));
+
+        // Start source manager (sources will publish to EventBus)
         sm.start_all_sources()
             .await
             .map_err(|e| CoordinatorError::SourceManagerError(e.to_string()))?;
         drop(sm);
 
-        info!("Ingestion coordinator started (sources sending to pre-configured channel)");
+        info!(
+            subscriber_count = self.event_bus.subscriber_count(),
+            "Ingestion coordinator started (sources publishing to EventBus)"
+        );
         Ok(())
     }
 
@@ -166,15 +171,14 @@ impl IngestionCoordinator {
 mod tests {
     use super::*;
     use config_client::StreamRegistry;
-    use neural_core::types::RawDataPoint;
     use std::time::Duration;
 
     // ========== TEST HELPERS ==========
 
-    /// Creates a properly configured coordinator with all required channels set up
-    async fn create_test_coordinator() -> (IngestionCoordinator, mpsc::Receiver<RawDataPoint>) {
+    /// Creates a properly configured coordinator
+    /// DP-012: No mpsc channel needed - EventBus is the SOLE data flow mechanism
+    async fn create_test_coordinator() -> IngestionCoordinator {
         let (dead_letter_tx, _dead_letter_rx) = mpsc::channel(10);
-        let (ingestion_tx, ingestion_rx) = mpsc::channel(100);
         let registry = Arc::new(
             StreamRegistry::new(&["http://localhost:2379"])
                 .await
@@ -183,14 +187,8 @@ mod tests {
         let router = Arc::new(IngestionRouter::new(registry.clone(), dead_letter_tx));
         let source_manager = Arc::new(RwLock::new(SourceManager::new(registry)));
 
-        // Set ingestion sender before creating coordinator
-        source_manager
-            .write()
-            .await
-            .set_ingestion_sender(ingestion_tx);
-
-        let coordinator = IngestionCoordinator::new(router, source_manager, 100);
-        (coordinator, ingestion_rx)
+        // DP-012: No need to set ingestion sender - EventBus is set during start()
+        IngestionCoordinator::new(router, source_manager, 100)
     }
 
     // ========== LONDON SCHOOL TDD: BEHAVIOR VERIFICATION TESTS ==========
@@ -198,7 +196,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_starts_successfully() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Act
         let result = coordinator.start().await;
@@ -214,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_stops_cleanly() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         coordinator.start().await.unwrap();
         assert!(coordinator.is_running().await);
@@ -231,7 +229,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_double_start_idempotent() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Act
         let result1 = coordinator.start().await;
@@ -249,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_stop_when_not_running() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Act
         let result = coordinator.stop().await;
@@ -264,7 +262,7 @@ mod tests {
         // This test verifies the coordinator can be started and integrates with router
 
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         coordinator.start().await.unwrap();
 
@@ -278,7 +276,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_handles_source_failures_gracefully() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Act
         coordinator.start().await.unwrap();
@@ -298,8 +296,8 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_buffer_capacity() {
         // Arrange - use helper with custom buffer size
+        // DP-012: No mpsc channel needed - EventBus is the SOLE data flow mechanism
         let (dead_letter_tx, _dead_letter_rx) = mpsc::channel(10);
-        let (ingestion_tx, _ingestion_rx) = mpsc::channel(100);
         let buffer_size = 50;
         let registry = Arc::new(
             StreamRegistry::new(&["http://localhost:2379"])
@@ -308,10 +306,7 @@ mod tests {
         );
         let router = Arc::new(IngestionRouter::new(registry.clone(), dead_letter_tx));
         let source_manager = Arc::new(RwLock::new(SourceManager::new(registry)));
-        source_manager
-            .write()
-            .await
-            .set_ingestion_sender(ingestion_tx);
+        // DP-012: No need to set ingestion sender - EventBus is set during start()
         let coordinator = IngestionCoordinator::new(router, source_manager, buffer_size);
 
         // Act & Assert - verify coordinator created successfully with buffer
@@ -321,7 +316,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_get_source_health() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         coordinator.start().await.unwrap();
 
@@ -340,7 +335,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_handles_shutdown_signal() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         coordinator.start().await.unwrap();
         assert!(coordinator.is_running().await);
@@ -360,7 +355,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_integrates_with_router() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Coordinator should maintain reference to router
         assert!(coordinator.start().await.is_ok());
@@ -372,7 +367,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_integrates_with_source_manager() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Start should trigger source manager start
         coordinator.start().await.unwrap();
@@ -390,7 +385,7 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_has_event_bus() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Act
         let event_bus = coordinator.event_bus();
@@ -403,7 +398,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_bus_shared_across_clones() {
         // Arrange
-        let (coordinator, _rx) = create_test_coordinator().await;
+        let coordinator = create_test_coordinator().await;
 
         // Act - get event_bus twice
         let bus1 = coordinator.event_bus();

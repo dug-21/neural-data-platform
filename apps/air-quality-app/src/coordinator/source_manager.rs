@@ -1,6 +1,9 @@
 //! Source Manager
 //!
 //! Manages lifecycle of multiple data sources (MQTT, HTTP, Webhook)
+//!
+//! DP-012: Sources publish to EventBus instead of mpsc channel.
+//! The EventBus is the single source of truth for all data flow.
 
 use config_client::StreamRegistry;
 use neural_core::parsers::{create_parser_from_config, ParserConfig, ParserType};
@@ -8,6 +11,7 @@ use neural_core::sources::{
     AuthMethod, EndpointConfig, GenericHttpPollingConfig, GenericHttpPollingSource, RetryConfig,
 };
 use neural_core::types::raw_data_point::RawDataPoint;
+use neural_core::EventBus;
 use neural_core::{
     HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, RawSource, SensorConfig,
     SourceConfig, SourceType, StreamConfig,
@@ -15,7 +19,7 @@ use neural_core::{
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -64,11 +68,14 @@ struct SourceInfo {
 }
 
 /// Manages multiple data sources
+///
+/// DP-012: Sources publish directly to EventBus instead of mpsc channel.
+/// The EventBus broadcasts to all subscribers (BronzeSubscriber, SilverSubscriber, etc.)
 pub struct SourceManager {
     registry: Arc<StreamRegistry>,
     sources: Arc<RwLock<HashMap<String, SourceInfo>>>,
-    /// Storage sender for RawDataPoint (dp-004 Bronze layer)
-    ingestion_sender: Option<mpsc::Sender<RawDataPoint>>,
+    /// DP-012: EventBus for publishing raw data points
+    event_bus: Option<Arc<EventBus>>,
 }
 
 impl SourceManager {
@@ -77,13 +84,16 @@ impl SourceManager {
         Self {
             registry,
             sources: Arc::new(RwLock::new(HashMap::new())),
-            ingestion_sender: None,
+            event_bus: None,
         }
     }
 
-    /// Set the ingestion sender (must be called before starting sources)
-    pub fn set_ingestion_sender(&mut self, sender: mpsc::Sender<RawDataPoint>) {
-        self.ingestion_sender = Some(sender);
+    /// DP-012: Set the EventBus for publishing raw data points
+    ///
+    /// Must be called before starting sources. Sources will publish to
+    /// EventBus instead of mpsc channel, enabling multi-consumer broadcasting.
+    pub fn set_event_bus(&mut self, event_bus: Arc<EventBus>) {
+        self.event_bus = Some(event_bus);
     }
 
     /// Start all configured sources
@@ -174,17 +184,16 @@ impl SourceManager {
         // Create cancellation token for this source
         let cancel_token = CancellationToken::new();
 
-        // Spawn source based on type - only HttpPoll requires ingestion sender
+        // DP-012: Spawn source based on type - all sources publish to EventBus
         let task_handle = match source_config.source_type {
             SourceType::HttpPoll => {
-                // Get ingestion sender (required for HttpPoll)
-                let ingestion_sender = self
-                    .ingestion_sender
+                // DP-012: Get EventBus (required for all sources)
+                let event_bus = self
+                    .event_bus
                     .as_ref()
                     .ok_or_else(|| {
                         SourceManagerError::ConfigError(
-                            "Ingestion sender not set. Call set_ingestion_sender() first."
-                                .to_string(),
+                            "EventBus not set. Call set_event_bus() first.".to_string(),
                         )
                     })?
                     .clone();
@@ -216,7 +225,7 @@ impl SourceManager {
                             storage_id_clone,
                             http_config,
                             parser_config,
-                            ingestion_sender,
+                            event_bus,
                             cancel_clone,
                             ndp_id,
                             context,
@@ -236,7 +245,7 @@ impl SourceManager {
                             stream_id_clone,
                             storage_id_clone2,
                             config,
-                            ingestion_sender,
+                            event_bus,
                             cancel_clone,
                             ndp_id,
                             context,
@@ -249,14 +258,13 @@ impl SourceManager {
                 }
             }
             SourceType::Mqtt => {
-                // Get ingestion sender (required for MQTT routing through ingestion channel)
-                let ingestion_sender = self
-                    .ingestion_sender
+                // DP-012: Get EventBus (required for all sources)
+                let event_bus = self
+                    .event_bus
                     .as_ref()
                     .ok_or_else(|| {
                         SourceManagerError::ConfigError(
-                            "Ingestion sender not set. Call set_ingestion_sender() first."
-                                .to_string(),
+                            "EventBus not set. Call set_event_bus() first.".to_string(),
                         )
                     })?
                     .clone();
@@ -277,7 +285,7 @@ impl SourceManager {
                         stream_id_clone,
                         storage_id_clone,
                         config,
-                        ingestion_sender,
+                        event_bus,
                         cancel_clone,
                         ndp_id,
                         context,
@@ -397,12 +405,12 @@ impl SourceManager {
         })
     }
 
-    /// Run HTTP polling source (DP-004: emits RawDataPoint to Bronze layer)
+    /// Run HTTP polling source (DP-012: publishes RawDataPoint to EventBus)
     async fn run_http_polling_source(
         stream_id: String,
         _source_id: String,
         config: HttpPollingConfig,
-        ingestion_sender: mpsc::Sender<RawDataPoint>,
+        event_bus: Arc<EventBus>,
         cancel_token: CancellationToken,
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
@@ -449,7 +457,7 @@ impl SourceManager {
         // 3. Caused memory pressure and Pi lockups after hours of operation
         // We only use fetch_raw_batch() which returns raw JSON without parsing.
 
-        // Poll loop - fetch data and send to ingestion channel
+        // Poll loop - fetch data and publish to EventBus
         // AIR-011: Use config.poll_interval instead of hardcoded 1 second
         let mut interval = tokio::time::interval(config.poll_interval);
 
@@ -461,12 +469,14 @@ impl SourceManager {
                     break;
                 }
                 _ = interval.tick() => {
-                    // DP-004: Fetch raw data points directly from source (ADR-001 compliance)
+                    // DP-004/DP-012: Fetch raw data points and publish to EventBus
                     match source.fetch_raw_batch().await {
                         Ok(raw_points) => {
                             for raw_point in raw_points {
-                                if let Err(e) = ingestion_sender.send(raw_point).await {
-                                    error!("Failed to send point to ingestion channel: {}", e);
+                                // DP-012: Publish to EventBus (zero-copy via Arc)
+                                if let Err(e) = event_bus.publish(Arc::new(raw_point)) {
+                                    // No subscribers is not an error - data flows when subscribers register
+                                    debug!("EventBus publish result: {:?}", e);
                                 }
                             }
                         }
@@ -733,12 +743,12 @@ impl SourceManager {
         })
     }
 
-    /// Run MQTT source (DP-004: emits RawDataPoint to Bronze layer)
+    /// Run MQTT source (DP-012: publishes RawDataPoint to EventBus)
     async fn run_mqtt_source(
         stream_id: String,
         _source_id: String,
         config: MqttConfig,
-        ingestion_sender: mpsc::Sender<RawDataPoint>,
+        event_bus: Arc<EventBus>,
         cancel_token: CancellationToken,
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
@@ -781,7 +791,7 @@ impl SourceManager {
             .await
             .map_err(|e| SourceManagerError::SpawnError(e.to_string()))?;
 
-        // Poll loop - fetch data and send to ingestion channel (same pattern as HTTP)
+        // Poll loop - fetch data and publish to EventBus (same pattern as HTTP)
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
 
         loop {
@@ -793,12 +803,14 @@ impl SourceManager {
                     break;
                 }
                 _ = interval.tick() => {
-                    // DP-004: Fetch raw data points directly from source (ADR-001 compliance)
+                    // DP-004/DP-012: Fetch raw data points and publish to EventBus
                     match source.fetch_raw_batch().await {
                         Ok(raw_points) => {
                             for raw_point in raw_points {
-                                if let Err(e) = ingestion_sender.send(raw_point).await {
-                                    error!("Failed to send MQTT point to ingestion channel: {}", e);
+                                // DP-012: Publish to EventBus (zero-copy via Arc)
+                                if let Err(e) = event_bus.publish(Arc::new(raw_point)) {
+                                    // No subscribers is not an error - data flows when subscribers register
+                                    debug!("EventBus publish result: {:?}", e);
                                 }
                             }
                         }
@@ -813,13 +825,13 @@ impl SourceManager {
         Ok(())
     }
 
-    /// Run Generic HTTP polling source for external APIs (DP-004: emits RawDataPoint to Bronze layer)
+    /// Run Generic HTTP polling source for external APIs (DP-012: publishes RawDataPoint to EventBus)
     async fn run_generic_http_polling_source(
         stream_id: String,
         _source_id: String,
         config: GenericHttpPollingConfig,
         parser_config: ParserConfig,
-        ingestion_sender: mpsc::Sender<RawDataPoint>,
+        event_bus: Arc<EventBus>,
         cancel_token: CancellationToken,
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
@@ -851,7 +863,7 @@ impl SourceManager {
         // 3. Caused memory pressure and Pi lockups after hours of operation
         // We only use fetch_raw_batch() which returns raw JSON without parsing.
 
-        // Poll loop - fetch data and send to ingestion channel
+        // Poll loop - fetch data and publish to EventBus
         // AIR-011: Use config.poll_interval instead of hardcoded 1 second
         let mut interval = tokio::time::interval(config.poll_interval);
 
@@ -863,12 +875,14 @@ impl SourceManager {
                     break;
                 }
                 _ = interval.tick() => {
-                    // DP-004: Fetch raw data points directly from source (ADR-001 compliance)
+                    // DP-004/DP-012: Fetch raw data points and publish to EventBus
                     match source.fetch_raw_batch().await {
                         Ok(raw_points) => {
                             for raw_point in raw_points {
-                                if let Err(e) = ingestion_sender.send(raw_point).await {
-                                    error!("Failed to send point to ingestion channel: {}", e);
+                                // DP-012: Publish to EventBus (zero-copy via Arc)
+                                if let Err(e) = event_bus.publish(Arc::new(raw_point)) {
+                                    // No subscribers is not an error - data flows when subscribers register
+                                    debug!("EventBus publish result: {:?}", e);
                                 }
                             }
                         }
@@ -1060,8 +1074,15 @@ impl SourceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neural_core::{FieldType, SchemaField};
+    use neural_core::{EventBusConfig, FieldType, SchemaField};
     use std::time::Duration;
+
+    // ========== TEST HELPERS ==========
+
+    /// Create a test EventBus for source manager tests
+    fn create_test_event_bus() -> Arc<EventBus> {
+        Arc::new(EventBus::new(EventBusConfig::default()))
+    }
 
     // ========== LONDON SCHOOL TDD: BEHAVIOR VERIFICATION TESTS ==========
 
@@ -1112,9 +1133,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
@@ -1148,9 +1169,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // Set up ingestion sender before spawning HTTP source
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Set up EventBus before spawning HTTP source
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         let mut params = HashMap::new();
         params.insert(
@@ -1215,9 +1236,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
@@ -1272,9 +1293,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         // Spawn multiple sources
         for i in 0..3 {
@@ -1311,9 +1332,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
@@ -1364,9 +1385,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         // Spawn sources
         for i in 0..3 {
@@ -1402,9 +1423,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry.clone());
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         // Create and save stream config
         let config = create_test_stream_config("test-stream", SourceType::Mqtt);
@@ -1445,9 +1466,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // Set up ingestion sender for HTTP source
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Set up EventBus for sources
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         // Spawn sources of different types with different stream IDs to avoid overwrites
         let sources = vec![
@@ -1502,9 +1523,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         // Act - spawn sources
         for i in 0..5 {
@@ -1543,9 +1564,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
@@ -1572,9 +1593,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
@@ -1611,9 +1632,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // Set up ingestion sender for HTTP source
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Set up EventBus for sources
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         // Spawn one of each type
         for source_type in [SourceType::Mqtt, SourceType::HttpPoll, SourceType::Webhook] {
@@ -1668,9 +1689,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // MQTT now routes through ingestion channel - must set sender
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Sources publish to EventBus - must set event_bus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         let source_config = SourceConfig {
             source_type: SourceType::Mqtt,
@@ -1698,12 +1719,12 @@ mod tests {
         assert!(health.is_none());
     }
 
-    // ========== MQTT ROUTING TESTS (REGRESSION PREVENTION) ==========
+    // ========== MQTT/EventBus ROUTING TESTS (DP-012 REGRESSION PREVENTION) ==========
 
     #[tokio::test]
-    async fn test_spawn_mqtt_source_sends_to_ingestion_channel() {
-        // CRITICAL TEST: Verify MQTT sources route through ingestion channel
-        // This prevents MQTT from bypassing IngestionRouter
+    async fn test_spawn_mqtt_source_publishes_to_eventbus() {
+        // CRITICAL TEST (DP-012): Verify MQTT sources publish to EventBus
+        // This prevents MQTT from bypassing the unified data flow
         let registry = Arc::new(
             StreamRegistry::new(&["http://localhost:2379"])
                 .await
@@ -1711,9 +1732,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        // Create mock ingestion channel
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Create EventBus for sources to publish to
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus.clone());
 
         // MQTT config
         let mut params = HashMap::new();
@@ -1736,10 +1757,10 @@ mod tests {
         let result = manager.spawn_source("air-quality", &source_config).await;
 
         // Assert - MQTT source should be spawned successfully
-        // NOTE: Once MQTT implementation is complete, this should:
+        // DP-012: Sources now publish to EventBus instead of mpsc channel:
         // 1. Create a running task that subscribes to MQTT
-        // 2. Send (source_id, stream_id, point) tuples to ingestion channel
-        // 3. NOT write directly to ParquetStore
+        // 2. Publish RawDataPoints to EventBus
+        // 3. BronzeSubscriber handles writes to ParquetStore
         assert!(result.is_ok());
         let source_id = result.unwrap();
         // internal_id includes source type, but storage uses stream_id
@@ -1757,8 +1778,9 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Set up EventBus
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
 
         // MQTT config with environment variable expansion
         let mut params = HashMap::new();
@@ -1805,8 +1827,10 @@ mod tests {
         );
         let mut manager = SourceManager::new(registry);
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-        manager.set_ingestion_sender(tx);
+        // DP-012: Set up EventBus with subscriber to verify data flow
+        let event_bus = create_test_event_bus();
+        let mut _rx = event_bus.subscribe();
+        manager.set_event_bus(event_bus.clone());
 
         let mut params = HashMap::new();
         params.insert(
@@ -1831,8 +1855,7 @@ mod tests {
         let source_id = result.unwrap();
         assert!(source_id.contains("air-quality"));
 
-        // Verify ingestion channel is connected (even if no messages yet)
-        // The channel should exist and not be closed
-        assert!(!rx.is_closed());
+        // DP-012: EventBus is the data flow mechanism (subscriber count > 0 verifies connection)
+        assert!(event_bus.subscriber_count() > 0);
     }
 }

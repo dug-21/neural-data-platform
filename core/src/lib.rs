@@ -57,8 +57,9 @@ pub use event_bus::{EventBus, EventBusConfig, EventBusError, EventBusMetrics, Ov
 pub use subscribers::{
     BronzeReader, BronzeSubscriber, BronzeSubscriberConfig, CatchUpConfig, CoordinatorHealth,
     CoordinatorState, EventNotification, EventNotifier, EventNotifierConfig, EventNotifierState,
-    ProcessorSubscriber, ProcessorSubscriberConfig, ProcessorSubscriberState, SilverSubscriber,
-    SilverSubscriberConfig, Subscriber, SubscriberCoordinator, SubscriberError, SubscriberState,
+    NoBronzeReader, ProcessorSubscriber, ProcessorSubscriberConfig, ProcessorSubscriberState,
+    SilverSubscriber, SilverSubscriberConfig, Subscriber, SubscriberCoordinator, SubscriberError,
+    SubscriberState,
 };
 
 // Processors (DP-012 Phase 3)

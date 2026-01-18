@@ -5,7 +5,7 @@
 
 pub mod timescale;
 
-pub use timescale::TimescaleOutput;
+pub use timescale::{TimescaleConfig, TimescaleOutput};
 
 use crate::silver::types::SilverRecord;
 use async_trait::async_trait;

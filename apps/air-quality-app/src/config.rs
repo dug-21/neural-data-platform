@@ -7,6 +7,78 @@ pub struct AppConfig {
     pub server: ServerConfig,
     pub mqtt: MqttConfig,
     pub storage: StorageConfig,
+    /// EventNotifier configuration for DP-012 (optional)
+    #[serde(default)]
+    pub event_notifier: Option<EventNotifierAppConfig>,
+    /// ThresholdProcessor configuration for DP-012 (optional)
+    #[serde(default)]
+    pub threshold_processor: Option<ThresholdProcessorAppConfig>,
+}
+
+/// EventNotifier configuration for publishing data arrival events via MQTT
+/// DP-012: Lightweight notifications for ML integration and downstream systems
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventNotifierAppConfig {
+    /// Whether EventNotifier is enabled (default: false)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Topic prefix for notifications (default: "ndp/events")
+    #[serde(default = "default_event_topic_prefix")]
+    pub topic_prefix: String,
+    /// Stream IDs to notify for (empty = all streams)
+    #[serde(default)]
+    pub stream_filter: Vec<String>,
+    /// Include raw_payload in notification (default: false)
+    #[serde(default)]
+    pub include_payload: bool,
+    /// Specific fields to include from raw_payload
+    #[serde(default)]
+    pub payload_fields: Vec<String>,
+}
+
+fn default_event_topic_prefix() -> String {
+    "ndp/events".to_string()
+}
+
+impl Default for EventNotifierAppConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            topic_prefix: default_event_topic_prefix(),
+            stream_filter: Vec::new(),
+            include_payload: false,
+            payload_fields: Vec::new(),
+        }
+    }
+}
+
+/// ThresholdProcessor configuration for DP-012
+/// Monitors data streams and triggers alerts when values exceed thresholds
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThresholdProcessorAppConfig {
+    /// Whether ThresholdProcessor is enabled (default: false)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Path to threshold rules YAML file
+    #[serde(default)]
+    pub config_path: Option<String>,
+    /// Topic for publishing alerts (default: "ndp/alerts/threshold")
+    #[serde(default = "default_alert_topic")]
+    pub alert_topic_prefix: String,
+}
+
+fn default_alert_topic() -> String {
+    "ndp/alerts".to_string()
+}
+
+impl Default for ThresholdProcessorAppConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            config_path: None,
+            alert_topic_prefix: default_alert_topic(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +167,8 @@ impl AppConfig {
                 batch_size: 100,
                 batch_timeout_secs: 5,
             },
+            event_notifier: None,
+            threshold_processor: None,
         };
 
         // Apply environment variable overrides
@@ -116,6 +190,37 @@ impl AppConfig {
 
         if let Ok(storage_path) = std::env::var("STORAGE_PATH") {
             self.storage.base_path = storage_path;
+        }
+
+        // DP-012: EventNotifier toggle via environment variable
+        if let Ok(enabled) = std::env::var("EVENT_NOTIFIER_ENABLED") {
+            let is_enabled = enabled.to_lowercase() == "true" || enabled == "1";
+            if is_enabled {
+                // Enable EventNotifier with defaults if not already configured
+                self.event_notifier = Some(self.event_notifier.clone().unwrap_or_default());
+                if let Some(ref mut cfg) = self.event_notifier {
+                    cfg.enabled = true;
+                }
+            }
+        }
+
+        // DP-012: EventNotifier topic prefix override
+        if let Ok(prefix) = std::env::var("EVENT_NOTIFIER_TOPIC_PREFIX") {
+            if let Some(ref mut cfg) = self.event_notifier {
+                cfg.topic_prefix = prefix;
+            }
+        }
+
+        // DP-012: ThresholdProcessor toggle via environment variable
+        if let Ok(enabled) = std::env::var("THRESHOLD_PROCESSOR_ENABLED") {
+            let is_enabled = enabled.to_lowercase() == "true" || enabled == "1";
+            if is_enabled {
+                self.threshold_processor =
+                    Some(self.threshold_processor.clone().unwrap_or_default());
+                if let Some(ref mut cfg) = self.threshold_processor {
+                    cfg.enabled = true;
+                }
+            }
         }
     }
 }

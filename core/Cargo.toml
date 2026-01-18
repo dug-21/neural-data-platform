@@ -3,6 +3,11 @@ name = "platform-core"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+# Enable real TimescaleDB output (dp-012)
+timescale = ["tokio-postgres", "bb8", "bb8-postgres"]
+
 [dependencies]
 chrono = { workspace = true }
 serde = { workspace = true }
@@ -25,6 +30,11 @@ etcd-client = "0.14"
 
 # UUID generation (DP-012 Phase 3)
 uuid = { version = "1.6", features = ["v4"] }
+
+# TimescaleDB connection pool (dp-012, optional)
+tokio-postgres = { version = "0.7", optional = true }
+bb8 = { version = "0.8", optional = true }
+bb8-postgres = { version = "0.8", optional = true }
 
 [dev-dependencies]
 mockall = "0.13"

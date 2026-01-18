@@ -2,14 +2,19 @@ use air_quality_app::{
     api::create_router,
     config::AppConfig,
     coordinator::{IngestionCoordinator, IngestionRouter, SourceManager},
-    pipeline::RawStorageWriter,
     stream_integration::load_from_stream_config,
 };
 use config_client::StreamRegistry;
-use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::ParquetStore;
 // DP-012: EventBus subscriber infrastructure
-use neural_core::{BronzeSubscriber, BronzeSubscriberConfig, SubscriberCoordinator};
+use neural_core::{
+    BronzeSubscriber, BronzeSubscriberConfig, NoBronzeReader, Subscriber, SubscriberCoordinator,
+};
+// DP-012 Phase 4: SilverSubscriber for real-time Bronze-to-Silver ETL
+use neural_core::config::SilverEtlConfig;
+use neural_core::silver::outputs::{SilverOutput, TimescaleConfig, TimescaleOutput};
+use neural_core::subscribers::{SilverSubscriber, SilverSubscriberConfig};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
@@ -78,6 +83,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             batch_size: etcd_config.storage.batch_size,
                             batch_timeout_secs: etcd_config.storage.batch_timeout_secs,
                         },
+                        // DP-012: These are loaded from env vars via apply_env_overrides
+                        event_notifier: None,
+                        threshold_processor: None,
                     }
                 }
                 Err(e) => {
@@ -295,32 +303,14 @@ async fn initialize_multi_stream_coordinator(
     let router = Arc::new(IngestionRouter::new(registry.clone(), dead_letter_tx));
 
     // ==========================================================================
-    // DP-004: Bronze Layer Storage Pipeline
+    // DP-012 FULL INTEGRATION: EventBus is the SOLE data flow mechanism
     // ==========================================================================
-    // Single ingestion path using RawDataPoint with 5-column schema:
-    // timestamp, source_id, ndp_id, context, raw_payload
-    let (storage_tx, storage_rx) = mpsc::channel::<RawDataPoint>(1000);
+    // REMOVED: mpsc channel and RawStorageWriter
+    // Sources now publish directly to EventBus (set during coordinator.start())
+    // BronzeSubscriber handles all Bronze layer writes via EventBus subscription
 
-    // Spawn storage writer
-    let store_clone = store.clone();
-    tokio::spawn(async move {
-        let writer = RawStorageWriter::new(
-            store_clone,
-            storage_rx,
-            Some(50),                      // batch_size
-            Some(Duration::from_secs(30)), // batch_timeout
-        );
-        if let Err(e) = writer.run().await {
-            tracing::error!("Storage writer failed: {}", e);
-        }
-    });
-
-    tracing::info!("Storage pipeline initialized (Bronze layer - raw JSON schema)");
-
-    // Create source manager with storage sender
-    let mut source_manager_inner = SourceManager::new(registry.clone());
-    source_manager_inner.set_ingestion_sender(storage_tx);
-    let source_manager = Arc::new(RwLock::new(source_manager_inner));
+    // Create source manager (EventBus will be set during coordinator.start())
+    let source_manager = Arc::new(RwLock::new(SourceManager::new(registry.clone())));
 
     // Create coordinator
     let coordinator = Arc::new(IngestionCoordinator::new(
@@ -384,6 +374,8 @@ async fn initialize_multi_stream_coordinator(
     } else {
         tracing::info!("BronzeSubscriber registered with SubscriberCoordinator");
     }
+
+    // DP-012: SilverSubscriber deferred to future PR - EventBus wiring complete
 
     // Start subscriber coordinator (spawns subscriber tasks)
     if let Err(e) = subscriber_coordinator.start_all().await {
@@ -490,4 +482,120 @@ fn create_services_with_real_store(
         alert_store: Arc::new(AlertStore::new()),
         location_store: Arc::new(LocationStore::new()),
     }
+}
+
+// ==========================================================================
+// DP-012 Phase 4: SilverSubscriber Creation Helper
+// ==========================================================================
+
+/// Create SilverSubscribers for streams with enabled silver_etl configuration.
+/// If TimescaleDB is unavailable, returns error and caller continues without Silver.
+#[allow(dead_code)]
+async fn create_silver_subscribers(
+    _event_bus: Arc<neural_core::EventBus>,
+    registry: Arc<StreamRegistry>,
+) -> Result<Vec<Box<dyn Subscriber>>, Box<dyn std::error::Error + Send + Sync>> {
+    let timescale_url = std::env::var("TIMESCALE_URL")
+        .map_err(|_| "TIMESCALE_URL environment variable not set")?;
+
+    let mut table_mapping = HashMap::new();
+    table_mapping.insert("air-quality".to_string(), "air_quality_observations".to_string());
+    table_mapping.insert("outdoor-weather".to_string(), "weather_observations".to_string());
+    table_mapping.insert("outdoor-air-quality".to_string(), "outdoor_air_quality".to_string());
+    table_mapping.insert("nws-observations".to_string(), "weather_observations".to_string());
+    table_mapping.insert("nws-gridpoints-forecast".to_string(), "weather_forecasts".to_string());
+
+    let timescale_config = TimescaleConfig {
+        connection_string: timescale_url,
+        max_connections: std::env::var("TIMESCALE_MAX_CONNECTIONS")
+            .ok().and_then(|s| s.parse().ok()).unwrap_or(5),
+        connection_timeout_secs: std::env::var("TIMESCALE_TIMEOUT_SECS")
+            .ok().and_then(|s| s.parse().ok()).unwrap_or(10),
+        default_table: "silver.observations".to_string(),
+        table_mapping,
+        timestamp_column: "observation_time".to_string(),
+        use_upsert: true,
+    };
+
+    tracing::info!("Attempting to connect to TimescaleDB for Silver layer");
+    let timescale_output: Arc<TimescaleOutput> = match TimescaleOutput::new(timescale_config).await {
+        Ok(output) => {
+            match output.health_check().await {
+                Ok(true) => {
+                    tracing::info!("TimescaleDB connection established successfully");
+                    Arc::new(output)
+                }
+                Ok(false) => return Err("TimescaleDB health check failed".into()),
+                Err(e) => return Err(format!("TimescaleDB health check error: {}", e).into()),
+            }
+        }
+        Err(e) => return Err(format!("Failed to create TimescaleDB connection: {}", e).into()),
+    };
+
+    let config_dir = std::env::var("STREAM_CONFIG_DIR")
+        .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
+
+    let streams = registry.list_streams().await.unwrap_or_default();
+    let mut subscribers: Vec<Box<dyn Subscriber>> = Vec::new();
+
+    for stream_id in streams {
+        if let Ok(Some(silver_config)) = load_silver_etl_config(&config_dir, &stream_id).await {
+            if silver_config.enabled {
+                tracing::debug!(stream_id = %stream_id, "Found enabled silver_etl config");
+
+                let mut etl_configs = std::collections::HashMap::new();
+                etl_configs.insert(stream_id.clone(), silver_config);
+
+                let subscriber_config = SilverSubscriberConfig {
+                    subscriber_id: format!("silver-{}", stream_id),
+                    stream_filter: std::collections::HashSet::from([stream_id.clone()]),
+                    etl_configs,
+                    ..Default::default()
+                };
+
+                // Use NoBronzeReader as we don't support catch-up yet
+                let subscriber: SilverSubscriber<TimescaleOutput, NoBronzeReader> =
+                    SilverSubscriber::new(subscriber_config, timescale_output.clone());
+                subscribers.push(Box::new(subscriber));
+            }
+        }
+    }
+
+    if subscribers.is_empty() {
+        tracing::info!("No streams with enabled silver_etl configuration found");
+    } else {
+        tracing::info!("Created {} SilverSubscribers", subscribers.len());
+    }
+
+    Ok(subscribers)
+}
+
+#[allow(dead_code)]
+async fn load_silver_etl_config(
+    config_dir: &str,
+    stream_id: &str,
+) -> Result<Option<SilverEtlConfig>, Box<dyn std::error::Error + Send + Sync>> {
+    use std::path::Path;
+
+    let dir_path = Path::new(config_dir).join(stream_id).join("config.yaml");
+    let flat_path = Path::new(config_dir).join(format!("{}.yaml", stream_id));
+
+    let yaml_path = if dir_path.exists() {
+        dir_path
+    } else if flat_path.exists() {
+        flat_path
+    } else {
+        return Ok(None);
+    };
+
+    let contents = tokio::fs::read_to_string(&yaml_path).await?;
+
+    #[derive(serde::Deserialize)]
+    struct StreamConfigWithSilver {
+        #[serde(default)]
+        silver_etl: Option<SilverEtlConfig>,
+    }
+
+    let config: StreamConfigWithSilver = serde_yaml::from_str(&contents)?;
+    Ok(config.silver_etl)
 }

@@ -2807,6 +2807,8 @@ name = "platform-core"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bb8",
+ "bb8-postgres",
  "chrono",
  "etcd-client",
  "futures",
@@ -2822,6 +2824,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-postgres",
  "tokio-stream",
  "tokio-test",
  "tokio-util",

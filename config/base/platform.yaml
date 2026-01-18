@@ -4,6 +4,24 @@
 # This configuration defines the behavior of NDP's core subscribers
 # that process data as it flows through the pipeline.
 
+# TimescaleDB connection configuration (dp-012)
+# Connection string is loaded from environment variable for security
+timescale:
+  # Connection string from env: ${TIMESCALE_URL}
+  # Format: postgresql://user:password@host:port/database
+  connection_string: "${TIMESCALE_URL}"
+  max_connections: 5
+  connection_timeout_secs: 10
+  timestamp_column: "observation_time"
+  use_upsert: true
+  # Stream to table mapping
+  table_mapping:
+    air-quality: "air_quality_observations"
+    outdoor-weather: "weather_observations"
+    outdoor-air-quality: "outdoor_air_quality"
+    nws-observations: "weather_observations"
+    nws-gridpoints-forecast: "weather_forecasts"
+
 subscribers:
   # Bronze layer subscriber - writes raw data to Parquet
   bronze:
@@ -19,12 +37,44 @@ subscribers:
     catch_up:
       enabled: true
       window_secs: 3600  # 1 hour lookback on startup
-    batch_size: 50
+      batch_size: 1000   # Records to process per catch-up batch
+    batch_size: 50       # Records to batch for real-time writes
     flush_interval_secs: 10
 
   # Event notifier - publishes data events for downstream systems
+  # ADR-012-006: Lightweight MQTT notifications for ML integration
+  # Toggle via env var: EVENT_NOTIFIER_ENABLED=true
   event_notifier:
-    enabled: true
+    # Disabled by default - enable when ML container is ready
+    enabled: false
     mqtt:
+      # Topic pattern: {topic_prefix}/{stream_id}
+      # Example: ndp/events/air-quality, ndp/events/outdoor-weather
       topic_prefix: "ndp/events"
-      qos: 0  # Fire-and-forget for events
+      # QoS 0 = fire-and-forget, never blocks ingestion
+      qos: 0
+      # Keep-alive for MQTT connection
+      keep_alive_secs: 30
+    # Optional stream filter (empty = all streams)
+    stream_filter: []
+    # Payload options - minimize payload size for efficiency
+    payload:
+      # Include full raw_payload (false recommended for production)
+      include_payload: false
+      # Or include only specific fields
+      payload_fields: []
+
+  # Threshold processor - generates alerts for threshold violations
+  # ADR-012-007: ProcessorSubscriber wraps ThresholdProcessor
+  # Toggle via env var: THRESHOLD_PROCESSOR_ENABLED=true
+  threshold_processor:
+    # Disabled by default - enable when alert routing is configured
+    enabled: false
+    # Path to threshold rules configuration
+    config_path: "config/base/processors/threshold-alerts.yaml"
+    mqtt:
+      # Topic pattern: {topic_prefix}/{severity}
+      # Example: ndp/alerts/warning, ndp/alerts/critical
+      topic_prefix: "ndp/alerts"
+      qos: 1  # QoS 1 = at-least-once for alerts
+      keep_alive_secs: 30

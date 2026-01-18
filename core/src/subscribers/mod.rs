@@ -31,6 +31,9 @@ pub use notifier::{EventNotification, EventNotifier, EventNotifierConfig, EventN
 pub use processor::{ProcessorSubscriber, ProcessorSubscriberConfig, ProcessorSubscriberState};
 pub use silver::{CatchUpConfig, SilverSubscriber, SilverSubscriberConfig, SubscriberState};
 
+// Re-export NoBronzeReader for use when catch-up is not needed
+// Defined in this module (above)
+
 use crate::traits::HealthStatus;
 use crate::types::RawDataPoint;
 use async_trait::async_trait;
@@ -81,6 +84,7 @@ impl From<crate::error::CoreError> for SubscriberError {
 ///
 /// # Implementations
 /// - ParquetBronzeReader: Reads from Bronze Parquet files
+/// - NoBronzeReader: Dummy implementation (no catch-up)
 /// - TestBronzeReader: In-memory implementation for testing
 #[async_trait]
 pub trait BronzeReader: Send + Sync {
@@ -109,6 +113,29 @@ pub trait BronzeReader: Send + Sync {
         &self,
         stream_filter: Option<&str>,
     ) -> Result<Option<chrono::DateTime<chrono::Utc>>, crate::error::CoreError>;
+}
+
+/// Dummy BronzeReader that never returns data (no catch-up support).
+/// Use this when creating SilverSubscriber without catch-up capability.
+#[derive(Debug, Clone, Default)]
+pub struct NoBronzeReader;
+
+#[async_trait]
+impl BronzeReader for NoBronzeReader {
+    async fn read_since(
+        &self,
+        _since: chrono::DateTime<chrono::Utc>,
+        _stream_filter: Option<&str>,
+    ) -> Result<Vec<RawDataPoint>, crate::error::CoreError> {
+        Ok(Vec::new())
+    }
+
+    async fn get_latest_timestamp(
+        &self,
+        _stream_filter: Option<&str>,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, crate::error::CoreError> {
+        Ok(None)
+    }
 }
 
 /// Core trait for event bus subscribers
