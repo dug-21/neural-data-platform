@@ -220,6 +220,29 @@ where
         self.records_dropped
     }
 
+    /// Extract stream_id from source_id
+    ///
+    /// source_id format: "{stream_id}-{SourceType}" where SourceType is one of:
+    /// - Mqtt, HttpPoll, Webhook, FileWatch
+    ///
+    /// Examples:
+    /// - "air-quality-Mqtt" -> "air-quality"
+    /// - "outdoor-weather-HttpPoll" -> "outdoor-weather"
+    /// - "nws-observations-HttpPoll" -> "nws-observations"
+    fn extract_stream_id(source_id: &str) -> String {
+        // Known source type suffixes (from SourceType enum Debug output)
+        const SUFFIXES: &[&str] = &["-Mqtt", "-HttpPoll", "-Webhook", "-FileWatch"];
+
+        for suffix in SUFFIXES {
+            if source_id.ends_with(suffix) {
+                return source_id[..source_id.len() - suffix.len()].to_string();
+            }
+        }
+
+        // If no known suffix, return as-is (shouldn't happen in normal operation)
+        source_id.to_string()
+    }
+
     /// Perform catch-up from Bronze layer
     async fn catch_up(&mut self) -> Result<usize, SubscriberError> {
         if !self.config.catch_up.enabled {
@@ -296,11 +319,16 @@ where
 
     /// Transform a RawDataPoint to SilverRecord
     fn transform_point(&self, raw: &RawDataPoint) -> Result<Option<SilverRecord>, SubscriberError> {
+        // Extract stream_id from source_id (format: "{stream_id}-{SourceType}")
+        // source_id examples: "air-quality-Mqtt", "outdoor-weather-HttpPoll"
+        // ETL configs are keyed by stream_id: "air-quality", "outdoor-weather"
+        let stream_id = Self::extract_stream_id(&raw.source_id);
+
         // Get ETL config for this stream
-        let _etl_config = match self.config.etl_configs.get(&raw.source_id) {
+        let _etl_config = match self.config.etl_configs.get(&stream_id) {
             Some(cfg) => cfg,
             None => {
-                debug!(stream_id = %raw.source_id, "No ETL config for stream, skipping");
+                debug!(stream_id = %stream_id, source_id = %raw.source_id, "No ETL config for stream, skipping");
                 return Ok(None);
             }
         };
@@ -335,8 +363,11 @@ where
 
     /// Process a single event
     async fn process_event(&mut self, raw: Arc<RawDataPoint>) -> Result<(), SubscriberError> {
+        // Extract stream_id from source_id for stream filter check
+        let stream_id = Self::extract_stream_id(&raw.source_id);
+
         // Check stream filter
-        if !self.accepts_stream(&raw.source_id) {
+        if !self.accepts_stream(&stream_id) {
             return Ok(());
         }
 
@@ -822,5 +853,38 @@ mod tests {
             SilverSubscriber::new(config, output);
 
         assert_eq!(subscriber.id(), "custom-silver-sub");
+    }
+
+    #[test]
+    fn test_extract_stream_id_mqtt() {
+        let result = SilverSubscriber::<InMemorySilverOutput, TestBronzeReader>::extract_stream_id(
+            "air-quality-Mqtt",
+        );
+        assert_eq!(result, "air-quality");
+    }
+
+    #[test]
+    fn test_extract_stream_id_http_poll() {
+        let result = SilverSubscriber::<InMemorySilverOutput, TestBronzeReader>::extract_stream_id(
+            "outdoor-weather-HttpPoll",
+        );
+        assert_eq!(result, "outdoor-weather");
+    }
+
+    #[test]
+    fn test_extract_stream_id_nws_observations() {
+        let result = SilverSubscriber::<InMemorySilverOutput, TestBronzeReader>::extract_stream_id(
+            "nws-observations-HttpPoll",
+        );
+        assert_eq!(result, "nws-observations");
+    }
+
+    #[test]
+    fn test_extract_stream_id_no_suffix() {
+        // If no known suffix, return as-is
+        let result = SilverSubscriber::<InMemorySilverOutput, TestBronzeReader>::extract_stream_id(
+            "air-quality",
+        );
+        assert_eq!(result, "air-quality");
     }
 }
