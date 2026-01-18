@@ -375,7 +375,24 @@ async fn initialize_multi_stream_coordinator(
         tracing::info!("BronzeSubscriber registered with SubscriberCoordinator");
     }
 
-    // DP-012: SilverSubscriber deferred to future PR - EventBus wiring complete
+    // DP-012: Create and register SilverSubscribers for real-time Bronze-to-Silver ETL
+    let event_bus_for_silver = coordinator.event_bus();
+    match create_silver_subscribers(event_bus_for_silver, registry).await {
+        Ok(silver_subscribers) => {
+            for silver_subscriber in silver_subscribers {
+                if let Err(e) = subscriber_coordinator.register(silver_subscriber) {
+                    tracing::warn!("Failed to register SilverSubscriber: {}", e);
+                }
+            }
+            tracing::info!("SilverSubscribers registered for real-time Silver ETL");
+        }
+        Err(e) => {
+            tracing::warn!("SilverSubscriber setup skipped: {} (Silver layer will use batch ETL)", e);
+        }
+    }
+
+    // TODO: EventNotifier and ThresholdProcessor require MQTT output implementation
+    // They are disabled by default via EVENT_NOTIFIER_ENABLED=false
 
     // Start subscriber coordinator (spawns subscriber tasks)
     if let Err(e) = subscriber_coordinator.start_all().await {
@@ -490,7 +507,6 @@ fn create_services_with_real_store(
 
 /// Create SilverSubscribers for streams with enabled silver_etl configuration.
 /// If TimescaleDB is unavailable, returns error and caller continues without Silver.
-#[allow(dead_code)]
 async fn create_silver_subscribers(
     _event_bus: Arc<neural_core::EventBus>,
     registry: Arc<StreamRegistry>,
