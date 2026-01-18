@@ -72,6 +72,8 @@ services:
       - "8080:8080"     # HTTP API
     volumes:
       - air-quality-data:/data
+      - ../../config/base/streams:/config/streams:ro
+      - ../../config/base/processors:/config/processors:ro
     environment:
       # Core Settings
       - RUST_LOG=info
@@ -84,10 +86,23 @@ services:
       - OPENWEATHERMAP_API_KEY=${OPENWEATHERMAP_API_KEY}
       - WEATHER_LATITUDE=${WEATHER_LATITUDE:-29.95838}
       - WEATHER_LONGITUDE=${WEATHER_LONGITUDE:--81.30878}
+      # DP-012: Streaming Silver Layer via EventBus
+      - TIMESCALE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-ndp_secure_password}@timescaledb:5432/ndp
+      - TIMESCALE_MAX_CONNECTIONS=5
+      - TIMESCALE_TIMEOUT_SECS=10
+      - STREAM_CONFIG_DIR=/config/streams
+      # DP-012: EventNotifier for MQTT notifications
+      - EVENT_NOTIFIER_ENABLED=${EVENT_NOTIFIER_ENABLED:-true}
+      - EVENT_NOTIFIER_TOPIC_PREFIX=ndp/events
+      # DP-012: ThresholdProcessor for air quality alerts
+      - THRESHOLD_PROCESSOR_ENABLED=${THRESHOLD_PROCESSOR_ENABLED:-true}
+      - THRESHOLD_CONFIG_PATH=/config/processors/threshold-alerts.yaml
     depends_on:
       mosquitto:
         condition: service_healthy
       etcd:
+        condition: service_healthy
+      timescaledb:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
