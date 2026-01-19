@@ -503,12 +503,37 @@ async fn create_silver_subscribers(
     let timescale_url = std::env::var("TIMESCALE_URL")
         .map_err(|_| "TIMESCALE_URL environment variable not set")?;
 
+    let config_dir = std::env::var("STREAM_CONFIG_DIR")
+        .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
+
+    // Build table_mapping from ETL configs (source of truth: YAML config.target_table)
+    // This matches how batch silver-etl uses config.target_table from YAML
+    let streams = registry.list_streams().await.unwrap_or_default();
     let mut table_mapping = HashMap::new();
-    table_mapping.insert("air-quality".to_string(), "air_quality_observations".to_string());
-    table_mapping.insert("outdoor-weather".to_string(), "weather_observations".to_string());
-    table_mapping.insert("outdoor-air-quality".to_string(), "outdoor_air_quality".to_string());
-    table_mapping.insert("nws-observations".to_string(), "weather_observations".to_string());
-    table_mapping.insert("nws-gridpoints-forecast".to_string(), "weather_forecasts".to_string());
+
+    for stream_id in &streams {
+        if let Ok(Some(silver_config)) = load_silver_etl_config(&config_dir, stream_id).await {
+            if silver_config.enabled {
+                // Use target_table directly from config (e.g., "silver.air_quality_observations")
+                tracing::debug!(
+                    stream_id = %stream_id,
+                    target_table = %silver_config.target_table,
+                    "Adding table mapping from silver_etl config"
+                );
+                table_mapping.insert(stream_id.clone(), silver_config.target_table.clone());
+            }
+        }
+    }
+
+    if table_mapping.is_empty() {
+        tracing::warn!("No streams with silver_etl config found - Silver ETL will not process any data");
+    } else {
+        tracing::info!(
+            "Built table_mapping from {} stream configs: {:?}",
+            table_mapping.len(),
+            table_mapping.keys().collect::<Vec<_>>()
+        );
+    }
 
     let timescale_config = TimescaleConfig {
         connection_string: timescale_url,
@@ -537,10 +562,7 @@ async fn create_silver_subscribers(
         Err(e) => return Err(format!("Failed to create TimescaleDB connection: {}", e).into()),
     };
 
-    let config_dir = std::env::var("STREAM_CONFIG_DIR")
-        .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
-
-    let streams = registry.list_streams().await.unwrap_or_default();
+    // Reuse streams list from earlier (already loaded for table_mapping)
     let mut subscribers: Vec<Box<dyn Subscriber>> = Vec::new();
 
     for stream_id in streams {
