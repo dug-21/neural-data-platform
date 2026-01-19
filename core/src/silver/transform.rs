@@ -74,7 +74,9 @@ pub fn transform_to_silver(
 // =============================================================================
 
 fn extract_stream_id(source_id: &str) -> String {
-    let source_types = ["Http", "Mqtt", "File"];
+    // Source types that can be suffixed to stream_id to form source_id
+    // e.g., "outdoor-weather-HttpPoll" -> "outdoor-weather"
+    let source_types = ["HttpPoll", "Http", "Mqtt", "File"];
     for suffix in source_types {
         if let Some(stripped) = source_id.strip_suffix(&format!("-{}", suffix)) {
             return stripped.to_string();
@@ -512,6 +514,8 @@ mod tests {
     fn test_extract_stream_id() {
         assert_eq!(extract_stream_id("air-quality-Mqtt"), "air-quality");
         assert_eq!(extract_stream_id("outdoor-weather-Http"), "outdoor-weather");
+        assert_eq!(extract_stream_id("outdoor-weather-HttpPoll"), "outdoor-weather");
+        assert_eq!(extract_stream_id("nws-observations-HttpPoll"), "nws-observations");
     }
 
     #[test]
