@@ -148,6 +148,14 @@ mod pooled {
         }
 
         /// Build INSERT/UPSERT query for a record - ALL column names from config
+        ///
+        /// Column order matches batch silver-etl exactly:
+        /// 1. ingestion_time (always current_timestamp/NOW())
+        /// 2. Primary timestamp (config.timestamp.target_field)
+        /// 3. Identity fields (config.identity_fields - supports multiple)
+        /// 4. Valid timestamp if present (config.valid_timestamp.target_field)
+        /// 5. Data field mappings (config.field_mappings)
+        /// 6. DQ flags (config.dq_output.target_column)
         fn build_upsert_query(
             &self,
             record: &SilverRecord,
@@ -157,12 +165,26 @@ mod pooled {
             let timestamp_col = &etl_config.timestamp.target_field;
             let dq_col = &etl_config.dq_output.target_column;
 
-            // Start with ingestion_time (always NOW()) and primary timestamp
-            let mut columns = vec!["ingestion_time".to_string(), timestamp_col.clone()];
-            let mut placeholders = vec!["NOW()".to_string(), "$1".to_string()];
-            let mut param_index = 2;
+            // 1. Start with ingestion_time (always NOW()) - matches batch ETL's current_timestamp
+            let mut columns = vec!["ingestion_time".to_string()];
+            let mut placeholders = vec!["NOW()".to_string()];
+            let mut param_index = 1;
 
-            // Add valid_timestamp if configured (e.g., for forecasts)
+            // 2. Primary timestamp
+            columns.push(timestamp_col.clone());
+            placeholders.push(format!("${}", param_index));
+            param_index += 1;
+
+            // 3. Identity fields from config - supports MULTIPLE (matches batch ETL)
+            for identity in &etl_config.identity_fields {
+                columns.push(identity.target.clone());
+                placeholders.push(format!("${}", param_index));
+                param_index += 1;
+            }
+
+            // 4. Valid timestamp if configured (e.g., for forecasts) - AFTER identity fields
+            let has_valid_timestamp =
+                etl_config.valid_timestamp.is_some() && record.valid_timestamp.is_some();
             if let Some(ref valid_ts) = etl_config.valid_timestamp {
                 if record.valid_timestamp.is_some() {
                     columns.push(valid_ts.target_field.clone());
@@ -171,17 +193,7 @@ mod pooled {
                 }
             }
 
-            // Add identity fields from config (e.g., ndp_id)
-            for identity in &etl_config.identity_fields {
-                if record.device_id.is_some() {
-                    columns.push(identity.target.clone());
-                    placeholders.push(format!("${}", param_index));
-                    param_index += 1;
-                    break; // Only support one identity field for now
-                }
-            }
-
-            // Add data fields (from record.fields which are set by transform)
+            // 5. Data fields (from record.fields which are set by transform)
             let field_names: Vec<String> = record.fields.keys().cloned().collect();
             for name in &field_names {
                 columns.push(name.clone());
@@ -189,7 +201,7 @@ mod pooled {
                 param_index += 1;
             }
 
-            // Add dq_flags column if there are flags (column name from config)
+            // 6. DQ flags column if enabled (column name from config)
             if etl_config.dq_output.enabled && !record.dq_flags().is_empty() {
                 columns.push(dq_col.clone());
                 placeholders.push(format!("${}", param_index));
@@ -207,7 +219,7 @@ mod pooled {
                     crate::config::DeduplicationStrategy::Upsert
                 )
             {
-                // UPSERT using ON CONFLICT - exclude dedup keys from UPDATE
+                // UPSERT using ON CONFLICT - exclude dedup keys and ingestion_time from UPDATE
                 let update_columns: Vec<String> = columns
                     .iter()
                     .filter(|c| {
@@ -240,12 +252,25 @@ mod pooled {
                 )
             };
 
+            // Track has_valid_timestamp for param building
+            let _ = has_valid_timestamp;
+
             (query, field_names)
         }
     }
 
     #[async_trait]
     impl SilverOutput for TimescaleOutput {
+        /// Write a Silver record to TimescaleDB
+        ///
+        /// Parameter order matches build_upsert_query() exactly:
+        /// 1. Primary timestamp (config.timestamp.target_field)
+        /// 2. Identity fields (config.identity_fields - supports multiple)
+        /// 3. Valid timestamp if present (config.valid_timestamp.target_field)
+        /// 4. Data field mappings (config.field_mappings)
+        /// 5. DQ flags (config.dq_output.target_column)
+        ///
+        /// Note: ingestion_time uses NOW() in SQL, not a parameter
         async fn write(
             &self,
             record: &SilverRecord,
@@ -271,34 +296,39 @@ mod pooled {
             })?;
 
             // Build parameter values in order matching build_upsert_query
+            // Order: timestamp, identity_fields (multiple), valid_timestamp, data_fields, dq_flags
             let mut params: Vec<String> = Vec::new();
 
-            // Primary timestamp
+            // 1. Primary timestamp (first param since ingestion_time uses NOW())
             params.push(record.timestamp.to_rfc3339());
 
-            // Valid timestamp if present
-            if let Some(ref valid_ts) = etl_config.valid_timestamp {
+            // 2. Identity fields - ALL of them from config (supports multiple)
+            // Try identity_fields HashMap first, fall back to device_id for backward compat
+            for identity in &etl_config.identity_fields {
+                let value = record
+                    .identity_fields
+                    .get(&identity.target)
+                    .map(|v| v.to_string().trim_matches('"').to_string())
+                    .or_else(|| record.device_id.clone())
+                    .unwrap_or_else(|| "null".to_string());
+                params.push(value);
+            }
+
+            // 3. Valid timestamp if present (AFTER identity fields)
+            if etl_config.valid_timestamp.is_some() {
                 if let Some(vt) = record.valid_timestamp {
-                    let _ = valid_ts; // Use config field name
                     params.push(vt.to_rfc3339());
                 }
             }
 
-            // Identity field (device_id)
-            if !etl_config.identity_fields.is_empty() {
-                if let Some(ref device_id) = record.device_id {
-                    params.push(device_id.clone());
-                }
-            }
-
-            // Data fields
+            // 4. Data fields
             for name in &field_names {
                 if let Some(value) = record.fields.get(name) {
                     params.push(value.to_string().trim_matches('"').to_string());
                 }
             }
 
-            // DQ flags (column name from config)
+            // 5. DQ flags (column name from config)
             if etl_config.dq_output.enabled && !record.dq_flags().is_empty() {
                 let flags_array = format!(
                     "{{{}}}",
