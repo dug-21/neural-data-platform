@@ -10,7 +10,6 @@ use neural_core::parsers::{create_parser_from_config, ParserConfig, ParserType};
 use neural_core::sources::{
     AuthMethod, EndpointConfig, GenericHttpPollingConfig, GenericHttpPollingSource, RetryConfig,
 };
-use neural_core::types::raw_data_point::RawDataPoint;
 use neural_core::EventBus;
 use neural_core::{
     HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, RawSource, SensorConfig,
