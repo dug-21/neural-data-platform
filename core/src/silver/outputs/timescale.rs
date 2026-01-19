@@ -290,12 +290,17 @@ mod pooled {
                     Ok(())
                 }
                 Err(e) => {
+                    let table = self.get_table(&record.stream_id);
                     error!(
                         stream_id = %record.stream_id,
+                        table = %table,
                         error = %e,
-                        "Failed to write record"
+                        query = %query,
+                        "Failed to write record to TimescaleDB"
                     );
-                    Err(SilverOutputError::WriteError(e.to_string()))
+                    Err(SilverOutputError::WriteError(format!(
+                        "table={}, error={}", table, e
+                    )))
                 }
             }
         }
