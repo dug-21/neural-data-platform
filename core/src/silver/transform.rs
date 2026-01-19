@@ -234,7 +234,7 @@ fn extract_json_path(path: &str, raw: &RawDataPoint) -> Option<Value> {
         "raw_payload" => {
             let mut current = &raw.raw_payload;
             for part in &parts[1..] {
-                current = current.get(*part)?;
+                current = navigate_json_part(current, part)?;
             }
             Some(current.clone())
         }
@@ -242,7 +242,7 @@ fn extract_json_path(path: &str, raw: &RawDataPoint) -> Option<Value> {
             let context = raw.context.as_ref()?;
             let mut current = context;
             for part in &parts[1..] {
-                current = current.get(*part)?;
+                current = navigate_json_part(current, part)?;
             }
             Some(current.clone())
         }
@@ -252,6 +252,35 @@ fn extract_json_path(path: &str, raw: &RawDataPoint) -> Option<Value> {
         ))),
         "source_id" => Some(Value::String(raw.source_id.clone())),
         _ => raw.raw_payload.get(parts[0]).cloned(),
+    }
+}
+
+/// Navigate a single path part, handling both field access and array indexing.
+/// Supports: "field", "field[0]", "field[0][1]" (nested arrays)
+fn navigate_json_part<'a>(current: &'a Value, part: &str) -> Option<&'a Value> {
+    if let Some(bracket_start) = part.find('[') {
+        // Has array index(es): "list[0]" or "list[0][1]"
+        let field = &part[..bracket_start];
+        let mut result = if field.is_empty() {
+            current
+        } else {
+            current.get(field)?
+        };
+
+        // Extract all indices like [0], [1], etc.
+        let indices_part = &part[bracket_start..];
+        for cap in indices_part.split(']') {
+            if let Some(idx_str) = cap.strip_prefix('[') {
+                if !idx_str.is_empty() {
+                    let idx: usize = idx_str.parse().ok()?;
+                    result = result.get(idx)?;
+                }
+            }
+        }
+        Some(result)
+    } else {
+        // Simple field access
+        current.get(part)
     }
 }
 
@@ -555,5 +584,48 @@ mod tests {
             coerce_to_type(&json!(42), "text", "test").unwrap().as_str(),
             Some("42")
         );
+    }
+
+    #[test]
+    fn test_array_index_extraction() {
+        // Test extraction with array indexing like outdoor-air-quality uses
+        let raw = RawDataPoint::new(
+            "outdoor-air-quality-Http",
+            json!({
+                "list": [{
+                    "main": { "aqi": 2 },
+                    "components": {
+                        "pm2_5": 12.5,
+                        "pm10": 25.0
+                    }
+                }]
+            }),
+        )
+        .with_timestamp(Utc::now());
+
+        let mut config = test_config();
+        config.field_mappings = vec![
+            SilverFieldMapping {
+                source_path: "raw_payload.list[0].main.aqi".to_string(),
+                target_column: "aqi".to_string(),
+                column_type: "integer".to_string(),
+                nullable: false,
+                transform: None,
+                dq_rules: vec![],
+            },
+            SilverFieldMapping {
+                source_path: "raw_payload.list[0].components.pm2_5".to_string(),
+                target_column: "pm25".to_string(),
+                column_type: "double_precision".to_string(),
+                nullable: false,
+                transform: None,
+                dq_rules: vec![],
+            },
+        ];
+
+        let result = transform_to_silver(&raw, &config).unwrap();
+
+        assert_eq!(result.fields["aqi"].as_i64(), Some(2));
+        assert_eq!(result.fields["pm25"].as_f64(), Some(12.5));
     }
 }
