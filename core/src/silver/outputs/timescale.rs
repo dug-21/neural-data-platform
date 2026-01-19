@@ -242,7 +242,7 @@ mod pooled {
 
             // Execute query using raw query with string parameters
             // For production, we'd use prepared statements with proper types
-            let result = if let Some(ref device_id) = record.device_id {
+            let raw_query = if let Some(ref device_id) = record.device_id {
                 let mut params: Vec<String> = vec![timestamp_str, device_id.clone()];
 
                 for name in &field_names {
@@ -259,10 +259,7 @@ mod pooled {
                     params.push(flags_array);
                 }
 
-                // Build parameterized query execution
-                // This is simplified - production code would use proper tokio-postgres params
-                let raw_query = build_raw_query(&query, &params);
-                conn.execute(&raw_query, &[]).await
+                build_raw_query(&query, &params)
             } else {
                 let mut params: Vec<String> = vec![timestamp_str];
 
@@ -280,9 +277,11 @@ mod pooled {
                     params.push(flags_array);
                 }
 
-                let raw_query = build_raw_query(&query, &params);
-                conn.execute(&raw_query, &[]).await
+                build_raw_query(&query, &params)
             };
+
+            // Execute the query
+            let result = conn.execute(&raw_query, &[]).await;
 
             match result {
                 Ok(_) => {
@@ -291,15 +290,27 @@ mod pooled {
                 }
                 Err(e) => {
                     let table = self.get_table(&record.stream_id);
+                    // Extract detailed PostgreSQL error if available
+                    let pg_detail = if let Some(db_err) = e.as_db_error() {
+                        format!(
+                            "code={}, message={}, detail={:?}, hint={:?}",
+                            db_err.code().code(),
+                            db_err.message(),
+                            db_err.detail(),
+                            db_err.hint()
+                        )
+                    } else {
+                        format!("{:?}", e)
+                    };
                     error!(
                         stream_id = %record.stream_id,
                         table = %table,
-                        error = %e,
-                        query = %query,
+                        pg_error = %pg_detail,
+                        executed_query = %raw_query,
                         "Failed to write record to TimescaleDB"
                     );
                     Err(SilverOutputError::WriteError(format!(
-                        "table={}, error={}", table, e
+                        "table={}, error={}", table, pg_detail
                     )))
                 }
             }
