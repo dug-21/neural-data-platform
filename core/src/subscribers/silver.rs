@@ -231,7 +231,7 @@ where
     /// - "nws-observations-HttpPoll" -> "nws-observations"
     fn extract_stream_id(source_id: &str) -> String {
         // Known source type suffixes (from SourceType enum Debug output)
-        const SUFFIXES: &[&str] = &["-Mqtt", "-HttpPoll", "-Webhook", "-FileWatch"];
+        const SUFFIXES: &[&str] = &["-Mqtt", "-HttpPoll", "-Http", "-Webhook", "-FileWatch"];
 
         for suffix in SUFFIXES {
             if source_id.ends_with(suffix) {
