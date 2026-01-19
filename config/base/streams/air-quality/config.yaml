@@ -229,7 +229,7 @@ silver_etl:
           action: clamp
           clamp_to_bounds: true
 
-    - source_path: raw_payload.tvoc_index
+    - source_path: raw_payload.tvocIndex
       target_column: tvoc_index
       type: smallint
       unit: "index"
@@ -242,7 +242,7 @@ silver_etl:
           action: clamp
           clamp_to_bounds: true
 
-    - source_path: raw_payload.nox_index
+    - source_path: raw_payload.noxIndex
       target_column: nox_index
       type: smallint
       unit: "index"
