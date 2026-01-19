@@ -317,7 +317,7 @@ where
         Ok(processed)
     }
 
-    /// Transform a RawDataPoint to SilverRecord
+    /// Transform a RawDataPoint to SilverRecord using config-driven field mappings
     fn transform_point(&self, raw: &RawDataPoint) -> Result<Option<SilverRecord>, SubscriberError> {
         // Extract stream_id from source_id (format: "{stream_id}-{SourceType}")
         // source_id examples: "air-quality-Mqtt", "outdoor-weather-HttpPoll"
@@ -325,7 +325,7 @@ where
         let stream_id = Self::extract_stream_id(&raw.source_id);
 
         // Get ETL config for this stream
-        let _etl_config = match self.config.etl_configs.get(&stream_id) {
+        let etl_config = match self.config.etl_configs.get(&stream_id) {
             Some(cfg) => cfg,
             None => {
                 debug!(stream_id = %stream_id, source_id = %raw.source_id, "No ETL config for stream, skipping");
@@ -333,33 +333,19 @@ where
             }
         };
 
-        // TODO: Full transform implementation would:
-        // 1. Extract timestamp using config.timestamp mapping
-        // 2. Extract identity fields
-        // 3. Apply field mappings with transforms
-        // 4. Evaluate DQ rules
-        // 5. Build SilverRecord
-
-        // For now, create a basic record from the raw data
-        // Use extracted stream_id (not source_id) so table_mapping lookup works
-        let timestamp = raw.timestamp;
-        let mut record = SilverRecord::new(&stream_id, timestamp);
-
-        // Set device ID from ndp_id if present
-        if let Some(ref ndp_id) = raw.ndp_id {
-            record = record.with_device_id(ndp_id);
-        }
-
-        // Copy fields from raw_payload
-        if let Some(payload) = raw.raw_payload.as_object() {
-            for (key, value) in payload {
-                if key != "timestamp" {
-                    record = record.with_field(key.clone(), value.clone());
-                }
+        // Use config-driven transform (same logic as batch silver-etl)
+        // This uses config.field_mappings to extract only mapped fields with transforms
+        match crate::silver::transform::transform_to_silver(raw, etl_config) {
+            Ok(record) => Ok(Some(record)),
+            Err(e) => {
+                warn!(
+                    stream_id = %stream_id,
+                    error = %e,
+                    "Transform failed, skipping record"
+                );
+                Ok(None)
             }
         }
-
-        Ok(Some(record))
     }
 
     /// Process a single event
