@@ -171,12 +171,35 @@ fn build_column_oriented_parser(
 ///
 /// Groups points by valid_time, then creates one SilverRecord per valid_time
 /// with all metrics as fields. This matches the PIVOT SQL in batch silver-etl.
+///
+/// Column name mapping (matches batch silver-etl):
+/// 1. pre_transform.metrics[].target_column = metric_name in ColumnOrientedParser output
+/// 2. field_mappings[].source_path matches metric_name
+/// 3. field_mappings[].target_column = final Silver column name
 fn pivot_to_silver_records(
     raw: &RawDataPoint,
-    _config: &SilverEtlConfig,
+    config: &SilverEtlConfig,
     points: Vec<TimeSeriesPoint>,
 ) -> Result<Vec<SilverRecord>, TransformError> {
     let stream_id = extract_stream_id(&raw.source_id);
+
+    // Build metric_name -> target_column mapping from field_mappings
+    // This mirrors how batch silver-etl's MetricMapping works
+    let metric_to_column: HashMap<String, String> = config
+        .field_mappings
+        .iter()
+        .map(|m| {
+            // source_path might be like "raw_payload.temperature" or just "temperature"
+            // Extract the final part as the metric name
+            let metric_name = m
+                .source_path
+                .rsplit('.')
+                .next()
+                .unwrap_or(&m.source_path)
+                .to_string();
+            (metric_name, m.target_column.clone())
+        })
+        .collect();
 
     // Group points by valid_time
     // Key: valid_time as timestamp, Value: map of metric_name -> value
@@ -226,10 +249,18 @@ fn pivot_to_silver_records(
             record = record.with_device_id(ndp_id.clone());
         }
 
-        // Add all metrics as fields
+        // Add all metrics as fields with column name mapping
+        // metric_name (from pre-transform) -> target_column (from field_mappings)
         for (metric_name, value) in metrics {
+            // Look up final column name from field_mappings
+            // If no mapping found, use metric_name as-is (shouldn't happen with proper config)
+            let column_name = metric_to_column
+                .get(&metric_name)
+                .cloned()
+                .unwrap_or(metric_name);
+
             record.fields.insert(
-                metric_name,
+                column_name,
                 Value::Number(
                     serde_json::Number::from_f64(value)
                         .unwrap_or_else(|| serde_json::Number::from(0)),
