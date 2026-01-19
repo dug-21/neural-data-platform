@@ -63,8 +63,9 @@ sources:
     broker_url: "mosquitto"
     port: 1883
     client_id: "air-quality-app"
-    topic_pattern: "airgradient/readings/+"
-    qos: 1
+    subscriptions:
+      - topic: "airgradient/readings/+"
+        qos: 1
     reconnect_delay_secs: 1
     max_reconnect_delay_secs: 30
     buffer_capacity: 1000
@@ -86,8 +87,9 @@ mqtt:
   broker_url: "mosquitto"
   port: 1883
   client_id: "air-quality-app"
-  topic_pattern: "airgradient/readings/+"
-  qos: 1
+  subscriptions:
+    - topic: "airgradient/readings/+"
+      qos: 1
   reconnect_delay_secs: 1
   max_reconnect_delay_secs: 30
   buffer_capacity: 1000
