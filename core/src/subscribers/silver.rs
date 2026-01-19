@@ -341,8 +341,9 @@ where
         // 5. Build SilverRecord
 
         // For now, create a basic record from the raw data
+        // Use extracted stream_id (not source_id) so table_mapping lookup works
         let timestamp = raw.timestamp;
-        let mut record = SilverRecord::new(&raw.source_id, timestamp);
+        let mut record = SilverRecord::new(&stream_id, timestamp);
 
         // Set device ID from ndp_id if present
         if let Some(ref ndp_id) = raw.ndp_id {
