@@ -28,6 +28,8 @@ pub fn transform_to_silver(
         record = record.with_device_id(ndp_id.clone());
     }
 
+    // Extract valid_timestamp if configured (e.g., for forecasts)
+    // Column name comes from config at write time, not stored in record
     if let Some(ref valid_ts_config) = config.valid_timestamp {
         if let Ok(valid_ts) = extract_valid_timestamp(raw, valid_ts_config) {
             record = record.with_valid_timestamp(valid_ts);

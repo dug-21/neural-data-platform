@@ -17,6 +17,9 @@ use thiserror::Error;
 // =============================================================================
 
 /// Transformed Silver layer record ready for TimescaleDB insertion.
+///
+/// Note: Column names are NOT stored in SilverRecord - they come from
+/// SilverEtlConfig at write time. This keeps records data-only.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SilverRecord {
     /// Stream identifier (e.g., "air-quality", "outdoor-weather")

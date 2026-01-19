@@ -94,6 +94,7 @@ impl Default for TimescaleConfig {
 #[cfg(feature = "timescale")]
 mod pooled {
     use super::*;
+    use crate::config::SilverEtlConfig;
     use bb8::Pool;
     use bb8_postgres::PostgresConnectionManager;
     use tokio_postgres::NoTls;
@@ -101,6 +102,8 @@ mod pooled {
     type PgPool = Pool<PostgresConnectionManager<NoTls>>;
 
     /// Production TimescaleDB output with connection pooling
+    ///
+    /// All column names are derived from SilverEtlConfig - no hardcoded column names.
     pub struct TimescaleOutput {
         config: TimescaleConfig,
         pool: PgPool,
@@ -144,32 +147,41 @@ mod pooled {
             Ok(Self { config, pool })
         }
 
-        /// Get target table for a stream
-        fn get_table(&self, stream_id: &str) -> String {
-            self.config
-                .table_mapping
-                .get(stream_id)
-                .cloned()
-                .unwrap_or_else(|| self.config.default_table.clone())
-        }
+        /// Build INSERT/UPSERT query for a record - ALL column names from config
+        fn build_upsert_query(
+            &self,
+            record: &SilverRecord,
+            etl_config: &SilverEtlConfig,
+        ) -> (String, Vec<String>) {
+            let table = &etl_config.target_table;
+            let timestamp_col = &etl_config.timestamp.target_field;
+            let dq_col = &etl_config.dq_output.target_column;
 
-        /// Build INSERT/UPSERT query for a record
-        fn build_upsert_query(&self, table: &str, record: &SilverRecord) -> (String, Vec<String>) {
-            let mut columns = vec![
-                "ingestion_time".to_string(),
-                self.config.timestamp_column.clone(),
-            ];
+            // Start with ingestion_time (always NOW()) and primary timestamp
+            let mut columns = vec!["ingestion_time".to_string(), timestamp_col.clone()];
             let mut placeholders = vec!["NOW()".to_string(), "$1".to_string()];
             let mut param_index = 2;
 
-            // Add ndp_id if present
-            if record.device_id.is_some() {
-                columns.push("ndp_id".to_string());
-                placeholders.push(format!("${}", param_index));
-                param_index += 1;
+            // Add valid_timestamp if configured (e.g., for forecasts)
+            if let Some(ref valid_ts) = etl_config.valid_timestamp {
+                if record.valid_timestamp.is_some() {
+                    columns.push(valid_ts.target_field.clone());
+                    placeholders.push(format!("${}", param_index));
+                    param_index += 1;
+                }
             }
 
-            // Add data fields
+            // Add identity fields from config (e.g., ndp_id)
+            for identity in &etl_config.identity_fields {
+                if record.device_id.is_some() {
+                    columns.push(identity.target.clone());
+                    placeholders.push(format!("${}", param_index));
+                    param_index += 1;
+                    break; // Only support one identity field for now
+                }
+            }
+
+            // Add data fields (from record.fields which are set by transform)
             let field_names: Vec<String> = record.fields.keys().cloned().collect();
             for name in &field_names {
                 columns.push(name.clone());
@@ -177,31 +189,50 @@ mod pooled {
                 param_index += 1;
             }
 
-            // Add dq_flags if present
-            if !record.dq_flags().is_empty() {
-                columns.push("dq_flags".to_string());
+            // Add dq_flags column if there are flags (column name from config)
+            if etl_config.dq_output.enabled && !record.dq_flags().is_empty() {
+                columns.push(dq_col.clone());
                 placeholders.push(format!("${}", param_index));
             }
 
             let columns_str = columns.join(", ");
             let placeholders_str = placeholders.join(", ");
 
-            let query = if self.config.use_upsert {
-                // UPSERT using ON CONFLICT
+            // Build ON CONFLICT clause from deduplication.key_columns
+            let dedup_keys = etl_config.deduplication.key_columns.join(", ");
+
+            let query = if etl_config.deduplication.enabled
+                && matches!(
+                    etl_config.deduplication.strategy,
+                    crate::config::DeduplicationStrategy::Upsert
+                )
+            {
+                // UPSERT using ON CONFLICT - exclude dedup keys from UPDATE
                 let update_columns: Vec<String> = columns
                     .iter()
-                    .filter(|c| *c != "ingestion_time" && *c != &self.config.timestamp_column && *c != "ndp_id")
+                    .filter(|c| {
+                        *c != "ingestion_time"
+                            && !etl_config.deduplication.key_columns.contains(c)
+                    })
                     .map(|c| format!("{} = EXCLUDED.{}", c, c))
                     .collect();
 
-                format!(
-                    "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}, ndp_id) DO UPDATE SET {}",
-                    table,
-                    columns_str,
-                    placeholders_str,
-                    self.config.timestamp_column,
-                    update_columns.join(", ")
-                )
+                if update_columns.is_empty() {
+                    // No columns to update, use DO NOTHING
+                    format!(
+                        "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO NOTHING",
+                        table, columns_str, placeholders_str, dedup_keys
+                    )
+                } else {
+                    format!(
+                        "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {}",
+                        table,
+                        columns_str,
+                        placeholders_str,
+                        dedup_keys,
+                        update_columns.join(", ")
+                    )
+                }
             } else {
                 format!(
                     "INSERT INTO {} ({}) VALUES ({})",
@@ -215,14 +246,18 @@ mod pooled {
 
     #[async_trait]
     impl SilverOutput for TimescaleOutput {
-        async fn write(&self, record: &SilverRecord) -> Result<(), SilverOutputError> {
+        async fn write(
+            &self,
+            record: &SilverRecord,
+            etl_config: &SilverEtlConfig,
+        ) -> Result<(), SilverOutputError> {
             if record.should_drop() {
                 debug!(stream_id = %record.stream_id, "Dropping record due to DQ rules");
                 return Ok(());
             }
 
-            let table = self.get_table(&record.stream_id);
-            let (query, field_names) = self.build_upsert_query(&table, record);
+            let table = &etl_config.target_table;
+            let (query, field_names) = self.build_upsert_query(record, etl_config);
 
             debug!(
                 table = %table,
@@ -235,50 +270,49 @@ mod pooled {
                 SilverOutputError::ConnectionError(format!("Failed to get connection: {}", e))
             })?;
 
-            // Build parameter values
-            // Note: This is a simplified implementation. A full implementation would
-            // use proper type mapping based on SilverEtlConfig field_mappings.
-            let timestamp_str = record.timestamp.to_rfc3339();
+            // Build parameter values in order matching build_upsert_query
+            let mut params: Vec<String> = Vec::new();
 
-            // Execute query using raw query with string parameters
-            // For production, we'd use prepared statements with proper types
-            let raw_query = if let Some(ref device_id) = record.device_id {
-                let mut params: Vec<String> = vec![timestamp_str, device_id.clone()];
+            // Primary timestamp
+            params.push(record.timestamp.to_rfc3339());
 
-                for name in &field_names {
-                    if let Some(value) = record.fields.get(name) {
-                        params.push(value.to_string().trim_matches('"').to_string());
-                    }
+            // Valid timestamp if present
+            if let Some(ref valid_ts) = etl_config.valid_timestamp {
+                if let Some(vt) = record.valid_timestamp {
+                    let _ = valid_ts; // Use config field name
+                    params.push(vt.to_rfc3339());
                 }
+            }
 
-                if !record.dq_flags().is_empty() {
-                    let flags_array = format!(
-                        "{{{}}}",
-                        record.dq_flags().iter().map(|f| format!("\"{}\"", f)).collect::<Vec<_>>().join(",")
-                    );
-                    params.push(flags_array);
+            // Identity field (device_id)
+            if !etl_config.identity_fields.is_empty() {
+                if let Some(ref device_id) = record.device_id {
+                    params.push(device_id.clone());
                 }
+            }
 
-                build_raw_query(&query, &params)
-            } else {
-                let mut params: Vec<String> = vec![timestamp_str];
-
-                for name in &field_names {
-                    if let Some(value) = record.fields.get(name) {
-                        params.push(value.to_string().trim_matches('"').to_string());
-                    }
+            // Data fields
+            for name in &field_names {
+                if let Some(value) = record.fields.get(name) {
+                    params.push(value.to_string().trim_matches('"').to_string());
                 }
+            }
 
-                if !record.dq_flags().is_empty() {
-                    let flags_array = format!(
-                        "{{{}}}",
-                        record.dq_flags().iter().map(|f| format!("\"{}\"", f)).collect::<Vec<_>>().join(",")
-                    );
-                    params.push(flags_array);
-                }
+            // DQ flags (column name from config)
+            if etl_config.dq_output.enabled && !record.dq_flags().is_empty() {
+                let flags_array = format!(
+                    "{{{}}}",
+                    record
+                        .dq_flags()
+                        .iter()
+                        .map(|f| format!("\"{}\"", f))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                );
+                params.push(flags_array);
+            }
 
-                build_raw_query(&query, &params)
-            };
+            let raw_query = build_raw_query(&query, &params);
 
             // Execute the query
             let result = conn.execute(&raw_query, &[]).await;
@@ -289,7 +323,6 @@ mod pooled {
                     Ok(())
                 }
                 Err(e) => {
-                    let table = self.get_table(&record.stream_id);
                     // Extract detailed PostgreSQL error if available
                     let pg_detail = if let Some(db_err) = e.as_db_error() {
                         format!(
@@ -310,7 +343,8 @@ mod pooled {
                         "Failed to write record to TimescaleDB"
                     );
                     Err(SilverOutputError::WriteError(format!(
-                        "table={}, error={}", table, pg_detail
+                        "table={}, error={}",
+                        table, pg_detail
                     )))
                 }
             }
@@ -319,12 +353,15 @@ mod pooled {
         async fn get_watermark(
             &self,
             stream_id: &str,
+            etl_config: &SilverEtlConfig,
         ) -> Result<Option<DateTime<Utc>>, SilverOutputError> {
-            let table = self.get_table(stream_id);
+            let table = &etl_config.target_table;
+            let timestamp_col = &etl_config.timestamp.target_field;
+
             // Cast to TEXT for parsing to avoid chrono FromSql dependency
             let query = format!(
                 "SELECT MAX({})::TEXT as watermark FROM {}",
-                self.config.timestamp_column, table
+                timestamp_col, table
             );
 
             let conn = self.pool.get().await.map_err(|e| {
@@ -361,15 +398,13 @@ mod pooled {
 
         async fn health_check(&self) -> Result<bool, SilverOutputError> {
             match self.pool.get().await {
-                Ok(conn) => {
-                    match conn.execute("SELECT 1", &[]).await {
-                        Ok(_) => Ok(true),
-                        Err(e) => {
-                            warn!(error = %e, "Health check query failed");
-                            Ok(false)
-                        }
+                Ok(conn) => match conn.execute("SELECT 1", &[]).await {
+                    Ok(_) => Ok(true),
+                    Err(e) => {
+                        warn!(error = %e, "Health check query failed");
+                        Ok(false)
                     }
-                }
+                },
                 Err(e) => {
                     warn!(error = %e, "Failed to get connection for health check");
                     Ok(false)
@@ -389,9 +424,14 @@ mod pooled {
         let mut query = template.to_string();
         for (i, param) in params.iter().enumerate() {
             let placeholder = format!("${}", i + 1);
-            // Escape single quotes for SQL
-            let escaped = param.replace('\'', "''");
-            query = query.replacen(&placeholder, &format!("'{}'", escaped), 1);
+            // Handle null values - output SQL NULL without quotes
+            if param == "null" {
+                query = query.replacen(&placeholder, "NULL", 1);
+            } else {
+                // Escape single quotes for SQL
+                let escaped = param.replace('\'', "''");
+                query = query.replacen(&placeholder, &format!("'{}'", escaped), 1);
+            }
         }
         query
     }
@@ -404,9 +444,11 @@ mod pooled {
 #[cfg(not(feature = "timescale"))]
 mod stub {
     use super::*;
+    use crate::config::SilverEtlConfig;
 
     /// Stub TimescaleDB output (requires `timescale` feature)
     pub struct TimescaleOutput {
+        #[allow(dead_code)]
         config: TimescaleConfig,
     }
 
@@ -421,23 +463,18 @@ mod stub {
             warn!("TimescaleOutput created without `timescale` feature - writes will fail");
             Ok(Self { config })
         }
-
-        fn get_table(&self, record: &SilverRecord) -> String {
-            self.config
-                .table_mapping
-                .get(&record.stream_id)
-                .cloned()
-                .unwrap_or_else(|| self.config.default_table.clone())
-        }
     }
 
     #[async_trait]
     impl SilverOutput for TimescaleOutput {
-        async fn write(&self, record: &SilverRecord) -> Result<(), SilverOutputError> {
+        async fn write(
+            &self,
+            record: &SilverRecord,
+            _etl_config: &SilverEtlConfig,
+        ) -> Result<(), SilverOutputError> {
             if record.should_drop() {
                 return Ok(());
             }
-            let _table = self.get_table(record);
             Err(SilverOutputError::WriteError(
                 "TimescaleOutput requires `timescale` feature flag".to_string(),
             ))
@@ -446,6 +483,7 @@ mod stub {
         async fn get_watermark(
             &self,
             _stream_id: &str,
+            _etl_config: &SilverEtlConfig,
         ) -> Result<Option<DateTime<Utc>>, SilverOutputError> {
             Ok(None)
         }

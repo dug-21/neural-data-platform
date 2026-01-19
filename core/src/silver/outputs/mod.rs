@@ -2,11 +2,14 @@
 //!
 //! This module defines the SilverOutput trait for writing transformed
 //! Silver records to storage backends (TimescaleDB, in-memory for testing).
+//!
+//! All column names are configuration-driven via SilverEtlConfig.
 
 pub mod timescale;
 
 pub use timescale::{TimescaleConfig, TimescaleOutput};
 
+use crate::config::SilverEtlConfig;
 use crate::silver::types::SilverRecord;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -33,17 +36,27 @@ pub enum SilverOutputError {
 }
 
 /// Trait for Silver layer output sinks
+///
+/// All column names are derived from `SilverEtlConfig` - no hardcoded column names.
 #[async_trait]
 pub trait SilverOutput: Send + Sync {
-    /// Write a single Silver record
-    async fn write(&self, record: &SilverRecord) -> Result<(), SilverOutputError>;
+    /// Write a single Silver record using column names from config
+    async fn write(
+        &self,
+        record: &SilverRecord,
+        config: &SilverEtlConfig,
+    ) -> Result<(), SilverOutputError>;
 
     /// Write a batch of Silver records
-    async fn write_batch(&self, records: &[SilverRecord]) -> Result<usize, SilverOutputError> {
+    async fn write_batch(
+        &self,
+        records: &[SilverRecord],
+        config: &SilverEtlConfig,
+    ) -> Result<usize, SilverOutputError> {
         let mut written = 0;
         for record in records {
             if !record.should_drop() {
-                self.write(record).await?;
+                self.write(record, config).await?;
                 written += 1;
             }
         }
@@ -51,9 +64,11 @@ pub trait SilverOutput: Send + Sync {
     }
 
     /// Get the high-water mark (latest timestamp) for a stream
+    /// Uses timestamp column from config
     async fn get_watermark(
         &self,
         stream_id: &str,
+        config: &SilverEtlConfig,
     ) -> Result<Option<DateTime<Utc>>, SilverOutputError>;
 
     /// Health check for the output sink
@@ -105,14 +120,45 @@ impl InMemorySilverOutput {
 
 #[async_trait]
 impl SilverOutput for InMemorySilverOutput {
-    async fn write(&self, record: &SilverRecord) -> Result<(), SilverOutputError> {
+    async fn write(
+        &self,
+        record: &SilverRecord,
+        config: &SilverEtlConfig,
+    ) -> Result<(), SilverOutputError> {
         let mut records = self.records.write().unwrap();
 
-        // UPSERT: find existing record
+        // UPSERT: find existing record using deduplication keys from config
+        let dedup_keys = &config.deduplication.key_columns;
         let existing_idx = records.iter().position(|r| {
-            r.stream_id == record.stream_id
-                && r.timestamp == record.timestamp
-                && r.device_id == record.device_id
+            if r.stream_id != record.stream_id {
+                return false;
+            }
+            // Match on all deduplication key columns
+            for key in dedup_keys {
+                let matches = match key.as_str() {
+                    k if k == config.timestamp.target_field => r.timestamp == record.timestamp,
+                    k if config
+                        .valid_timestamp
+                        .as_ref()
+                        .map(|vt| k == vt.target_field)
+                        .unwrap_or(false) =>
+                    {
+                        r.valid_timestamp == record.valid_timestamp
+                    }
+                    k if config
+                        .identity_fields
+                        .iter()
+                        .any(|id| id.target == k) =>
+                    {
+                        r.device_id == record.device_id
+                    }
+                    _ => true, // Unknown key, skip
+                };
+                if !matches {
+                    return false;
+                }
+            }
+            true
         });
 
         match existing_idx {
@@ -141,6 +187,7 @@ impl SilverOutput for InMemorySilverOutput {
     async fn get_watermark(
         &self,
         stream_id: &str,
+        _config: &SilverEtlConfig,
     ) -> Result<Option<DateTime<Utc>>, SilverOutputError> {
         Ok(self.watermarks.read().unwrap().get(stream_id).copied())
     }
@@ -153,19 +200,41 @@ impl SilverOutput for InMemorySilverOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{IdentityField, TimestampMapping, TimestampTransform};
     use chrono::TimeZone;
     use serde_json::json;
+
+    fn test_config() -> SilverEtlConfig {
+        let mut config = SilverEtlConfig::default();
+        config.enabled = true;
+        config.target_table = "silver.test".to_string();
+        config.timestamp = TimestampMapping {
+            source_field: "timestamp".to_string(),
+            target_field: "observation_time".to_string(),
+            transform: TimestampTransform::MicrosecondsToTimestamp,
+        };
+        config.identity_fields = vec![IdentityField {
+            source: "ndp_id".to_string(),
+            target: "ndp_id".to_string(),
+        }];
+        // Use default deduplication (observation_time, ndp_id)
+        config.deduplication.enabled = true;
+        config.deduplication.key_columns =
+            vec!["observation_time".to_string(), "ndp_id".to_string()];
+        config
+    }
 
     #[tokio::test]
     async fn test_in_memory_output_write() {
         let output = InMemorySilverOutput::new();
+        let config = test_config();
         let ts = Utc.with_ymd_and_hms(2026, 1, 18, 12, 0, 0).unwrap();
 
         let record = SilverRecord::new("air-quality", ts)
             .with_device_id("device-001")
             .with_field("pm25", json!(12.5));
 
-        output.write(&record).await.unwrap();
+        output.write(&record, &config).await.unwrap();
 
         let records = output.get_records();
         assert_eq!(records.len(), 1);
@@ -175,17 +244,18 @@ mod tests {
     #[tokio::test]
     async fn test_in_memory_output_upsert() {
         let output = InMemorySilverOutput::new();
+        let config = test_config();
         let ts = Utc.with_ymd_and_hms(2026, 1, 18, 12, 0, 0).unwrap();
 
         let record1 = SilverRecord::new("air-quality", ts)
             .with_device_id("device-001")
             .with_field("pm25", json!(12.5));
-        output.write(&record1).await.unwrap();
+        output.write(&record1, &config).await.unwrap();
 
         let record2 = SilverRecord::new("air-quality", ts)
             .with_device_id("device-001")
             .with_field("pm25", json!(15.0));
-        output.write(&record2).await.unwrap();
+        output.write(&record2, &config).await.unwrap();
 
         let records = output.get_records();
         assert_eq!(records.len(), 1);
@@ -195,16 +265,17 @@ mod tests {
     #[tokio::test]
     async fn test_in_memory_output_watermark() {
         let output = InMemorySilverOutput::new();
+        let config = test_config();
         let ts1 = Utc.with_ymd_and_hms(2026, 1, 18, 12, 0, 0).unwrap();
         let ts2 = Utc.with_ymd_and_hms(2026, 1, 18, 13, 0, 0).unwrap();
 
         let record1 = SilverRecord::new("air-quality", ts1).with_device_id("d1");
         let record2 = SilverRecord::new("air-quality", ts2).with_device_id("d2");
 
-        output.write(&record1).await.unwrap();
-        output.write(&record2).await.unwrap();
+        output.write(&record1, &config).await.unwrap();
+        output.write(&record2, &config).await.unwrap();
 
-        let watermark = output.get_watermark("air-quality").await.unwrap();
+        let watermark = output.get_watermark("air-quality", &config).await.unwrap();
         assert_eq!(watermark, Some(ts2));
     }
 

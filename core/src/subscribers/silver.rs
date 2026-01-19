@@ -291,10 +291,17 @@ where
         let mut processed = 0;
         for chunk in raw_points.chunks(self.config.catch_up.batch_size) {
             for raw_point in chunk {
+                // Extract stream_id to get config
+                let stream_id = Self::extract_stream_id(&raw_point.source_id);
+                let etl_config = match self.config.etl_configs.get(&stream_id) {
+                    Some(cfg) => cfg,
+                    None => continue, // Skip if no config
+                };
+
                 if let Some(record) = self.transform_point(raw_point)? {
                     if !record.should_drop() {
                         self.output
-                            .write(&record)
+                            .write(&record, etl_config)
                             .await
                             .map_err(|e| SubscriberError::StorageError(e.to_string()))?;
                         processed += 1;
@@ -358,6 +365,15 @@ where
             return Ok(());
         }
 
+        // Get ETL config for this stream (needed for write)
+        let etl_config = match self.config.etl_configs.get(&stream_id) {
+            Some(cfg) => cfg,
+            None => {
+                debug!(stream_id = %stream_id, "No ETL config for stream, skipping");
+                return Ok(());
+            }
+        };
+
         // Transform
         let record = match self.transform_point(&raw)? {
             Some(r) => r,
@@ -370,9 +386,9 @@ where
             return Ok(());
         }
 
-        // Write to output
+        // Write to output with config (all column names from config)
         self.output
-            .write(&record)
+            .write(&record, etl_config)
             .await
             .map_err(|e| SubscriberError::StorageError(e.to_string()))?;
 
@@ -788,24 +804,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_catch_up_with_test_reader() {
+        use crate::config::IdentityField;
+
         let mut config = create_test_config();
         config.catch_up.enabled = true;
         config.catch_up.window_secs = 3600;
 
-        // Add ETL config
-        config.etl_configs.insert(
-            "air-quality".to_string(),
-            SilverEtlConfig {
-                enabled: true,
-                target_table: "silver.air_quality".to_string(),
-                timestamp: crate::config::TimestampMapping {
-                    source_field: "timestamp".to_string(),
-                    target_field: "observation_time".to_string(),
-                    transform: crate::config::TimestampTransform::MicrosecondsToTimestamp,
-                },
-                ..Default::default()
-            },
-        );
+        // Add ETL config with proper identity_fields for deduplication
+        let mut etl_config = SilverEtlConfig::default();
+        etl_config.enabled = true;
+        etl_config.target_table = "silver.air_quality".to_string();
+        etl_config.timestamp = crate::config::TimestampMapping {
+            source_field: "timestamp".to_string(),
+            target_field: "observation_time".to_string(),
+            transform: crate::config::TimestampTransform::MicrosecondsToTimestamp,
+        };
+        etl_config.identity_fields = vec![IdentityField {
+            source: "ndp_id".to_string(),
+            target: "ndp_id".to_string(),
+        }];
+        etl_config.deduplication.key_columns =
+            vec!["observation_time".to_string(), "ndp_id".to_string()];
+
+        config.etl_configs.insert("air-quality".to_string(), etl_config);
 
         let output = Arc::new(InMemorySilverOutput::new());
 
