@@ -64,8 +64,8 @@ sources:
     port: 1883
     client_id: "air-quality-app"
     subscriptions:
-      - topic: "airgradient/readings/+"
-        qos: 1
+      - stream_id: "air-quality"
+        topic_pattern: "airgradient/readings/+"
     reconnect_delay_secs: 1
     max_reconnect_delay_secs: 30
     buffer_capacity: 1000
@@ -88,8 +88,8 @@ mqtt:
   port: 1883
   client_id: "air-quality-app"
   subscriptions:
-    - topic: "airgradient/readings/+"
-      qos: 1
+    - stream_id: "air-quality"
+      topic_pattern: "airgradient/readings/+"
   reconnect_delay_secs: 1
   max_reconnect_delay_secs: 30
   buffer_capacity: 1000
