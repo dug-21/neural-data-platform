@@ -356,6 +356,9 @@ where
     }
 
     /// Process a single event
+    ///
+    /// Handles both simple transforms and pre-transform (array explosion).
+    /// Pre-transform produces multiple SilverRecords per RawDataPoint.
     async fn process_event(&mut self, raw: Arc<RawDataPoint>) -> Result<(), SubscriberError> {
         // Extract stream_id from source_id for stream filter check
         let stream_id = Self::extract_stream_id(&raw.source_id);
@@ -367,14 +370,20 @@ where
 
         // Get ETL config for this stream (needed for write)
         let etl_config = match self.config.etl_configs.get(&stream_id) {
-            Some(cfg) => cfg,
+            Some(cfg) => cfg.clone(),
             None => {
                 debug!(stream_id = %stream_id, "No ETL config for stream, skipping");
                 return Ok(());
             }
         };
 
-        // Transform
+        // Check if this stream uses pre-transform (e.g., NWS forecasts with array explosion)
+        if etl_config.pre_transform.is_some() {
+            // Use pre-transform: produces multiple records per payload
+            return self.process_with_pre_transform(&raw, &etl_config).await;
+        }
+
+        // Standard transform: single record per payload
         let record = match self.transform_point(&raw)? {
             Some(r) => r,
             None => return Ok(()),
@@ -388,7 +397,7 @@ where
 
         // Write to output with config (all column names from config)
         self.output
-            .write(&record, etl_config)
+            .write(&record, &etl_config)
             .await
             .map_err(|e| SubscriberError::StorageError(e.to_string()))?;
 
@@ -400,6 +409,72 @@ where
             .map_or(true, |hwm| record.timestamp > hwm)
         {
             self.high_water_mark = Some(record.timestamp);
+        }
+
+        Ok(())
+    }
+
+    /// Process event with pre-transform (array explosion).
+    ///
+    /// Uses ColumnOrientedParser (like batch silver-etl) to explode arrays,
+    /// pivots to wide format, and writes multiple records per payload.
+    async fn process_with_pre_transform(
+        &mut self,
+        raw: &RawDataPoint,
+        etl_config: &SilverEtlConfig,
+    ) -> Result<(), SubscriberError> {
+        // Use pre-transform to get multiple records
+        let records =
+            match crate::silver::transform::transform_with_pre_transform(raw, etl_config) {
+                Ok(recs) => recs,
+                Err(e) => {
+                    warn!(
+                        stream_id = %raw.source_id,
+                        error = %e,
+                        "Pre-transform failed, skipping payload"
+                    );
+                    return Ok(());
+                }
+            };
+
+        if records.is_empty() {
+            debug!(stream_id = %raw.source_id, "Pre-transform produced no records");
+            return Ok(());
+        }
+
+        debug!(
+            stream_id = %raw.source_id,
+            record_count = records.len(),
+            "Pre-transform produced {} records",
+            records.len()
+        );
+
+        // Write each record
+        let mut latest_timestamp = None;
+        for record in records {
+            if record.should_drop() {
+                self.records_dropped += 1;
+                continue;
+            }
+
+            self.output
+                .write(&record, etl_config)
+                .await
+                .map_err(|e| SubscriberError::StorageError(e.to_string()))?;
+
+            self.records_processed += 1;
+
+            // Track latest timestamp for watermark
+            if latest_timestamp.map_or(true, |ts| record.timestamp > ts) {
+                latest_timestamp = Some(record.timestamp);
+            }
+        }
+
+        // Update high water mark
+        if let Some(ts) = latest_timestamp {
+            if self.high_water_mark.map_or(true, |hwm| ts > hwm) {
+                self.high_water_mark = Some(ts);
+            }
         }
 
         Ok(())

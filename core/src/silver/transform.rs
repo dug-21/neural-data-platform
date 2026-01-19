@@ -2,12 +2,21 @@
 //!
 //! This module implements the core transformation logic from Bronze (RawDataPoint)
 //! to Silver (SilverRecord) using SilverEtlConfig-driven field mappings.
+//!
+//! Supports both simple transforms and pre-transform (array explosion) for
+//! columnar data sources like NWS forecasts.
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Value;
+use std::collections::HashMap;
 
-use crate::config::{SilverEtlConfig, SilverFieldMapping, TimestampTransform, TransformConfig};
+use crate::config::{
+    PreTransformType, SilverEtlConfig, SilverFieldMapping, TimestampTransform, TransformConfig,
+};
+use crate::parsers::{ColumnMapping, ColumnOrientedConfig, ColumnOrientedParser, ParserConfig};
+use crate::traits::TimeSeriesPoint;
 use crate::types::RawDataPoint;
+use crate::Parser;
 
 use super::types::{DqResult, SilverRecord, TransformError};
 
@@ -72,10 +81,174 @@ pub fn transform_to_silver(
 }
 
 // =============================================================================
+// Pre-Transform Function (Array Explosion)
+// =============================================================================
+
+/// Transform a Bronze RawDataPoint to multiple Silver records using pre-transform.
+///
+/// This is used for columnar data sources (e.g., NWS forecasts) where a single
+/// Bronze payload contains arrays of values for multiple timestamps.
+///
+/// Uses ColumnOrientedParser (like batch silver-etl) to explode arrays,
+/// then pivots the narrow results into wide SilverRecords.
+///
+/// Returns Vec<SilverRecord> - one per valid_time with all metrics as fields.
+pub fn transform_with_pre_transform(
+    raw: &RawDataPoint,
+    config: &SilverEtlConfig,
+) -> Result<Vec<SilverRecord>, TransformError> {
+    let pre_transform_config = config.pre_transform.as_ref().ok_or_else(|| {
+        TransformError::ConfigError("pre_transform not configured".to_string())
+    })?;
+
+    // Build ColumnOrientedParser from config (matches batch silver-etl exactly)
+    let parser = build_column_oriented_parser(pre_transform_config)?;
+
+    // Parse payload -> narrow points (one per metric/validTime)
+    let points = parser
+        .parse(&raw.raw_payload, raw.timestamp)
+        .map_err(|e| TransformError::ConfigError(format!("Parser error: {}", e)))?;
+
+    if points.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Pivot narrow points to wide SilverRecords (group by valid_time)
+    let records = pivot_to_silver_records(raw, config, points)?;
+
+    Ok(records)
+}
+
+/// Build ColumnOrientedParser from PreTransformConfig.
+///
+/// This matches the batch silver-etl `build_parser_from_config()` function exactly.
+fn build_column_oriented_parser(
+    config: &crate::config::PreTransformConfig,
+) -> Result<ColumnOrientedParser, TransformError> {
+    use crate::parsers::{ParserType, TimestampFormat};
+
+    match &config.transform_type {
+        PreTransformType::ArrayExplosion(explosion) => {
+            // Convert MetricExplosionMapping to ColumnMapping
+            let columns: Vec<ColumnMapping> = explosion
+                .metrics
+                .iter()
+                .map(|m| ColumnMapping {
+                    metric_path: m.metric_path.clone(),
+                    field_name: m.target_column.clone(),
+                    values_path: Some(explosion.values_path.clone()),
+                    timestamp_path: Some(explosion.timestamp_field.clone()),
+                    value_path: Some(explosion.value_field.clone()),
+                })
+                .collect();
+
+            let column_config = ColumnOrientedConfig {
+                metrics_base_path: explosion.metrics_base_path.clone(),
+                columns,
+                timestamp_format: TimestampFormat::Iso8601Duration,
+                unit_conversions: HashMap::new(),
+            };
+
+            // Build ParserConfig for ColumnOrientedParser (matches batch silver-etl)
+            let base_config = ParserConfig {
+                parser_type: ParserType::ColumnOriented,
+                location_id_field: "location".to_string(),
+                default_location_id: Some("unknown".to_string()),
+                skip_fields: vec![],
+                field_mappings: None,
+                default_tags: HashMap::new(),
+                array_config: None,
+                column_config: Some(column_config),
+            };
+
+            ColumnOrientedParser::from_config(base_config)
+                .map_err(|e| TransformError::ConfigError(format!("Parser creation failed: {}", e)))
+        }
+    }
+}
+
+/// Pivot narrow TimeSeriesPoints to wide SilverRecords.
+///
+/// Groups points by valid_time, then creates one SilverRecord per valid_time
+/// with all metrics as fields. This matches the PIVOT SQL in batch silver-etl.
+fn pivot_to_silver_records(
+    raw: &RawDataPoint,
+    _config: &SilverEtlConfig,
+    points: Vec<TimeSeriesPoint>,
+) -> Result<Vec<SilverRecord>, TransformError> {
+    let stream_id = extract_stream_id(&raw.source_id);
+
+    // Group points by valid_time
+    // Key: valid_time as timestamp, Value: map of metric_name -> value
+    let mut grouped: HashMap<i64, HashMap<String, f64>> = HashMap::new();
+
+    for point in points {
+        // Extract valid_time from tags (set by ColumnOrientedParser)
+        let valid_time_ts: i64 = point
+            .tags
+            .get("forecast_valid_time")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        // Extract metric name from tags
+        let metric_name = point
+            .tags
+            .get("metric")
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+
+        // Add to grouped map
+        grouped
+            .entry(valid_time_ts)
+            .or_default()
+            .insert(metric_name, point.value);
+    }
+
+    // Convert grouped data to SilverRecords
+    let mut records = Vec::with_capacity(grouped.len());
+
+    for (valid_time_ts, metrics) in grouped {
+        // Create valid_time DateTime
+        let valid_time = DateTime::from_timestamp(valid_time_ts, 0).ok_or_else(|| {
+            TransformError::InvalidTimestamp {
+                field: "valid_time".to_string(),
+                value: valid_time_ts.to_string(),
+                reason: "Invalid Unix timestamp".to_string(),
+            }
+        })?;
+
+        // Create SilverRecord with issue_time as primary timestamp
+        let mut record = SilverRecord::new(&stream_id, raw.timestamp)
+            .with_valid_timestamp(valid_time);
+
+        // Set device_id/ndp_id
+        if let Some(ref ndp_id) = raw.ndp_id {
+            record = record.with_device_id(ndp_id.clone());
+        }
+
+        // Add all metrics as fields
+        for (metric_name, value) in metrics {
+            record.fields.insert(
+                metric_name,
+                Value::Number(
+                    serde_json::Number::from_f64(value)
+                        .unwrap_or_else(|| serde_json::Number::from(0)),
+                ),
+            );
+        }
+
+        record.dq_result = DqResult::passed();
+        records.push(record);
+    }
+
+    Ok(records)
+}
+
+// =============================================================================
 // Helper Functions
 // =============================================================================
 
-fn extract_stream_id(source_id: &str) -> String {
+pub fn extract_stream_id(source_id: &str) -> String {
     // Source types that can be suffixed to stream_id to form source_id
     // e.g., "outdoor-weather-HttpPoll" -> "outdoor-weather"
     let source_types = ["HttpPoll", "Http", "Mqtt", "File"];
