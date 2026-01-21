@@ -1,0 +1,34 @@
+{
+  "swarmId": "swarm_1768624456_AoHCrNS",
+  "objective": "Fix dp-010 BUG-001: Implement TimescaleDB storage adapters for Silver MCP tools using London TDD. 
+
+CONTEXT: Read /workspaces/neural-data-platform/product/features/dp-010/bugs/BUG-001-noop-storage-not-replaced.md for full requirements.
+
+PHASE 1 - Core Adapters:
+1. Add tokio-postgres 0.7, bb8 0.8, bb8-postgres 0.8 to core/ndp-mcp-server/Cargo.toml
+2. Create TimescaleSilverStorage in core/ndp-mcp-server/src/storage/timescale_silver.rs implementing SilverStorage trait
+3. Create TimescaleDictionaryStore in core/ndp-mcp-server/src/storage/timescale_dictionary.rs implementing DictionaryStore trait  
+4. Create TimescaleEtlRunStore in core/ndp-mcp-server/src/storage/timescale_etl.rs implementing EtlRunStore trait
+
+PHASE 2 - Integration:
+5. Update AppConfig in config.rs with timescale_url, timescale_max_connections
+6. Add AppState::with_timescale() constructor in server.rs
+7. Update main.rs to use real implementations when NDP_TIMESCALE_URL is set
+8. Update deploy/pi/docker-compose.yml with NDP_TIMESCALE_URL
+
+PHASE 3 - Testing:
+9. Write integration tests in tests/integration/timescale_storage_test.rs
+
+USE get-pattern skill BEFORE implementing to learn: mcp-silver-storage-pattern, dp-011-hybrid-connection-pattern, arch-domain-adapter-pattern
+
+Follow London TDD: Write tests first with mocks, then implement to pass. development hierarchical 5",
+  "startTime": "2026-01-17T04:34:16Z",
+  "logFile": "./swarm-runs/swarm_1768624456_AoHCrNS/swarm.log",
+  "args": [
+  "--strategy",
+  "--mode",
+  "--max-agents",
+  "--parallel",
+  "--executor"
+]
+}
