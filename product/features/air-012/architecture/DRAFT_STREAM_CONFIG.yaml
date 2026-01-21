@@ -1,0 +1,191 @@
+# Home Assistant State Stream Configuration
+# DRAFT - For review before moving to config/base/streams/
+
+stream_id: home-assistant-state
+stream_type: state_events
+description: "Home Assistant binary sensor state changes (windows, doors)"
+version: "1.0.0"
+enabled: true
+retention_days: 365
+compression_after_days: 7
+partitioning_strategy: daily
+
+fields:
+  - name: ndp_id
+    type: string
+    nullable: false
+    description: NDP identity (assigned in config)
+  - name: source_entity_id
+    type: string
+    nullable: true
+    description: Home Assistant entity identifier (for traceability)
+  - name: category
+    type: string
+    nullable: false
+    description: Event category (window, door, etc.)
+  - name: state
+    type: string
+    nullable: false
+    description: Entity state (on/off for binary sensors)
+  - name: device_class
+    type: string
+    nullable: true
+    description: HA device class (window, door, motion, etc.)
+
+sources:
+  - type: http_poll
+    enabled: true
+    poll_interval_secs: 30
+    timeout_secs: 10
+    context:
+      source_type:
+        provider: home_assistant
+        purpose: binary_sensor_state
+      location:
+        coordinates: [29.95838, -81.30878]
+        type: indoor
+        path: /home
+
+    # Each endpoint has its own ndp_id (NDP standard pattern)
+    endpoints:
+      - ndp_id: window_office
+        category: window
+        url: "http://192.168.52.221:8123/api/states/binary_sensor.office_window"
+        auth_type: header
+        auth_key: Authorization
+        auth_value: "Bearer ${HASS_TOKEN}"
+
+      # Additional windows - uncomment and configure as needed
+      # - ndp_id: window_bedroom
+      #   category: window
+      #   url: "http://192.168.52.221:8123/api/states/binary_sensor.bedroom_window"
+      #   auth_type: header
+      #   auth_key: Authorization
+      #   auth_value: "Bearer ${HASS_TOKEN}"
+      #
+      # - ndp_id: window_kitchen
+      #   category: window
+      #   url: "http://192.168.52.221:8123/api/states/binary_sensor.kitchen_window"
+      #   auth_type: header
+      #   auth_key: Authorization
+      #   auth_value: "Bearer ${HASS_TOKEN}"
+
+storage:
+  batch_size: 50
+  batch_timeout_secs: 30
+  buffer_capacity: 500
+
+entity_schemas:
+  - schema_name: ha-binary-sensor
+    description: Home Assistant binary sensor state event
+    attributes:
+      - name: ndp_id
+        type: string
+        description: NDP identity (from config)
+        nullable: false
+      - name: source_entity_id
+        type: string
+        description: HA entity identifier
+        nullable: true
+      - name: category
+        type: string
+        description: Event category
+        nullable: false
+      - name: state
+        type: string
+        description: Current state (on/off)
+        nullable: false
+      - name: device_class
+        type: string
+        description: Device class (window, door, etc.)
+        nullable: true
+
+# Silver ETL Configuration
+silver_etl:
+  enabled: true
+  target_table: silver.state_events
+  description: "State change events from various sources"
+  grain: "One row per state change (event-sourced)"
+
+  # Timestamp from HA's last_changed field (ISO 8601)
+  timestamp:
+    source_field: raw_payload.last_changed
+    target_field: event_time
+    transform: iso8601
+
+  # Identity - ndp_id from endpoint config (NDP standard pattern)
+  # Note: ndp_id is injected from endpoint config, not extracted from response
+  identity_fields:
+    - source: ndp_id
+      target: ndp_id
+    - source: category
+      target: category
+
+  field_mappings:
+    # Store HA entity_id for traceability back to source
+    - source_path: raw_payload.entity_id
+      target_column: source_entity_id
+      type: text
+      description: "Original HA entity identifier"
+      nullable: true
+
+    - source_path: raw_payload.state
+      target_column: state
+      type: text
+      description: "Entity state (on=open, off=closed for windows)"
+      nullable: false
+
+    - source_path: raw_payload.attributes.device_class
+      target_column: device_class
+      type: text
+      description: "HA device class (window, door, etc.)"
+      nullable: true
+
+  # Note: is_open can be a generated column in table DDL:
+  # is_open BOOLEAN GENERATED ALWAYS AS (state = 'on') STORED
+
+  # DQ rules
+  dq_rules:
+    - rule: null_check
+      field: ndp_id
+      action: reject
+
+    - rule: enum_check
+      field: state
+      allowed_values: ["on", "off", "unavailable", "unknown"]
+      action: flag
+
+  dq_output:
+    enabled: true
+    target_column: dq_flags
+    include_rules: true
+
+  # Deduplication: key on ndp_id + event_time
+  # If last_changed hasn't changed, it's the same event (no state change occurred)
+  deduplication:
+    enabled: true
+    key_columns: [event_time, ndp_id]
+    strategy: upsert
+
+  incremental:
+    enabled: true
+    watermark_column: event_time
+    lag_interval: 1 minute
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Entity Context (loaded separately via CSV dimension loader)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# The correlation between state events and observation streams is defined in:
+#   config/dimensions/entity_context.csv
+#
+# Example CSV content:
+#   ndp_id,category,friendly_name,location_path,correlates_with,orientation
+#   window_office,window,Office Window,/home/office,aq_airgradient_1,east
+#   window_bedroom,window,Bedroom Window,/home/bedroom,aq_airgradient_2,west
+#
+# This enables joins like:
+#   SELECT e.*, ctx.correlates_with, ctx.orientation
+#   FROM silver.state_events e
+#   JOIN silver.entity_context ctx ON e.ndp_id = ctx.ndp_id
+# ═══════════════════════════════════════════════════════════════════════════════
