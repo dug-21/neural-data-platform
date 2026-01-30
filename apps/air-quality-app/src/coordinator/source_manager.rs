@@ -303,6 +303,15 @@ impl SourceManager {
                 warn!("FileWatch source not yet implemented");
                 None
             }
+            SourceType::Csv => {
+                // dp-013: CSV sources are batch/one-time imports, not continuous polling.
+                // Use `ndp stream ingest <stream_id>` or deploy.sh for CSV ingestion.
+                warn!(
+                    "CSV source '{}' is for batch import. Use 'ndp stream ingest' or deploy.sh, not continuous polling.",
+                    stream_id
+                );
+                None
+            }
         };
 
         // Create source info

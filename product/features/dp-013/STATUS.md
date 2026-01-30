@@ -1,21 +1,26 @@
 # dp-013: Status Tracker
 
 **Feature**: CSV Source Type & Dimension Tables
-**Current Phase**: Ready for Implementation (SPARC-R Refinement)
+**Current Phase**: Refinement Complete (SPARC-C Completion)
 **Started**: 2026-01-29
-**Last Updated**: 2026-01-29
+**Last Updated**: 2026-01-30
 
 ---
 
-## Current Status: SPARC Planning Complete - Ready for Implementation
+## Current Status: Refinement Phase Complete - Ready for Deployment
 
-All SPARC planning phases (Specification, Pseudocode, Architecture) have been completed. The feature is now ready for TDD implementation in the Refinement phase.
+All core implementation is complete:
+- CSV Source adapter with async reading and multiple timestamp formats
+- Dimension config types with config-driven DDL generation
+- CsvDimensionLoader with TimescaleDB integration
+- deploy.sh integration with sync-dimensions command
+- 74+ tests passing (25 CSV, 18 DDL, 31 loader)
 
 Feature extends NDP configuration language to support:
 1. CSV as a source type for stream configs (timeseries batch data)
 2. Dimension table configs for reference/lookup data (new config type)
 
-Initial deliverable: Entity Context dimension for air-012 Home Assistant integration.
+Committed: `feat(dp-013): Add CSV Source Type & Dimension Tables` (08faf54)
 
 ---
 
@@ -27,8 +32,8 @@ Initial deliverable: Entity Context dimension for air-012 Home Assistant integra
 | Specification (SPARC-S) | **Complete** | 2026-01-29 | 2026-01-29 |
 | Pseudocode (SPARC-P) | **Complete** | 2026-01-29 | 2026-01-29 |
 | Architecture (SPARC-A) | **Complete** | 2026-01-29 | 2026-01-29 |
-| Refinement (SPARC-R) | **Pending** | - | - |
-| Completion (SPARC-C) | Pending | - | - |
+| Refinement (SPARC-R) | **Complete** | 2026-01-30 | 2026-01-30 |
+| Completion (SPARC-C) | **In Progress** | 2026-01-30 | - |
 
 ---
 
@@ -69,26 +74,36 @@ Initial deliverable: Entity Context dimension for air-012 Home Assistant integra
 - `architecture/ADR-002-dimension-tables.md`
 - `architecture/SQL_PATTERNS.md`
 
-### Refinement Phase - PENDING (Ready to Start)
+### Refinement Phase - COMPLETE
 
-- [ ] Unit tests for CSV adapter
-- [ ] Unit tests for dimension loader
-- [ ] Integration tests for Bronze ingest
-- [ ] Integration tests for dimension sync
-- [ ] Implementation following TDD
+- [x] Unit tests for CSV adapter (25 tests)
+- [x] Unit tests for dimension loader (31 tests)
+- [x] Unit tests for DDL generator (18 tests)
+- [x] Integration tests for dimension sync
+- [x] Implementation following TDD (London School methodology)
+
+**Implementation Files**:
+- `core/src/sources/csv.rs` - CsvSource adapter with async reading
+- `core/src/types/dimension_config.rs` - DimensionConfig types
+- `core/src/dimensions/ddl.rs` - Config-driven DDL generator
+- `core/src/dimensions/loader.rs` - CsvDimensionLoader
+- `deploy/pi/deploy.sh` - sync-dimensions command
 
 **Deliverables**:
 - `refinement/TEST_STRATEGY.md` (complete - defines test approach)
 - `refinement/RUST_IMPLEMENTATION.md` (complete - implementation guidance)
 - `refinement/DATA_QUALITY.md` (complete - DQ integration)
 
-### Completion Phase - PENDING
+### Completion Phase - IN PROGRESS
 
-- [ ] CLI commands implemented (`ndp dimension list/sync`)
-- [ ] `deploy.sh sync` integration
+- [ ] CLI commands implemented (`ndp dimension list/sync`) - fallback via deploy.sh
+- [x] `deploy.sh sync` integration (sync-dimensions, list-dimensions commands)
 - [ ] Documentation updated
-- [ ] Entity Context dimension deployed
-- [ ] Acceptance criteria verified
+- [x] Entity Context dimension config created (config/base/dimensions/entity_context.yaml)
+- [x] Sample data created (data/dimensions/entity_context.csv)
+- [ ] Deployed to Pi and acceptance criteria verified
+
+**Note**: CLI commands deferred to future iteration. deploy.sh provides dimension sync via bash.
 
 **Deliverable**: `completion/ACCEPTANCE_CRITERIA.md` (complete - defines done criteria)
 
@@ -206,32 +221,70 @@ New config type in `config/base/dimensions/`:
 
 ---
 
-## Next Steps
+## What Was Implemented
 
-1. **Start Refinement Phase**: Begin TDD implementation
-   - Create test fixtures for CSV parsing
-   - Write unit tests for CsvSource adapter
-   - Implement CsvSource following tests
+### Core Library (platform-core)
 
-2. **Implement Core Types**: Add to neural-core
-   - SourceType::Csv variant
-   - DimensionConfig struct
-   - LoadStrategy enum
+1. **CsvSource** (`core/src/sources/csv.rs`):
+   - Implements `RawSource` trait for CSV file reading
+   - Async CSV parsing with `csv-async` + tokio
+   - Multiple timestamp formats: ISO8601, epoch seconds/millis, custom
+   - Error handling strategies: Skip, Fail, Log
+   - Builder pattern with metadata support
+   - 25 unit tests
 
-3. **Implement Dimension Loader**:
-   - CSV parsing for dimensions
-   - truncate_and_load strategy
-   - upsert strategy
+2. **DimensionConfig** (`core/src/types/dimension_config.rs`):
+   - Schema definition with field types and constraints
+   - Primary key and index configuration
+   - Load strategies: TruncateAndLoad, Upsert
+   - Validation rules and transforms
 
-4. **CLI Commands**:
-   - `ndp dimension list`
-   - `ndp dimension sync`
-   - `ndp stream ingest`
+3. **DdlGenerator** (`core/src/dimensions/ddl.rs`):
+   - Config-driven DDL generation (follows SchemaGenerator pattern)
+   - generate_create_table() from config YAML
+   - generate_indexes() for regular and unique indexes
+   - generate_insert() and generate_upsert() for load statements
+   - 18 unit tests
 
-5. **deploy.sh Integration**:
-   - Add sync_dimensions() function
-   - Add to sync workflow
+4. **CsvDimensionLoader** (`core/src/dimensions/loader.rs`):
+   - CSV parsing with header validation
+   - Dry-run validation support
+   - Feature-gated TimescaleDB loader
+   - 31 unit tests
+
+### Deployment
+
+1. **deploy.sh** - New commands:
+   - `sync-dimensions`: Sync all dimension tables from config
+   - `list-dimensions`: List configured dimensions with status
+   - `dimension-status`: Show sync history
+
+2. **SQL Scripts**:
+   - `deploy/pi/sql/dimensions/init.sql`
+   - `deploy/pi/sql/dimensions/entity_context.sql`
+   - `deploy/pi/sql/dimensions/sync_functions.sql`
+   - `deploy/pi/init-scripts/04-dimension-tables.sql`
+
+### Configuration
+
+- `config/base/dimensions/entity_context.yaml`: Example dimension config
+- `data/dimensions/entity_context.csv`: Sample data (17 entities)
+
+## Next Steps (Completion Phase)
+
+1. **Deploy to Pi**:
+   - Run `./deploy.sh refresh` to apply SQL scripts
+   - Run `./deploy.sh sync-dimensions` to load entity_context
+
+2. **Verify Acceptance Criteria**:
+   - Query `silver.entity_context` table
+   - Test JOIN with `silver.air_quality_observations`
+   - Verify `gold.events_with_context` view works
+
+3. **Future Iteration**:
+   - Implement `ndp dimension` CLI commands (currently bash-only)
+   - Add more dimension tables as needed
 
 ---
 
-*Status last updated: 2026-01-29 by ndp-scrum-master*
+*Status last updated: 2026-01-30 by claude-flow swarm*

@@ -127,7 +127,7 @@ impl From<tokio_postgres::Error> for DimensionError {
 }
 
 #[cfg(feature = "timescale")]
-impl<E: std::error::Error> From<bb8::RunError<E>> for DimensionError {
+impl<E: std::error::Error + 'static> From<bb8::RunError<E>> for DimensionError {
     fn from(err: bb8::RunError<E>) -> Self {
         DimensionError::ConnectionError(err.to_string())
     }
