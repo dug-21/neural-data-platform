@@ -15,7 +15,6 @@ Retrieves established **application patterns** (architecture, procedures, conven
 
 ## Quick Reference
 
-**For Claude/Agents (MCP Tools):**
 ```
 # Search patterns by task description
 mcp__agentdb__agentdb_pattern_search(task="domain adapter pattern", k=5)
@@ -27,18 +26,9 @@ mcp__agentdb__agentdb_pattern_stats()
 mcp__agentdb__reflexion_retrieve(task="how to add a stream", k=5, only_successes=true)
 ```
 
-**For CLI (legacy skills table):**
-```bash
-# Search skills (legacy - patterns table preferred)
-agentdb skill search "domain adapter pattern" 5
-
-# View database stats
-agentdb db stats
-```
-
 ---
 
-## Primary Method: MCP Pattern Search
+## Primary Method: Pattern Search
 
 ```
 mcp__agentdb__agentdb_pattern_search(
@@ -88,36 +78,33 @@ mcp__agentdb__agentdb_pattern_search(
 
 ## Fallback Method: Reflexion Retrieve
 
-If no skill patterns exist, search past experiences:
+If no patterns exist, search past experiences:
 
-```bash
-agentdb reflexion retrieve "<query>" --k 5 --only-successes --synthesize-context
 ```
-
-### Parameters
-
-| Parameter | Description |
-|-----------|-------------|
-| `<query>` | Task description to find similar work |
-| `--k` | Number of results |
-| `--only-successes` | Only successful episodes |
-| `--min-reward` | Minimum success score (0-1) |
-| `--synthesize-context` | Generate coherent summary |
-
-### Examples
-
-```bash
-# Find successful similar work
-agentdb reflexion retrieve "HTTP source implementation" \
-  --k 5 \
-  --only-successes \
-  --min-reward 0.7
+mcp__agentdb__reflexion_retrieve(
+  task="HTTP source implementation",
+  k=5,
+  only_successes=true,
+  min_reward=0.7
+)
 
 # Get synthesized context
-agentdb reflexion retrieve "timescaledb schema" \
-  --k 10 \
-  --synthesize-context
+mcp__agentdb__reflexion_retrieve(
+  task="timescaledb schema",
+  k=10,
+  synthesize_context=true
+)
 ```
+
+### Retrieve Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `task` | string | Task description to find similar work |
+| `k` | number | Number of results |
+| `only_successes` | boolean | Only successful episodes |
+| `min_reward` | number | Minimum success score (0-1) |
+| `synthesize_context` | boolean | Generate coherent summary |
 
 ---
 
@@ -149,23 +136,36 @@ Results from `agentdb_pattern_search` include:
 
 **High-value patterns**: Success Rate > 80% AND Similarity > 0.3
 
+**Deprecated patterns**: Check reflexion episodes - patterns with reward=0.0 and success=false may be obsolete.
+
 ---
 
 ## Typical Workflow
 
-```bash
+```
 # 1. Search for existing patterns
-agentdb skill search "what I'm about to implement" 5
+mcp__agentdb__agentdb_pattern_search(task="what I'm about to implement", k=5)
 
 # 2. If found: Follow the pattern
 # 3. If not found: Check reflexion for past experiences
-agentdb reflexion retrieve "similar task" --k 5 --only-successes
+mcp__agentdb__reflexion_retrieve(task="similar task", k=5, only_successes=true)
 
-# 4. After work: Record feedback
-agentdb reflexion store "feature-id" "task" 0.9 true "Pattern worked well"
+# 4. After work: Record feedback (reflexion skill)
+mcp__agentdb__reflexion_store(
+  session_id="feature-id",
+  task="task description",
+  reward=0.9,
+  success=true,
+  critique="Pattern worked well"
+)
 
-# 5. If you discovered something new: Save it
-agentdb skill create "pattern-name" "description" "optional-details"
+# 5. If you discovered something new: Save it (save-pattern skill)
+mcp__agentdb__agentdb_pattern_store(
+  taskType="category:name",
+  approach="description",
+  successRate=0.9,
+  tags=["tag1", "tag2"]
+)
 ```
 
 ---
@@ -174,18 +174,24 @@ agentdb skill create "pattern-name" "description" "optional-details"
 
 After using a pattern, **always use the `reflexion` skill** to record whether it helped:
 
-```bash
+```
 # Pattern worked well
-agentdb reflexion store "dp-004" \
-  "Used domain-adapter pattern for new HTTP source" \
-  1.0 true \
-  "Pattern was complete - followed steps exactly, tests passed"
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Used domain-adapter pattern for new HTTP source",
+  reward=1.0,
+  success=true,
+  critique="Pattern was complete - followed steps exactly, tests passed"
+)
 
 # Pattern needed fixes
-agentdb reflexion store "dp-004" \
-  "Used add-stream pattern but needed adjustment" \
-  0.6 true \
-  "Pattern missing retention field - should update via save-pattern"
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Used add-stream pattern but needed adjustment",
+  reward=0.6,
+  success=true,
+  critique="Pattern missing retention field - should update via save-pattern"
+)
 ```
 
 Without feedback, the system can't learn which patterns work.
@@ -195,13 +201,13 @@ Without feedback, the system can't learn which patterns work.
 ## If No Patterns Found
 
 1. **Check pattern stats:**
-   ```bash
-   agentdb db stats
+   ```
+   mcp__agentdb__agentdb_pattern_stats()
    ```
 
 2. **Search reflexion episodes:**
-   ```bash
-   agentdb reflexion retrieve "your query" --k 10 --synthesize-context
+   ```
+   mcp__agentdb__reflexion_retrieve(task="your query", k=10, synthesize_context=true)
    ```
 
 3. **Check file-based documentation:**

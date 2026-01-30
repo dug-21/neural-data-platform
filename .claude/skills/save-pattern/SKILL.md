@@ -15,7 +15,6 @@ Stores **application patterns** to AgentDB's **patterns table** with semantic em
 
 ## Quick Reference
 
-**For Claude/Agents (MCP Tools):**
 ```
 # Store a new pattern
 mcp__agentdb__agentdb_pattern_store(
@@ -32,18 +31,9 @@ mcp__agentdb__agentdb_pattern_search(task="pattern topic", k=3)
 mcp__agentdb__agentdb_pattern_stats()
 ```
 
-**For CLI (legacy skills table):**
-```bash
-# Store to skills table (legacy)
-agentdb skill create "pattern-name" "description" "details"
-
-# View database stats
-agentdb db stats
-```
-
 ---
 
-## Primary Method: MCP Pattern Store
+## Primary Method: Pattern Store
 
 ```
 mcp__agentdb__agentdb_pattern_store(
@@ -56,12 +46,12 @@ mcp__agentdb__agentdb_pattern_store(
 
 ### Parameters
 
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| `taskType` | Category and name (e.g., `architecture:domain-adapter`) | Yes |
-| `approach` | Full pattern content - what it does, how to use it | Yes |
-| `successRate` | Confidence level 0-1 (default: 0.9 for proven patterns) | No |
-| `tags` | Array of tags for filtering | No |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `taskType` | string | Yes | Category and name (e.g., `architecture:domain-adapter`) |
+| `approach` | string | Yes | Full pattern content - what it does, how to use it |
+| `successRate` | number | No | Confidence level 0-1 (default: 0.9 for proven patterns) |
+| `tags` | array | No | Array of tags for filtering |
 
 ---
 
@@ -128,8 +118,7 @@ Use consistent `taskType` prefixes for categorization:
 | Troubleshooting | `troubleshoot:` | `troubleshoot:mqtt-issues`, `troubleshoot:parquet-errors` |
 | Conventions | `conventions:` | `conventions:naming`, `conventions:code-style` |
 | MCP Tools | `mcp:` | `mcp:tool-implementation`, `mcp:silver-storage` |
-| ETL | `etl:` | `etl:run-lifecycle`, `etl:hybrid-connection` |
-| SQL | `sql:` | `sql:dimension-table`, `sql:duckdb-timestamptz` |
+| ETL | `etl:` | `etl:run-lifecycle`, `etl:persistence` |
 | Data Quality | `data-quality:` | `data-quality:framework`, `data-quality:csv-patterns` |
 
 ---
@@ -140,8 +129,8 @@ Use consistent `taskType` prefixes for categorization:
 
 Always search before creating to avoid duplicates:
 
-```bash
-agentdb skill search "pattern topic" 5
+```
+mcp__agentdb__agentdb_pattern_search(task="pattern topic", k=5)
 ```
 
 ### 2. Be Specific
@@ -152,10 +141,7 @@ Include concrete details:
 
 ### 3. Include Tags
 
-Add tags in the code/details field for better searchability:
-```bash
-"tags: category, topic1, topic2"
-```
+Add relevant tags for better searchability.
 
 ### 4. Reference Files
 
@@ -175,18 +161,33 @@ How to confirm the pattern worked:
 
 ## Update vs. Create New
 
-AgentDB tracks skill usage and success rates. To update a pattern:
+AgentDB tracks pattern usage and success rates. To update a pattern:
 
-1. **Search for existing**: `agentdb skill search "pattern-name" 3`
+1. **Search for existing:**
+   ```
+   mcp__agentdb__agentdb_pattern_search(task="pattern-name", k=3)
+   ```
+
 2. **If found with low success rate**: Create improved version with `-v2` suffix
+
 3. **If found with high success rate**: Only create new if fundamentally different
 
-```bash
+```
 # Original
-agentdb skill create "add-stream" "Original approach..."
+mcp__agentdb__agentdb_pattern_store(
+  taskType="procedure:add-stream",
+  approach="Original approach...",
+  successRate=0.9,
+  tags=["procedure", "streams"]
+)
 
 # Updated version (when original is insufficient)
-agentdb skill create "add-stream-v2" "Updated approach with retention field requirement..."
+mcp__agentdb__agentdb_pattern_store(
+  taskType="procedure:add-stream-v2",
+  approach="Updated approach with retention field requirement...",
+  successRate=0.9,
+  tags=["procedure", "streams", "updated"]
+)
 ```
 
 ---

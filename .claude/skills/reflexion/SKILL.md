@@ -18,43 +18,51 @@ Records feedback on patterns and approaches used during work. This feedback:
 
 ## Quick Reference
 
-```bash
+```
 # Store feedback
-agentdb reflexion store "session-id" "task description" reward success "critique"
+mcp__agentdb__reflexion_store(
+  session_id="feature-id",
+  task="task description",
+  reward=0.9,
+  success=true,
+  critique="what worked or didn't"
+)
 
 # Retrieve similar experiences
-agentdb reflexion retrieve "search query" --k 5 --only-successes
-
-# Get critique summary
-agentdb reflexion critique-summary "topic" true
+mcp__agentdb__reflexion_retrieve(
+  task="search query",
+  k=5,
+  only_successes=true
+)
 ```
 
 ---
 
 ## Primary Method: Store Feedback
 
-```bash
-agentdb reflexion store \
-  "dp-004" \
-  "Used domain-adapter pattern for new HTTP source" \
-  1.0 \
-  true \
-  "Pattern was complete - followed Source trait steps exactly, tests passed first try"
+```
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Used domain-adapter pattern for new HTTP source",
+  reward=1.0,
+  success=true,
+  critique="Pattern was complete - followed Source trait steps exactly, tests passed first try"
+)
 ```
 
-### Parameters (positional)
+### Parameters
 
-| Position | Parameter | Description |
-|----------|-----------|-------------|
-| 1 | session-id | Feature ID (e.g., `dp-004`, `air-011`) |
-| 2 | task | Description of what you did |
-| 3 | reward | Success score 0-1 |
-| 4 | success | `true` or `false` |
-| 5 | critique | Specific feedback (required) |
-| 6 | input | Optional: task input |
-| 7 | output | Optional: task output |
-| 8 | latency-ms | Optional: execution time |
-| 9 | tokens | Optional: tokens used |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| session_id | string | Yes | Feature ID (e.g., `dp-004`, `air-011`) |
+| task | string | Yes | Description of what you did |
+| reward | number | Yes | Success score 0-1 |
+| success | boolean | Yes | `true` or `false` |
+| critique | string | No | Specific feedback (highly recommended) |
+| input | string | No | Task input |
+| output | string | No | Task output |
+| latency_ms | number | No | Execution time in milliseconds |
+| tokens | number | No | Tokens used |
 
 ---
 
@@ -62,93 +70,101 @@ agentdb reflexion store \
 
 ### Pattern Worked Well
 
-```bash
-agentdb reflexion store \
-  "dp-004" \
-  "Used domain-adapter pattern for new HTTP source" \
-  1.0 \
-  true \
-  "Pattern was complete - followed Source trait steps exactly, tests passed first try"
+```
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Used domain-adapter pattern for new HTTP source",
+  reward=1.0,
+  success=true,
+  critique="Pattern was complete - followed Source trait steps exactly, tests passed first try"
+)
 ```
 
 ### Pattern Partially Worked
 
-```bash
-agentdb reflexion store \
-  "dp-004" \
-  "Used add-stream pattern but needed adjustment" \
-  0.6 \
-  true \
-  "Pattern missing retention field requirement added in v2.0 - should update pattern via save-pattern"
+```
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Used add-stream pattern but needed adjustment",
+  reward=0.6,
+  success=true,
+  critique="Pattern missing retention field requirement added in v2.0 - should update pattern via save-pattern"
+)
 ```
 
 ### Pattern Failed
 
-```bash
-agentdb reflexion store \
-  "dp-004" \
-  "Pattern mqtt-routing failed for multi-topic subscription" \
-  0.2 \
-  false \
-  "Pattern assumes single topic per source - needs update for multi-topic. Used workaround with topic array."
+```
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Pattern mqtt-routing failed for multi-topic subscription",
+  reward=0.2,
+  success=false,
+  critique="Pattern assumes single topic per source - needs update for multi-topic. Used workaround with topic array."
+)
+```
+
+### Pattern Deprecated
+
+```
+mcp__agentdb__reflexion_store(
+  session_id="architecture-deprecation",
+  task="Pattern architecture:dp-006-etl-engine (ID 40) - DuckDB as ETL engine",
+  reward=0.0,
+  success=false,
+  critique="DEPRECATED: DuckDB has been eliminated from NDP architecture. Use direct TimescaleDB/tokio-postgres instead."
+)
 ```
 
 ### No Pattern Found
 
-```bash
-agentdb reflexion store \
-  "dp-004" \
-  "Implemented TimescaleDB continuous aggregate - no existing pattern" \
-  0.85 \
-  true \
-  "No pattern existed. Created new approach using hypertable + continuous_aggregate. Should save as new pattern."
+```
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Implemented TimescaleDB continuous aggregate - no existing pattern",
+  reward=0.85,
+  success=true,
+  critique="No pattern existed. Created new approach using hypertable + continuous_aggregate. Should save as new pattern."
+)
 ```
 
 ---
 
 ## Retrieve Similar Experiences
 
-```bash
+```
 # Find successful similar work
-agentdb reflexion retrieve "HTTP source implementation" \
-  --k 5 \
-  --only-successes \
-  --min-reward 0.7
+mcp__agentdb__reflexion_retrieve(
+  task="HTTP source implementation",
+  k=5,
+  only_successes=true,
+  min_reward=0.7
+)
 
 # Find failures to learn from
-agentdb reflexion retrieve "MQTT configuration" \
-  --k 5 \
-  --only-failures
+mcp__agentdb__reflexion_retrieve(
+  task="MQTT configuration",
+  k=5,
+  only_successes=false
+)
 
 # Get synthesized summary
-agentdb reflexion retrieve "parquet storage" \
-  --k 10 \
-  --synthesize-context
+mcp__agentdb__reflexion_retrieve(
+  task="parquet storage",
+  k=10,
+  synthesize_context=true
+)
 ```
 
 ### Retrieve Parameters
 
-| Parameter | Description |
-|-----------|-------------|
-| `--k` | Number of results |
-| `--only-successes` | Only successful episodes |
-| `--only-failures` | Only failed episodes |
-| `--min-reward` | Minimum reward threshold |
-| `--synthesize-context` | Generate summary |
-
----
-
-## Get Critique Summary
-
-Aggregate lessons from critiques:
-
-```bash
-# Get critique summary for failures
-agentdb reflexion critique-summary "mqtt" true
-
-# Get all critiques for a topic
-agentdb reflexion critique-summary "architecture" false
-```
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| task | string | Search query for similar experiences |
+| k | number | Number of results (default: 5) |
+| only_successes | boolean | Only return successful episodes |
+| min_reward | number | Minimum reward threshold (0-1) |
+| synthesize_context | boolean | Generate coherent summary |
 
 ---
 
@@ -161,7 +177,7 @@ agentdb reflexion critique-summary "architecture" false
 | 0.6 | Partial | Significant modifications required |
 | 0.4 | Weak | Marginally helpful, major workarounds |
 | 0.2 | Failed | Didn't work, caused issues |
-| 0.0 | Harmful | Actively wrong, wasted time |
+| 0.0 | Harmful/Deprecated | Actively wrong, wasted time, or obsolete |
 
 ---
 
@@ -175,6 +191,7 @@ Use consistent session IDs for aggregation:
 | `{feature-id}-{phase}` | Specific phase (e.g., `dp-004-spec`) |
 | `maintenance` | Bug fixes, refactoring |
 | `exploration` | Research, spikes, experiments |
+| `architecture-deprecation` | Marking patterns as deprecated |
 
 ---
 
@@ -186,6 +203,7 @@ Use consistent session IDs for aggregation:
 "Missing retention field that's now required in v2.0 schema"
 "TimescaleDB connection pattern assumed localhost but we use Docker networking"
 "Architecture pattern outdated - ADR-005 superseded the approach"
+"DEPRECATED: DuckDB eliminated from architecture. Use tokio-postgres directly."
 ```
 
 **Poor critiques** (vague, unusable):
@@ -213,18 +231,17 @@ Use consistent session IDs for aggregation:
 
 If your critique identifies a pattern that needs updating:
 
-```bash
+```
 # 1. Record the feedback (this skill)
-agentdb reflexion store \
-  "dp-004" \
-  "Used add-stream pattern" \
-  0.6 \
-  true \
-  "Pattern missing required retention field"
-```
+mcp__agentdb__reflexion_store(
+  session_id="dp-004",
+  task="Used add-stream pattern",
+  reward=0.6,
+  success=true,
+  critique="Pattern missing required retention field"
+)
 
-```
-# 2. Update the pattern (save-pattern skill via MCP)
+# 2. Update the pattern (save-pattern skill)
 mcp__agentdb__agentdb_pattern_store(
   taskType="procedure:add-stream-v2",
   approach="Add Data Stream (v2.0): Now requires retention field. Steps: 1) Create config.yaml, 2) Add retention field (required), 3) Run sync...",
