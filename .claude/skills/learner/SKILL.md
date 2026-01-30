@@ -1,6 +1,6 @@
 ---
 name: "learner"
-description: "Auto-discover patterns from reflexion episodes. Run post-feature to consolidate successful approaches into reusable patterns and skills."
+description: "Auto-discover patterns from reflexion episodes. Run post-feature to consolidate successful approaches into reusable patterns."
 ---
 
 # Learner - Auto-Discover Patterns
@@ -9,10 +9,14 @@ description: "Auto-discover patterns from reflexion episodes. Run post-feature t
 
 Analyzes reflexion episodes to automatically discover:
 1. **Causal patterns** - What actions lead to successful outcomes
-2. **Skills** - Reusable procedures from successful episodes
-3. **Patterns needing review** - Low-performing or conflicting patterns
+2. **Reasoning patterns** - Stored via MCP `agentdb_pattern_store` (patterns table)
+3. **Skills** - Legacy table, use patterns for new knowledge
+4. **Patterns needing review** - Low-performing or conflicting patterns
 
 **Run this AFTER completing a feature** to consolidate learnings.
+
+> **Note**: For manual pattern storage, use `save-pattern` skill with MCP tools.
+> The learner CLI uses the legacy skills table; for patterns table, use MCP tools directly.
 
 ---
 

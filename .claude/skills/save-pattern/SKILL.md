@@ -1,13 +1,13 @@
 ---
 name: "save-pattern"
-description: "Store APPLICATION patterns (architecture, procedures, conventions) in AgentDB's skills table. NOT for swarm/transient memory."
+description: "Store APPLICATION patterns (architecture, procedures, conventions) in AgentDB's patterns table. NOT for swarm/transient memory."
 ---
 
 # Save Pattern - Store Application Knowledge
 
 ## What This Skill Does
 
-Stores **application patterns** to AgentDB's **skills table** with semantic embeddings. Patterns are searchable via `get-pattern` using `skill search`.
+Stores **application patterns** to AgentDB's **patterns table** with semantic embeddings. Patterns are searchable via `get-pattern` using `agentdb_pattern_search`.
 
 **Use this AFTER completing work** to share reusable knowledge with future agents.
 
@@ -15,32 +15,53 @@ Stores **application patterns** to AgentDB's **skills table** with semantic embe
 
 ## Quick Reference
 
-```bash
+**For Claude/Agents (MCP Tools):**
+```
 # Store a new pattern
-agentdb skill create "pattern-name" "description of the pattern" "optional details or code"
+mcp__agentdb__agentdb_pattern_store(
+  taskType="architecture:domain-adapter",
+  approach="Description of the pattern and how to apply it...",
+  successRate=0.9,
+  tags=["architecture", "rust", "ndp"]
+)
 
-# Check existing patterns
+# Check existing patterns first (avoid duplicates)
+mcp__agentdb__agentdb_pattern_search(task="pattern topic", k=3)
+
+# Get pattern statistics
+mcp__agentdb__agentdb_pattern_stats()
+```
+
+**For CLI (legacy skills table):**
+```bash
+# Store to skills table (legacy)
+agentdb skill create "pattern-name" "description" "details"
+
+# View database stats
 agentdb db stats
-
-# Search before creating (avoid duplicates)
-agentdb skill search "pattern name" 3
 ```
 
 ---
 
-## Primary Method: Skill Create
+## Primary Method: MCP Pattern Store
 
-```bash
-agentdb skill create "<name>" "<description>" "[code/details]"
+```
+mcp__agentdb__agentdb_pattern_store(
+  taskType="<category:name>",
+  approach="<full pattern description>",
+  successRate=<0-1>,
+  tags=["tag1", "tag2"]
+)
 ```
 
-### Parameters (positional)
+### Parameters
 
-| Position | Parameter | Description | Required |
-|----------|-----------|-------------|----------|
-| 1 | name | Pattern identifier (kebab-case) | Yes |
-| 2 | description | Full pattern content | Yes |
-| 3 | code | Optional implementation details | No |
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `taskType` | Category and name (e.g., `architecture:domain-adapter`) | Yes |
+| `approach` | Full pattern content - what it does, how to use it | Yes |
+| `successRate` | Confidence level 0-1 (default: 0.9 for proven patterns) | No |
+| `tags` | Array of tags for filtering | No |
 
 ---
 
@@ -48,53 +69,68 @@ agentdb skill create "<name>" "<description>" "[code/details]"
 
 ### Store Architecture Pattern
 
-```bash
-agentdb skill create \
-  "domain-adapter-source" \
-  "Domain Adapter Pattern for Data Sources: All data sources implement the Source trait for uniform handling. Steps: 1) Create struct implementing Source trait, 2) Implement fetch() -> Vec<TimeSeriesPoint>, 3) Implement health_check() -> HealthStatus. Related files: core/src/traits.rs, core/src/sources/http_poll.rs" \
-  "tags: hexagonal, traits, source, architecture"
+```
+mcp__agentdb__agentdb_pattern_store(
+  taskType="architecture:domain-adapter-source",
+  approach="Domain Adapter Pattern for Data Sources: All data sources implement the Source trait for uniform handling. Steps: 1) Create struct implementing Source trait, 2) Implement fetch() -> Vec<TimeSeriesPoint>, 3) Implement health_check() -> HealthStatus. Related files: core/src/traits.rs, core/src/sources/http_poll.rs",
+  successRate=0.95,
+  tags=["architecture", "hexagonal", "traits", "source"]
+)
 ```
 
 ### Store Development Procedure
 
-```bash
-agentdb skill create \
-  "add-data-stream" \
-  "Add New Data Stream: Prerequisites - Stream config YAML ready, etcd running. Steps: 1) Create config/base/streams/{stream-id}/config.yaml, 2) Define fields array with name, source_path, unit, 3) Run ./deploy.sh sync, 4) Verify: etcdctl get /streams/{id}/config" \
-  "tags: streams, config, etcd, development"
+```
+mcp__agentdb__agentdb_pattern_store(
+  taskType="procedure:add-data-stream",
+  approach="Add New Data Stream: Prerequisites - Stream config YAML ready, etcd running. Steps: 1) Create config/base/streams/{stream-id}/config.yaml, 2) Define fields array with name, source_path, unit, 3) Run ./deploy.sh sync, 4) Verify: etcdctl get /streams/{id}/config",
+  successRate=0.9,
+  tags=["procedure", "streams", "config", "etcd"]
+)
 ```
 
 ### Store Troubleshooting Pattern
 
-```bash
-agentdb skill create \
-  "mqtt-data-not-appearing" \
-  "MQTT Data Not Appearing - Symptoms: Sensor data not in Parquet files, no errors in logs. Root Causes: 1) Topic mismatch, 2) Missing stream_id in routing. Solution: 1) Check mosquitto_sub -t # for actual topics, 2) Verify config.yaml source.topics matches, 3) Ensure IngestionRouter tags stream_id" \
-  "tags: mqtt, debugging, parquet, troubleshooting"
+```
+mcp__agentdb__agentdb_pattern_store(
+  taskType="troubleshoot:mqtt-data-not-appearing",
+  approach="MQTT Data Not Appearing - Symptoms: Sensor data not in Parquet files, no errors in logs. Root Causes: 1) Topic mismatch, 2) Missing stream_id in routing. Solution: 1) Check mosquitto_sub -t # for actual topics, 2) Verify config.yaml source.topics matches, 3) Ensure IngestionRouter tags stream_id",
+  successRate=0.85,
+  tags=["troubleshoot", "mqtt", "debugging", "parquet"]
+)
 ```
 
-### Store Product Vision
+### Store Naming Convention
 
-```bash
-agentdb skill create \
-  "ndp-product-vision" \
-  "The Neural Data Platform is a generic, extensible data ingestion and analytics system built in Rust. Uses Domain Adapter Pattern (hexagonal architecture) for pluggable sources/stores, configuration-driven stream management, Bronze->Silver->Gold data lake model." \
-  "tags: vision, product, architecture"
+```
+mcp__agentdb__agentdb_pattern_store(
+  taskType="conventions:naming",
+  approach="Stream IDs use kebab-case (outdoor-weather, air-quality-pm25). Database fields use snake_case (temperature_celsius). Rust structs use PascalCase (WeatherReading). Config keys use dot notation (streams.outdoor-weather.enabled).",
+  successRate=0.95,
+  tags=["conventions", "naming", "style"]
+)
 ```
 
 ---
 
-## Pattern Categories
+## Pattern Categories (taskType)
 
-Use consistent naming prefixes:
+Use consistent `taskType` prefixes for categorization:
 
-| Category | Prefix | Examples |
-|----------|--------|----------|
-| Architecture | `arch-` | `arch-domain-adapter`, `arch-data-layers` |
-| Development | `dev-` | `dev-add-stream`, `dev-implement-source` |
-| Deployment | `deploy-` | `deploy-docker`, `deploy-raspberry-pi` |
-| Troubleshooting | `debug-` | `debug-mqtt-issues`, `debug-parquet-errors` |
-| Conventions | `conv-` | `conv-naming`, `conv-code-style` |
+| Category | taskType Prefix | Examples |
+|----------|-----------------|----------|
+| Architecture | `architecture:` | `architecture:domain-adapter`, `architecture:data-layers` |
+| Procedures | `procedure:` | `procedure:add-stream`, `procedure:deploy-to-pi` |
+| Implementation | `implementation:` | `implementation:etl-persistence`, `implementation:mcp-tool` |
+| Configuration | `configuration:` | `configuration:gitops`, `configuration:etcd` |
+| Testing | `testing:` | `testing:mcp-tool`, `testing:csv-dimension` |
+| Deployment | `deployment:` | `deployment:docker`, `deployment:resource-constraints` |
+| Troubleshooting | `troubleshoot:` | `troubleshoot:mqtt-issues`, `troubleshoot:parquet-errors` |
+| Conventions | `conventions:` | `conventions:naming`, `conventions:code-style` |
+| MCP Tools | `mcp:` | `mcp:tool-implementation`, `mcp:silver-storage` |
+| ETL | `etl:` | `etl:run-lifecycle`, `etl:hybrid-connection` |
+| SQL | `sql:` | `sql:dimension-table`, `sql:duckdb-timestamptz` |
+| Data Quality | `data-quality:` | `data-quality:framework`, `data-quality:csv-patterns` |
 
 ---
 

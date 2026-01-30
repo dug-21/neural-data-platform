@@ -221,12 +221,16 @@ agentdb reflexion store \
   0.6 \
   true \
   "Pattern missing required retention field"
+```
 
-# 2. Update the pattern (save-pattern skill)
-agentdb skill create \
-  "add-stream-v2" \
-  "Add Data Stream (v2.0): Now requires retention field. Steps: 1) Create config.yaml, 2) Add retention field (required), 3) Run sync..." \
-  "tags: streams, config, updated"
+```
+# 2. Update the pattern (save-pattern skill via MCP)
+mcp__agentdb__agentdb_pattern_store(
+  taskType="procedure:add-stream-v2",
+  approach="Add Data Stream (v2.0): Now requires retention field. Steps: 1) Create config.yaml, 2) Add retention field (required), 3) Run sync...",
+  successRate=0.9,
+  tags=["procedure", "streams", "config", "updated"]
+)
 ```
 
 ---

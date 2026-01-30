@@ -1,13 +1,13 @@
 ---
 name: "get-pattern"
-description: "Retrieve APPLICATION patterns (architecture, procedures, conventions) from AgentDB skills table. Use BEFORE implementing to ensure consistency."
+description: "Retrieve APPLICATION patterns (architecture, procedures, conventions) from AgentDB patterns table. Use BEFORE implementing to ensure consistency."
 ---
 
 # Get Pattern - Retrieve Application Knowledge
 
 ## What This Skill Does
 
-Retrieves established **application patterns** (architecture, procedures, conventions) for the Neural Data Platform using AgentDB's semantic skill search.
+Retrieves established **application patterns** (architecture, procedures, conventions) for the Neural Data Platform using AgentDB's semantic pattern search.
 
 **Use this BEFORE implementing anything** to ensure you follow project standards.
 
@@ -15,46 +15,73 @@ Retrieves established **application patterns** (architecture, procedures, conven
 
 ## Quick Reference
 
+**For Claude/Agents (MCP Tools):**
+```
+# Search patterns by task description
+mcp__agentdb__agentdb_pattern_search(task="domain adapter pattern", k=5)
+
+# Get pattern statistics
+mcp__agentdb__agentdb_pattern_stats()
+
+# Fallback: search reflexion episodes
+mcp__agentdb__reflexion_retrieve(task="how to add a stream", k=5, only_successes=true)
+```
+
+**For CLI (legacy skills table):**
 ```bash
-# Search for patterns by description
+# Search skills (legacy - patterns table preferred)
 agentdb skill search "domain adapter pattern" 5
 
-# Fallback: search reflexion episodes for past experiences
-agentdb reflexion retrieve "how to add a stream" --k 5 --only-successes
-
-# View all stored patterns
+# View database stats
 agentdb db stats
 ```
 
 ---
 
-## Primary Method: Skill Search
+## Primary Method: MCP Pattern Search
 
-```bash
-agentdb skill search "<query>" <k>
+```
+mcp__agentdb__agentdb_pattern_search(
+  task="<query>",
+  k=<number>,
+  threshold=<0-1>,
+  filters={taskType: "architecture:*", minSuccessRate: 0.8}
+)
 ```
 
 ### Parameters
 
-| Parameter | Description |
-|-----------|-------------|
-| `<query>` | What you're looking for (semantic search) |
-| `<k>` | Number of results (default: 5) |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `task` | What you're looking for (semantic search) | required |
+| `k` | Number of results | 10 |
+| `threshold` | Minimum similarity (0-1) | 0 |
+| `filters.taskType` | Filter by category | optional |
+| `filters.minSuccessRate` | Minimum success rate | optional |
+| `filters.tags` | Filter by tags | optional |
 
 ### Examples
 
-```bash
+```
 # Find architecture patterns
-agentdb skill search "domain adapter pattern" 5
+mcp__agentdb__agentdb_pattern_search(task="domain adapter pattern", k=5)
 
 # Find deployment procedures
-agentdb skill search "deploy to raspberry pi" 3
+mcp__agentdb__agentdb_pattern_search(task="deploy to raspberry pi", k=3)
 
-# Find naming conventions
-agentdb skill search "naming conventions streams fields" 3
+# Find naming conventions with filter
+mcp__agentdb__agentdb_pattern_search(
+  task="naming conventions streams fields",
+  k=5,
+  filters={taskType: "conventions:*"}
+)
 
-# Find troubleshooting guides
-agentdb skill search "mqtt data not appearing" 5
+# Find high-success patterns only
+mcp__agentdb__agentdb_pattern_search(
+  task="mqtt configuration",
+  k=5,
+  filters={minSuccessRate: 0.9}
+)
 ```
 
 ---
@@ -109,16 +136,18 @@ agentdb reflexion retrieve "timescaledb schema" \
 
 ## Interpreting Results
 
-Results from `skill search` include:
+Results from `agentdb_pattern_search` include:
 
 | Field | Meaning |
 |-------|---------|
-| `Name` | Pattern identifier |
-| `Description` | The pattern content |
+| `ID` | Pattern identifier |
+| `taskType` | Category (e.g., `architecture:domain-adapter`) |
+| `Similarity` | How well it matches your query (0-1) |
 | `Success Rate` | How often this pattern succeeded (0-100%) |
+| `Approach` | The pattern content/description |
 | `Uses` | Number of times used |
 
-**High-value patterns**: Success Rate > 80% AND Uses > 3
+**High-value patterns**: Success Rate > 80% AND Similarity > 0.3
 
 ---
 
