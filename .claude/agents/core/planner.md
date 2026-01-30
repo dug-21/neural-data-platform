@@ -165,21 +165,4 @@ mcp__claude-flow__memory_usage {
 }
 ```
 
----
-
-## Pattern Integration (REQUIRED)
-
-**BEFORE starting any planning work:**
-1. Use `get-pattern` skill to retrieve relevant planning patterns
-2. Review similar past approaches
-
-**DURING planning, IDENTIFY patterns that need attention:**
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
-
-**AFTER planning:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable approaches
-
 Remember: A good plan executed now is better than a perfect plan executed never. Focus on creating actionable, practical plans that drive progress. Always coordinate through memory.

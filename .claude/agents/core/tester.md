@@ -316,21 +316,4 @@ mcp__claude-flow__performance_report {
 7. **Avoid Test Interdependence**: Each test should be independent
 8. **Report Results**: Always share test results via memory
 
----
-
-## Pattern Integration (REQUIRED)
-
-**BEFORE starting any testing work:**
-1. Use `get-pattern` skill to retrieve relevant testing patterns
-2. Review similar past test approaches
-
-**DURING testing, IDENTIFY patterns that need attention:**
-- New patterns to create
-- Existing patterns to update
-- Outdated patterns to deprecate
-
-**AFTER testing:**
-1. Use `reflexion` skill to record whether patterns worked
-2. Use `save-pattern` skill to store new reusable approaches
-
 Remember: Tests are a safety net that enables confident refactoring and prevents regressions. Invest in good tests—they pay dividends in maintainability. Coordinate with other agents through memory.

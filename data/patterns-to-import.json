@@ -1,0 +1,986 @@
+[
+  {
+    "id": 1,
+    "name": "sample-rust-error-handling",
+    "taskType": "conventions:rust-error-handling",
+    "approach": "Rust Error Handling Pattern for NDP: Use thiserror for library errors and anyhow for application errors. Steps: 1) Define custom error enum with #[derive(thiserror::Error, Debug)], 2) Use #[error(\"message\")] for display, 3) Implement From<T> for error conversion, 4) Return Result<T, Error> from all fallible functions. Example: pub enum SourceError { #[error(\"Connection failed: {0}\")] Connection(String), #[error(\"Parse error\")] Parse(#[from] serde_json::Error) }",
+    "successRate": 0.9,
+    "tags": [
+      "rust",
+      "error-handling",
+      "thiserror",
+      "anyhow",
+      "conventions"
+    ]
+  },
+  {
+    "id": 2,
+    "name": "arch-domain-adapter-pattern",
+    "taskType": "architecture:domain-adapter-pattern",
+    "approach": "Domain Adapter Pattern (Hexagonal Architecture) - NDP Core Pattern. Uses ports and adapters architecture: Core domain logic separated from infrastructure. Traits as ports: Source, Store, Parser. Implementations as adapters: MqttSource, HttpPollingSource, ParquetStore, TimescaleStore. Design Principles: 1) Domain-agnostic core (core/ crate), 2) Domain-specific adapters (domains/, apps/), 3) Configuration-driven behavior (YAML \u2192 etcd), 4) Trait-based dependency inversion. Source: AIR-001, confirmed through DP-004. Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "hexagonal",
+      "ports-adapters",
+      "traits",
+      "core-pattern"
+    ]
+  },
+  {
+    "id": 3,
+    "name": "arch-data-lake-layers",
+    "taskType": "architecture:data-lake-layers",
+    "approach": "Bronze \u2192 Silver \u2192 Gold Data Lake Architecture. Three-layer data architecture: BRONZE (Parquet): Raw archive, audit, replay - Schema-on-read (raw JSON). SILVER (TimescaleDB): Analytics, dashboards - Schema-on-write (typed columns). GOLD (Features/ML): Predictions, aggregations - Derived from Silver. Key principle: Bronze is authoritative (must succeed), Silver is best-effort (can rebuild). Source: AIR-004, DP-001, DP-004. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "data-lake",
+      "bronze",
+      "silver",
+      "gold",
+      "parquet",
+      "timescaledb"
+    ]
+  },
+  {
+    "id": 4,
+    "name": "arch-bronze-schema",
+    "taskType": "architecture:bronze-schema",
+    "approach": "Bronze Layer Schema (Wide Raw JSON) - DP-004. Store raw JSON payloads, not transformed metrics. Schema: timestamp (DateTime<Utc>) - Ingestion timestamp, source_id (String) - Source identifier, ndp_id (String?) - Stable platform-owned identifier, context (JSON?) - Config-derived metadata snapshot, raw_payload (JSON) - Exact payload from source. Key Principles: raw_payload is sacred (byte-for-byte copy), context is snapshot (frozen at ingestion), No parsing in Bronze (defer to Silver ETL), Wide format (one row per message). Supersedes: Previous tall schema (one row per metric). Status: Accepted.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "bronze",
+      "parquet",
+      "schema",
+      "raw-json",
+      "dp-004"
+    ]
+  },
+  {
+    "id": 5,
+    "name": "arch-silver-schema",
+    "taskType": "architecture:silver-schema",
+    "approach": "Silver Layer Schema - AIR-009 ADR-003. TimescaleDB hypertable schema: time TIMESTAMPTZ (hypertable dimension), ndp_id TEXT (indexed), stream_id TEXT (indexed), context JSONB (GIN indexed), Measurement columns (typed: pm25 FLOAT, temperature FLOAT, etc.). Uses TimescaleDB continuous aggregates for time-series optimization. Source: AIR-009 ADR-003. Status: Proposed.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "silver",
+      "timescaledb",
+      "schema",
+      "hypertable",
+      "air-009"
+    ]
+  },
+  {
+    "id": 6,
+    "name": "arch-context-storage",
+    "taskType": "architecture:context-storage",
+    "approach": "Context Storage Strategy - AIR-009 ADR-002-AMENDMENT-002. Decision: Simple blob storage - store context as single JSON blob, no flattening. Store context JSONB field as-is without dot-notation flattening or hybrid promoted fields. Supersedes: AIR-009 ADR-002 (dot-notation flattening), AIR-009 ADR-002-AMENDMENT-001 (hybrid promoted fields + blob). Rationale: Simplicity, easy reconstruction, fewer edge cases. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "context",
+      "jsonb",
+      "storage",
+      "air-009"
+    ]
+  },
+  {
+    "id": 7,
+    "name": "arch-ndp-id-identifier",
+    "taskType": "architecture:ndp-id-identifier",
+    "approach": "ndp_id: Stable Source Identifier - AIR-009 ADR-001. Platform-owned, immutable identifier for each source instance. Naming Convention: {device-type}-{location-hint}-{sequence}. Examples: airgradient-office-001, window-office-001. Design Principles: ndp_id is outside context (pure identity, not attribute), ndp_id is immutable (never changes after assignment), ndp_id is required for new records, ndp_id is unique across system. Problem Solved: Unstable device identifiers (serial numbers change with replacements). Status: Proposed.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "identity",
+      "ndp-id",
+      "source",
+      "air-009"
+    ]
+  },
+  {
+    "id": 8,
+    "name": "config-etcd-pattern",
+    "taskType": "configuration:etcd-pattern",
+    "approach": "etcd-Based Configuration - AIR-003. Key Structure: /streams/{stream-id}/config \u2192 StreamConfig JSON, /streams/{stream-id}/schema \u2192 SchemaDefinition JSON, /streams/{stream-id}/sources \u2192 SourceConfig[] JSON. Architecture Patterns: Watch-based hot reload (<100ms propagation), GitOps integration (YAML \u2192 etcd sync via deploy.sh), Environment variable override (Env > etcd > Defaults). Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "configuration",
+      "etcd",
+      "hot-reload",
+      "watch-api",
+      "air-003"
+    ]
+  },
+  {
+    "id": 9,
+    "name": "config-gitops-pattern",
+    "taskType": "configuration:gitops-pattern",
+    "approach": "GitOps Configuration Pattern - DP-001 ADR-003. Split configurations between static and dynamic: STATIC (Git-managed): Docker configs, provisioned dashboards - version controlled, change via PR. DYNAMIC (GitOps \u2192 etcd): Stream configs, runtime parameters - hot-reloadable, synced via deploy.sh. Flow: config/base/streams/*.yaml \u2192 deploy.sh sync \u2192 etcd \u2192 watch API \u2192 application hot-reload. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": [
+      "configuration",
+      "gitops",
+      "static",
+      "dynamic",
+      "dp-001"
+    ]
+  },
+  {
+    "id": 10,
+    "name": "arch-channel-ownership",
+    "taskType": "architecture:channel-ownership",
+    "approach": "Channel Ownership Pattern - AIR-005, AIR-011. Decision: IngestionCoordinator owns master mpsc channel. Sources send to coordinator's channel, Coordinator routes to storage layers, Single point of coordination. Flow: Sources \u2192 mpsc channel \u2192 IngestionCoordinator \u2192 ParquetStore/TimescaleStore. Benefits: Centralized coordination, clear ownership, predictable backpressure handling. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "channel",
+      "mpsc",
+      "coordinator",
+      "ingestion",
+      "air-005"
+    ]
+  },
+  {
+    "id": 11,
+    "name": "arch-parser-trait",
+    "taskType": "architecture:parser-trait",
+    "approach": "Parser Architecture - AIR-006. Unified Parser trait system (delete ResponseParser). Trait signature: pub trait Parser: Send + Sync { fn parse(&self, payload: &Value, timestamp: DateTime<Utc>) -> CoreResult<Vec<TimeSeriesPoint>>; fn name(&self) -> &str; fn config(&self) -> &ParserConfig; }. Implementations: FlatJsonParser (single JSON object), JsonPathParser (specific field extraction), ArrayIteratorParser (array-wrapped responses), ColumnOrientedParser (column-oriented data like NWS). Supersedes: ResponseParser struct-based system (AIR-005). Status: Proposed.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "parser",
+      "trait",
+      "json",
+      "air-006"
+    ]
+  },
+  {
+    "id": 12,
+    "name": "arch-dual-trait-source",
+    "taskType": "architecture:dual-trait-source",
+    "approach": "Dual-Trait Architecture for Source Layer Separation - AIR-011 ADR-001. Two trait paths: Source trait: fetch() \u2192 Vec<TimeSeriesPoint> for parsed data (Silver layer). RawSource trait: fetch_raw()/fetch_raw_batch() \u2192 RawDataPoint for raw JSON (Bronze layer). CRITICAL: Only RawSource::fetch_raw_batch() is called in production. Production Flow: main.rs \u2192 IngestionCoordinator \u2192 SourceManager \u2192 source.fetch_raw_batch() \u2192 RawDataPoint \u2192 ParquetStore. Parser configs remain in stream config for future Silver ETL. Problem Solved: Double polling caused memory accumulation and Pi lockups. Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "dual-trait",
+      "source",
+      "rawsource",
+      "bronze",
+      "silver",
+      "air-011"
+    ]
+  },
+  {
+    "id": 13,
+    "name": "arch-http-polling",
+    "taskType": "architecture:http-polling",
+    "approach": "HTTP Polling Architecture - AIR-005. Components: AuthMethod enum (None, QueryParam, Header, BasicAuth), RetryConfig (exponential backoff with jitter), EndpointConfig (generic endpoint configuration). Error Classification: Transient (5xx, network) \u2192 Exponential backoff, Rate Limited (429) \u2192 Parse Retry-After, respect quota, Permanent (401, 403, 404) \u2192 Log error, skip endpoint. Health Check Pattern: Staleness detection - Alert if no data for 2\u00d7 poll_interval. Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "http",
+      "polling",
+      "retry",
+      "auth",
+      "air-005"
+    ]
+  },
+  {
+    "id": 14,
+    "name": "arch-mqtt-multi-subscription",
+    "taskType": "architecture:mqtt-multi-subscription",
+    "approach": "MQTT Multi-Subscription Pattern - DP-003 ADR-001. Decision: Single MqttSource with subscription array (not multiple connections). Config structure: sources: - type: mqtt, params: broker_url, subscriptions: [{stream_id, topic_pattern}]. Topic Routing Algorithm (DP-003 ADR-003): MQTT pattern \u2192 compiled regex at config load, First match wins (order matters), Dead letter queue for unmatched messages, Performance: <1 microsecond per match. Pattern Conversion: + \u2192 [^/]+ (single level), # \u2192 .* (multi-level, must be at end). Status: Proposed.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "mqtt",
+      "subscription",
+      "topic-routing",
+      "dp-003"
+    ]
+  },
+  {
+    "id": 15,
+    "name": "config-stream-files",
+    "taskType": "configuration:stream-files",
+    "approach": "Stream Configuration Files Pattern. File Location: config/base/streams/{stream-id}/config.yaml. Each stream has single config.yaml containing: Stream metadata (stream_id, description, version, retention), Field definitions (fields section), Source configurations (sources array with type, params, parser), Entity schemas for Data Dictionary (entity_schemas section). Example structure: stream_id, description, version, enabled, retention_days, fields: {pm25: {type, unit}}, sources: [{type, enabled, ndp_id, context, broker_url, topic_pattern, parser}], entity_schemas: [{schema_name, description, attributes}]. Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "configuration",
+      "stream",
+      "yaml",
+      "fields",
+      "sources"
+    ]
+  },
+  {
+    "id": 16,
+    "name": "arch-data-dictionary",
+    "taskType": "architecture:data-dictionary",
+    "approach": "Data Dictionary Pattern - DP-002. TimescaleDB data_dictionary schema tables: streams (stream metadata), fields (field definitions per stream), sources (source configs per stream), entity_schemas (entity definitions with device_class), entity_schema_attributes (attributes per entity), sync_status (audit trail). Views: v_data_dictionary (joined streams\u2192entities\u2192attributes), stream_overview (summary with counts). Dynamic Loading: SQL schema created at container start (init-scripts/01-create-data-dictionary.sql), deploy.sh sync triggers sync_to_data_dictionary(), Full refresh on each sync. Config\u2192Database Flow: config/base/streams/{stream}/config.yaml \u2192 deploy.sh \u2192 SQL INSERTs \u2192 data_dictionary.* tables. Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "data-dictionary",
+      "timescaledb",
+      "metadata",
+      "dp-002"
+    ]
+  },
+  {
+    "id": 17,
+    "name": "arch-dead-letter-queue",
+    "taskType": "architecture:dead-letter-queue",
+    "approach": "Dead Letter Queue Pattern - AIR-002 ADR-003. Format: /data/dlq/YYYY-MM-DD.jsonl. Benefits: Data preservation (no data loss on parse errors), Debugging capability (inspect failed messages), Replay potential (reprocess after bug fixes). Combined with Dual-Write Semantics (AIR-004): Bronze write is AUTHORITATIVE (must succeed), Silver write is BEST-EFFORT (can fail, can rebuild from Bronze). Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "architecture",
+      "dlq",
+      "dead-letter",
+      "error-handling",
+      "air-002"
+    ]
+  },
+  {
+    "id": 18,
+    "name": "deploy-resource-constraints",
+    "taskType": "deployment:resource-constraints",
+    "approach": "Resource Constraints - Raspberry Pi 5 Budget. System Limits: Total Memory < 2GB, Single App < 512MB, Config Propagation < 100ms, Cross-stream Query < 100ms p99. Container Memory Allocation (DP-001): mosquitto 128MB, etcd 256MB, air-quality-app 512MB, duckdb 512MB, grafana 256MB, timescaledb 256MB. Design Implications: Memory-conscious implementations, Efficient data structures, Bounded buffer sizes, Aggressive resource cleanup. Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "deployment",
+      "resources",
+      "raspberry-pi",
+      "memory",
+      "constraints"
+    ]
+  },
+  {
+    "id": 19,
+    "name": "deploy-docker-architecture",
+    "taskType": "deployment:docker-architecture",
+    "approach": "Docker-Based Deployment Architecture. Primary Entry Point: deploy/pi/deploy.sh. Commands: ./deploy.sh (full deploy), ./deploy.sh start (start services), ./deploy.sh stop (stop services), ./deploy.sh logs (view logs), ./deploy.sh status (check health), ./deploy.sh update (pull and rebuild). Startup Sequence: 1) dc up -d (start Docker Compose), 2) sync_config() (sync YAML to etcd), 3) init_streams() (initialize streams), 4) sync_to_data_dictionary() (populate TimescaleDB). Container Stack: mosquitto (MQTT, 128MB), etcd (config store, 256MB), air-quality-app (Rust ingestion, 512MB), pi5-timescaledb (Silver layer, 256MB), grafana (dashboards, 256MB). Init Scripts: 01-create-data-dictionary.sql, 02-create-users.sql. Status: Implemented.",
+    "successRate": 0.9,
+    "tags": [
+      "deployment",
+      "docker",
+      "compose",
+      "raspberry-pi",
+      "deploy-script"
+    ]
+  },
+  {
+    "id": 20,
+    "name": "arch-mcp-http-transport",
+    "taskType": "architecture:mcp-http-transport",
+    "approach": "MCP Transport Protocol Selection - dp-005 ADR-001. Decision: HTTP POST for MVP with axum framework. Rationale: Universal compatibility, cloud-portable, debuggable with standard tools, TLS-ready, stateless. Alternatives rejected: stdio (no cross-network), SSE (unnecessary for request/response), WebSocket (overkill), gRPC (MCP uses JSON-RPC). Routes: POST /mcp (JSON-RPC), GET /health. Future: Can add SSE for streaming if needed. Tags: dp-005, mcp, http, transport, axum. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 21,
+    "name": "arch-bronze-storage-trait",
+    "taskType": "architecture:bronze-storage-trait",
+    "approach": "BronzeStorage Trait Abstraction - dp-005 ADR-002. Domain Adapter pattern for Bronze layer access. Trait methods: list() -> StreamStorageInfo[], schema(stream_id) -> Arrow Schema, sample(stream_id, n) -> JSON rows, validate() -> health check. Implementations: LocalParquetStorage (today), S3ParquetStorage (future). Follows NDP hexagonal architecture. Benefits: Storage agnostic, testable with mocks, cloud-portable. Tags: dp-005, mcp, storage, traits, parquet, domain-adapter. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 22,
+    "name": "arch-mcp-etcd-config",
+    "taskType": "architecture:mcp-etcd-config",
+    "approach": "etcd as MCP Configuration Source - dp-005 ADR-003. Decision: Read config from etcd, not source YAML. Rationale: Validates full sync pipeline (YAML -> ConfigSyncService -> etcd), consistency with running apps, already denormalized. ConfigStore trait: list_streams() -> stream IDs, get_stream(id) -> StreamConfig, health_check(). Fail-fast if etcd unavailable. Alternatives rejected: Read YAML (doesn't validate pipeline), dual source fallback (masks failures). Tags: dp-005, mcp, etcd, config, domain-adapter. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 23,
+    "name": "arch-parquet-introspection",
+    "taskType": "architecture:parquet-introspection",
+    "approach": "Dynamic Schema Discovery via Parquet Introspection - dp-005 ADR-004. Decision: Always read schema from Parquet files, no hardcoded expectations. Benefits: Always accurate, zero maintenance, evolution-proof, debug-friendly. Reads Arrow schema from Parquet footer (metadata-only, <10ms). Also analyzes raw_payload JSON structure by sampling rows. Alternatives rejected: Schema from config (defines target not Bronze), hardcoded envelope (stale), schema registry (overkill). Tags: dp-005, mcp, parquet, schema, introspection. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 24,
+    "name": "arch-mcp-response-format",
+    "taskType": "architecture:mcp-response-format",
+    "approach": "MCP Response Format - dp-005 ADR-005. Structure: MCP content[] array with JSON in text, plus isError flag. Inner JSON has success:true/false, data or error+details. Success: {success:true, ...data}. Error: {success:false, error:'message', details:{context}}. Consistent pattern across all tools. Actionable errors include suggestions. Double serialization required by MCP spec. Alternatives rejected: Plain text (not parseable), multiple content items (splits info), no success flag (less explicit). Tags: dp-005, mcp, response, json, error-handling. Status: Accepted.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 25,
+    "name": "dp-005-deployment-strategy",
+    "taskType": "pattern:dp-005-deployment-strategy",
+    "approach": "Docker container deployment pattern for ndp-mcp-server (Bronze MCP Server). Key decisions: 1) 64MB memory limit (target <50MB with buffer), 2) Port 9100 for MCP HTTP endpoint, 3) Read-only mount of air-quality-data volume at /data:ro, 4) Depends on etcd service_healthy condition, 5) Health check: curl -f http://localhost:9100/health with 30s interval, 10s timeout, 3 retries, 15s start_period, 6) Environment: NDP_MCP_LISTEN, NDP_ETCD_ENDPOINTS, NDP_RAW_PATH, RUST_LOG. Uses neural-network bridge network. Integrates with deploy.sh status command. ADR location: product/features/dp-005/architecture/ADR-006-deployment-strategy.md",
+    "successRate": 0.9,
+    "tags": [
+      "dp-005",
+      "deployment",
+      "docker",
+      "mcp-server",
+      "resource-limits",
+      "health-check",
+      "architecture"
+    ]
+  },
+  {
+    "id": 26,
+    "name": "config-client-adapter-pattern",
+    "taskType": "configuration:client-adapter-pattern",
+    "approach": "Adapter pattern for wrapping config-client in MCP server - dp-005 BUG-001. Create ConfigClientStore struct that wraps StreamRegistry. Key implementation: 1) async fn new(endpoints) connects to etcd via StreamRegistry::new, 2) impl ConfigStore trait by delegating to registry methods, 3) Convert neural_core::StreamConfig to MCP StreamConfig via From trait, 4) Error mapping: ConfigError::NotFound -> McpError::StreamNotFound, other errors -> McpError::EtcdUnavailable. Benefits: Single etcd implementation, type-safe conversion, consistent error handling. Tags: dp-005, config-client, adapter, mcp-server, domain-adapter-pattern.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 27,
+    "name": "mcp-config-adapter-pattern",
+    "taskType": "mcp:config-adapter-pattern",
+    "approach": "Domain Adapter pattern for bridging config-client to MCP ConfigStore. When MCP server needs to use config-client's StreamRegistry but has its own ConfigStore trait with different types: 1) Create StreamRegistryAdapter struct that wraps StreamRegistry, 2) Implement convert_config() to transform neural_core::StreamConfig to MCP's StreamConfig types, 3) Implement ConfigStore trait methods using StreamRegistry internally. Key mappings: stream_id/enabled direct copy, sources[0].source_type -> source_type string, fields -> field_mappings (name as source/target), description/version -> entity_schema.name/version. Location: core/ndp-mcp-server/src/etcd/registry_adapter.rs. Tags: dp-005, mcp, config-client, domain-adapter, type-conversion.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 28,
+    "name": "rust-workspace-path-dependency",
+    "taskType": "pattern:rust-workspace-path-dependency",
+    "approach": "Adding path dependencies in Rust workspace for internal crates. In Cargo.toml dependencies section: 1) Use path = relative path from current crate to dependency, 2) For crates with different package names, use package = attribute. Example for ndp-mcp-server depending on config-client: config-client = { path = \"../../config-client\" }. For core library (which has package name 'platform-core'): neural_core = { path = \"../../core\", package = \"platform-core\" }. Relative paths are from the Cargo.toml location. Tags: rust, cargo, dependencies, workspace.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 29,
+    "name": "mcp-tool-testing-pattern",
+    "taskType": "mcp:tool-testing-pattern",
+    "approach": "MCP Tool Testing Pattern - ndp-mcp-server. Uses London School TDD with mockall for behavior verification. Key traits: ConfigStore (etcd access), BronzeStorage (parquet access). Both have #[cfg_attr(test, automock)] for automatic mock generation. Test pattern: 1) Create MockConfigStore/MockBronzeStorage, 2) Set expectations with .expect_method(), 3) Control returns with .returning(|| Ok(...)), 4) Verify calls with .times(1). Tools tested: list_streams, describe_schema, validate_config, sample_data. Each tool function accepts trait references (&S, &C) enabling mock injection. Integration tests use axum_test::TestServer for HTTP layer. All 261 tests pass. Tags: testing, mcp, mockall, london-school-tdd, trait-mocking.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 30,
+    "name": "grafana-timescaledb-migration",
+    "taskType": "pattern:grafana-timescaledb-migration",
+    "approach": "Grafana Dashboard Migration - DuckDB to TimescaleDB. Key SQL patterns: 1) Time filter: DuckDB uses timestamp >= ${__from}::BIGINT * 1000, TimescaleDB uses $__timeFilter(time). 2) Time bucketing: Both use time_bucket() but TimescaleDB prefers string intervals ('10 minutes' vs INTERVAL). 3) Data access: DuckDB reads Parquet with read_parquet(), TimescaleDB queries tables directly. 4) Current value queries: DuckDB needs subquery with LIMIT, TimescaleDB is simple ORDER BY time DESC LIMIT 1. Performance: Use continuous aggregates (hourly/daily) for time ranges >24h. Connection pooling: maxOpenConns=5, maxIdleConns=2 for Pi constraints. Refresh rates: Overview=1m, Detail=5m, Historical=15m. See research/agenticdataplatform/silver/04-dashboard-integration.md for complete guide.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 31,
+    "name": "grafana-alerting-timescaledb",
+    "taskType": "pattern:grafana-alerting-timescaledb",
+    "approach": "Grafana Alerting with TimescaleDB for NDP. Alert rule structure: Use rawSql queries against silver.* tables, reduce to last value, apply threshold. Key thresholds: Indoor PM2.5 (35 warning, 55 critical), CO2 (1500 warning, 2000 critical), Outdoor AQI (100 warning, 150 critical). Alert timing: evaluation interval 1m, for duration 5-15m depending on metric volatility. Query pattern: SELECT time, metric as value FROM silver.table WHERE time > NOW() - INTERVAL '5 minutes' ORDER BY time DESC LIMIT 1. Use Grafana expressions for reduce and threshold conditions. Labels: severity (warning/critical), stream (stream_id). Provisioning via YAML in config/grafana/provisioning/alerting/. See research/agenticdataplatform/silver/04-dashboard-integration.md for complete YAML examples.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 32,
+    "name": "analytics-silver-data-types",
+    "taskType": "pattern:analytics-silver-data-types",
+    "approach": "Silver Layer Data Type Selection Guide for NDP. PostgreSQL types by use case: Temperatures/concentrations/continuous use DOUBLE PRECISION. Bounded indices (AQI, TVOC 0-500) use SMALLINT. CO2 ppm use SMALLINT. Counters use INTEGER. All timestamps TIMESTAMPTZ (UTC). Text IDs use TEXT not VARCHAR. DQ flags use TEXT[] arrays. JSON context use JSONB. Column naming: _c for Celsius, _pct for percent, _pa for Pascals, _kmh for km/h, _deg for degrees, _m for meters, _mm for precipitation. Primary keys: (time_column, ndp_id) for observations, (issue_time, valid_time, ndp_id) for forecasts. Source: Silver data dictionary research. Tags: analytics, silver, timescaledb, schema, data-types.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 33,
+    "name": "proc-silver-stream-mapping",
+    "taskType": "procedure:silver-stream-mapping",
+    "approach": "Silver Layer Stream Mapping Procedure - dp-006. Maps Bronze streams to Silver entities: 1) IDENTIFY domain groupings (indoor air, outdoor weather, forecasts), 2) DETERMINE cardinality (1:1, N:1, 1:N), 3) HANDLE duplicates (check for overlapping streams), 4) PLAN unit normalization (SI units in Silver), 5) EXTRACT field priority (core -> enhanced -> diagnostic). Mapping types: Direct (1:1), Merged (N:1 with source_provider), Exploded (1:N for arrays like forecasts). Key principle: Group by domain use case, not by source API. Tags: dp-006, silver, etl, stream-mapping.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 34,
+    "name": "proc-unit-normalization",
+    "taskType": "procedure:unit-normalization",
+    "approach": "Unit Normalization Procedure for Silver Layer - dp-006. Convert source units to SI standards at ETL time: Temperature (Kelvin/Fahrenheit -> Celsius), Pressure (Pa -> hPa), Wind speed (km/h, mph -> m/s), Visibility (miles -> meters). Store unit metadata in column comments or data dictionary. Pattern: source_value * conversion_factor + offset. Examples: OWM temp: K-273.15, NWS wind: km_h/3.6, Fahrenheit: (F-32)*5/9. Keep original unit in Bronze, normalize in Silver. Tags: dp-006, silver, etl, units.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 35,
+    "name": "arch-config-driven-silver-etl",
+    "taskType": "architecture:config-driven-silver-etl",
+    "approach": "Config-Driven Silver ETL Architecture Pattern - dp-006. Extends existing Bronze config patterns to drive Silver layer ETL. KEY CONCEPTS: 1) Add silver_etl section to stream config YAML, 2) Reuse FieldMapping, UnitConversion, ConversionFormula from parser config, 3) field_mappings with source_path, target_column, transform, dq_rules, 4) DQ rules (range_check, not_null, pattern, one_of) with actions (flag, reject, clamp, drop), 5) dq_output.enabled creates dq_flags TEXT[] column, 6) Silver schema stored in etcd for hot-reload. TRANSFORMS: unit_conversion (Linear scale+offset), expression, lookup, json_extract, timestamp, computed. DEDUP: upsert/skip/replace strategies. INCREMENTAL: watermark_column + lag_interval. SQL Generator trait produces DuckDB SQL from config. Tags: dp-006, silver, etl, config-driven, architecture.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 36,
+    "name": "ml-feature-store-pattern",
+    "taskType": "pattern:ml-feature-store-pattern",
+    "approach": "Gold Layer Feature Store Pattern for ML Training - Multi-domain extensibility. KEY COMPONENTS: 1) Feature tables (gold.{domain}_features) with point-in-time correctness, 2) Feature config YAML with feature_windows (rolling aggregations, lag features, trend detection), 3) Cross-stream joins with temporal_align (exact, nearest_within_Xmin, lag_Xh), 4) Batch export to Parquet for training with time-based splits (train/validation/test), 5) Training DQ report (completeness, correlation, distribution, outliers). POINT-IN-TIME: Avoid data leakage - use temporal_join semantics (exact, nearest_before, lag). ONLINE SERVING: In-memory cache for real-time inference on edge devices. Tags: ml, feature-store, gold-layer, mlops, training-pipeline.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 37,
+    "name": "ml-dq-monitoring",
+    "taskType": "pattern:ml-dq-monitoring",
+    "approach": "ML-Specific Data Quality Monitoring Pattern. Beyond basic range_check/not_null, ML pipelines need: DISTRIBUTION DRIFT: Monitor KL divergence from reference window (30 days), alert when >0.1. NULL RATE: Track % nulls per column per 24h window, alert if exceeds threshold. OUTLIER DETECTION: z-score (threshold 4.0) and IQR (3x multiplier) methods, flag don't remove. TEMPORAL CONSISTENCY: Max gap detection, rate-of-change plausibility. TRAINING DQ REPORT: Before training - feature completeness, correlation matrix, label distribution, temporal coverage, outlier summary. Config example: ml_dq_rules: [{type: distribution_drift, column: X, reference_window: 30d, alert_threshold: 0.1}]. Tags: ml, dq, data-quality, drift-detection, outliers, mlops.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 38,
+    "name": "dq-framework-design",
+    "taskType": "data-quality:framework-design",
+    "approach": "Config-Driven DQ Framework Pattern (DP-006). 11 DQ rule types: range_check, null_check, enum_check, pattern_check (value-level); freshness_check, monotonic_check, rate_of_change (temporal); cross_field_check, conditional_check (cross-field); completeness_check, cardinality_check (batch-level). Actions: flag (default, preserve data), reject (set NULL), clamp (adjust to bounds), drop (exclude row). dq_flags column: TEXT[] with format '{rule_type}:{field}:{reason}[:{value}]'. Transparency tables: silver.dq_transparency (row-level audit), silver.dq_batch_summary (batch metrics), silver.dq_metrics_hourly (continuous aggregate). Key principle: Flag over reject - preserve data, enable investigation. Domain-specific thresholds in config YAML. See product/features/dp-006/architecture/DQ-FRAMEWORK-DESIGN.md for full specification.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 39,
+    "name": "arch-dp-006-binary-separation",
+    "taskType": "architecture:dp-006-binary-separation",
+    "approach": "DP-006 ADR-006-002: Binary Architecture - Separate silver-etl binary. Create apps/silver-etl/ as separate binary from air-quality-app. Benefits: Process isolation protects Bronze reliability, independent scheduling via systemd timer, separate 256MB memory budget. Follows principle: Bronze must succeed, Silver is best-effort. Location: product/features/dp-006/architecture/ADR-006-002-binary-architecture.md",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 40,
+    "name": "arch-dp-006-etl-engine",
+    "taskType": "architecture:dp-006-etl-engine",
+    "approach": "ADR-006-001: Use duckdb-rs embedded as ETL engine. Single binary deployment with native Parquet support, PostgreSQL extension for TimescaleDB writes. Memory: ~200MB peak. Fallback: tokio-postgres if postgres extension unreliable on ARM64. Key: duckdb = { version = \"1.1\", features = [\"bundled\", \"parquet\", \"json\"] }",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 41,
+    "name": "arch-dp-006-schema-naming",
+    "taskType": "architecture:dp-006-schema-naming",
+    "approach": "ADR-006-003: Use flat silver.* schema for Phase 1. Pattern: silver.{domain}_{entity_type}. Examples: silver.air_quality_observations, silver.weather_observations, silver.weather_forecasts. Migration path to silver_aq.*, silver_weather.* documented for multi-domain. Benefits: simple queries, no schema switching for Grafana, easy cross-domain joins.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 42,
+    "name": "arch-dp-006-dq-actions",
+    "taskType": "architecture:dp-006-dq-actions",
+    "approach": "ADR-006-004: Four DQ actions with flag as default. Actions: flag (keep value, add to dq_flags), reject (set NULL, add to dq_flags), clamp (clamp to bounds, add flag), drop (drop entire row). Default is flag for transparency. All actions except drop recorded in dq_flags TEXT[] column for queryable audit trail. Different actions per field based on criticality.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 43,
+    "name": "arch-dp-006-scheduling",
+    "taskType": "architecture:dp-006-scheduling",
+    "approach": "ADR-006-005: Use systemd timer for ETL scheduling. Config: OnCalendar=*:05:00, Persistent=true (catches up missed runs), RandomizedDelaySec=60 (prevents thundering herd). Benefits: integrated journal logging, restart on failure with backoff, standard systemctl tooling. Hourly cadence at 5 minutes past the hour.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 44,
+    "name": "arch-dp-006-stream-types",
+    "taskType": "architecture:dp-006-stream-types",
+    "approach": "ADR-006-006: Add stream_type field to distinguish data patterns. Types: observations (continuous measurements, PK: observation_time, ndp_id), events (discrete state changes, PK: event_time, ndp_id, event_type), forecasts (future predictions, PK: issue_time, valid_time, ndp_id). Default: observations for backward compatibility. Forward-compatible for Home Assistant integration.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 45,
+    "name": "daemon-loop-pattern",
+    "taskType": "pattern:daemon-loop-pattern",
+    "approach": "Rust daemon loop pattern for NDP services",
+    "successRate": 0.9,
+    "tags": [
+      "daemon",
+      "tokio",
+      "graceful-shutdown",
+      "interval",
+      "rust",
+      "ndp",
+      "silver-etl",
+      "dp-006"
+    ]
+  },
+  {
+    "id": 46,
+    "name": "silver-layer-schema-evolution",
+    "taskType": "pattern:silver-layer-schema-evolution",
+    "approach": "Adding new columns to Silver layer tables via config-driven migration",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 47,
+    "name": "arch-pre-transform-silver-etl",
+    "taskType": "architecture:pre-transform-silver-etl",
+    "approach": "Pre-Transform Parser Integration Pattern - DP-007. Enables config-driven pre-transformation of columnar array data in Silver ETL. KEY CONCEPTS: 1) Add pre_transform section to silver_etl config, 2) Reuse ColumnOrientedParser from neural-core parsers module, 3) Flatten arrays into individual rows before DuckDB processing, 4) Extract issue_time (Bronze timestamp) and valid_time (from array validTime), 5) Pivot metric_name/value pairs into typed columns. USE CASE: NWS gridpoints forecast data with 40+ metrics each containing ~150 forecast values. CONFIG: pre_transform.enabled, pre_transform.parser_type (column_oriented), pre_transform.metrics_base_path, pre_transform.columns[]. OUTPUT: Flattened rows with (issue_time, valid_time, ndp_id, metric columns). Tags: dp-007, silver, etl, pre-transform, column-oriented, forecast.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 48,
+    "name": "duckdb-timestamptz-arithmetic",
+    "taskType": "pattern:duckdb-timestamptz-arithmetic",
+    "approach": "DuckDB TIMESTAMPTZ Arithmetic Pattern - CRITICAL for Silver ETL. DuckDB does NOT support direct TIMESTAMPTZ arithmetic. All timestamp interval/subtraction operations must cast to TIMESTAMP first. WRONG: observation_time < ingestion_time - INTERVAL '3 hours'. CORRECT: observation_time::TIMESTAMP < (ingestion_time::TIMESTAMP - INTERVAL '3 hours'). WRONG: observation_time - LAG(observation_time). CORRECT: observation_time::TIMESTAMP - (LAG(observation_time) OVER (...))::TIMESTAMP. WRONG: SELECT MAX(timestamptz_col) returning native type. CORRECT: SELECT MAX(col)::VARCHAR for string handling. Applies to: dq.rs (freshness_check, rate_of_change), sql_gen.rs (incremental WHERE), etl.rs (watermark queries). TimescaleDB handles TIMESTAMPTZ natively - this is DuckDB ETL layer only. Tags: duckdb, timestamptz, timestamp, interval, silver-etl, sql-generation, dp-006, dp-007.",
+    "successRate": 0.9,
+    "tags": [
+      "duckdb",
+      "timestamptz",
+      "etl",
+      "sql-generation",
+      "critical"
+    ]
+  },
+  {
+    "id": 49,
+    "name": "arch-pre-transform-silver-etl-v2",
+    "taskType": "architecture:pre-transform-silver-etl-v2",
+    "approach": "CORRECTED Pre-Transform Pattern DP-007. Config format: pre_transform.transform_type.type=array_explosion with ArrayExplosionConfig (metrics_base_path, timestamp_field, value_field, values_path, metrics[]). Rust: PreTransformConfig.transform_type: PreTransformType enum. Integration: etl.rs extract_bronze_raw_data -> build_parser_from_config -> apply_pre_transform -> SQL FROM pre_transformed. WARNING: Old pattern arch-pre-transform-silver-etl is WRONG - do NOT use enabled/parser_type/parser_config_ref format. Tags: dp-007, silver, etl, pre-transform, corrected.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 50,
+    "name": "arch-silver-data-dictionary",
+    "taskType": "architecture:silver-data-dictionary",
+    "approach": "Silver Layer Data Dictionary Extension Pattern - dp-009. Extends Bronze data dictionary to Silver layer with 4 new tables: (1) silver_tables - table metadata with description, grain, source_streams[], hypertable_column; (2) silver_columns - column definitions with data_type, unit, description, nullable; (3) silver_lineage - Bronze\u2192Silver field mappings tracking source_stream, source_path, transformation; (4) silver_dq_rules - DQ rules per column with rule_name, rule_params JSONB, action. Key design: UPSERT sync (not TRUNCATE) to handle multi-stream tables (e.g., outdoor-weather + nws-observations \u2192 weather_observations). Config extension adds optional unit/description to field_mappings, description/grain to silver_etl block. Unified views: v_complete_dictionary (Bronze + Silver), v_lineage (source\u2192target tracing). Tags: dp-009, silver, data-dictionary, architecture.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 51,
+    "name": "proc-multi-stream-sync",
+    "taskType": "procedure:multi-stream-sync",
+    "approach": "Multi-Stream Data Dictionary Sync Procedure - dp-009. When multiple Bronze streams feed one Silver table, use UPSERT (not TRUNCATE) sync strategy: (1) Two-pass collection: First pass builds associative array mapping Silver tables to list of source streams; (2) source_streams[] aggregation: Array of all streams feeding this table; (3) Lineage preservation: Keep all mappings from all contributing streams; (4) UPSERT with ON CONFLICT: Update existing rows, insert new ones atomically. Example: outdoor-weather + nws-observations both feed silver.weather_observations. Each contributes different fields but share table. Sync must preserve lineage from both while avoiding duplicates. Tags: dp-009, sync, data-dictionary, procedure.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 52,
+    "name": "arch-dq-rules-dictionary",
+    "taskType": "architecture:dq-rules-dictionary",
+    "approach": "DQ Rules Data Dictionary Pattern - dp-009. Expose Silver ETL DQ rules in queryable data dictionary. Table schema: silver_dq_rules(silver_table, silver_column, rule_name, rule_params JSONB, action). Column-level rules: silver_column populated (range_check, not_null, pattern). Table-level rules: silver_column = NULL (cross_field_check, freshness_check, rate_of_change, completeness_check). Actions: flag (add to dq_flags[]), reject (exclude row), clamp (adjust to bounds), warn (log only). rule_params JSONB stores rule-specific config: range_check={min, max, clamp_to_bounds}, cross_field_check={expression, message}, freshness_check={max_age, max_future, reference}. Extraction: field_mappings[].dq_rules[] \u2192 column-level, silver_etl.dq_rules[] \u2192 table-level. Tags: dp-009, dq, data-dictionary, silver.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 53,
+    "name": "etl-observability-schema",
+    "taskType": "etl:observability-schema",
+    "approach": "ETL Observability Schema Pattern - dp-010. silver.etl_runs table for persistent ETL run history. Schema: id UUID PRIMARY KEY, stream_id TEXT, started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ, duration_ms BIGINT, status TEXT (running/success/failed/partial), rows_processed BIGINT, rows_flagged BIGINT, rows_rejected BIGINT, watermark_before TIMESTAMPTZ, watermark_after TIMESTAMPTZ, error_message TEXT, error_context JSONB, run_mode TEXT (daemon/manual/backfill), daemon_cycle_id UUID. Indexes: (stream_id, started_at DESC), (status) WHERE status != success, (started_at DESC), (daemon_cycle_id). Retention: 30 days via scheduled DELETE. Storage estimate: ~14MB for 30 days at 5-min intervals x 8 streams. Source: dp-010 specification. Tags: dp-010, dp-011, etl, observability, silver, schema.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 54,
+    "name": "mcp-silver-storage-pattern",
+    "taskType": "mcp:silver-storage-pattern",
+    "approach": "SilverStorage Trait Pattern for dp-010. Follow BronzeStorage design: async trait with #[cfg_attr(test, automock)], methods return McpResult<T>. Key methods: list_tables() -> Vec<SilverTableInfo>, describe_table(name) -> SilverTableSchema, sample(name, limit, filters?) -> Vec<Value>, stats(name) -> TableStats. Implement with TimescaleSilverStorage using tokio-postgres with connection pooling (bb8/deadpool). Location: core/ndp-mcp-server/src/storage/silver_traits.rs. Tags: dp-010, mcp, silver, storage, traits, timescaledb.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 55,
+    "name": "mcp-etl-status-tools",
+    "taskType": "mcp:etl-status-tools",
+    "approach": "MCP ETL Status Tools Pattern - dp-010. Three observability tools: 1) etl_status: Get latest run status per stream with 24h summary (input: stream_id optional, output: status, last_run details, runs_last_24h counts). 2) etl_history: Paginated run history (input: stream_id required, limit, since, status filter; output: array of runs with summary). 3) data_freshness: Cross-layer freshness report (input: layer bronze/silver/all; output: per-stream/table latest timestamp, age_seconds, freshness_status fresh/stale/critical). Freshness thresholds: fresh <5min, stale 5-30min, critical >30min. All tools query silver.etl_runs table + Silver MAX(watermark) queries. Source: dp-010 specification. Tags: dp-010, dp-011, mcp, tools, observability, freshness.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 56,
+    "name": "mcp-dictionary-store-pattern",
+    "taskType": "mcp:dictionary-store-pattern",
+    "approach": "DictionaryStore Trait Pattern for dp-010. Follow ConfigStore design: async trait with #[cfg_attr(test, automock)], methods return McpResult<T>. Key methods: search(query, layer?) -> Vec<DictEntry>, column_details(table, column) -> ColumnDetails, lineage(silver_table, silver_column) -> Lineage, dq_rules(table?, column?) -> Vec<DqRule>. Implement with PostgresDictionaryStore using tokio-postgres. Location: core/ndp-mcp-server/src/dictionary/traits.rs. Tags: dp-010, mcp, dictionary, data-dictionary, traits, lineage.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 57,
+    "name": "mcp-tool-implementation-pattern",
+    "taskType": "mcp:tool-implementation-pattern",
+    "approach": "MCP Tool Implementation Pattern. File structure: 1) Tool doc with response examples, 2) ToolNameArgs struct (Deserialize, defaults), 3) Response structs (Serialize, success field), 4) execute<S,C> function generic over traits. Steps: parse args -> validate -> call storage -> build response -> McpToolResult::success(&response). Error mapping: storage errors to McpError variants. Test with MockStorage using mockall expectations. Location: core/ndp-mcp-server/src/mcp/tools/{tool_name}.rs. Tags: dp-005, dp-010, mcp, tools, implementation, pattern.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 58,
+    "name": "mcp-handler-extension-pattern",
+    "taskType": "mcp:handler-extension-pattern",
+    "approach": "MCP Handler Extension Pattern for dp-010. Extend McpHandler generic params: McpHandler<B,C,S,D> where B:BronzeStorage, C:ConfigStore, S:SilverStorage, D:DictionaryStore. Add new fields: silver_storage: Arc<S>, dictionary_store: Arc<D>. Update tools/list with new ToolDefinition entries. Add dispatch routes in handle_tools_call for new tools. Keep existing Bronze tools unchanged. Location: core/ndp-mcp-server/src/mcp/handler.rs. Tags: dp-010, mcp, handler, extension, silver.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 59,
+    "name": "mcp-dictionary-query-patterns",
+    "taskType": "mcp:dictionary-query-patterns",
+    "approach": "Data Dictionary MCP Query Patterns - dp-010. Four unified dictionary tools: (1) query_dictionary - search v_complete_dictionary with ILIKE across column_name/description, layer filter (bronze|silver|all), LIMIT 50; (2) describe_column - detect layer first (snake_case=silver, kebab-case=bronze), join silver_columns+silver_lineage+silver_dq_rules OR query fields table; (3) trace_lineage - query silver_lineage joined with silver_columns, include both column-level and table-level dq_rules (silver_column IS NULL for table-level); (4) list_dq_rules - query silver_dq_rules with optional table/column filters, column filter requires table. Key patterns: layer detection via naming convention, DQ rule scope (column vs table), multi-source lineage (array response for merged streams like weather_observations). Tags: dp-010, mcp, data-dictionary, lineage, dq.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 60,
+    "name": "silver-mcp-tools",
+    "taskType": "pattern:silver-mcp-tools",
+    "approach": "Silver Layer MCP Tools Pattern (dp-010). Four tools for Silver TimescaleDB access: (1) list_silver_tables - enumerate hypertables with row counts, time ranges, chunk info; uses data_dictionary.silver_tables + timescaledb_information views. (2) describe_silver_table - get column schema with types, units, descriptions; uses data_dictionary.silver_columns with information_schema fallback. (3) sample_silver_data - retrieve N rows (default 10, max 100) with optional time_start/time_end/ndp_id filters; ORDER BY time DESC LIMIT n. (4) silver_stats - comprehensive stats including row_count, distinct_ndp_ids, null_counts per column, dq_flag_summary (unnest array), chunk_info. Key patterns: SilverStorage trait with list_tables/describe_table/sample/stats methods. Error codes: TABLE_NOT_FOUND, TIMESCALE_UNAVAILABLE, DICTIONARY_UNAVAILABLE, INVALID_FILTER. Time column varies by table (observation_time vs valid_time for forecasts). See specification at product/features/dp-010/specification/SILVER-TOOLS-SPEC.md",
+    "successRate": 0.9,
+    "tags": [
+      "dp-010",
+      "mcp",
+      "silver",
+      "timescaledb",
+      "tools",
+      "api"
+    ]
+  },
+  {
+    "id": 61,
+    "name": "impl-bash-silver-sync",
+    "taskType": "pattern:impl-bash-silver-sync",
+    "approach": "Bash Silver Data Dictionary Sync Implementation - dp-009. Key implementation patterns: (1) Use bash associative arrays for two-pass collection: declare -A SILVER_TABLES to accumulate source_streams per target table; (2) UPSERT with ON CONFLICT DO UPDATE for all Silver tables to handle multi-stream scenarios; (3) Helper functions yaml_get/yaml_array_len/yaml_array_get with yq and grep fallbacks; (4) Type mapping: double_precision\u2192'DOUBLE PRECISION', smallint\u2192'SMALLINT'; (5) JSON building for dq_rule_params: extract min/max/expression as JSONB; (6) NULL handling for optional fields (unit, description, grain); (7) SQL escaping: sed \"s/'/''/g\" for single quotes. Integration point: Add after Bronze sync loop in sync_to_data_dictionary(), before sync_status update. Tags: dp-009, bash, sync, implementation.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 62,
+    "name": "config-silver-metadata-fields",
+    "taskType": "configuration:silver-metadata-fields",
+    "approach": "Silver ETL Config Metadata Fields - dp-009. Optional fields to add to stream configs for data dictionary: TABLE-LEVEL (in silver_etl block): description (string) - Human-readable table purpose, grain (string) - What one row represents. COLUMN-LEVEL (in field_mappings[]): unit (string) - Measurement unit (ug/m3, Celsius, %, Pa, km/h, meters, ppm, index), description (string) - Column description. Standard unit strings: Temperature=Celsius, Pressure=Pa, Speed=km/h, Distance=meters, Humidity=%, Particulates=ug/m3, CO2=ppm, Index=index, Direction=degrees. All fields optional for backward compatibility - missing values become NULL in data dictionary. Tags: dp-009, config, silver_etl, metadata.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 63,
+    "name": "etl-persistence-trait-contract",
+    "taskType": "etl:persistence-trait-contract",
+    "approach": "EtlRunPersistence trait contract for dp-011. Trait signature: start_run(stream_id, run_mode, daemon_cycle_id) -> Result<Uuid>, complete_run(run_id, stats) -> Result<()>, fail_run(run_id, error_message, error_context) -> Result<()>. Uses #[cfg_attr(test, mockall::automock)] for London TDD. Companion types: EtlRunMode enum (Daemon/Manual/Backfill), EtlRunStatus enum (Running/Success/Failed/Partial), PersistenceError (Connection/SqlExecution/RunNotFound/Serialization). Graceful degradation: persistence failures log warnings but don't fail ETL. NoOpPersistence for backwards compatibility.",
+    "successRate": 0.9,
+    "tags": [
+      "dp-011",
+      "etl",
+      "persistence",
+      "trait",
+      "mockall",
+      "domain-adapter"
+    ]
+  },
+  {
+    "id": 64,
+    "name": "etl-run-record-struct",
+    "taskType": "etl:run-record-struct",
+    "approach": "EtlRunRecord struct design for dp-011. Complete record representation for silver.etl_runs table. Fields: id (Uuid), stream_id (String), started_at (DateTime<Utc>), completed_at (Option<DateTime<Utc>>), duration_ms (Option<i64>), status (EtlRunStatus), rows_processed (i64), rows_flagged (i64), rows_rejected (i64), watermark_before (Option<DateTime<Utc>>), watermark_after (Option<DateTime<Utc>>), error_message (Option<String>), error_context (Option<serde_json::Value>), run_mode (EtlRunMode), daemon_cycle_id (Option<Uuid>). Includes from_stats() constructor to map EtlStats to EtlRunRecord. Type conversions: u64 fields in EtlStats map to i64 in database (BIGINT).",
+    "successRate": 0.9,
+    "tags": [
+      "dp-011",
+      "etl",
+      "struct",
+      "persistence",
+      "data-contract"
+    ]
+  },
+  {
+    "id": 65,
+    "name": "etl-persistence-pseudocode-dp011",
+    "taskType": "etl:persistence-pseudocode-dp011",
+    "approach": "ETL Run Persistence Pseudocode Pattern (dp-011). Key design: EtlRunPersistence trait with start_run/complete_run/fail_run methods. Implementation uses DuckDB PostgreSQL extension to write to silver.etl_runs table. Daemon integration: Wrapper pattern (Option B) keeps EtlRunner unchanged, persistence handled at daemon level with cycle_id correlation. Error handling: Persistence failures are non-fatal (logged, ETL continues). SQL uses parameterized queries via DuckDB pg. attachment. Files: persistence.rs (trait+impl), daemon.rs (modified run_cycle), run_with_tracking.rs (wrapper function), SQL-STATEMENTS.md (exact SQL). Tags: dp-011, etl, persistence, duckdb, timescaledb, pseudocode.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 66,
+    "name": "dp-011-dual-write-observability",
+    "taskType": "pattern:dp-011-dual-write-observability",
+    "approach": "ETL Observability Dual-Write Pattern (dp-011). Persist ETL run statistics to BOTH database (primary) AND Prometheus (secondary). Database (silver.etl_runs): For historical queries, MCP tools, error context storage, 30-day retention. Prometheus metrics: For real-time Grafana dashboards, Alertmanager integration, rate() queries. Key metrics: silver_etl_rows_processed_total (counter), silver_etl_duration_seconds (histogram), silver_etl_last_success_timestamp (gauge), silver_etl_watermark_lag_seconds (gauge). Write order: 1) INSERT status=running, 2) UPDATE on completion. Failure modes: DB unavailable -> log warning, continue ETL; Prometheus unavailable -> silently dropped. Pi 5 resources: <15MB storage/month, <5ms write latency. Tags: dp-011, observability, prometheus, dual-write, etl, metrics.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 67,
+    "name": "dp-011-hybrid-connection-pattern",
+    "taskType": "pattern:dp-011-hybrid-connection-pattern",
+    "approach": "ETL Hybrid Connection Pattern (dp-011). Use separate connection strategies for different concerns: 1) DuckDB with ATTACH postgres for bulk ETL data writes (existing), 2) tokio-postgres with bb8 pool for single-row stats persistence (new). Rationale: Bulk ops need COPY semantics, stats need simple INSERT/UPDATE. Pool config: max_size=2, min_idle=1, connection_timeout=5s. Trait: EtlRunPersistence with start_run(), complete_run(), fail_run() methods. Mockall for testing. Failure isolation: stats persistence failure does NOT fail ETL execution. Dependencies: tokio-postgres 0.7, bb8 0.8, bb8-postgres 0.8. Tags: dp-011, connection-pooling, tokio-postgres, duckdb, traits, mockall.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 68,
+    "name": "dp-011-run-lifecycle-pattern",
+    "taskType": "pattern:dp-011-run-lifecycle-pattern",
+    "approach": "ETL Run Lifecycle Pattern (dp-011). Two-phase persistence with daemon_cycle_id linking. Phase 1 (before ETL): INSERT with status=running, captures started_at. Phase 2 (after ETL): UPDATE with status=success/failed, stats, watermarks, error details. Cycle linking: daemon generates UUID cycle_id, all stream runs in same tick share it. Query: WHERE daemon_cycle_id = X shows correlated failures. Orphan handling: 1) Startup cleanup marks stale running > 15min as failed, 2) pg_cron hourly cleanup for edge cases. Status values: running, success, failed (partial is computed at cycle level for MCP). Error handling: Persistence failure logged but does NOT fail ETL. Tags: dp-011, lifecycle, daemon-cycle, orphan-cleanup, state-machine.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 69,
+    "name": "dp011-persistence-tdd-pattern",
+    "taskType": "pattern:dp011-persistence-tdd-pattern",
+    "approach": "London TDD Pattern for ETL Run Persistence (dp-011). Mock boundaries: EtlRunPersistence trait with #[cfg_attr(test, mockall::automock)], MockDbConnection for database isolation. Test pattern: 1) Create MockEtlRunPersistence with success_persistence() factory, 2) Set expectations with .expect_start_run(), .expect_complete_run(), .expect_fail_run(), 3) Verify calls with .times(N) and .withf() predicates, 4) Use tracking_persistence() to capture all calls for complex verification. Key tests: test_daemon_persists_each_stream_run (all streams get records), test_persistence_failure_continues_etl (graceful degradation), test_daemon_cycle_id_shared (UUID linking). Critical: Persistence failures MUST NOT fail ETL - log and continue. Tags: dp-011, testing, mockall, london-school-tdd, persistence, etl-observability.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 70,
+    "name": "mock-etl-run-persistence-pattern",
+    "taskType": "pattern:mock-etl-run-persistence-pattern",
+    "approach": "MockEtlRunPersistence Usage Pattern for silver-etl tests. Trait definition: EtlRunPersistence with start_run(stream_id, mode, cycle_id)->Uuid, complete_run(id, stats)->(), fail_run(id, error, context)->(). Mock factories: success_persistence() - always succeeds, failing_start_persistence() - start_run fails, tracking_persistence() - captures all calls in Vec<PersistenceCall>. Test expectations: mock.expect_start_run().with(eq(stream_id), eq(EtlRunMode::Daemon), predicate::always()).times(1).returning(|_,_,_| Ok(Uuid::new_v4())). Verification: Use mockall Sequence for order verification, withf() for argument inspection. Location: apps/silver-etl/src/persistence.rs. Tags: dp-011, mockall, testing, mock-factory, silver-etl.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 71,
+    "name": "dp-011-etl-persistence-implementation",
+    "taskType": "pattern:dp-011-etl-persistence-implementation",
+    "approach": "Implementation pattern for ETL Run Statistics Persistence (dp-011). Components: 1) Migration: 003_etl_runs.sql creates silver.etl_runs table with id, stream_id, started_at, completed_at, duration_ms, status, rows_processed, rows_flagged, rows_rejected, watermark_before, watermark_after, error_message, error_context, run_mode, daemon_cycle_id. 2) Persistence module: EtlRunPersistence trait with #[cfg_attr(test, mockall::automock)] for London TDD. Methods: start_run(), complete_run(), fail_run(). 3) Implementations: DuckDbRunPersistence (production, uses DuckDB postgres extension), NoOpPersistence (backwards compatibility). 4) Daemon integration: DaemonRunner<E, P> with generic persistence parameter, daemon_cycle_id links runs in same cycle. 5) Graceful degradation: persistence failures log warnings but DON'T fail ETL. Key files: apps/silver-etl/src/persistence.rs, apps/silver-etl/src/daemon.rs, deploy/timescaledb/migrations/003_etl_runs.sql",
+    "successRate": 0.9,
+    "tags": [
+      "dp-011",
+      "etl",
+      "persistence",
+      "daemon",
+      "graceful-degradation",
+      "london-tdd",
+      "mockall"
+    ]
+  },
+  {
+    "id": 72,
+    "name": "env-controlled-optional-feature",
+    "taskType": "pattern:env-controlled-optional-feature",
+    "approach": "ENV-controlled optional feature pattern for NDP. Add optional feature flags via: 1) clap arg with env fallback: #[arg(long, env = \"FEATURE_NAME\", default_value = \"false\")], 2) docker-compose.yml: Add env var directly with inline comment explaining purpose, 3) deploy.sh: Update help text in Environment Variables section. Pattern supports graceful degradation - if feature fails to initialize, log warning and continue with no-op implementation. Default to 'false' for backwards compatibility. See dp-011 SILVER_ETL_PERSISTENCE for reference implementation in apps/silver-etl/src/main.rs lines 165-167 (Daemon subcommand) and deploy/pi/docker-compose.yml silver-etl-daemon service.",
+    "successRate": 0.9,
+    "tags": [
+      "deployment",
+      "docker-compose",
+      "clap",
+      "env-var",
+      "optional-feature",
+      "graceful-degradation",
+      "dp-011"
+    ]
+  },
+  {
+    "id": 73,
+    "name": "noop-trait-backward-compat",
+    "taskType": "pattern:noop-trait-backward-compat",
+    "approach": "NoOp Trait Implementation Pattern for Backward Compatibility. When extending McpHandler with new generic trait params, create NoOp implementations that return empty/default results. Pattern: struct NoOpFooStorage; impl FooStorage for NoOpFooStorage { async fn method(&self) -> Result<T, E> { Ok(T::default()) } }. Use in existing code paths that don't have the new storage yet. Example from dp-010: NoOpSilverStorage, NoOpDictionaryStore, NoOpEtlRunStore added to server.rs to allow Bronze-only mode to continue working. This enables incremental migration - callers can start with NoOp and upgrade to real implementations later. Tags: dp-010, backward-compatibility, traits, rust, mcp, incremental-migration.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 74,
+    "name": "architecture:event-bus-broadcast",
+    "taskType": "pattern:architecture:event-bus-broadcast",
+    "approach": "ADR-012-001: Use tokio::broadcast for in-process multi-consumer event broadcasting. Key decisions: (1) tokio::broadcast channel instead of external broker - no network overhead, simple deployment, Pi-appropriate, (2) Arc<RawDataPoint> for zero-copy event sharing, (3) capacity: 10,000 events with lag_warning_threshold: 1,000, (4) Events dropped when buffer full (oldest first), (5) Not suitable for distributed deployment without redesign. Rationale: < 1ms broadcast latency, 1000+ events/sec capacity, easy to test, future-proof (can add external broker later). Consequences: subscribers must catch up from Bronze if they lag/crash since message history not preserved. Related files: core/src/event_bus/mod.rs",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "event-bus",
+      "tokio",
+      "broadcast",
+      "real-time",
+      "architecture"
+    ]
+  },
+  {
+    "id": 75,
+    "name": "architecture:subscriber-isolation",
+    "taskType": "pattern:architecture:subscriber-isolation",
+    "approach": "ADR-012-002: Each subscriber runs in its own tokio task, spawned by SubscriberCoordinator. Key decisions: (1) Independent tokio tasks per subscriber (not sequential processing or separate processes), (2) JoinHandle for health monitoring, (3) SubscriberCoordinator manages lifecycle. Rationale: Task panic doesn't crash the application, each subscriber has own receive loop and buffering, independent backpressure handling, easy to add/remove subscribers dynamically. Consequences: All share same process memory limits, CPU-intensive subscriber could starve others (mitigated by async nature). Use this pattern when you need multiple consumers that should be isolated from each other's failures. Related files: core/src/subscribers/coordinator.rs",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "subscriber",
+      "tokio",
+      "isolation",
+      "fault-tolerance",
+      "architecture"
+    ]
+  },
+  {
+    "id": 76,
+    "name": "architecture:streaming-catchup",
+    "taskType": "pattern:architecture:streaming-catchup",
+    "approach": "ADR-012-003: Silver subscriber catches up from Bronze Parquet on startup, then streams. Algorithm: (1) Query Silver: SELECT MAX(observation_time) FROM table, (2) List Bronze files modified after watermark, (3) Read and transform each file, (4) UPSERT to Silver (handles duplicates), (5) Switch to streaming mode. Key principle: Bronze is source of truth - already durable via WAL, no duplicate storage needed for Silver. Rationale: Zero data loss on restart, handles lag gracefully, simple implementation. Consequences: Startup time proportional to catch-up window, requires Bronze to be available. Use UPSERT for idempotency - duplicates from catch-up + streaming overlap are handled gracefully. Related files: core/src/subscribers/silver.rs",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "silver",
+      "bronze",
+      "streaming",
+      "recovery",
+      "durability",
+      "architecture"
+    ]
+  },
+  {
+    "id": 77,
+    "name": "architecture:config-reuse-silver-etl",
+    "taskType": "pattern:architecture:config-reuse-silver-etl",
+    "approach": "ADR-012-004: Reuse existing SilverEtlConfig structure from stream YAMLs for streaming Silver. Do NOT create new config format. Key decisions: (1) Same config, same behavior - ~2000 lines of working configuration already exists, (2) Port SQL transform concepts from silver-etl to Rust functions (one-time effort), (3) Operators already familiar with config. Rationale: Zero config migration needed, consistency between streaming and batch output, one source of truth for transforms. Consequences: Two implementations to maintain (Rust streaming, DuckDB batch) but same behavior guaranteed. When implementing streaming transforms, reference the existing field_mappings in stream YAML configs. Related files: config/base/streams/*/config.yaml, core/src/silver/transform.rs",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "silver",
+      "config",
+      "silveretlconfig",
+      "transform",
+      "architecture"
+    ]
+  },
+  {
+    "id": 78,
+    "name": "architecture:parser-deprecation",
+    "taskType": "pattern:architecture:parser-deprecation",
+    "approach": "ADR-012-005: Deprecate parsers in core/src/parsers/. Reason: Parsers produce TimeSeriesPoint (one row per metric) but Silver needs one row per reading with all metrics as columns (columnar format). Correct approach: Silver transforms use SilverEtlConfig.field_mappings which produce the correct columnar format. Migration: Add deprecation warnings to parser modules, do NOT delete (keep for potential future use), document in CLAUDE.md. When building transforms, use field_mappings from stream YAML configs, not the parser modules. Related files: core/src/parsers/ (DEPRECATED)",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "parsers",
+      "deprecation",
+      "transform",
+      "silver",
+      "architecture"
+    ]
+  },
+  {
+    "id": 79,
+    "name": "architecture:event-notifier-pattern",
+    "taskType": "pattern:architecture:event-notifier-pattern",
+    "approach": "ADR-012-006: EventNotifier subscriber publishes lightweight MQTT notifications for ML integration. Key decisions: (1) ML runs in separate container (never in ingestion process), (2) Fire-and-forget with QoS 0 - never blocks ingestion, (3) Minimal payload (only IDs + timestamp), ML queries Silver for actual data, (4) Toggle via env var EVENT_NOTIFIER_ENABLED. Rationale: Perfect isolation between ingestion and ML, ML can crash/restart independently, zero code change needed when ML is ready - just enable notifier, simple integration point for future consumers. Use this pattern when you need to trigger downstream processing without coupling to the ingestion pipeline. Related files: core/src/subscribers/event_notifier.rs",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "ml",
+      "mqtt",
+      "notification",
+      "decoupling",
+      "architecture"
+    ]
+  },
+  {
+    "id": 80,
+    "name": "architecture:processor-trait",
+    "taskType": "pattern:architecture:processor-trait",
+    "approach": "ADR-012-007: Create Processor trait for business logic, ProcessorSubscriber wrapper for event bus integration, OutputSink for destinations. Structure: (1) Processor trait - focuses on logic only (e.g., ThresholdProcessor), testable without event bus, (2) ProcessorSubscriber<P: Processor> wraps any processor as Subscriber, (3) OutputSink trait (MqttOutputSink, TimescaleOutputSink, WebhookOutputSink) for output destinations. Rationale: Separation of concerns, reusability (pattern works for thresholds, anomaly detection, etc.), easy to add new processor types. Module location: core/src/processors/ for traits and implementations, core/src/outputs/ for sinks.",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "processor",
+      "trait",
+      "alerting",
+      "extensibility",
+      "architecture"
+    ]
+  },
+  {
+    "id": 81,
+    "name": "architecture:subscriber-trait",
+    "taskType": "pattern:architecture:subscriber-trait",
+    "approach": "Subscriber trait defines the interface for all event consumers in DP-012. Required methods: (1) id() -> String - unique identifier for logging/metrics, (2) start(receiver) -> JoinHandle - spawn task and return handle, (3) stop() - request graceful shutdown, (4) accepts_stream(stream_id) -> bool - filter which streams to process, (5) health_check() -> HealthStatus - report health for monitoring. Module location: core/src/subscribers/mod.rs. All subscribers (BronzeSubscriber, SilverSubscriber, ProcessorSubscriber, EventNotifier) implement this trait. SubscriberCoordinator uses this interface to manage lifecycle uniformly.",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "subscriber",
+      "trait",
+      "interface",
+      "architecture"
+    ]
+  },
+  {
+    "id": 82,
+    "name": "data:upsert-idempotency",
+    "taskType": "pattern:data:upsert-idempotency",
+    "approach": "UPSERT pattern for idempotent Silver writes in DP-012: Use ON CONFLICT DO UPDATE to handle duplicates safely. Why needed: (1) Catch-up on startup reads from Bronze which may overlap with already-written streaming data, (2) Retries after transient failures may re-send same records. Implementation: INSERT INTO table (...) VALUES (...) ON CONFLICT (primary_key) DO UPDATE SET column = EXCLUDED.column. Primary key typically includes stream_id + observation_time. This pattern ensures data is never lost and never duplicated regardless of restart timing or retry behavior. Related: architecture:streaming-catchup",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "silver",
+      "upsert",
+      "idempotency",
+      "timescaledb",
+      "data"
+    ]
+  },
+  {
+    "id": 83,
+    "name": "operations:graceful-degradation",
+    "taskType": "pattern:operations:graceful-degradation",
+    "approach": "Graceful degradation priority order for DP-012 components: (1) Bronze write - MUST succeed (data durability), retry with backoff, eventually log critical error, (2) Silver write - SHOULD succeed, retry + backoff, will catch up on restart from Bronze, (3) Threshold alerts - Nice to have, skip if issues, log warning and continue, (4) Event notifications - Optional, fire-and-forget QoS 0, ignore failures. Error recovery matrix: EventBus full = oldest events dropped, Subscriber lagged = log warning continue, Bronze write fail = retry 3x, Silver DB down = retry + backoff + catch up on restart, Transform error = skip row continue, DQ rule fail = set dq_flags continue, MQTT down = ignore, Processor error = skip row continue.",
+    "successRate": 0.9,
+    "tags": [
+      "dp-012",
+      "reliability",
+      "priority",
+      "error-handling",
+      "operations"
+    ]
+  },
+  {
+    "id": 84,
+    "name": "arch-home-assistant-integration",
+    "taskType": "architecture:home-assistant-integration",
+    "approach": "Home Assistant Integration Pattern - AIR-012. Decision: HTTP Polling with ResponseParser for MVP. Key decisions: (1) Polling over WebSocket - reuses HttpPollingSource, 30-60s latency acceptable for air quality correlation, (2) Event-sourced data model - only store state changes, enables duration queries, (3) New HomeAssistantStateParser with state tracking - emits TimeSeriesPoint only on state change. Stream: home-assistant-state. Auth: Bearer token via HASS_TOKEN env var. Future upgrade path: WebSocket source for <1s latency. Reference: /product/features/air-012/architecture/INTEGRATION_PATTERNS.md",
+    "successRate": 0.9,
+    "tags": [
+      "air-012",
+      "home-assistant",
+      "http-polling",
+      "event-sourced",
+      "binary-sensor"
+    ]
+  },
+  {
+    "id": 85,
+    "name": "procedure-status-md-template",
+    "taskType": "pattern:procedure-status-md-template",
+    "approach": "STATUS.md Template for NDP Features. Location: product/features/{feature-id}/STATUS.md. Required sections: (1) Header with Feature name, Current Phase (Scope|Specification|Pseudocode|Architecture|Refinement|Completion), Started date, Last Updated. (2) Current Status paragraph. (3) Phase Status table with columns: Phase, Status (Pending|In Progress|Complete), Started, Completed. (4) SPARC Phase Checklist with checkboxes per phase. (5) Key Decisions Pending table. (6) Dependencies table with Status, Feature, Notes. (7) Team table with Role, Agent, Focus. (8) Scope Summary (brief). (9) Bugs table (ID, Status, Summary). (10) Research Artifacts. (11) Related Patterns. Footer: Status last updated timestamp + agent name. Example features: dp-010, dp-012.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 86,
+    "name": "dimension-table-sql-patterns",
+    "taskType": "pattern:dimension-table-sql-patterns",
+    "approach": "Dimension Table SQL Patterns for dp-013. (1) DDL: CREATE TABLE with PRIMARY KEY, NOT NULL for required fields, audit columns (loaded_at, source_file). (2) Type mapping: text->TEXT, int->INTEGER, float->DOUBLE PRECISION, bool->BOOLEAN, timestamp->TIMESTAMPTZ, json->JSONB. (3) Load strategies: truncate_and_load (DELETE + INSERT in transaction) for full refresh, upsert (INSERT ... ON CONFLICT DO UPDATE SET) for incremental/merge. (4) Gold view pattern: LEFT JOIN dimension to hypertable using ndp_id, preserves records without context. (5) Migration: Add columns with ALTER TABLE ADD COLUMN IF NOT EXISTS, remove columns requires dependency check first, type changes need migration script with data conversion. Key tables: silver.entity_context (ndp_id PK, category, friendly_name, location_path, correlates_with, orientation). See product/features/dp-013/architecture/SQL_PATTERNS.md for full documentation. Tags: dp-013, dimension, silver, sql, ddl, upsert, gold-view.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 87,
+    "name": "csv-dq-patterns",
+    "taskType": "pattern:csv-dq-patterns",
+    "approach": "CSV Data Quality Patterns (dp-013). VALIDATION LAYERS: Layer 0 (Pre-Load) - file exists, readable, required columns present, config valid - all Fatal. Layer 1 (Parse-Time) - type conversion, timestamp parse, required fields - Streams: configurable skip/abort, Dimensions: always abort. Layer 2 (Post-Load) - PK uniqueness, row count, referential integrity - for dimensions only. ERROR BEHAVIOR: Dimensions always abort on error (must be complete). Streams default to skip (on_error: skip|abort configurable). ERROR CLASSIFICATION: Fatal errors - file not found, malformed CSV, missing columns, PK violation. Configurable errors - type conversion, timestamp parse. Warnings - empty file. TRANSPARENCY TABLES: silver.dimension_load_history (dimension_id, loaded_at, rows_before/after, strategy, success, source_file, report_json), bronze.csv_ingest_history (stream_id, ingested_at, rows_written/skipped, on_error_policy, skipped_rows JSONB). LOG FORMAT: [ERROR] dp-013/csv: Row N: message. CLI OUTPUT: Summary with total/processed/skipped counts, error details with line numbers. DRY-RUN: Validate without side effects via --dry-run flag. See product/features/dp-013/refinement/DATA_QUALITY.md for full specification.",
+    "successRate": 0.9,
+    "tags": [
+      "dp-013",
+      "csv",
+      "dq",
+      "data-quality",
+      "dimensions",
+      "validation",
+      "error-handling"
+    ]
+  },
+  {
+    "id": 88,
+    "name": "csv-source-rust-patterns",
+    "taskType": "pattern:csv-source-rust-patterns",
+    "approach": "CSV Source and Dimension Table Rust Implementation Patterns (dp-013). Key patterns: (1) CsvSource implements RawSource trait, produces RawDataPoint with row data as JSON in raw_payload, timestamp parsed from configured field. (2) DimensionLoader trait with CsvDimensionLoader implementation for loading reference data directly to Silver. (3) CsvSourceConfig: path, timestamp_field, timestamp_format (iso8601/epoch_seconds/epoch_millis/custom), delimiter, on_error (skip/abort). (4) DimensionConfig: dimension_id, target (table, primary_key), source (csv path), schema (fields), load (truncate_and_load/upsert). (5) Error types: CsvError with Parse/MissingField/TypeConversion/FileError variants, DimensionError with SchemaValidation/LoadFailed/TableCreation. (6) Module structure: core/src/sources/csv.rs for CsvSource, core/src/dimensions/ for loader. (7) Dependencies: csv-async crate for streaming parsing. (8) Batch inserts use transactions, multi-value INSERT for efficiency. Location: product/features/dp-013/refinement/RUST_IMPLEMENTATION.md. Tags: dp-013, csv, dimensions, source-adapter, rust, domain-adapter.",
+    "successRate": 0.9,
+    "tags": []
+  },
+  {
+    "id": 89,
+    "name": "dp013-csv-dimension-testing-pattern",
+    "taskType": "pattern:dp013-csv-dimension-testing-pattern",
+    "approach": "CSV Source & Dimension Testing Pattern (dp-013). Test Pyramid: Unit tests for CSV parsing (delimiters, quotes, encoding), timestamp parsing (iso8601, epoch, custom), column mapping (type conversion, required fields), schema validation, load strategy logic. Integration tests: CSV->Bronze Parquet flow, dimension truncate_and_load (atomic DELETE+INSERT), dimension upsert (ON CONFLICT DO UPDATE), CLI commands (ndp dimension list/sync), deploy.sh sync. Mock Boundaries: CsvReader trait (file I/O), DimensionStore trait (TimescaleDB ops), ConfigStore trait (etcd). Mock Factory Pattern: success_csv_reader(), empty_csv_reader(), failing_csv_reader(error), success_dimension_store(), tracking_dimension_store(). Error scenarios: malformed CSV with line number, missing required columns, type conversion failures, file not found, empty file. Performance tests: 1M row processing (<60s), memory bounded streaming (<100MB for 10M rows), transaction performance (100k rows in <10s truncate, <30s upsert). Test fixtures in apps/silver-etl/tests/fixtures/csv/{valid,invalid,dimensions}/. Tags: dp-013, csv, dimensions, testing, mockall, london-school-tdd, performance.",
+    "successRate": 0.9,
+    "tags": [
+      "dp-013",
+      "csv",
+      "dimensions",
+      "testing",
+      "mockall",
+      "etl",
+      "integration-tests"
+    ]
+  }
+]
