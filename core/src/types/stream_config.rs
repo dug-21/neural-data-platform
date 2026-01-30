@@ -184,6 +184,7 @@ pub enum SourceType {
     HttpPoll,
     Webhook,
     FileWatch,
+    Csv, // dp-013: CSV file source
 }
 
 /// Source configuration within a stream
@@ -214,6 +215,153 @@ pub struct SourceConfig {
 
 fn default_enabled() -> bool {
     true
+}
+
+// ========== dp-013: CSV Source Configuration ==========
+
+use std::path::PathBuf;
+
+/// Timestamp format for CSV parsing
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TimestampFormat {
+    /// ISO 8601 format (e.g., "2024-01-15T10:30:00Z")
+    #[default]
+    Iso8601,
+    /// Unix epoch in seconds
+    EpochSeconds,
+    /// Unix epoch in milliseconds
+    EpochMillis,
+    /// Custom strftime-compatible format string
+    Custom(String),
+}
+
+/// Error handling strategy for CSV parsing
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OnError {
+    /// Skip invalid rows and continue processing
+    #[default]
+    Skip,
+    /// Fail immediately on first error
+    Fail,
+    /// Log the error and continue processing
+    Log,
+}
+
+/// Configuration for CSV file source (dp-013)
+///
+/// Defines how to read and parse a CSV file as a data source.
+/// All behavior is config-driven with sensible defaults.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CsvSourceConfig {
+    /// Path to the CSV file
+    pub path: PathBuf,
+
+    /// Name of the column containing timestamps
+    pub timestamp_field: String,
+
+    /// Format of timestamps in the file
+    #[serde(default = "default_timestamp_format")]
+    pub timestamp_format: TimestampFormat,
+
+    /// CSV field delimiter character
+    #[serde(default = "default_delimiter")]
+    pub delimiter: char,
+
+    /// File encoding (e.g., "utf-8", "latin-1")
+    #[serde(default = "default_encoding")]
+    pub encoding: String,
+
+    /// How to handle parsing errors
+    #[serde(default)]
+    pub on_error: OnError,
+
+    /// Whether the CSV has a header row
+    #[serde(default = "default_has_header")]
+    pub has_header: bool,
+
+    /// Optional limit on number of rows to read (0 = no limit)
+    #[serde(default)]
+    pub row_limit: usize,
+}
+
+fn default_delimiter() -> char {
+    ','
+}
+
+fn default_encoding() -> String {
+    "utf-8".to_string()
+}
+
+fn default_timestamp_format() -> TimestampFormat {
+    TimestampFormat::Iso8601
+}
+
+fn default_has_header() -> bool {
+    true
+}
+
+impl Default for CsvSourceConfig {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::new(),
+            timestamp_field: "timestamp".to_string(),
+            timestamp_format: default_timestamp_format(),
+            delimiter: default_delimiter(),
+            encoding: default_encoding(),
+            on_error: OnError::default(),
+            has_header: default_has_header(),
+            row_limit: 0,
+        }
+    }
+}
+
+impl CsvSourceConfig {
+    /// Create a new CsvSourceConfig with required fields
+    pub fn new(path: impl Into<PathBuf>, timestamp_field: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            timestamp_field: timestamp_field.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Set the timestamp format
+    pub fn with_timestamp_format(mut self, format: TimestampFormat) -> Self {
+        self.timestamp_format = format;
+        self
+    }
+
+    /// Set the delimiter character
+    pub fn with_delimiter(mut self, delimiter: char) -> Self {
+        self.delimiter = delimiter;
+        self
+    }
+
+    /// Set the encoding
+    pub fn with_encoding(mut self, encoding: impl Into<String>) -> Self {
+        self.encoding = encoding.into();
+        self
+    }
+
+    /// Set the error handling strategy
+    pub fn with_on_error(mut self, on_error: OnError) -> Self {
+        self.on_error = on_error;
+        self
+    }
+
+    /// Set whether the file has a header row
+    pub fn with_has_header(mut self, has_header: bool) -> Self {
+        self.has_header = has_header;
+        self
+    }
+
+    /// Set a limit on the number of rows to read
+    pub fn with_row_limit(mut self, limit: usize) -> Self {
+        self.row_limit = limit;
+        self
+    }
 }
 
 /// Stream configuration

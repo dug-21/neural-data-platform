@@ -28,6 +28,9 @@ regex = "1.10"
 # etcd configuration store (dp-005)
 etcd-client = "0.14"
 
+# CSV async parsing (dp-013)
+csv-async = { version = "1.3", features = ["tokio", "serde"] }
+
 # UUID generation (DP-012 Phase 3)
 uuid = { version = "1.6", features = ["v4"] }
 

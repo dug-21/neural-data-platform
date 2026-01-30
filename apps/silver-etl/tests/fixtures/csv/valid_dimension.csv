@@ -1,0 +1,6 @@
+ndp_id,category,friendly_name,location_path,correlates_with,orientation
+sensor_001,temperature,Living Room Temp,home/living_room,humidity_001,north
+sensor_002,humidity,Living Room Humidity,home/living_room,temp_001,north
+sensor_003,temperature,Kitchen Temp,home/kitchen,humidity_003,south
+sensor_004,door,Back Door,home/back,motion_001,east
+sensor_005,window,Office Window,home/office,,west

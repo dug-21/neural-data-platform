@@ -97,9 +97,10 @@ pub fn transform_with_pre_transform(
     raw: &RawDataPoint,
     config: &SilverEtlConfig,
 ) -> Result<Vec<SilverRecord>, TransformError> {
-    let pre_transform_config = config.pre_transform.as_ref().ok_or_else(|| {
-        TransformError::ConfigError("pre_transform not configured".to_string())
-    })?;
+    let pre_transform_config = config
+        .pre_transform
+        .as_ref()
+        .ok_or_else(|| TransformError::ConfigError("pre_transform not configured".to_string()))?;
 
     // Build ColumnOrientedParser from config (matches batch silver-etl exactly)
     let parser = build_column_oriented_parser(pre_transform_config)?;
@@ -241,8 +242,8 @@ fn pivot_to_silver_records(
         })?;
 
         // Create SilverRecord with issue_time as primary timestamp
-        let mut record = SilverRecord::new(&stream_id, raw.timestamp)
-            .with_valid_timestamp(valid_time);
+        let mut record =
+            SilverRecord::new(&stream_id, raw.timestamp).with_valid_timestamp(valid_time);
 
         // Set device_id/ndp_id
         if let Some(ref ndp_id) = raw.ndp_id {
@@ -720,8 +721,14 @@ mod tests {
     fn test_extract_stream_id() {
         assert_eq!(extract_stream_id("air-quality-Mqtt"), "air-quality");
         assert_eq!(extract_stream_id("outdoor-weather-Http"), "outdoor-weather");
-        assert_eq!(extract_stream_id("outdoor-weather-HttpPoll"), "outdoor-weather");
-        assert_eq!(extract_stream_id("nws-observations-HttpPoll"), "nws-observations");
+        assert_eq!(
+            extract_stream_id("outdoor-weather-HttpPoll"),
+            "outdoor-weather"
+        );
+        assert_eq!(
+            extract_stream_id("nws-observations-HttpPoll"),
+            "nws-observations"
+        );
     }
 
     #[test]

@@ -424,18 +424,18 @@ where
         etl_config: &SilverEtlConfig,
     ) -> Result<(), SubscriberError> {
         // Use pre-transform to get multiple records
-        let records =
-            match crate::silver::transform::transform_with_pre_transform(raw, etl_config) {
-                Ok(recs) => recs,
-                Err(e) => {
-                    warn!(
-                        stream_id = %raw.source_id,
-                        error = %e,
-                        "Pre-transform failed, skipping payload"
-                    );
-                    return Ok(());
-                }
-            };
+        let records = match crate::silver::transform::transform_with_pre_transform(raw, etl_config)
+        {
+            Ok(recs) => recs,
+            Err(e) => {
+                warn!(
+                    stream_id = %raw.source_id,
+                    error = %e,
+                    "Pre-transform failed, skipping payload"
+                );
+                return Ok(());
+            }
+        };
 
         if records.is_empty() {
             debug!(stream_id = %raw.source_id, "Pre-transform produced no records");
@@ -901,7 +901,9 @@ mod tests {
         etl_config.deduplication.key_columns =
             vec!["observation_time".to_string(), "ndp_id".to_string()];
 
-        config.etl_configs.insert("air-quality".to_string(), etl_config);
+        config
+            .etl_configs
+            .insert("air-quality".to_string(), etl_config);
 
         let output = Arc::new(InMemorySilverOutput::new());
 

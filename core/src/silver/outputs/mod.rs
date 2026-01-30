@@ -145,11 +145,7 @@ impl SilverOutput for InMemorySilverOutput {
                     {
                         r.valid_timestamp == record.valid_timestamp
                     }
-                    k if config
-                        .identity_fields
-                        .iter()
-                        .any(|id| id.target == k) =>
-                    {
+                    k if config.identity_fields.iter().any(|id| id.target == k) => {
                         r.device_id == record.device_id
                     }
                     _ => true, // Unknown key, skip

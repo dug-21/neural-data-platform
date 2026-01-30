@@ -1,0 +1,4 @@
+ndp_id,category,friendly_name
+sensor_001,temperature,Living Room Temp
+sensor_001,humidity,Duplicate Entry
+sensor_002,temperature,Kitchen Temp

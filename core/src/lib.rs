@@ -1,5 +1,6 @@
 pub mod config;
 pub mod coordinator;
+pub mod dimensions;
 pub mod error;
 pub mod event_bus;
 // pub mod forecast;
@@ -77,3 +78,16 @@ pub use silver::{
     InMemorySilverOutput, SilverOutput, SilverOutputError, SilverRecord, TimescaleOutput,
     TransformError,
 };
+
+// Dimension tables (DP-013)
+pub use dimensions::{
+    CsvDimensionLoader, DdlGenerator, DimensionError, DimensionLoadStats, DimensionLoader,
+};
+pub use types::{
+    DimensionConfig, DimensionField, DimensionFieldType, DimensionSchema, DimensionSource,
+    DimensionSourceType, DimensionTarget, IndexConfig, LoadConfig, LoadStrategy,
+};
+
+// TimescaleDB dimension loading (DP-013, requires 'timescale' feature)
+#[cfg(feature = "timescale")]
+pub use dimensions::TimescaleDimensionLoader;

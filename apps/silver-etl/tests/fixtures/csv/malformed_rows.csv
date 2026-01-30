@@ -1,0 +1,7 @@
+timestamp,sensor_id,temperature,humidity
+2026-01-29T10:00:00Z,sensor_001,22.5,45.0
+2026-01-29T10:01:00Z,sensor_001,not_a_number,44.8
+2026-01-29T10:02:00Z,sensor_001,22.4
+2026-01-29T10:03:00Z,sensor_001,22.6,46.0,extra_column
+invalid_timestamp,sensor_001,22.7,45.5
+2026-01-29T10:05:00Z,sensor_001,22.8,45.3

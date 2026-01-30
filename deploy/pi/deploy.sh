@@ -90,6 +90,175 @@ log() { echo -e "${GREEN}[DEPLOY]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
+# ============================================================================
+# YAML Helper Functions
+# Used by sync_to_data_dictionary and sync_dimensions
+# ============================================================================
+
+# Helper function to extract YAML values (compatible with both Python yq and Go yq)
+# Falls back to Python if yq is unavailable, then grep/sed for simple top-level keys
+yaml_get() {
+    local file="$1"
+    local key="$2"
+    local default="$3"
+    local result=""
+
+    if command -v yq &> /dev/null; then
+        # Detect which yq variant is installed
+        if yq --version 2>&1 | grep -q "mikefarah"; then
+            # Go yq (mikefarah/yq)
+            result=$(yq eval ".$key // \"$default\"" "$file" 2>/dev/null)
+        else
+            # Python yq (kislyuk/yq) - uses jq syntax
+            result=$(yq -r ".$key // \"$default\"" "$file" 2>/dev/null)
+        fi
+    fi
+
+    # Fallback to Python for nested keys if yq failed or not installed
+    if [ -z "$result" ] || [ "$result" = "null" ]; then
+        if command -v python3 &> /dev/null; then
+            result=$(python3 -c "
+import yaml
+import sys
+try:
+    with open('$file') as f:
+        data = yaml.safe_load(f)
+    keys = '$key'.split('.')
+    val = data
+    for k in keys:
+        if val is None:
+            val = None
+            break
+        val = val.get(k) if isinstance(val, dict) else None
+    if val is None:
+        print('$default')
+    else:
+        print(val)
+except Exception:
+    print('$default')
+" 2>/dev/null)
+        fi
+    fi
+
+    # Final fallback to grep/sed for simple top-level keys only
+    if [ -z "$result" ] || [ "$result" = "null" ]; then
+        result=$(grep -E "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//' | tr -d '"' || echo "$default")
+    fi
+
+    # Return default if still empty
+    if [ -z "$result" ] || [ "$result" = "null" ]; then
+        echo "$default"
+    else
+        echo "$result"
+    fi
+}
+
+# Helper to get array length
+yaml_array_len() {
+    local file="$1"
+    local key="$2"
+    local result=0
+
+    if command -v yq &> /dev/null; then
+        if yq --version 2>&1 | grep -q "mikefarah"; then
+            result=$(yq eval ".$key | length" "$file" 2>/dev/null || echo "0")
+        else
+            result=$(yq -r ".$key | length" "$file" 2>/dev/null || echo "0")
+        fi
+    fi
+
+    # Fallback to Python if yq not available or failed
+    if ! [[ "$result" =~ ^[0-9]+$ ]] || [ "$result" = "0" ]; then
+        if command -v python3 &> /dev/null; then
+            result=$(python3 -c "
+import yaml
+try:
+    with open('$file') as f:
+        data = yaml.safe_load(f)
+    keys = '$key'.split('.')
+    val = data
+    for k in keys:
+        if val is None:
+            break
+        if k.endswith(']'):
+            # Handle array index in key path
+            arr_key = k[:k.index('[')]
+            idx = int(k[k.index('[')+1:-1])
+            val = val.get(arr_key, [])[idx] if isinstance(val, dict) else None
+        else:
+            val = val.get(k) if isinstance(val, dict) else None
+    print(len(val) if isinstance(val, list) else 0)
+except Exception:
+    print(0)
+" 2>/dev/null || echo "0")
+        fi
+    fi
+
+    # Validate it's a number
+    if ! [[ "$result" =~ ^[0-9]+$ ]]; then
+        result=0
+    fi
+
+    echo "$result"
+}
+
+# Helper to get array item value
+yaml_array_get() {
+    local file="$1"
+    local path="$2"
+    local default="$3"
+    local result=""
+
+    if command -v yq &> /dev/null; then
+        if yq --version 2>&1 | grep -q "mikefarah"; then
+            result=$(yq eval "$path // \"$default\"" "$file" 2>/dev/null)
+        else
+            result=$(yq -r "$path // \"$default\"" "$file" 2>/dev/null)
+        fi
+    fi
+
+    # Fallback to Python if yq not available or failed
+    if [ -z "$result" ] || [ "$result" = "null" ]; then
+        if command -v python3 &> /dev/null; then
+            result=$(python3 -c "
+import yaml
+import re
+try:
+    with open('$file') as f:
+        data = yaml.safe_load(f)
+    # Parse path like .silver_etl.field_mappings[0].source_path
+    path = '$path'.lstrip('.')
+    # Split by . but preserve array indices
+    parts = re.split(r'\.(?![^\[]*\])', path)
+    val = data
+    for part in parts:
+        if val is None:
+            break
+        # Check for array index
+        match = re.match(r'(.+)\[(\d+)\]$', part)
+        if match:
+            key, idx = match.groups()
+            val = val.get(key, []) if isinstance(val, dict) else val
+            val = val[int(idx)] if isinstance(val, list) and len(val) > int(idx) else None
+        else:
+            val = val.get(part) if isinstance(val, dict) else None
+    if val is None:
+        print('$default')
+    else:
+        print(val)
+except Exception:
+    print('$default')
+" 2>/dev/null)
+        fi
+    fi
+
+    if [ -z "$result" ] || [ "$result" = "null" ]; then
+        echo "$default"
+    else
+        echo "$result"
+    fi
+}
+
 # Show environment on startup
 log "Environment: $DEPLOY_ENV (compose: $(basename $COMPOSE_FILE))"
 
@@ -155,169 +324,7 @@ sync_to_data_dictionary() {
     local CONFIG_DIR="$REPO_ROOT/config/base/streams"
     local SQL_FILE="/tmp/data_dictionary_sync_$$.sql"
 
-    # Helper function to extract YAML values (compatible with both Python yq and Go yq)
-    # Falls back to Python if yq is unavailable, then grep/sed for simple top-level keys
-    yaml_get() {
-        local file="$1"
-        local key="$2"
-        local default="$3"
-        local result=""
-
-        if command -v yq &> /dev/null; then
-            # Detect which yq variant is installed
-            if yq --version 2>&1 | grep -q "mikefarah"; then
-                # Go yq (mikefarah/yq)
-                result=$(yq eval ".$key // \"$default\"" "$file" 2>/dev/null)
-            else
-                # Python yq (kislyuk/yq) - uses jq syntax
-                result=$(yq -r ".$key // \"$default\"" "$file" 2>/dev/null)
-            fi
-        fi
-
-        # Fallback to Python for nested keys if yq failed or not installed
-        if [ -z "$result" ] || [ "$result" = "null" ]; then
-            if command -v python3 &> /dev/null; then
-                result=$(python3 -c "
-import yaml
-import sys
-try:
-    with open('$file') as f:
-        data = yaml.safe_load(f)
-    keys = '$key'.split('.')
-    val = data
-    for k in keys:
-        if val is None:
-            val = None
-            break
-        val = val.get(k) if isinstance(val, dict) else None
-    if val is None:
-        print('$default')
-    else:
-        print(val)
-except Exception:
-    print('$default')
-" 2>/dev/null)
-            fi
-        fi
-
-        # Final fallback to grep/sed for simple top-level keys only
-        if [ -z "$result" ] || [ "$result" = "null" ]; then
-            result=$(grep -E "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//' | tr -d '"' || echo "$default")
-        fi
-
-        # Return default if still empty
-        if [ -z "$result" ] || [ "$result" = "null" ]; then
-            echo "$default"
-        else
-            echo "$result"
-        fi
-    }
-
-    # Helper to get array length
-    yaml_array_len() {
-        local file="$1"
-        local key="$2"
-        local result=0
-
-        if command -v yq &> /dev/null; then
-            if yq --version 2>&1 | grep -q "mikefarah"; then
-                result=$(yq eval ".$key | length" "$file" 2>/dev/null || echo "0")
-            else
-                result=$(yq -r ".$key | length" "$file" 2>/dev/null || echo "0")
-            fi
-        fi
-
-        # Fallback to Python if yq not available or failed
-        if ! [[ "$result" =~ ^[0-9]+$ ]] || [ "$result" = "0" ]; then
-            if command -v python3 &> /dev/null; then
-                result=$(python3 -c "
-import yaml
-try:
-    with open('$file') as f:
-        data = yaml.safe_load(f)
-    keys = '$key'.split('.')
-    val = data
-    for k in keys:
-        if val is None:
-            break
-        if k.endswith(']'):
-            # Handle array index in key path
-            arr_key = k[:k.index('[')]
-            idx = int(k[k.index('[')+1:-1])
-            val = val.get(arr_key, [])[idx] if isinstance(val, dict) else None
-        else:
-            val = val.get(k) if isinstance(val, dict) else None
-    print(len(val) if isinstance(val, list) else 0)
-except Exception:
-    print(0)
-" 2>/dev/null || echo "0")
-            fi
-        fi
-
-        # Validate it's a number
-        if ! [[ "$result" =~ ^[0-9]+$ ]]; then
-            result=0
-        fi
-
-        echo "$result"
-    }
-
-    # Helper to get array item value
-    yaml_array_get() {
-        local file="$1"
-        local path="$2"
-        local default="$3"
-        local result=""
-
-        if command -v yq &> /dev/null; then
-            if yq --version 2>&1 | grep -q "mikefarah"; then
-                result=$(yq eval "$path // \"$default\"" "$file" 2>/dev/null)
-            else
-                result=$(yq -r "$path // \"$default\"" "$file" 2>/dev/null)
-            fi
-        fi
-
-        # Fallback to Python if yq not available or failed
-        if [ -z "$result" ] || [ "$result" = "null" ]; then
-            if command -v python3 &> /dev/null; then
-                result=$(python3 -c "
-import yaml
-import re
-try:
-    with open('$file') as f:
-        data = yaml.safe_load(f)
-    # Parse path like .silver_etl.field_mappings[0].source_path
-    path = '$path'.lstrip('.')
-    # Split by . but preserve array indices
-    parts = re.split(r'\.(?![^\[]*\])', path)
-    val = data
-    for part in parts:
-        if val is None:
-            break
-        # Check for array index
-        match = re.match(r'(.+)\[(\d+)\]$', part)
-        if match:
-            key, idx = match.groups()
-            val = val.get(key, []) if isinstance(val, dict) else val
-            val = val[int(idx)] if isinstance(val, list) and len(val) > int(idx) else None
-        else:
-            val = val.get(part) if isinstance(val, dict) else None
-    if val is None:
-        print('$default')
-    else:
-        print(val)
-except Exception:
-    print('$default')
-" 2>/dev/null)
-            fi
-        fi
-
-        if [ -z "$result" ] || [ "$result" = "null" ]; then
-            echo "$default"
-        else
-            echo "$result"
-        fi
-    }
+    # Note: yaml_get, yaml_array_len, yaml_array_get are defined at top-level
 
     # Generate SQL
     {
@@ -765,6 +772,253 @@ except Exception:
     fi
 }
 
+# ============================================================================
+# DIMENSION TABLE SYNC (dp-013)
+# Syncs dimension tables from config/base/dimensions/ to Silver layer
+# ============================================================================
+
+# State file for tracking dimension sync status
+DIMENSION_STATE_FILE="$REPO_ROOT/data/.dimension_state"
+
+# Update dimension sync state tracking
+update_dimension_state() {
+    local dimension_id="$1"
+    local status="$2"
+    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    # Ensure state directory exists
+    mkdir -p "$(dirname "$DIMENSION_STATE_FILE")"
+
+    # Update or add entry
+    if [ -f "$DIMENSION_STATE_FILE" ] && grep -q "^$dimension_id:" "$DIMENSION_STATE_FILE" 2>/dev/null; then
+        sed -i "s/^$dimension_id:.*/$dimension_id:$status:$timestamp/" "$DIMENSION_STATE_FILE"
+    else
+        echo "$dimension_id:$status:$timestamp" >> "$DIMENSION_STATE_FILE"
+    fi
+}
+
+# Get dimension sync state
+get_dimension_state() {
+    local dimension_id="$1"
+    if [ -f "$DIMENSION_STATE_FILE" ]; then
+        grep "^$dimension_id:" "$DIMENSION_STATE_FILE" 2>/dev/null | cut -d: -f2
+    else
+        echo "unknown"
+    fi
+}
+
+# Fallback SQL import for dimension data when ndp CLI is not available
+import_dimension_sql() {
+    local config_file="$1"
+    local source_file="$2"
+    local strategy="$3"
+
+    local table_name=$(yaml_get "$config_file" "target.table" "")
+    local schema_name=$(yaml_get "$config_file" "target.schema" "silver")
+
+    if [ -z "$table_name" ]; then
+        warn "No target table specified in $config_file"
+        return 1
+    fi
+
+    log "Importing dimension data to ${schema_name}.${table_name}..."
+
+    if [ "$strategy" = "truncate_and_load" ]; then
+        # Truncate existing data
+        dcx timescaledb psql -U postgres -d ndp -c \
+            "TRUNCATE TABLE ${schema_name}.${table_name};" 2>/dev/null || true
+    fi
+
+    # Import CSV data using COPY
+    # Note: We copy the file into the container first, then import
+    local temp_file="/tmp/dim_import_$$.csv"
+    docker cp "$source_file" "$(docker compose -f "$COMPOSE_FILE" ps -q timescaledb):$temp_file"
+
+    if dcx timescaledb psql -U postgres -d ndp -c \
+        "\\COPY ${schema_name}.${table_name} FROM '$temp_file' WITH (FORMAT csv, HEADER true);" 2>/dev/null; then
+        log "Successfully imported dimension data to ${schema_name}.${table_name}"
+        # Clean up temp file in container
+        dcx timescaledb rm -f "$temp_file" 2>/dev/null || true
+        return 0
+    else
+        warn "Failed to import dimension data to ${schema_name}.${table_name}"
+        dcx timescaledb rm -f "$temp_file" 2>/dev/null || true
+        return 1
+    fi
+}
+
+# Sync a single dimension table
+sync_dimension() {
+    local dimension_id="$1"
+    local config_file="$2"
+    local source_file="$3"
+    local strategy="$4"
+
+    log "Loading dimension $dimension_id with strategy: $strategy"
+
+    update_dimension_state "$dimension_id" "syncing"
+
+    # Call the Rust CLI to perform the actual sync if available
+    if command -v ndp &> /dev/null; then
+        if ndp dimension sync "$dimension_id" --config "$config_file" --source "$source_file"; then
+            update_dimension_state "$dimension_id" "success"
+            return 0
+        else
+            update_dimension_state "$dimension_id" "failed"
+            return 1
+        fi
+    else
+        # Fallback to direct SQL import
+        if import_dimension_sql "$config_file" "$source_file" "$strategy"; then
+            update_dimension_state "$dimension_id" "success"
+            return 0
+        else
+            update_dimension_state "$dimension_id" "failed"
+            return 1
+        fi
+    fi
+}
+
+# Sync all dimension tables from config/base/dimensions/
+sync_dimensions() {
+    local dimension_dir="$REPO_ROOT/config/base/dimensions"
+
+    if [ ! -d "$dimension_dir" ]; then
+        log "No dimensions directory found at $dimension_dir"
+        return 0
+    fi
+
+    log "Syncing dimension tables..."
+
+    # Ensure TimescaleDB is ready
+    until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+        warn "Waiting for TimescaleDB to be ready..."
+        sleep 2
+    done
+
+    local dimension_count=0
+    local success_count=0
+
+    # Find all dimension config files
+    for config_file in "$dimension_dir"/*.yaml "$dimension_dir"/*.yml; do
+        if [ -f "$config_file" ]; then
+            local dimension_id=$(yaml_get "$config_file" "dimension_id" "")
+            local table_name=$(yaml_get "$config_file" "target.table" "")
+            local schema_name=$(yaml_get "$config_file" "target.schema" "silver")
+            local source_path=$(yaml_get "$config_file" "source.path" "")
+            local strategy=$(yaml_get "$config_file" "load.strategy" "truncate_and_load")
+
+            if [ -z "$dimension_id" ]; then
+                dimension_id=$(basename "$config_file" | sed 's/\.\(yaml\|yml\)$//')
+            fi
+
+            if [ -z "$table_name" ]; then
+                warn "Skipping $config_file: no target table specified"
+                continue
+            fi
+
+            log "Processing dimension: $dimension_id -> $schema_name.$table_name"
+
+            # Check if source file exists
+            local full_path="$REPO_ROOT/$source_path"
+            if [ ! -f "$full_path" ]; then
+                warn "Source file not found: $full_path"
+                update_dimension_state "$dimension_id" "source_missing"
+                continue
+            fi
+
+            dimension_count=$((dimension_count + 1))
+
+            # Execute dimension sync
+            if sync_dimension "$dimension_id" "$config_file" "$full_path" "$strategy"; then
+                success_count=$((success_count + 1))
+            fi
+        fi
+    done
+
+    if [ "$dimension_count" -eq 0 ]; then
+        log "No dimension configurations found in $dimension_dir"
+    else
+        log "Dimension sync complete: $success_count/$dimension_count succeeded"
+    fi
+}
+
+# List all configured dimensions and their sync status
+list_dimensions() {
+    local dimension_dir="$REPO_ROOT/config/base/dimensions"
+
+    if [ ! -d "$dimension_dir" ]; then
+        log "No dimensions directory found at $dimension_dir"
+        return 0
+    fi
+
+    echo ""
+    log "Configured Dimensions:"
+    echo "  ID                           TABLE                    STATUS           LAST_SYNC"
+    echo "  -------------------------------------------------------------------------"
+
+    for config_file in "$dimension_dir"/*.yaml "$dimension_dir"/*.yml; do
+        if [ -f "$config_file" ]; then
+            local dimension_id=$(yaml_get "$config_file" "dimension_id" "")
+            local table_name=$(yaml_get "$config_file" "target.table" "")
+            local schema_name=$(yaml_get "$config_file" "target.schema" "silver")
+
+            if [ -z "$dimension_id" ]; then
+                dimension_id=$(basename "$config_file" | sed 's/\.\(yaml\|yml\)$//')
+            fi
+
+            local status="unknown"
+            local last_sync=""
+            if [ -f "$DIMENSION_STATE_FILE" ]; then
+                local state_line=$(grep "^$dimension_id:" "$DIMENSION_STATE_FILE" 2>/dev/null)
+                if [ -n "$state_line" ]; then
+                    status=$(echo "$state_line" | cut -d: -f2)
+                    last_sync=$(echo "$state_line" | cut -d: -f3-)
+                fi
+            fi
+
+            printf "  %-28s %-24s %-16s %s\n" "$dimension_id" "$schema_name.$table_name" "$status" "$last_sync"
+        fi
+    done
+
+    echo ""
+
+    # Document expected CLI interface
+    echo "  Expected ndp CLI commands (when available):"
+    echo "    ndp dimension list              - List all configured dimensions"
+    echo "    ndp dimension sync <id>         - Sync specific dimension"
+    echo "    ndp dimension sync --all        - Sync all dimensions"
+    echo "    ndp dimension status            - Show dimension sync status"
+    echo ""
+}
+
+# Show dimension sync status
+dimension_status() {
+    local dimension_dir="$REPO_ROOT/config/base/dimensions"
+
+    if [ ! -d "$dimension_dir" ]; then
+        log "No dimensions directory found at $dimension_dir"
+        return 0
+    fi
+
+    log "Dimension Sync Status:"
+
+    if [ ! -f "$DIMENSION_STATE_FILE" ]; then
+        echo "  No sync history found. Run './deploy.sh sync-dimensions' to sync."
+        return 0
+    fi
+
+    echo ""
+    echo "  State file: $DIMENSION_STATE_FILE"
+    echo ""
+
+    while IFS=: read -r dim_id status timestamp; do
+        printf "  %-28s %-16s %s\n" "$dim_id" "$status" "$timestamp"
+    done < "$DIMENSION_STATE_FILE"
+
+    echo ""
+}
+
 build() {
     log "Building Docker images (this may take 15-30 minutes on first run)..."
     dc build --progress=plain
@@ -958,9 +1212,10 @@ refresh() {
     sync_config
     init_streams
 
-    # Sync data dictionary if TimescaleDB is running
+    # Sync data dictionary and dimensions if TimescaleDB is running
     if dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; then
         sync_to_data_dictionary
+        sync_dimensions
     fi
 
     # Restart Grafana to pick up dashboard/datasource changes
@@ -1001,6 +1256,11 @@ case "${1:-deploy}" in
         echo "  init-streams    - Initialize stream configurations in etcd"
         echo "  list-streams    - List configured streams from etcd"
         echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
+        echo ""
+        echo "Dimension Commands:"
+        echo "  sync-dimensions      - Sync dimension tables from config/base/dimensions/"
+        echo "  list-dimensions      - List configured dimensions and sync status"
+        echo "  dimension-status     - Show dimension sync status history"
         echo ""
         echo "Analytics Commands:"
         echo "  analytics       - Start DuckDB + Grafana analytics stack"
@@ -1071,6 +1331,15 @@ case "${1:-deploy}" in
         ;;
     sync-dictionary)
         sync_to_data_dictionary
+        ;;
+    sync-dimensions)
+        sync_dimensions
+        ;;
+    list-dimensions)
+        list_dimensions
+        ;;
+    dimension-status)
+        dimension_status
         ;;
     analytics)
         log "Starting analytics stack (DuckDB + Grafana)..."

@@ -1,0 +1,3 @@
+ndp_id,category,friendly_name,location_path
+sensor_001,temperature,Updated Living Room,home/living_room/updated
+sensor_006,motion,New Motion Sensor,home/hallway

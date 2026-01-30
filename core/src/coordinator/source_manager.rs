@@ -77,6 +77,17 @@ impl SourceManager {
                     "FileWatch sources not implemented".to_string(),
                 ))
             }
+            SourceType::Csv => {
+                // CSV sources are batch-oriented and handled differently
+                // They are typically used for one-time data loading, not streaming
+                warn!(
+                    "CSV sources should use CsvSource directly for batch loading: {}",
+                    source_id
+                );
+                Err(CoreError::Source(
+                    "CSV sources not supported in streaming context. Use CsvSource::fetch_raw_batch() directly.".to_string(),
+                ))
+            }
         }
     }
 

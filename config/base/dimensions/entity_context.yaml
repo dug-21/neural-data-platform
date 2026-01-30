@@ -1,0 +1,154 @@
+# =============================================================================
+# Entity Context Dimension Configuration
+# =============================================================================
+# Feature: dp-013 - CSV Source Type & Dimension Tables
+# Version: 1.0.0
+# Date: 2026-01-30
+#
+# Purpose: Define the entity_context dimension table for enriching sensor
+#          observations with human-readable metadata.
+#
+# This follows NDP's config-driven architecture. Dimensions are configuration
+# data that load directly to Silver (not through Bronze).
+# =============================================================================
+
+dimension_id: entity_context
+description: "Entity context for Home Assistant sensor enrichment"
+version: "1.0.0"
+
+# Target table in Silver layer
+target:
+  table: entity_context
+  schema: silver
+
+# Source data configuration
+source:
+  type: csv
+  path: data/dimensions/entity_context.csv
+  delimiter: ","
+  encoding: utf-8
+  has_header: true
+  # Skip empty lines and comment lines starting with #
+  skip_blank_lines: true
+  comment_char: "#"
+
+# Schema definition - SINGLE SOURCE OF TRUTH for DDL generation
+# All DDL is generated from this config via DdlGenerator
+# NO hardcoded SQL files for dimension tables (DP-013)
+schema:
+  # Primary key columns for UPSERT and deduplication
+  primary_key:
+    - ndp_id
+
+  # Field definitions
+  fields:
+    - name: ndp_id
+      type: text
+      nullable: false
+      description: "Neural Data Platform entity identifier (matches fact tables)"
+
+    - name: category
+      type: text
+      nullable: false
+      description: "Entity classification (temperature, humidity, door, window, etc.)"
+      validation:
+        min_length: 1
+
+    - name: friendly_name
+      type: text
+      nullable: false
+      description: "Human-readable display name for dashboards"
+      validation:
+        min_length: 1
+
+    - name: location_path
+      type: text
+      nullable: true
+      description: "Hierarchical location path (home/living_room)"
+
+    - name: correlates_with
+      type: text
+      nullable: true
+      description: "Comma-separated list of correlated entity ndp_ids"
+      # Note: CSV stores as comma-separated string; loader converts to TEXT[]
+
+    - name: orientation
+      type: text
+      nullable: true
+      description: "Compass direction for physical entities"
+      validation:
+        allowed_values:
+          - north
+          - south
+          - east
+          - west
+          - northeast
+          - northwest
+          - southeast
+          - southwest
+
+  # Index definitions - generated via DdlGenerator::generate_indexes()
+  indexes:
+    - name: idx_entity_context_category
+      columns: [category]
+      unique: false
+
+    - name: idx_entity_context_location
+      columns: [location_path]
+      unique: false
+
+# Load strategy configuration
+load:
+  strategy: truncate_and_load
+  # Alternative: upsert (INSERT ... ON CONFLICT DO UPDATE)
+
+  # Batch size for INSERT statements (memory optimization for Pi)
+  batch_size: 1000
+
+  # Transaction handling
+  transaction:
+    # Wrap entire load in single transaction (rollback on any error)
+    mode: atomic
+
+  # Pre-load validation
+  validation:
+    # Fail if required columns missing from CSV
+    require_all_columns: true
+    # Fail if CSV has extra columns not in schema
+    reject_extra_columns: false
+    # Maximum errors before aborting (0 = abort on first error)
+    max_errors: 0
+
+  # Post-load verification
+  verification:
+    # Verify row count matches CSV line count (minus header)
+    check_row_count: true
+    # Verify primary key uniqueness
+    check_primary_key: true
+
+# Array field transformation
+transforms:
+  correlates_with:
+    # Convert comma-separated string to PostgreSQL array
+    type: csv_to_array
+    delimiter: ","
+    trim_whitespace: true
+
+# Sync schedule (optional - for future automation)
+schedule:
+  # Manual sync only (no automatic schedule)
+  enabled: false
+  # Future: cron expression for automatic sync
+  # cron: "0 2 * * *"  # Daily at 2 AM
+
+# Metadata for data dictionary integration
+metadata:
+  category: dimension
+  domain: entity
+  owner: dp-013
+  documentation_url: "docs/dimensions/entity_context.md"
+  tags:
+    - dimension
+    - entity-context
+    - enrichment
+    - home-assistant

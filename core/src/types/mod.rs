@@ -4,6 +4,7 @@
 // extending the existing single-stream architecture with backward compatibility.
 
 pub mod air_quality;
+pub mod dimension_config;
 pub mod raw_data_point;
 pub mod stream_config;
 pub mod stream_record;
@@ -16,7 +17,13 @@ pub use raw_data_point::RawDataPoint;
 
 // Re-export new multi-stream types
 pub use stream_config::{
-    FieldType, SchemaField, SourceConfig, SourceType, StorageConfig, StreamConfig,
-    StreamConfigError,
+    CsvSourceConfig, FieldType, OnError, SchemaField, SourceConfig, SourceType, StorageConfig,
+    StreamConfig, StreamConfigError, TimestampFormat,
 };
 pub use stream_record::{RecordMetadata, StreamRecord};
+
+// DP-013: Dimension table configuration types
+pub use dimension_config::{
+    DimensionConfig, DimensionField, DimensionSchema, DimensionSource, DimensionSourceType,
+    DimensionTarget, FieldType as DimensionFieldType, IndexConfig, LoadConfig, LoadStrategy,
+};

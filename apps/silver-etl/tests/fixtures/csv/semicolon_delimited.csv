@@ -1,0 +1,4 @@
+timestamp;sensor_id;temperature;humidity
+2026-01-29T10:00:00Z;sensor_001;22.5;45.0
+2026-01-29T10:01:00Z;sensor_001;22.6;44.8
+2026-01-29T10:02:00Z;sensor_001;22.4;45.2

@@ -124,18 +124,18 @@ mod pooled {
             );
 
             // Parse connection string and create manager
-            let manager = PostgresConnectionManager::new_from_stringlike(
-                &config.connection_string,
-                NoTls,
-            )
-            .map_err(|e| {
-                SilverOutputError::ConfigError(format!("Invalid connection string: {}", e))
-            })?;
+            let manager =
+                PostgresConnectionManager::new_from_stringlike(&config.connection_string, NoTls)
+                    .map_err(|e| {
+                        SilverOutputError::ConfigError(format!("Invalid connection string: {}", e))
+                    })?;
 
             // Build connection pool
             let pool = Pool::builder()
                 .max_size(config.max_connections)
-                .connection_timeout(std::time::Duration::from_secs(config.connection_timeout_secs))
+                .connection_timeout(std::time::Duration::from_secs(
+                    config.connection_timeout_secs,
+                ))
                 .build(manager)
                 .await
                 .map_err(|e| {
@@ -217,14 +217,12 @@ mod pooled {
                 && matches!(
                     etl_config.deduplication.strategy,
                     crate::config::DeduplicationStrategy::Upsert
-                )
-            {
+                ) {
                 // UPSERT using ON CONFLICT - exclude dedup keys and ingestion_time from UPDATE
                 let update_columns: Vec<String> = columns
                     .iter()
                     .filter(|c| {
-                        *c != "ingestion_time"
-                            && !etl_config.deduplication.key_columns.contains(c)
+                        *c != "ingestion_time" && !etl_config.deduplication.key_columns.contains(c)
                     })
                     .map(|c| format!("{} = EXCLUDED.{}", c, c))
                     .collect();
@@ -588,9 +586,7 @@ mod tests {
             max_connections: 10,
             connection_timeout_secs: 30,
             default_table: "silver.default".to_string(),
-            table_mapping: HashMap::from([
-                ("test".to_string(), "silver.test".to_string()),
-            ]),
+            table_mapping: HashMap::from([("test".to_string(), "silver.test".to_string())]),
             timestamp_column: "ts".to_string(),
             use_upsert: true,
         };

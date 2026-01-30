@@ -1,0 +1,4 @@
+timestamp,sensor_id,value
+1706522400,sensor_001,100.5
+1706522460,sensor_001,101.2
+1706522520,sensor_001,99.8

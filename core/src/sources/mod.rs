@@ -5,12 +5,15 @@
 //! - HTTP Polling: Periodic polling of HTTP endpoints
 //! - Merge: Combining and deduplicating data from multiple sources
 //! - Parsers: Parse external API responses into TimeSeriesPoint format
+//! - CSV: File-based CSV data ingestion (dp-013)
 
+pub mod csv;
 pub mod http_poll;
 pub mod merge;
 pub mod mqtt;
 pub mod parsers;
 
+pub use csv::{CsvSource, CsvSourceBuilder};
 pub use http_poll::{
     AuthMethod, EndpointConfig, ErrorClassification, GenericHttpPollingConfig,
     GenericHttpPollingSource, HttpPollingConfig, HttpPollingSource, ParserRegistry, PollingError,
@@ -78,6 +81,7 @@ fn source_type_suffix(source_type: &SourceType) -> &'static str {
         SourceType::Mqtt => "Mqtt",
         SourceType::Webhook => "Webhook",
         SourceType::FileWatch => "FileWatch",
+        SourceType::Csv => "Csv",
     }
 }
 
@@ -163,5 +167,20 @@ mod tests {
         assert_eq!(source_type_suffix(&SourceType::Mqtt), "Mqtt");
         assert_eq!(source_type_suffix(&SourceType::Webhook), "Webhook");
         assert_eq!(source_type_suffix(&SourceType::FileWatch), "FileWatch");
+        assert_eq!(source_type_suffix(&SourceType::Csv), "Csv");
+    }
+
+    // ========== dp-013: CSV Source ID Tests ==========
+
+    #[test]
+    fn test_generate_source_id_csv() {
+        let source_id = generate_source_id("historical-data", &SourceType::Csv);
+        assert_eq!(source_id, "historical-data-Csv");
+    }
+
+    #[test]
+    fn test_generate_source_id_indexed_csv() {
+        let source_id = generate_source_id_indexed("sensor-logs", &SourceType::Csv, 0);
+        assert_eq!(source_id, "sensor-logs-Csv-0");
     }
 }
