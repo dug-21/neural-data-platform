@@ -498,7 +498,7 @@ fn create_services_with_real_store(
 /// If TimescaleDB is unavailable, returns error and caller continues without Silver.
 async fn create_silver_subscribers(
     _event_bus: Arc<neural_core::EventBus>,
-    registry: Arc<StreamRegistry>,
+    _registry: Arc<StreamRegistry>,  // AIR-012: Now scans YAML directory instead
 ) -> Result<Vec<Box<dyn Subscriber>>, Box<dyn std::error::Error + Send + Sync>> {
     let timescale_url = std::env::var("TIMESCALE_URL")
         .map_err(|_| "TIMESCALE_URL environment variable not set")?;
@@ -507,8 +507,11 @@ async fn create_silver_subscribers(
         .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
 
     // Build table_mapping from ETL configs (source of truth: YAML config.target_table)
-    // This matches how batch silver-etl uses config.target_table from YAML
-    let streams = registry.list_streams().await.unwrap_or_default();
+    // AIR-012: Scan YAML directory directly instead of relying on etcd timing
+    // This avoids race conditions where etcd sync hasn't completed before subscribers are created
+    let streams = scan_stream_config_directory(&config_dir).await;
+    tracing::info!("Found {} stream configs in {}", streams.len(), config_dir);
+
     let mut table_mapping = HashMap::new();
 
     for stream_id in &streams {
@@ -595,6 +598,39 @@ async fn create_silver_subscribers(
     }
 
     Ok(subscribers)
+}
+
+/// AIR-012: Scan stream config directory to find all streams
+/// This avoids race conditions with etcd sync timing
+async fn scan_stream_config_directory(config_dir: &str) -> Vec<String> {
+    use std::path::Path;
+
+    let path = Path::new(config_dir);
+    if !path.exists() {
+        tracing::warn!("Stream config directory not found: {}", config_dir);
+        return Vec::new();
+    }
+
+    let mut streams = Vec::new();
+
+    if let Ok(mut entries) = tokio::fs::read_dir(path).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if let Ok(file_type) = entry.file_type().await {
+                if file_type.is_dir() {
+                    // Check if directory contains config.yaml
+                    let config_path = entry.path().join("config.yaml");
+                    if config_path.exists() {
+                        if let Some(stream_id) = entry.file_name().to_str() {
+                            streams.push(stream_id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    streams.sort();
+    streams
 }
 
 #[allow(dead_code)]
