@@ -181,6 +181,10 @@ impl ConfigLoader {
     }
 
     /// List streams from YAML directory
+    ///
+    /// Supports two directory structures:
+    /// - Flat: `{config_dir}/{stream_id}.yaml`
+    /// - Directory: `{config_dir}/{stream_id}/config.yaml`
     async fn list_streams_from_yaml(&self) -> Result<Vec<String>> {
         let config_path = Path::new(&self.config_dir);
 
@@ -195,12 +199,25 @@ impl ConfigLoader {
 
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if path
-                .extension()
-                .map_or(false, |ext| ext == "yaml" || ext == "yml")
+            let file_type = entry.file_type().await?;
+
+            // Check for flat structure: {stream_id}.yaml
+            if file_type.is_file()
+                && path
+                    .extension()
+                    .map_or(false, |ext| ext == "yaml" || ext == "yml")
             {
                 if let Some(stem) = path.file_stem() {
                     streams.push(stem.to_string_lossy().to_string());
+                }
+            }
+            // Check for directory structure: {stream_id}/config.yaml
+            else if file_type.is_dir() {
+                let config_file = path.join("config.yaml");
+                if config_file.exists() {
+                    if let Some(dir_name) = path.file_name() {
+                        streams.push(dir_name.to_string_lossy().to_string());
+                    }
                 }
             }
         }
@@ -276,6 +293,52 @@ silver_etl:
         assert_eq!(streams.len(), 2);
         assert!(streams.contains(&"air-quality".to_string()));
         assert!(streams.contains(&"outdoor-weather".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_list_streams_from_yaml_directory_structure() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create directory-based config structure: {stream_id}/config.yaml
+        let stream1_dir = temp_dir.path().join("home-assistant-state");
+        tokio::fs::create_dir(&stream1_dir).await.unwrap();
+        tokio::fs::write(
+            stream1_dir.join("config.yaml"),
+            "stream_id: home-assistant-state\nsilver_etl:\n  enabled: true\n  target_table: silver.state_events",
+        )
+        .await
+        .unwrap();
+
+        let stream2_dir = temp_dir.path().join("air-quality");
+        tokio::fs::create_dir(&stream2_dir).await.unwrap();
+        tokio::fs::write(
+            stream2_dir.join("config.yaml"),
+            "stream_id: air-quality\nsilver_etl:\n  enabled: true\n  target_table: silver.air_quality",
+        )
+        .await
+        .unwrap();
+
+        // Also create a flat file to test mixed structures
+        tokio::fs::write(
+            temp_dir.path().join("outdoor-weather.yaml"),
+            "stream_id: outdoor-weather",
+        )
+        .await
+        .unwrap();
+
+        // Create a directory without config.yaml (should be ignored)
+        let empty_dir = temp_dir.path().join("empty-stream");
+        tokio::fs::create_dir(&empty_dir).await.unwrap();
+
+        let loader = ConfigLoader::new("http://localhost:2379", temp_dir.path().to_str().unwrap());
+
+        let streams = loader.list_streams_from_yaml().await.unwrap();
+        assert_eq!(streams.len(), 3, "Expected 3 streams, got: {:?}", streams);
+        assert!(streams.contains(&"home-assistant-state".to_string()));
+        assert!(streams.contains(&"air-quality".to_string()));
+        assert!(streams.contains(&"outdoor-weather".to_string()));
+        // empty-stream should NOT be included (no config.yaml)
+        assert!(!streams.contains(&"empty-stream".to_string()));
     }
 
     #[tokio::test]
