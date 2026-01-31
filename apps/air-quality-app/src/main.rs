@@ -69,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     stream_id: s.stream_id,
                                     topic_pattern: s.topic_pattern,
                                     enabled: s.enabled,
+                                    ndp_id_topic_segment: s.ndp_id_topic_segment,
                                 })
                                 .collect(),
                             qos: etcd_config.mqtt.qos,

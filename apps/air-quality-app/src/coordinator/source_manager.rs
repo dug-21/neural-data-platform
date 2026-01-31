@@ -764,13 +764,34 @@ impl SourceManager {
             .and_then(|v| v.as_u64())
             .unwrap_or(30);
 
+        // AIR-012: Extract ndp_id_topic_segment from params
+        let ndp_id_topic_segment = source_config
+            .params
+            .get("ndp_id_topic_segment")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
+
+        // AIR-012: Build subscriptions with ndp_id_topic_segment if topic_pattern exists
+        let subscriptions = if let Some(ref pattern) = topic_pattern {
+            let mut sub = neural_core::sources::mqtt::SubscriptionConfig::new(
+                stream_id.to_string(),
+                pattern.clone(),
+            );
+            if let Some(segment) = ndp_id_topic_segment {
+                sub = sub.with_ndp_id_topic_segment(segment);
+            }
+            vec![sub]
+        } else {
+            Vec::new()
+        };
+
         #[allow(deprecated)]
         Ok(MqttConfig {
             broker_url,
             port,
             client_id,
             topic_pattern,
-            subscriptions: Vec::new(), // Using legacy topic_pattern for backward compatibility
+            subscriptions,
             qos,
             reconnect_delay: std::time::Duration::from_secs(reconnect_delay_secs),
             max_reconnect_delay: std::time::Duration::from_secs(max_reconnect_delay_secs),

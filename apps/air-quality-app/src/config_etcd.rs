@@ -150,6 +150,9 @@ pub struct SubscriptionConfig {
     pub topic_pattern: String,
     #[serde(default = "default_true_etcd")]
     pub enabled: bool,
+    /// AIR-012: Topic segment index to extract as ndp_id (0-indexed)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ndp_id_topic_segment: Option<usize>,
 }
 
 fn default_true_etcd() -> bool {

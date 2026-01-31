@@ -94,6 +94,9 @@ pub struct SubscriptionConfig {
     pub topic_pattern: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// AIR-012: Topic segment index to extract as ndp_id (0-indexed)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ndp_id_topic_segment: Option<usize>,
 }
 
 fn default_true() -> bool {
@@ -480,5 +483,100 @@ storage:
             ..config_qos0
         };
         assert!(matches!(config_invalid.get_qos(), QoS::AtLeastOnce));
+    }
+
+    // AIR-012: Tests for ndp_id_topic_segment feature
+    #[test]
+    fn test_subscription_config_with_ndp_id_topic_segment() {
+        let yaml = r#"
+stream_id: ha-state
+topic_pattern: "homeassistant/binary_sensor/+/state"
+ndp_id_topic_segment: 2
+"#;
+        let sub: SubscriptionConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(sub.stream_id, "ha-state");
+        assert_eq!(sub.topic_pattern, "homeassistant/binary_sensor/+/state");
+        assert_eq!(sub.ndp_id_topic_segment, Some(2));
+        assert!(sub.enabled); // default is true
+    }
+
+    #[test]
+    fn test_subscription_config_without_ndp_id_topic_segment() {
+        let yaml = r#"
+stream_id: air-quality
+topic_pattern: "airgradient/readings/+"
+"#;
+        let sub: SubscriptionConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(sub.stream_id, "air-quality");
+        assert_eq!(sub.topic_pattern, "airgradient/readings/+");
+        assert_eq!(sub.ndp_id_topic_segment, None);
+        assert!(sub.enabled); // default is true
+    }
+
+    #[test]
+    fn test_subscription_config_ndp_id_topic_segment_zero() {
+        // Test that segment index 0 works (first segment)
+        let yaml = r#"
+stream_id: test-stream
+topic_pattern: "prefix/+/suffix"
+ndp_id_topic_segment: 0
+"#;
+        let sub: SubscriptionConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(sub.ndp_id_topic_segment, Some(0));
+    }
+
+    #[test]
+    fn test_from_yaml_with_subscriptions_and_ndp_id_topic_segment() {
+        let yaml_content = r#"
+server:
+  host: "127.0.0.1"
+  port: 8080
+mqtt:
+  broker_url: "broker.example.com"
+  port: 1883
+  client_id: "test-client"
+  subscriptions:
+    - stream_id: air-quality
+      topic_pattern: "airgradient/readings/+"
+    - stream_id: ha-state
+      topic_pattern: "homeassistant/binary_sensor/+/state"
+      ndp_id_topic_segment: 2
+    - stream_id: ha-sensor
+      topic_pattern: "homeassistant/sensor/+/state"
+      ndp_id_topic_segment: 2
+      enabled: true
+  qos: 1
+  reconnect_delay_secs: 5
+  max_reconnect_delay_secs: 60
+  buffer_capacity: 2000
+storage:
+  base_path: "/data/parquet"
+  wal_enabled: true
+  batch_size: 50
+  batch_timeout_secs: 10
+"#;
+
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_config_ndp_id_segment.yaml");
+        let mut file = std::fs::File::create(&temp_file).unwrap();
+        file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = AppConfig::from_yaml(&temp_file).unwrap();
+        assert_eq!(config.mqtt.subscriptions.len(), 3);
+
+        // First subscription: no ndp_id_topic_segment
+        assert_eq!(config.mqtt.subscriptions[0].stream_id, "air-quality");
+        assert_eq!(config.mqtt.subscriptions[0].ndp_id_topic_segment, None);
+
+        // Second subscription: has ndp_id_topic_segment = 2
+        assert_eq!(config.mqtt.subscriptions[1].stream_id, "ha-state");
+        assert_eq!(config.mqtt.subscriptions[1].ndp_id_topic_segment, Some(2));
+
+        // Third subscription: has ndp_id_topic_segment = 2 and enabled = true
+        assert_eq!(config.mqtt.subscriptions[2].stream_id, "ha-sensor");
+        assert_eq!(config.mqtt.subscriptions[2].ndp_id_topic_segment, Some(2));
+        assert!(config.mqtt.subscriptions[2].enabled);
+
+        std::fs::remove_file(temp_file).ok();
     }
 }
