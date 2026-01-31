@@ -16,11 +16,11 @@ partitioning_strategy: "daily"
 # Schema definition - simple state event
 fields:
   state:
-    type: "text"
+    type: "string"
     description: "Binary state: on (open) or off (closed)"
     nullable: false
   source_entity_id:
-    type: "text"
+    type: "string"
     description: "Home Assistant entity ID for traceability"
     nullable: true
 
