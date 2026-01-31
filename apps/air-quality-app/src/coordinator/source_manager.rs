@@ -279,11 +279,41 @@ impl SourceManager {
                 // Parse MQTT config from source params
                 let config = self.parse_mqtt_config(stream_id, source_config)?;
 
+                // AIR-012: Extract parser config from YAML (like HTTP does)
+                let parser_config = if let Some(parser_val) = source_config.params.get("parser") {
+                    serde_json::from_value::<ParserConfig>(parser_val.clone()).map_err(|e| {
+                        SourceManagerError::ConfigError(format!(
+                            "Failed to parse parser config for MQTT stream {}: {}",
+                            stream_id, e
+                        ))
+                    })?
+                } else {
+                    // Fallback to default FlatJson parser (AirGradient-compatible)
+                    ParserConfig {
+                        parser_type: ParserType::FlatJson,
+                        location_id_field: "serialno".to_string(),
+                        default_location_id: None,
+                        skip_fields: vec![
+                            "serialno".to_string(),
+                            "wifi".to_string(),
+                            "boot".to_string(),
+                            "firmware".to_string(),
+                            "model".to_string(),
+                            "ledMode".to_string(),
+                            "bootCount".to_string(),
+                        ],
+                        field_mappings: None,
+                        default_tags: std::collections::HashMap::new(),
+                        ..Default::default()
+                    }
+                };
+
                 Some(tokio::spawn(async move {
                     if let Err(e) = Self::run_mqtt_source(
                         stream_id_clone,
                         storage_id_clone,
                         config,
+                        parser_config,
                         event_bus,
                         cancel_clone,
                         ndp_id,
@@ -750,35 +780,23 @@ impl SourceManager {
     }
 
     /// Run MQTT source (DP-012: publishes RawDataPoint to EventBus)
+    /// AIR-012: Now accepts parser_config from YAML instead of hardcoding
     async fn run_mqtt_source(
         stream_id: String,
         _source_id: String,
         config: MqttConfig,
+        parser_config: ParserConfig,
         event_bus: Arc<EventBus>,
         cancel_token: CancellationToken,
         ndp_id: Option<String>,
         context: Option<serde_json::Value>,
     ) -> Result<(), SourceManagerError> {
-        info!("Starting MQTT source for stream {}", stream_id);
+        info!(
+            "Starting MQTT source for stream {} with parser type {:?}",
+            stream_id, parser_config.parser_type
+        );
 
-        // Create parser from config (FlatJson for AirGradient MQTT messages)
-        let parser_config = ParserConfig {
-            parser_type: ParserType::FlatJson,
-            location_id_field: "serialno".to_string(),
-            default_location_id: None,
-            skip_fields: vec![
-                "serialno".to_string(),
-                "wifi".to_string(),
-                "boot".to_string(),
-                "firmware".to_string(),
-                "model".to_string(),
-                "ledMode".to_string(),
-                "bootCount".to_string(),
-            ],
-            field_mappings: None,
-            default_tags: std::collections::HashMap::new(),
-            ..Default::default()
-        };
+        // AIR-012: Create parser from config (now from YAML, not hardcoded)
         let parser = create_parser_from_config(parser_config).map_err(|e| {
             SourceManagerError::SpawnError(format!("Failed to create parser: {}", e))
         })?;
