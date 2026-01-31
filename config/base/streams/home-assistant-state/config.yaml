@@ -42,7 +42,7 @@ sources:
         type: indoor
         path: /home
       environment: indoor
-    broker_url: "192.168.52.103"
+    broker_url: "mosquitto"
     port: 1883
     client_id: "ndp-home-assistant-state"
     topic_pattern: "homeassistant/binary_sensor/+/state"
