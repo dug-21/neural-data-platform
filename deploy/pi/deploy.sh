@@ -259,6 +259,38 @@ except Exception:
     fi
 }
 
+# Extract column names from dimension config schema.fields array
+# Returns comma-separated list of column names for SQL COPY
+yaml_get_schema_columns() {
+    local file="$1"
+    local result=""
+
+    if command -v python3 &> /dev/null; then
+        result=$(python3 -c "
+import yaml
+try:
+    with open('$file') as f:
+        data = yaml.safe_load(f)
+    fields = data.get('schema', {}).get('fields', [])
+    if fields:
+        names = [f['name'] for f in fields if 'name' in f]
+        print(','.join(names))
+    else:
+        print('')
+except Exception as e:
+    print('')
+" 2>/dev/null)
+    elif command -v yq &> /dev/null; then
+        if yq --version 2>&1 | grep -q "mikefarah"; then
+            result=$(yq eval '.schema.fields[].name' "$file" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+        else
+            result=$(yq -r '.schema.fields[].name' "$file" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+        fi
+    fi
+
+    echo "$result"
+}
+
 # Show environment on startup
 log "Environment: $DEPLOY_ENV (compose: $(basename $COMPOSE_FILE))"
 
@@ -821,12 +853,21 @@ import_dimension_sql() {
         return 1
     fi
 
+    # Extract column names from schema.fields in YAML config
+    # This ensures we only import to columns defined in the CSV, not audit columns
+    local columns=$(yaml_get_schema_columns "$config_file")
+    if [ -z "$columns" ]; then
+        warn "No schema.fields defined in $config_file, attempting import without column spec"
+    fi
+
     log "Importing dimension data to ${schema_name}.${table_name}..."
 
     if [ "$strategy" = "truncate_and_load" ]; then
         # Truncate existing data
-        dcx timescaledb psql -U postgres -d ndp -c \
-            "TRUNCATE TABLE ${schema_name}.${table_name};" 2>/dev/null || true
+        if ! dcx timescaledb psql -U postgres -d ndp -c \
+            "TRUNCATE TABLE ${schema_name}.${table_name};" 2>&1; then
+            warn "Truncate failed (table may not exist yet)"
+        fi
     fi
 
     # Import CSV data using COPY
@@ -834,14 +875,24 @@ import_dimension_sql() {
     local temp_file="/tmp/dim_import_$$.csv"
     docker cp "$source_file" "$(docker compose -f "$COMPOSE_FILE" ps -q timescaledb):$temp_file"
 
-    if dcx timescaledb psql -U postgres -d ndp -c \
-        "\\COPY ${schema_name}.${table_name} FROM '$temp_file' WITH (FORMAT csv, HEADER true);" 2>/dev/null; then
+    # Build COPY command with explicit columns if available
+    local copy_cmd
+    if [ -n "$columns" ]; then
+        copy_cmd="\\COPY ${schema_name}.${table_name}(${columns}) FROM '$temp_file' WITH (FORMAT csv, HEADER true);"
+    else
+        copy_cmd="\\COPY ${schema_name}.${table_name} FROM '$temp_file' WITH (FORMAT csv, HEADER true);"
+    fi
+
+    local output
+    if output=$(dcx timescaledb psql -U postgres -d ndp -c "$copy_cmd" 2>&1); then
         log "Successfully imported dimension data to ${schema_name}.${table_name}"
+        log "$output"
         # Clean up temp file in container
         dcx timescaledb rm -f "$temp_file" 2>/dev/null || true
         return 0
     else
         warn "Failed to import dimension data to ${schema_name}.${table_name}"
+        warn "Error: $output"
         dcx timescaledb rm -f "$temp_file" 2>/dev/null || true
         return 1
     fi
