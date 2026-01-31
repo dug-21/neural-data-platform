@@ -320,67 +320,86 @@ impl MqttSource {
                     // Route topic to subscription
                     match router.route(&publish.topic) {
                         Some(route) => {
-                            // Parse payload using injected parser with context (AIR-009)
-                            match serde_json::from_slice::<Value>(&publish.payload) {
-                                Ok(json) => {
-                                    let timestamp = Utc::now();
+                            let timestamp = Utc::now();
 
-                                    // DP-004: Cache raw payload for Bronze layer (RawSource)
-                                    {
-                                        let mut raw_point =
-                                            RawDataPoint::new(source_id.clone(), json.clone())
-                                                .with_timestamp(timestamp);
+                            // AIR-012: Try JSON first, fall back to raw text wrapper
+                            // This enables Home Assistant integration with plain text payloads
+                            let json = match serde_json::from_slice::<Value>(&publish.payload) {
+                                Ok(json) => json,
+                                Err(_) => {
+                                    // Wrap raw text payload for RawTextParser
+                                    // Format: { "_raw_text": "on", "_topic": "homeassistant/..." }
+                                    let raw_text = String::from_utf8_lossy(&publish.payload);
+                                    debug!(
+                                        topic = %publish.topic,
+                                        raw_text = %raw_text,
+                                        "Wrapping non-JSON payload for RawTextParser"
+                                    );
+                                    serde_json::json!({
+                                        "_raw_text": raw_text.to_string(),
+                                        "_topic": publish.topic.clone()
+                                    })
+                                }
+                            };
 
-                                        if let Some(ref id) = ndp_id {
-                                            raw_point = raw_point.with_ndp_id(id.clone());
-                                        }
-                                        if let Some(ref ctx) = context {
-                                            raw_point = raw_point.with_context(ctx.clone());
-                                        }
+                            // DP-004: Cache raw payload for Bronze layer (RawSource)
+                            {
+                                let mut raw_point =
+                                    RawDataPoint::new(source_id.clone(), json.clone())
+                                        .with_timestamp(timestamp);
 
-                                        let mut raw_cache = cached_raw_points.lock().await;
-                                        raw_cache.push(raw_point);
+                                // AIR-012: Dynamic ndp_id extraction from topic for event-oriented streams
+                                // If ndp_id_topic_segment is configured, extract from topic path.
+                                // Otherwise, fall back to static ndp_id from config.
+                                let effective_ndp_id = route
+                                    .extract_ndp_id_from_topic(&publish.topic)
+                                    .or_else(|| ndp_id.clone());
+
+                                if let Some(id) = effective_ndp_id {
+                                    raw_point = raw_point.with_ndp_id(id);
+                                }
+                                if let Some(ref ctx) = context {
+                                    raw_point = raw_point.with_context(ctx.clone());
+                                }
+
+                                let mut raw_cache = cached_raw_points.lock().await;
+                                raw_cache.push(raw_point);
+                            }
+
+                            // Parse for Silver layer (legacy Source trait)
+                            // AIR-012: Use dynamic ndp_id if extracted from topic
+                            let effective_ndp_id_for_parse = route
+                                .extract_ndp_id_from_topic(&publish.topic)
+                                .or_else(|| ndp_id.clone());
+                            let parse_context =
+                                ParseContext::new(effective_ndp_id_for_parse, context.clone());
+                            match parser.parse_with_context(
+                                &json,
+                                timestamp,
+                                &parse_context,
+                            ) {
+                                Ok(mut points) => {
+                                    // Tag points with stream_id and topic
+                                    for point in &mut points {
+                                        point.tags.insert(
+                                            "stream_id".to_string(),
+                                            route.stream_id.clone(),
+                                        );
+                                        point.tags.insert(
+                                            "topic".to_string(),
+                                            publish.topic.clone(),
+                                        );
                                     }
-
-                                    // Parse for Silver layer (legacy Source trait)
-                                    let parse_context =
-                                        ParseContext::new(ndp_id.clone(), context.clone());
-                                    match parser.parse_with_context(
-                                        &json,
-                                        timestamp,
-                                        &parse_context,
-                                    ) {
-                                        Ok(mut points) => {
-                                            // Tag points with stream_id and topic
-                                            for point in &mut points {
-                                                point.tags.insert(
-                                                    "stream_id".to_string(),
-                                                    route.stream_id.clone(),
-                                                );
-                                                point.tags.insert(
-                                                    "topic".to_string(),
-                                                    publish.topic.clone(),
-                                                );
-                                            }
-                                            // Add to cache for fetch()
-                                            let mut cache = cached_points.lock().await;
-                                            cache.extend(points);
-                                        }
-                                        Err(e) => {
-                                            error!(
-                                                topic = %publish.topic,
-                                                stream_id = %route.stream_id,
-                                                error = %e,
-                                                "Failed to parse MQTT payload"
-                                            );
-                                        }
-                                    }
+                                    // Add to cache for fetch()
+                                    let mut cache = cached_points.lock().await;
+                                    cache.extend(points);
                                 }
                                 Err(e) => {
                                     error!(
                                         topic = %publish.topic,
+                                        stream_id = %route.stream_id,
                                         error = %e,
-                                        "Failed to parse JSON from MQTT payload"
+                                        "Failed to parse MQTT payload"
                                     );
                                 }
                             }
@@ -627,6 +646,7 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
+            raw_text_config: None,
             default_tags: [("source".to_string(), "mqtt".to_string())]
                 .into_iter()
                 .collect(),
@@ -1246,6 +1266,7 @@ mod tests {
                 topic_pattern: "test/+".to_string(),
                 parser: None,
                 enabled: true,
+                ndp_id_topic_segment: None,
             }],
             topic_pattern: None,
             ..Default::default()

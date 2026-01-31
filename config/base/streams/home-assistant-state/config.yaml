@@ -1,0 +1,180 @@
+# Home Assistant State Stream Configuration
+# GitOps managed - synced to etcd at /streams/home-assistant-state/*
+#
+# IMPORTANT: This stream handles plain text MQTT payloads ("on"/"off"),
+# not JSON. The parser configuration below uses a custom parser type
+# that may require implementation. See air-012 feature documentation.
+
+stream_id: "home-assistant-state"
+description: "Window/door state events from Home Assistant via MQTT"
+version: "1.0.0"
+enabled: true
+retention_days: 365
+compression_after_days: 7
+partitioning_strategy: "daily"
+
+# Schema definition - simple state event
+fields:
+  state:
+    type: "text"
+    description: "Binary state: on (open) or off (closed)"
+    nullable: false
+  source_entity_id:
+    type: "text"
+    description: "Home Assistant entity ID for traceability"
+    nullable: true
+
+# MQTT Source Configuration
+# Note: Connects to Home Assistant MQTT broker (internal network, no auth)
+sources:
+  - type: mqtt
+    enabled: true
+    # AIR-012: ndp_id extracted dynamically from topic segment 2
+    # Topic: homeassistant/binary_sensor/{ndp_id}/state
+    # Each device gets its own ndp_id (door_backslider, door_officewindow, etc.)
+    ndp_id_topic_segment: 2
+    context:
+      source_type:
+        provider: home_assistant
+        purpose: binary_sensor_state
+      location:
+        coordinates: [29.95838, -81.30878]
+        type: indoor
+        path: /home
+      environment: indoor
+    broker_url: "192.168.52.103"
+    port: 1883
+    client_id: "ndp-home-assistant-state"
+    topic_pattern: "homeassistant/binary_sensor/+/state"
+    qos: 1
+    reconnect_delay_secs: 1
+    max_reconnect_delay_secs: 30
+    buffer_capacity: 100
+    # Parser configuration for plain text payloads
+    # NOTE: The MQTT source wraps non-JSON payloads in a JSON structure:
+    #   Topic: homeassistant/binary_sensor/door_backslider/state
+    #   Raw payload: "on"
+    #   Wrapped: {"_raw_text": "on", "_topic": "homeassistant/binary_sensor/door_backslider/state"}
+    # The ndp_id is extracted from topic segment 2 via ndp_id_topic_segment above.
+    parser:
+      parser_type: flat_json
+      location_id_field: _topic
+      default_location_id: unknown
+      default_tags:
+        source: mqtt
+        stream_id: home-assistant-state
+        provider: home_assistant
+
+# Storage configuration (smaller batches due to sparse events)
+storage:
+  batch_size: 10
+  batch_timeout_secs: 60
+  buffer_capacity: 100
+
+# Entity schemas for data dictionary
+entity_schemas:
+  - schema_name: ha-binary-sensor
+    description: Home Assistant binary sensor state events (windows, doors)
+    device_class: binary_sensor
+    attributes:
+      - name: state
+        type: string
+        unit: null
+        description: Binary state (on=open, off=closed)
+        nullable: false
+        enum: ["on", "off"]
+      - name: source_entity_id
+        type: string
+        unit: null
+        description: Original Home Assistant entity identifier
+        nullable: true
+
+# Silver ETL Configuration
+# Transforms Bronze Parquet data to Silver TimescaleDB
+silver_etl:
+  enabled: true
+  target_table: silver.state_events
+  description: "Window/door state change events from Home Assistant"
+  grain: "One row per state change event"
+
+  # Timestamp mapping from Bronze to Silver
+  # Bronze stores ingestion timestamp in microseconds
+  timestamp:
+    source_field: timestamp
+    target_field: event_time
+    transform: microseconds_to_timestamp
+
+  # Identity fields (used in deduplication)
+  identity_fields:
+    - source: ndp_id
+      target: ndp_id
+
+  # Field mappings with transforms and DQ rules
+  field_mappings:
+    # State field: the binary on/off value
+    # AIR-012: Extracted from wrapped payload's _raw_text field
+    - source_path: raw_payload._raw_text
+      target_column: state
+      type: text
+      description: "Binary state (on/off)"
+      nullable: false
+      dq_rules:
+        - rule: value_in_set
+          values: ["on", "off"]
+          action: flag
+          message: "unexpected_state_value"
+
+    # Source entity ID: constructed from ndp_id for traceability
+    # Transform: prepend "binary_sensor." to ndp_id
+    # AIR-012: ndp_id is now dynamically extracted from topic (e.g., door_backslider)
+    - source_path: ndp_id
+      target_column: source_entity_id
+      type: text
+      description: "Home Assistant entity ID (binary_sensor.{ndp_id})"
+      nullable: true
+      transform: "prefix:binary_sensor."
+
+  # Additional DQ rules
+  dq_rules:
+    # Null check on ndp_id
+    - rule: null_check
+      field: ndp_id
+      action: reject
+      message: "missing_ndp_id"
+
+    # Freshness check - allow up to 5 minutes future (clock skew)
+    - rule: freshness_check
+      field: event_time
+      max_future: "5 minutes"
+      action: flag
+      message: "future_timestamp"
+
+  # DQ output configuration
+  dq_output:
+    enabled: true
+    target_column: dq_flags
+    include_rules: true
+    include_values: false
+
+  # Deduplication strategy
+  # Events are unique by (event_time, ndp_id)
+  deduplication:
+    enabled: true
+    key_columns: [event_time, ndp_id]
+    strategy: upsert
+
+  # Incremental processing
+  incremental:
+    enabled: true
+    watermark_column: event_time
+    lag_interval: 1 minute
+
+# Pipeline health configuration
+# State events are sparse (fire only on change), so use longer thresholds
+pipeline_health:
+  freshness_thresholds:
+    fresh: "18 hours"
+    stale: "36 hours"
+    critical: "72 hours"
+  # Explanation: Windows may remain closed for days. These thresholds
+  # prevent false alarms while still catching genuine connection issues.

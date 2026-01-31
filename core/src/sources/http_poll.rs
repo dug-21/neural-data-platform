@@ -925,6 +925,7 @@ impl GenericHttpPollingSource {
             field_mappings: None,
             array_config: None,
             column_config: None,
+            raw_text_config: None,
             default_tags: [("source".to_string(), "http".to_string())].into(),
         };
         let parser = crate::parsers::FlatJsonParser::from_config(parser_config)

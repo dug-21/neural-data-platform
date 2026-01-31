@@ -25,3 +25,6 @@ motion_living,motion,Living Room Motion,home/living_room,,
 motion_bedroom,motion,Bedroom Motion,home/bedroom,,
 light_living,light,Living Room Light,home/living_room,,
 light_bedroom,light,Bedroom Light,home/bedroom,,
+door_backslider,door,Back Door Slider,home/living_room,aq_airgradient_1,south
+door_officewindow,window,Office Window,home/office,aq_airgradient_1,east
+door_dinettewindow,window,Dinette Window,home/dining,aq_airgradient_1,west

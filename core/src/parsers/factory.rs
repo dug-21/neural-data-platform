@@ -9,6 +9,7 @@ use crate::parsers::column_oriented::ColumnOrientedParser;
 use crate::parsers::config::{ParserConfig, ParserType};
 use crate::parsers::flat_json::FlatJsonParser;
 use crate::parsers::json_path::JsonPathParser;
+use crate::parsers::raw_text::RawTextParser;
 use crate::parsers::traits::Parser;
 
 /// Create a parser instance from configuration
@@ -41,9 +42,14 @@ pub fn create_parser_from_config(
             let parser = ColumnOrientedParser::from_config(config)?;
             Ok(Box::new(parser))
         }
+        ParserType::RawText => {
+            let raw_text_config = config.raw_text_config.clone().unwrap_or_default();
+            let parser = RawTextParser::with_raw_text_config(config, raw_text_config)?;
+            Ok(Box::new(parser))
+        }
         ParserType::Custom(ref name) => {
             Err(CoreError::Config(format!(
-                "Custom parser type '{}' not registered. Only built-in parsers (flat_json, json_path, array_iterator, column_oriented) are supported.",
+                "Custom parser type '{}' not registered. Only built-in parsers (flat_json, json_path, array_iterator, column_oriented, raw_text) are supported.",
                 name
             )))
         }
@@ -68,6 +74,7 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
+            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -93,6 +100,7 @@ mod tests {
             }]),
             array_config: None,
             column_config: None,
+            raw_text_config: None,
             default_tags,
         };
 
@@ -110,6 +118,7 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
+            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -152,10 +161,38 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: Some(column_config),
+            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
         let parser = create_parser_from_config(config).unwrap();
         assert_eq!(parser.name(), "column_oriented");
+    }
+
+    #[test]
+    fn test_create_raw_text_parser() {
+        use crate::parsers::raw_text::RawTextConfig;
+
+        let raw_text_config = RawTextConfig {
+            ndp_id_regex: Some("homeassistant/[^/]+/(?P<ndp_id>[^/]+)/state".to_string()),
+            metric_name: "state".to_string(),
+            parse_numeric: true,
+            ..Default::default()
+        };
+
+        let config = ParserConfig {
+            parser_type: ParserType::RawText,
+            location_id_field: "topic".to_string(),
+            default_location_id: Some("unknown".to_string()),
+            skip_fields: vec![],
+            field_mappings: None,
+            array_config: None,
+            column_config: None,
+            raw_text_config: Some(raw_text_config),
+            default_tags: HashMap::new(),
+        };
+
+        let parser = create_parser_from_config(config).unwrap();
+        assert_eq!(parser.name(), "raw_text");
     }
 }

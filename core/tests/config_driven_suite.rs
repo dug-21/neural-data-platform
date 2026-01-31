@@ -47,8 +47,7 @@ fn flat_parser_requires_config() {
         skip_fields: vec!["device_id".to_string(), "timestamp".to_string()],
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config);
@@ -74,8 +73,7 @@ fn json_path_parser_requires_mappings() {
             transform: None,
         }]),
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = JsonPathParser::from_config(config);
@@ -101,8 +99,7 @@ fn flat_parser_extracts_all_numeric_fields() {
         skip_fields: vec!["id".to_string()],
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config).unwrap();
@@ -131,8 +128,7 @@ fn flat_parser_extracts_unknown_future_fields() {
         skip_fields: vec!["serialno".to_string()],
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config).unwrap();
@@ -172,8 +168,7 @@ fn flat_parser_extracts_generic_unknown_fields() {
         skip_fields: vec!["device_id".to_string(), "timestamp".to_string()],
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config).unwrap();
@@ -220,8 +215,7 @@ fn config_skip_fields_affects_extraction() {
         ],
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let config_without_skip = ParserConfig {
@@ -231,8 +225,7 @@ fn config_skip_fields_affects_extraction() {
         skip_fields: vec!["serialno".to_string()], // Only skip ID
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser_with_skip = FlatJsonParser::from_config(config_with_skip).unwrap();
@@ -274,8 +267,7 @@ fn config_location_id_field_is_honored() {
         skip_fields: vec!["serialno".to_string()],
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config_serialno).unwrap();
@@ -309,8 +301,7 @@ fn config_default_tags_propagate() {
         skip_fields: vec!["serialno".to_string()],
         field_mappings: None,
         default_tags: tags,
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config).unwrap();
@@ -350,8 +341,7 @@ fn empty_skip_fields_extracts_all() {
         skip_fields: vec![], // EMPTY - should skip nothing
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config).unwrap();
@@ -383,8 +373,7 @@ fn field_names_not_transformed() {
         skip_fields: vec!["serialno".to_string()],
         field_mappings: None,
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = FlatJsonParser::from_config(config).unwrap();
@@ -461,8 +450,7 @@ fn json_path_extracts_nested_fields() {
             },
         ]),
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = JsonPathParser::from_config(config).unwrap();
@@ -513,8 +501,7 @@ fn json_path_extracts_array_elements() {
             },
         ]),
         default_tags: HashMap::new(),
-        array_config: None,
-        column_config: None,
+        ..Default::default()
     };
 
     let parser = JsonPathParser::from_config(config).unwrap();

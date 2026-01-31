@@ -22,12 +22,30 @@ pub struct RouteEntry {
     pub parser_config: Option<ParserConfig>,
     /// Whether this route is enabled
     pub enabled: bool,
+    /// AIR-012: Topic segment index to extract as ndp_id (0-indexed)
+    pub ndp_id_topic_segment: Option<usize>,
 }
 
 impl RouteEntry {
     /// Check if a topic matches this route.
     pub fn matches(&self, topic: &str) -> bool {
         self.regex.is_match(topic)
+    }
+
+    /// AIR-012: Extract ndp_id from topic if configured.
+    ///
+    /// When `ndp_id_topic_segment` is set, extracts that segment from the topic
+    /// as the ndp_id. This enables event-oriented streams where each device
+    /// should have its own ndp_id derived from the topic path.
+    ///
+    /// # Example
+    ///
+    /// For topic "homeassistant/binary_sensor/door_backslider/state"
+    /// with ndp_id_topic_segment = 2, returns Some("door_backslider")
+    pub fn extract_ndp_id_from_topic(&self, topic: &str) -> Option<String> {
+        let segment_index = self.ndp_id_topic_segment?;
+        let segments: Vec<&str> = topic.split('/').collect();
+        segments.get(segment_index).map(|s| s.to_string())
     }
 }
 
@@ -87,6 +105,7 @@ impl TopicRouter {
                 stream_id: sub.stream_id,
                 parser_config: sub.parser,
                 enabled: true,
+                ndp_id_topic_segment: sub.ndp_id_topic_segment,
             });
         }
 
@@ -468,5 +487,84 @@ mod tests {
                 .stream_id,
             "catchall"
         );
+    }
+
+    // --- AIR-012: ndp_id Extraction Tests ---
+
+    #[test]
+    fn test_extract_ndp_id_from_topic_segment_2() {
+        let sub = SubscriptionConfig::new("ha-state", "homeassistant/binary_sensor/+/state")
+            .with_ndp_id_topic_segment(2);
+        let router = TopicRouter::new(vec![sub]).unwrap();
+
+        let route = router.route("homeassistant/binary_sensor/door_backslider/state").unwrap();
+        let ndp_id = route.extract_ndp_id_from_topic("homeassistant/binary_sensor/door_backslider/state");
+
+        assert_eq!(ndp_id, Some("door_backslider".to_string()));
+    }
+
+    #[test]
+    fn test_extract_ndp_id_from_topic_different_segments() {
+        // Test extracting from different segment indices
+        let topic = "a/b/c/d/e";
+
+        let sub0 = SubscriptionConfig::new("test", "a/+/+/+/+").with_ndp_id_topic_segment(0);
+        let router0 = TopicRouter::new(vec![sub0]).unwrap();
+        let route0 = router0.route(topic).unwrap();
+        assert_eq!(route0.extract_ndp_id_from_topic(topic), Some("a".to_string()));
+
+        let sub3 = SubscriptionConfig::new("test", "a/+/+/+/+").with_ndp_id_topic_segment(3);
+        let router3 = TopicRouter::new(vec![sub3]).unwrap();
+        let route3 = router3.route(topic).unwrap();
+        assert_eq!(route3.extract_ndp_id_from_topic(topic), Some("d".to_string()));
+
+        let sub4 = SubscriptionConfig::new("test", "a/+/+/+/+").with_ndp_id_topic_segment(4);
+        let router4 = TopicRouter::new(vec![sub4]).unwrap();
+        let route4 = router4.route(topic).unwrap();
+        assert_eq!(route4.extract_ndp_id_from_topic(topic), Some("e".to_string()));
+    }
+
+    #[test]
+    fn test_extract_ndp_id_from_topic_out_of_bounds() {
+        let sub = SubscriptionConfig::new("test", "a/b/c")
+            .with_ndp_id_topic_segment(10); // Out of bounds
+        let router = TopicRouter::new(vec![sub]).unwrap();
+
+        let route = router.route("a/b/c").unwrap();
+        let ndp_id = route.extract_ndp_id_from_topic("a/b/c");
+
+        assert_eq!(ndp_id, None);
+    }
+
+    #[test]
+    fn test_extract_ndp_id_from_topic_not_configured() {
+        // When ndp_id_topic_segment is not set, should return None
+        let sub = SubscriptionConfig::new("test", "a/b/+");
+        let router = TopicRouter::new(vec![sub]).unwrap();
+
+        let route = router.route("a/b/c").unwrap();
+        let ndp_id = route.extract_ndp_id_from_topic("a/b/c");
+
+        assert_eq!(ndp_id, None);
+    }
+
+    #[test]
+    fn test_extract_ndp_id_home_assistant_devices() {
+        // Test realistic Home Assistant scenario with multiple devices
+        let sub = SubscriptionConfig::new("ha-binary-sensor", "homeassistant/binary_sensor/+/state")
+            .with_ndp_id_topic_segment(2);
+        let router = TopicRouter::new(vec![sub]).unwrap();
+
+        let devices = vec![
+            ("homeassistant/binary_sensor/door_backslider/state", "door_backslider"),
+            ("homeassistant/binary_sensor/door_officewindow/state", "door_officewindow"),
+            ("homeassistant/binary_sensor/door_dinettewindow/state", "door_dinettewindow"),
+        ];
+
+        for (topic, expected_ndp_id) in devices {
+            let route = router.route(topic).unwrap();
+            let ndp_id = route.extract_ndp_id_from_topic(topic);
+            assert_eq!(ndp_id, Some(expected_ndp_id.to_string()), "Failed for topic: {}", topic);
+        }
     }
 }

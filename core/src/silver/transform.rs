@@ -160,6 +160,7 @@ fn build_column_oriented_parser(
                 default_tags: HashMap::new(),
                 array_config: None,
                 column_config: Some(column_config),
+                raw_text_config: None,
             };
 
             ColumnOrientedParser::from_config(base_config)

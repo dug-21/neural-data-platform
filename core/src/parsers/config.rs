@@ -3,6 +3,7 @@
 //! Defines the configuration structures for creating parsers from YAML/JSON config.
 
 use crate::parsers::array_iterator::ArrayIteratorConfig;
+use crate::parsers::raw_text::RawTextConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -38,6 +39,10 @@ pub struct ParserConfig {
     /// For ColumnOrientedParser: column-specific configuration
     #[serde(default)]
     pub column_config: Option<ColumnOrientedConfig>,
+
+    /// For RawTextParser: raw text parsing configuration (AIR-012)
+    #[serde(default)]
+    pub raw_text_config: Option<RawTextConfig>,
 }
 
 impl Default for ParserConfig {
@@ -51,6 +56,7 @@ impl Default for ParserConfig {
             default_tags: HashMap::new(),
             array_config: None,
             column_config: None,
+            raw_text_config: None,
         }
     }
 }
@@ -67,6 +73,9 @@ pub enum ParserType {
     ArrayIterator,
     /// Extract metrics from column-oriented data structures
     ColumnOriented,
+    /// Parse plain text payloads (e.g., "on", "off", "42.5") from Home Assistant
+    /// AIR-012: Home Assistant Integration
+    RawText,
     /// Custom parser (must be registered in code)
     Custom(String),
 }

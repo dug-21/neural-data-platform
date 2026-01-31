@@ -57,6 +57,16 @@ pub struct SubscriptionConfig {
     /// Whether this subscription is enabled (default: true)
     #[serde(default = "default_true")]
     pub enabled: bool,
+
+    /// AIR-012: Topic segment index to extract as ndp_id (0-indexed)
+    ///
+    /// For event-oriented streams where each device should have its own ndp_id,
+    /// this allows dynamic extraction from the topic path.
+    ///
+    /// Example: For topic "homeassistant/binary_sensor/door_backslider/state"
+    /// with ndp_id_topic_segment: 2, the ndp_id becomes "door_backslider"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ndp_id_topic_segment: Option<usize>,
 }
 
 impl SubscriptionConfig {
@@ -83,6 +93,7 @@ impl SubscriptionConfig {
             topic_pattern: topic_pattern.into(),
             parser: None,
             enabled: true,
+            ndp_id_topic_segment: None,
         }
     }
 
@@ -126,6 +137,26 @@ impl SubscriptionConfig {
     /// ```
     pub fn with_parser(mut self, parser: ParserConfig) -> Self {
         self.parser = Some(parser);
+        self
+    }
+
+    /// Set the topic segment index to extract as ndp_id (AIR-012)
+    ///
+    /// For event-oriented streams where each device should have its own ndp_id,
+    /// this allows dynamic extraction from the topic path.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use neural_core::sources::mqtt::SubscriptionConfig;
+    ///
+    /// // For topic "homeassistant/binary_sensor/door_backslider/state"
+    /// // segment 2 extracts "door_backslider" as ndp_id
+    /// let sub = SubscriptionConfig::new("ha-state", "homeassistant/binary_sensor/+/state")
+    ///     .with_ndp_id_topic_segment(2);
+    /// ```
+    pub fn with_ndp_id_topic_segment(mut self, segment: usize) -> Self {
+        self.ndp_id_topic_segment = Some(segment);
         self
     }
 
@@ -173,6 +204,7 @@ impl Default for SubscriptionConfig {
             topic_pattern: String::new(),
             parser: None,
             enabled: true,
+            ndp_id_topic_segment: None,
         }
     }
 }
@@ -372,6 +404,7 @@ enabled: true
             topic_pattern: "test/+".to_string(),
             parser: None,
             enabled: true,
+            ..Default::default()
         };
 
         assert!(matches!(
@@ -387,6 +420,7 @@ enabled: true
             topic_pattern: "".to_string(),
             parser: None,
             enabled: true,
+            ..Default::default()
         };
 
         assert!(matches!(
