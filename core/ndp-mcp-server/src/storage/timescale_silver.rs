@@ -206,6 +206,9 @@ impl SilverStorage for TimescaleSilverStorage {
         let conn = self.get_conn().await?;
 
         // Query combines data dictionary metadata with live TimescaleDB stats
+        // Note: data_dictionary stores fully-qualified names (silver.table_name)
+        // but hypertables/pg_class return unqualified names (table_name).
+        // We normalize by stripping 'silver.' prefix in JOINs.
         let query = r#"
             WITH hypertable_info AS (
                 SELECT
@@ -227,7 +230,9 @@ impl SilverStorage for TimescaleSilverStorage {
             ),
             dict_info AS (
                 SELECT
-                    table_name,
+                    table_name AS dict_table_name,
+                    -- Strip 'silver.' prefix for joining with hypertables
+                    REGEXP_REPLACE(table_name, '^silver\.', '') AS table_name,
                     description,
                     grain,
                     source_streams,
@@ -323,6 +328,9 @@ impl SilverStorage for TimescaleSilverStorage {
         }
 
         // Query table metadata from data dictionary
+        // Note: data_dictionary stores fully-qualified names (silver.table_name)
+        // but we normalize to unqualified name, so we need to match both formats
+        let dict_table_name = format!("silver.{}", table_name);
         let table_query = r#"
             SELECT
                 table_name,
@@ -332,10 +340,10 @@ impl SilverStorage for TimescaleSilverStorage {
                 hypertable_column,
                 chunk_interval::TEXT AS chunk_interval
             FROM data_dictionary.silver_tables
-            WHERE table_name = $1
+            WHERE table_name = $1 OR table_name = $2
         "#;
         let table_row = conn
-            .query_opt(table_query, &[&table_name])
+            .query_opt(table_query, &[&table_name, &dict_table_name])
             .await
             .map_err(|e| {
                 warn!("Data dictionary query failed, using fallback: {}", e);
@@ -343,6 +351,7 @@ impl SilverStorage for TimescaleSilverStorage {
             })?;
 
         // Query column definitions from data dictionary with fallback
+        // Note: data_dictionary stores fully-qualified names (silver.table_name)
         let columns_query = r#"
             SELECT
                 c.column_name,
@@ -353,10 +362,10 @@ impl SilverStorage for TimescaleSilverStorage {
                 c.is_primary_key,
                 c.sort_order
             FROM data_dictionary.silver_columns c
-            WHERE c.table_name = $1
+            WHERE c.table_name = $1 OR c.table_name = $2
             ORDER BY c.sort_order, c.column_name
         "#;
-        let column_rows = conn.query(columns_query, &[&table_name]).await;
+        let column_rows = conn.query(columns_query, &[&table_name, &dict_table_name]).await;
 
         let columns: Vec<SilverColumnInfo> = match column_rows {
             Ok(rows) if !rows.is_empty() => rows
@@ -563,6 +572,8 @@ impl SilverStorage for TimescaleSilverStorage {
     async fn get_stats(&self, table_name: &str) -> McpResult<SilverTableStats> {
         let table_name = Self::normalize_table_name(table_name);
         let time_column = Self::get_time_column(table_name);
+        // data_dictionary stores fully-qualified names (silver.table_name)
+        let dict_table_name = format!("silver.{}", table_name);
 
         debug!("Getting stats for Silver table: {}", table_name);
         let conn = self.get_conn().await?;
@@ -632,15 +643,16 @@ impl SilverStorage for TimescaleSilverStorage {
         };
 
         // Query DQ rules count
+        // Note: data_dictionary stores fully-qualified names (silver.table_name)
         let dq_query = r#"
             SELECT
                 COUNT(*) AS total_rules,
                 COUNT(DISTINCT silver_column) AS columns_with_rules
             FROM data_dictionary.silver_dq_rules
-            WHERE silver_table = $1
+            WHERE silver_table = $1 OR silver_table = $2
         "#;
         let dq_row = conn
-            .query_opt(dq_query, &[&table_name])
+            .query_opt(dq_query, &[&table_name, &dict_table_name])
             .await
             .ok()
             .flatten();

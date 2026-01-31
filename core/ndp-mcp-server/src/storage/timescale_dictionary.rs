@@ -101,11 +101,16 @@ impl TimescaleDictionaryStore {
     }
 
     /// Check if an entity is a Silver table.
+    /// Handles both qualified (silver.table) and unqualified (table) names.
     async fn is_silver_table(&self, conn: &PgConnection<'_>, name: &str) -> McpResult<bool> {
+        // Strip silver. prefix if present for normalized lookup
+        let normalized = name.strip_prefix("silver.").unwrap_or(name);
+        let qualified = format!("silver.{}", normalized);
+
         let row = conn
             .query_opt(
-                "SELECT EXISTS(SELECT 1 FROM data_dictionary.silver_tables WHERE table_name = $1) AS is_silver",
-                &[&name],
+                "SELECT EXISTS(SELECT 1 FROM data_dictionary.silver_tables WHERE table_name = $1 OR table_name = $2) AS is_silver",
+                &[&name, &qualified],
             )
             .await
             .map_err(|e| McpError::StorageError(format!("Database query error: {}", e)))?;
@@ -423,11 +428,21 @@ impl DictionaryStore for TimescaleDictionaryStore {
             "Listing DQ rules"
         );
 
+        // Normalize table name - data_dictionary stores with 'silver.' prefix
+        let qualified_table = table.as_ref().map(|t| {
+            if t.starts_with("silver.") {
+                t.clone()
+            } else {
+                format!("silver.{}", t)
+            }
+        });
+
         // Build query based on filters
+        // Note: Use qualified table name for data_dictionary lookup
         let (query, params): (&str, Vec<&(dyn tokio_postgres::types::ToSql + Sync)>) = match (
-            &table, &column,
+            &table, &qualified_table, &column,
         ) {
-            (None, None) => (
+            (None, _, None) => (
                 r#"
                     SELECT
                         silver_table,
@@ -445,7 +460,7 @@ impl DictionaryStore for TimescaleDictionaryStore {
                     "#,
                 vec![],
             ),
-            (Some(t), None) => (
+            (Some(t), Some(qt), None) => (
                 r#"
                     SELECT
                         silver_table,
@@ -455,15 +470,15 @@ impl DictionaryStore for TimescaleDictionaryStore {
                         action,
                         CASE WHEN silver_column IS NULL THEN 'cross-field' ELSE 'column' END AS scope
                     FROM data_dictionary.silver_dq_rules
-                    WHERE silver_table = $1
+                    WHERE silver_table = $1 OR silver_table = $2
                     ORDER BY CASE WHEN silver_column IS NULL THEN 1 ELSE 0 END,
                              silver_column,
                              rule_name
                     LIMIT 100
                     "#,
-                vec![t],
+                vec![t, qt],
             ),
-            (Some(t), Some(c)) => (
+            (Some(t), Some(qt), Some(c)) => (
                 r#"
                     SELECT
                         silver_table,
@@ -473,14 +488,15 @@ impl DictionaryStore for TimescaleDictionaryStore {
                         action,
                         CASE WHEN silver_column IS NULL THEN 'cross-field' ELSE 'column' END AS scope
                     FROM data_dictionary.silver_dq_rules
-                    WHERE silver_table = $1
-                      AND (silver_column = $2 OR (silver_column IS NULL AND $2 IS NULL))
+                    WHERE (silver_table = $1 OR silver_table = $2)
+                      AND (silver_column = $3 OR (silver_column IS NULL AND $3 IS NULL))
                     ORDER BY rule_name
                     LIMIT 100
                     "#,
-                vec![t, c],
+                vec![t, qt, c],
             ),
-            (None, Some(_)) => unreachable!(), // Already handled above
+            (None, _, Some(_)) => unreachable!(), // Already handled above
+            (Some(_), None, _) => unreachable!(), // qualified_table is always Some when table is Some
         };
 
         let rows = conn
