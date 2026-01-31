@@ -124,14 +124,13 @@ silver_etl:
           action: flag
 
     # Source entity ID: constructed from ndp_id for traceability
-    # Transform: prepend "binary_sensor." to ndp_id
     # AIR-012: ndp_id is now dynamically extracted from topic (e.g., door_backslider)
+    # Note: prefix transform removed - raw ndp_id stored; prefix can be added in views/queries
     - source_path: ndp_id
       target_column: source_entity_id
       type: text
-      description: "Home Assistant entity ID (binary_sensor.{ndp_id})"
+      description: "Home Assistant entity ID (ndp_id from topic, e.g., door_backslider)"
       nullable: true
-      transform: "prefix:binary_sensor."
 
   # Additional DQ rules
   dq_rules:
