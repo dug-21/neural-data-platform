@@ -119,10 +119,9 @@ silver_etl:
       description: "Binary state (on/off)"
       nullable: false
       dq_rules:
-        - rule: value_in_set
-          values: ["on", "off"]
+        - rule: enum_check
+          allowed_values: ["on", "off"]
           action: flag
-          message: "unexpected_state_value"
 
     # Source entity ID: constructed from ndp_id for traceability
     # Transform: prepend "binary_sensor." to ndp_id
@@ -140,14 +139,12 @@ silver_etl:
     - rule: null_check
       field: ndp_id
       action: reject
-      message: "missing_ndp_id"
 
     # Freshness check - allow up to 5 minutes future (clock skew)
     - rule: freshness_check
       field: event_time
       max_future: "5 minutes"
       action: flag
-      message: "future_timestamp"
 
   # DQ output configuration
   dq_output:
