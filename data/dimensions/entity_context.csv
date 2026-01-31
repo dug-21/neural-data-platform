@@ -1,30 +1,21 @@
-# Entity Context Dimension Data
-# Neural Data Platform - dp-013
-#
-# This file defines entity context for sensor enrichment.
-# Format: ndp_id,category,friendly_name,location_path,correlates_with,orientation
-#
-# correlates_with: Comma-separated list within quotes for multiple values
-# orientation: north, south, east, west, or empty
-#
 ndp_id,category,friendly_name,location_path,correlates_with,orientation
-temp_living,temperature,Living Room Temperature,home/living_room,humidity_living,
-humidity_living,humidity,Living Room Humidity,home/living_room,temp_living,
-temp_bedroom,temperature,Master Bedroom Temperature,home/bedroom,humidity_bedroom,
-humidity_bedroom,humidity,Master Bedroom Humidity,home/bedroom,temp_bedroom,
-temp_outdoor,temperature,Outdoor Temperature,outdoor,"humidity_outdoor,aqi_outdoor",north
-humidity_outdoor,humidity,Outdoor Humidity,outdoor,"temp_outdoor,aqi_outdoor",
-aqi_outdoor,air_quality,Outdoor AQI,outdoor,"temp_outdoor,humidity_outdoor",
-aq_airgradient_1,air_quality,Living Room Air Quality,home/living_room,"temp_living,humidity_living",
-door_back,door,Back Door,home/living_room,aq_airgradient_1,south
-door_front,door,Front Door,home/entryway,,north
-window_living_1,window,Living Room Window (East),home/living_room,aq_airgradient_1,east
-window_living_2,window,Living Room Window (West),home/living_room,aq_airgradient_1,west
-window_bedroom,window,Bedroom Window,home/bedroom,temp_bedroom,south
-motion_living,motion,Living Room Motion,home/living_room,,
-motion_bedroom,motion,Bedroom Motion,home/bedroom,,
-light_living,light,Living Room Light,home/living_room,,
-light_bedroom,light,Bedroom Light,home/bedroom,,
-door_backslider,door,Back Door Slider,home/living_room,aq_airgradient_1,south
-door_officewindow,window,Office Window,home/office,aq_airgradient_1,east
-door_dinettewindow,window,Dinette Window,home/dining,aq_airgradient_1,west
+temp_living,temperature,Living Room Temperature,home/living_room,{humidity_living},
+humidity_living,humidity,Living Room Humidity,home/living_room,{temp_living},
+temp_bedroom,temperature,Master Bedroom Temperature,home/bedroom,{humidity_bedroom},
+humidity_bedroom,humidity,Master Bedroom Humidity,home/bedroom,{temp_bedroom},
+temp_outdoor,temperature,Outdoor Temperature,outdoor,"{humidity_outdoor,aqi_outdoor}",north
+humidity_outdoor,humidity,Outdoor Humidity,outdoor,"{temp_outdoor,aqi_outdoor}",
+aqi_outdoor,air_quality,Outdoor AQI,outdoor,"{temp_outdoor,humidity_outdoor}",
+aq_airgradient_1,air_quality,Living Room Air Quality,home/living_room,"{temp_living,humidity_living}",
+door_back,door,Back Door,home/living_room,{aq_airgradient_1},south
+door_front,door,Front Door,home/entryway,{},north
+window_living_1,window,Living Room Window (East),home/living_room,{aq_airgradient_1},east
+window_living_2,window,Living Room Window (West),home/living_room,{aq_airgradient_1},west
+window_bedroom,window,Bedroom Window,home/bedroom,{temp_bedroom},south
+motion_living,motion,Living Room Motion,home/living_room,{},
+motion_bedroom,motion,Bedroom Motion,home/bedroom,{},
+light_living,light,Living Room Light,home/living_room,{},
+light_bedroom,light,Bedroom Light,home/bedroom,{},
+door_backslider,door,Back Door Slider,home/living_room,{aq_airgradient_1},south
+door_officewindow,window,Office Window,home/office,{aq_airgradient_1},east
+door_dinettewindow,window,Dinette Window,home/dining,{aq_airgradient_1},west
