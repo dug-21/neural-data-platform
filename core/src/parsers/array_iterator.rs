@@ -570,7 +570,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: Some(array_config),
             column_config: None,
-            raw_text_config: None,
         };
 
         ArrayIteratorParser::from_config(base_config).unwrap()
@@ -801,7 +800,6 @@ mod tests {
             },
             array_config: Some(array_config),
             column_config: None,
-            raw_text_config: None,
         };
 
         let parser = ArrayIteratorParser::from_config(base_config).unwrap();
@@ -961,7 +959,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: Some(array_config),
             column_config: None,
-            raw_text_config: None,
         };
 
         let parser = ArrayIteratorParser::from_config(base_config).unwrap();
@@ -1042,7 +1039,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: Some(array_config),
             column_config: None,
-            raw_text_config: None,
         };
 
         let parser = ArrayIteratorParser::from_config(base_config).unwrap();
@@ -1105,7 +1101,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: Some(array_config),
             column_config: None,
-            raw_text_config: None,
         };
 
         let parser = ArrayIteratorParser::from_config(base_config).unwrap();
@@ -1179,7 +1174,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: Some(array_config),
             column_config: None,
-            raw_text_config: None,
         };
 
         let parser = ArrayIteratorParser::from_config(base_config).unwrap();

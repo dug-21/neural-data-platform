@@ -394,8 +394,8 @@ pub fn build_parser_from_config(
                 skip_fields: vec![],
                 field_mappings: None,
                 default_tags: HashMap::new(),
-                array_config: None,
                 column_config: Some(column_config),
+                ..Default::default()
             };
 
             ColumnOrientedParser::from_config(base_config)
@@ -485,8 +485,8 @@ mod tests {
             skip_fields: vec![],
             field_mappings: None,
             default_tags: HashMap::new(),
-            array_config: None,
             column_config: Some(column_config),
+            ..Default::default()
         };
 
         ColumnOrientedParser::from_config(base_config).unwrap()
@@ -878,8 +878,8 @@ mod tests {
             skip_fields: vec![],
             field_mappings: None,
             default_tags: HashMap::new(),
-            array_config: None,
             column_config: None, // Will be set by build_parser
+            ..Default::default()
         };
 
         let result = build_parser(&parser_config, &column_config);

@@ -196,7 +196,6 @@ mod tests {
             field_mappings: Some(mappings),
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags,
         }
     }

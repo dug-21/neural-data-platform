@@ -327,13 +327,13 @@ impl MqttSource {
                             let json = match serde_json::from_slice::<Value>(&publish.payload) {
                                 Ok(json) => json,
                                 Err(_) => {
-                                    // Wrap raw text payload for RawTextParser
+                                    // Wrap raw text payload as JSON for downstream processing
                                     // Format: { "_raw_text": "on", "_topic": "homeassistant/..." }
                                     let raw_text = String::from_utf8_lossy(&publish.payload);
                                     debug!(
                                         topic = %publish.topic,
                                         raw_text = %raw_text,
-                                        "Wrapping non-JSON payload for RawTextParser"
+                                        "Wrapping non-JSON payload as JSON object"
                                     );
                                     serde_json::json!({
                                         "_raw_text": raw_text.to_string(),
@@ -646,7 +646,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags: [("source".to_string(), "mqtt".to_string())]
                 .into_iter()
                 .collect(),

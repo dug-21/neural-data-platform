@@ -120,7 +120,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -167,7 +166,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -212,7 +210,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags,
         };
 
@@ -248,7 +245,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -290,7 +286,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -324,7 +319,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 
@@ -359,7 +353,6 @@ mod tests {
             field_mappings: None,
             array_config: None,
             column_config: None,
-            raw_text_config: None,
             default_tags: HashMap::new(),
         };
 

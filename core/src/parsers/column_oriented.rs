@@ -353,7 +353,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: None,
             column_config: Some(column_config.clone()),
-                raw_text_config: None,
         };
 
         ColumnOrientedParser::from_configs(base_config, column_config).unwrap()
@@ -549,7 +548,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: None,
             column_config: Some(column_config.clone()),
-                raw_text_config: None,
         };
 
         let parser = ColumnOrientedParser::from_configs(base_config, column_config).unwrap();
@@ -757,7 +755,6 @@ mod tests {
             },
             array_config: None,
             column_config: Some(column_config.clone()),
-                raw_text_config: None,
         };
 
         let parser = ColumnOrientedParser::from_configs(base_config, column_config).unwrap();
@@ -894,7 +891,6 @@ mod tests {
             default_tags: HashMap::new(),
             array_config: None,
             column_config: Some(column_config.clone()),
-                raw_text_config: None,
         };
 
         let parser = ColumnOrientedParser::from_configs(base_config, column_config).unwrap();

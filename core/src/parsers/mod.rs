@@ -25,7 +25,6 @@ pub mod config;
 pub mod factory;
 pub mod flat_json;
 pub mod json_path;
-pub mod raw_text;
 pub mod traits;
 
 pub use array_iterator::{
@@ -39,5 +38,4 @@ pub use config::{
 pub use factory::create_parser_from_config;
 pub use flat_json::FlatJsonParser;
 pub use json_path::JsonPathParser;
-pub use raw_text::{RawTextConfig, RawTextParser};
 pub use traits::{ParseContext, Parser};
