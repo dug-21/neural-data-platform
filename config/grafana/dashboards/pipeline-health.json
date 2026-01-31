@@ -2,7 +2,7 @@
   "uid": "ndp-pipeline-health",
   "title": "Pipeline Health - Silver Layer",
   "description": "Operational monitoring dashboard for all Silver layer streams. Config-driven: automatically discovers streams from Silver tables.",
-  "tags": ["ndp", "pipeline", "health", "silver", "dp-008"],
+  "tags": ["ndp", "pipeline", "health", "silver", "dp-008", "air-012"],
   "timezone": "browser",
   "refresh": "1m",
   "time": {
@@ -82,7 +82,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Stream Status Grid: Config-driven query that auto-discovers all Silver streams\n-- Queries each Silver table to get latest record, calculates freshness and status\n-- Thresholds: Based on expected update intervals per stream type (ETL-based)\n--   air_quality_observations: ~30s stream interval, yellow >90s, red >180s\n--   weather_observations: ~10min expected, yellow >20min, red >40min\n--   outdoor_air_quality: ~10min expected, yellow >20min, red >40min\n--   weather_forecasts: ~1h expected, yellow >2h, red >4h\n\nWITH stream_stats AS (\n    -- Air Quality Observations (indoor sensors, ~30s stream interval)\n    SELECT \n        'air_quality_observations' AS stream_name,\n        'Air Quality (Indoor)' AS display_name,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        90 AS yellow_threshold_seconds,\n        180 AS red_threshold_seconds\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Weather Observations (NWS stations, ~10min updates)\n    SELECT \n        'weather_observations' AS stream_name,\n        'Weather Observations (NWS)' AS display_name,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        1200 AS yellow_threshold_seconds,  -- 20 minutes\n        2400 AS red_threshold_seconds       -- 40 minutes\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Outdoor Air Quality (OWM API, ~10min updates)\n    SELECT \n        'outdoor_air_quality' AS stream_name,\n        'Outdoor Air Quality (OWM)' AS display_name,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        1200 AS yellow_threshold_seconds,  -- 20 minutes\n        2400 AS red_threshold_seconds       -- 40 minutes\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Weather Forecasts (NWS gridpoints, ~1h updates)\n    SELECT \n        'weather_forecasts' AS stream_name,\n        'Weather Forecasts (NWS)' AS display_name,\n        MAX(ingestion_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        7200 AS yellow_threshold_seconds,   -- 2 hours\n        14400 AS red_threshold_seconds      -- 4 hours\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    display_name AS \"Stream\",\n    COALESCE(TO_CHAR(last_record_time, 'YYYY-MM-DD HH24:MI:SS'), 'No Data') AS \"Last Record\",\n    CASE \n        WHEN last_record_time IS NULL THEN 'No Data'\n        ELSE CONCAT(\n            EXTRACT(EPOCH FROM (NOW() - last_record_time))::INTEGER / 60,\n            'm ',\n            EXTRACT(EPOCH FROM (NOW() - last_record_time))::INTEGER % 60,\n            's ago'\n        )\n    END AS \"Time Since Last\",\n    total_records_24h AS \"Records (24h)\",\n    CASE \n        WHEN last_record_time IS NULL THEN 'CRITICAL'\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > red_threshold_seconds THEN 'CRITICAL'\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > yellow_threshold_seconds THEN 'WARNING'\n        ELSE 'HEALTHY'\n    END AS \"Status\"\nFROM stream_stats\nORDER BY \n    CASE \n        WHEN last_record_time IS NULL THEN 0\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > red_threshold_seconds THEN 1\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > yellow_threshold_seconds THEN 2\n        ELSE 3\n    END,\n    stream_name;",
+          "rawSql": "-- Stream Status Grid: Config-driven query that auto-discovers all Silver streams\n-- Queries each Silver table to get latest record, calculates freshness and status\n-- Thresholds: Based on expected update intervals per stream type (ETL-based)\n--   air_quality_observations: ~30s stream interval, yellow >90s, red >180s\n--   weather_observations: ~10min expected, yellow >20min, red >40min\n--   outdoor_air_quality: ~10min expected, yellow >20min, red >40min\n--   weather_forecasts: ~1h expected, yellow >2h, red >4h\n--   state_events: event-driven (sparse), yellow >18h, red >36h\n\nWITH stream_stats AS (\n    -- Air Quality Observations (indoor sensors, ~30s stream interval)\n    SELECT \n        'air_quality_observations' AS stream_name,\n        'Air Quality (Indoor)' AS display_name,\n        'Regular' AS data_pattern,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        90 AS yellow_threshold_seconds,\n        180 AS red_threshold_seconds,\n        FALSE AS is_sparse\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Weather Observations (NWS stations, ~10min updates)\n    SELECT \n        'weather_observations' AS stream_name,\n        'Weather Observations (NWS)' AS display_name,\n        'Regular' AS data_pattern,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        1200 AS yellow_threshold_seconds,  -- 20 minutes\n        2400 AS red_threshold_seconds,      -- 40 minutes\n        FALSE AS is_sparse\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Outdoor Air Quality (OWM API, ~10min updates)\n    SELECT \n        'outdoor_air_quality' AS stream_name,\n        'Outdoor Air Quality (OWM)' AS display_name,\n        'Regular' AS data_pattern,\n        MAX(observation_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        1200 AS yellow_threshold_seconds,  -- 20 minutes\n        2400 AS red_threshold_seconds,      -- 40 minutes\n        FALSE AS is_sparse\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- Weather Forecasts (NWS gridpoints, ~1h updates)\n    SELECT \n        'weather_forecasts' AS stream_name,\n        'Weather Forecasts (NWS)' AS display_name,\n        'Regular' AS data_pattern,\n        MAX(ingestion_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        7200 AS yellow_threshold_seconds,   -- 2 hours\n        14400 AS red_threshold_seconds,     -- 4 hours\n        FALSE AS is_sparse\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    -- State Events (Home Assistant binary sensors, event-driven)\n    -- Events only fire on STATE CHANGE, not intervals\n    -- Windows may stay closed for days - this is NORMAL\n    SELECT \n        'state_events' AS stream_name,\n        'State Events (HA)' AS display_name,\n        'Sparse' AS data_pattern,\n        MAX(event_time) AS last_record_time,\n        COUNT(*) AS total_records_24h,\n        64800 AS yellow_threshold_seconds,  -- 18 hours\n        129600 AS red_threshold_seconds,    -- 36 hours\n        TRUE AS is_sparse\n    FROM silver.state_events\n    -- Note: No 24h filter for sparse streams - we need last event regardless of age\n)\nSELECT \n    display_name AS \"Stream\",\n    data_pattern AS \"Pattern\",\n    COALESCE(TO_CHAR(last_record_time, 'YYYY-MM-DD HH24:MI:SS'), 'No Data') AS \"Last Record\",\n    CASE \n        WHEN last_record_time IS NULL THEN 'No Data'\n        WHEN is_sparse THEN CONCAT(ROUND(EXTRACT(EPOCH FROM (NOW() - last_record_time)) / 3600, 1), ' hours ago')\n        ELSE CONCAT(\n            EXTRACT(EPOCH FROM (NOW() - last_record_time))::INTEGER / 60,\n            'm ',\n            EXTRACT(EPOCH FROM (NOW() - last_record_time))::INTEGER % 60,\n            's ago'\n        )\n    END AS \"Time Since Last\",\n    total_records_24h AS \"Records (24h)\",\n    CASE \n        WHEN last_record_time IS NULL THEN 'CRITICAL'\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > red_threshold_seconds THEN 'CRITICAL'\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > yellow_threshold_seconds THEN 'WARNING'\n        ELSE 'HEALTHY'\n    END AS \"Status\"\nFROM stream_stats\nORDER BY \n    CASE \n        WHEN last_record_time IS NULL THEN 0\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > red_threshold_seconds THEN 1\n        WHEN EXTRACT(EPOCH FROM (NOW() - last_record_time)) > yellow_threshold_seconds THEN 2\n        ELSE 3\n    END,\n    is_sparse,\n    stream_name;",
           "refId": "A",
           "format": "table"
         }
@@ -187,7 +187,7 @@
       "type": "gauge",
       "title": "Air Quality Freshness",
       "description": "Time since last indoor air quality reading. Stream interval ~30s. Yellow >90s, Red >180s.",
-      "gridPos": { "x": 0, "y": 10, "w": 6, "h": 5 },
+      "gridPos": { "x": 0, "y": 10, "w": 5, "h": 5 },
       "datasource": {
         "type": "postgres",
         "uid": "timescaledb-silver"
@@ -246,7 +246,7 @@
       "type": "gauge",
       "title": "Weather Obs Freshness",
       "description": "Time since last NWS weather observation. Expected: ~10 minutes. Yellow >20min, Red >40min.",
-      "gridPos": { "x": 6, "y": 10, "w": 6, "h": 5 },
+      "gridPos": { "x": 5, "y": 10, "w": 5, "h": 5 },
       "datasource": {
         "type": "postgres",
         "uid": "timescaledb-silver"
@@ -305,7 +305,7 @@
       "type": "gauge",
       "title": "Outdoor AQ Freshness",
       "description": "Time since last outdoor air quality reading. Expected: ~10 minutes. Yellow >20min, Red >40min.",
-      "gridPos": { "x": 12, "y": 10, "w": 6, "h": 5 },
+      "gridPos": { "x": 10, "y": 10, "w": 5, "h": 5 },
       "datasource": {
         "type": "postgres",
         "uid": "timescaledb-silver"
@@ -364,7 +364,7 @@
       "type": "gauge",
       "title": "Forecast Freshness",
       "description": "Time since last weather forecast ingestion. Expected: ~1 hour. Yellow >2h, Red >4h.",
-      "gridPos": { "x": 18, "y": 10, "w": 6, "h": 5 },
+      "gridPos": { "x": 15, "y": 10, "w": 5, "h": 5 },
       "datasource": {
         "type": "postgres",
         "uid": "timescaledb-silver"
@@ -419,6 +419,65 @@
       }
     },
     {
+      "id": 22,
+      "type": "gauge",
+      "title": "State Events Freshness",
+      "description": "Time since last state event (window/door sensor). SPARSE DATA: Events only fire on state change, not intervals. Yellow >18h, Red >36h.",
+      "gridPos": { "x": 20, "y": 10, "w": 4, "h": 5 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb-silver"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb-silver"
+          },
+          "rawSql": "-- State Events Freshness: Time in seconds since last event\n-- SPARSE DATA: Events only fire on state CHANGE (window/door open/close)\n-- Windows may stay closed for days - this is NORMAL behavior\n-- Thresholds: Green <64800s (18h), Yellow 64800-129600s, Red >129600s (36h)\n\nSELECT \n    COALESCE(\n        EXTRACT(EPOCH FROM (NOW() - MAX(event_time))),\n        999999  -- Return high value if no data\n    )::INTEGER AS \"Seconds Since Last\"\nFROM silver.state_events;",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "min": 0,
+          "max": 172800,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 64800 },
+              { "color": "red", "value": 129600 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": { "text": "No Data", "color": "dark-red" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
       "id": 8,
       "type": "row",
       "title": "Record Volume (24h)",
@@ -442,7 +501,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Record Volume: Count of records per stream in last 24 hours\n-- Config-driven: Dynamically queries all Silver tables\n-- Expected approximate counts (24h):\n--   air_quality: ~2880 (1 per 30s * 60min * 48h / 2)\n--   weather_obs: ~144 (1 per 10min * 24h)\n--   outdoor_aq: ~144 (1 per 10min * 24h)\n--   forecasts: ~24+ (depends on forecast horizon coverage)\n\nWITH stream_counts AS (\n    SELECT 'Air Quality' AS stream, COUNT(*) AS record_count\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Weather Obs' AS stream, COUNT(*) AS record_count\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Outdoor AQ' AS stream, COUNT(*) AS record_count\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Forecasts' AS stream, COUNT(*) AS record_count\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT stream, record_count\nFROM stream_counts\nORDER BY record_count DESC;",
+          "rawSql": "-- Record Volume: Count of records per stream in last 24 hours\n-- Config-driven: Dynamically queries all Silver tables\n-- Expected approximate counts (24h):\n--   air_quality: ~2880 (1 per 30s * 60min * 48h / 2)\n--   weather_obs: ~144 (1 per 10min * 24h)\n--   outdoor_aq: ~144 (1 per 10min * 24h)\n--   forecasts: ~24+ (depends on forecast horizon coverage)\n--   state_events: varies (event-driven, sparse)\n\nWITH stream_counts AS (\n    SELECT 'Air Quality' AS stream, COUNT(*) AS record_count\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Weather Obs' AS stream, COUNT(*) AS record_count\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Outdoor AQ' AS stream, COUNT(*) AS record_count\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'Forecasts' AS stream, COUNT(*) AS record_count\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT 'State Events' AS stream, COUNT(*) AS record_count\n    FROM silver.state_events\n    WHERE event_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT stream, record_count\nFROM stream_counts\nORDER BY record_count DESC;",
           "refId": "A",
           "format": "table"
         }
@@ -503,7 +562,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Total Record Count: Sum across all Silver streams\n-- Quick health check: total should be in the thousands for 24h\n\nSELECT \n    (\n        (SELECT COUNT(*) FROM silver.air_quality_observations WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.weather_observations WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.outdoor_air_quality WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.weather_forecasts WHERE ingestion_time >= NOW() - INTERVAL '24 hours')\n    ) AS total_records;",
+          "rawSql": "-- Total Record Count: Sum across all Silver streams\n-- Quick health check: total should be in the thousands for 24h\n\nSELECT \n    (\n        (SELECT COUNT(*) FROM silver.air_quality_observations WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.weather_observations WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.outdoor_air_quality WHERE observation_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.weather_forecasts WHERE ingestion_time >= NOW() - INTERVAL '24 hours') +\n        (SELECT COUNT(*) FROM silver.state_events WHERE event_time >= NOW() - INTERVAL '24 hours')\n    ) AS total_records;",
           "refId": "A",
           "format": "table"
         }
@@ -554,7 +613,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Active Streams Count: Number of streams with recent data\n-- Expected: 4 (all streams operational)\n-- Less than 4 indicates a stream is not receiving data\n\nSELECT COUNT(*) AS active_streams FROM (\n    SELECT 1 AS stream_active\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n) AS active;",
+          "rawSql": "-- Active Streams Count: Number of streams with recent data\n-- Expected: 5 (all streams operational)\n-- Less than 5 indicates a stream is not receiving data\n\nSELECT COUNT(*) AS active_streams FROM (\n    SELECT 1 AS stream_active\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n    \n    UNION ALL\n    \n    SELECT 1 AS stream_active\n    FROM silver.state_events\n    WHERE event_time >= NOW() - INTERVAL '24 hours'\n    HAVING COUNT(*) > 0\n) AS active;",
           "refId": "A",
           "format": "table"
         }
@@ -577,15 +636,15 @@
           "unit": "short",
           "decimals": 0,
           "min": 0,
-          "max": 4,
+          "max": 5,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "red", "value": null },
               { "color": "red", "value": 0 },
-              { "color": "orange", "value": 1 },
-              { "color": "yellow", "value": 3 },
-              { "color": "green", "value": 4 }
+              { "color": "orange", "value": 2 },
+              { "color": "yellow", "value": 4 },
+              { "color": "green", "value": 5 }
             ]
           }
         },
@@ -608,7 +667,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Oldest Record Age: Maximum staleness across all streams\n-- Identifies the most delayed data source\n-- Useful for quick health check: if this is green, all streams are fresh\n\nSELECT MAX(seconds_since_last) AS max_staleness_seconds FROM (\n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(ingestion_time)))::INTEGER AS seconds_since_last\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n) AS staleness;",
+          "rawSql": "-- Oldest Record Age: Maximum staleness across REGULAR streams only\n-- (Excludes sparse streams like state_events which can legitimately be hours old)\n-- Identifies the most delayed regular data source\n-- Useful for quick health check: if this is green, all regular streams are fresh\n\nSELECT MAX(seconds_since_last) AS max_staleness_seconds FROM (\n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(observation_time)))::INTEGER AS seconds_since_last\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(ingestion_time)))::INTEGER AS seconds_since_last\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n) AS staleness;",
           "refId": "A",
           "format": "table"
         }
@@ -659,7 +718,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Detailed Record Stats: Compare actual vs expected counts\n-- Expected counts based on typical update intervals:\n--   air_quality: 2880 (1/30s * 86400s)\n--   weather_obs: 144 (1/10min * 24h)\n--   outdoor_aq: 144 (1/10min * 24h)\n--   forecasts: 24 (1/hour * 24h, minimum)\n\nWITH stats AS (\n    SELECT \n        'Air Quality' AS stream,\n        COUNT(*) AS actual,\n        2880 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 2880 * 100, 1) AS completeness_pct\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Weather Obs' AS stream,\n        COUNT(*) AS actual,\n        144 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 144 * 100, 1) AS completeness_pct\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Outdoor AQ' AS stream,\n        COUNT(*) AS actual,\n        144 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 144 * 100, 1) AS completeness_pct\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Forecasts' AS stream,\n        COUNT(*) AS actual,\n        24 AS expected,\n        ROUND(LEAST(COUNT(*)::NUMERIC / 24 * 100, 100), 1) AS completeness_pct\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    stream AS \"Stream\",\n    actual AS \"Actual\",\n    expected AS \"Expected\",\n    completeness_pct AS \"Completeness %\"\nFROM stats\nORDER BY completeness_pct ASC;",
+          "rawSql": "-- Detailed Record Stats: Compare actual vs expected counts\n-- Expected counts based on typical update intervals:\n--   air_quality: 2880 (1/30s * 86400s)\n--   weather_obs: 144 (1/10min * 24h)\n--   outdoor_aq: 144 (1/10min * 24h)\n--   forecasts: 24 (1/hour * 24h, minimum)\n--   state_events: N/A (event-driven, no expected count)\n\nWITH stats AS (\n    SELECT \n        'Air Quality' AS stream,\n        COUNT(*) AS actual,\n        2880 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 2880 * 100, 1) AS completeness_pct\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Weather Obs' AS stream,\n        COUNT(*) AS actual,\n        144 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 144 * 100, 1) AS completeness_pct\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Outdoor AQ' AS stream,\n        COUNT(*) AS actual,\n        144 AS expected,\n        ROUND(COUNT(*)::NUMERIC / 144 * 100, 1) AS completeness_pct\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Forecasts' AS stream,\n        COUNT(*) AS actual,\n        24 AS expected,\n        ROUND(LEAST(COUNT(*)::NUMERIC / 24 * 100, 100), 1) AS completeness_pct\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'State Events (sparse)' AS stream,\n        COUNT(*) AS actual,\n        NULL AS expected,  -- Event-driven, no expected count\n        NULL AS completeness_pct\n    FROM silver.state_events\n    WHERE event_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    stream AS \"Stream\",\n    actual AS \"Actual\",\n    COALESCE(expected::TEXT, 'N/A') AS \"Expected\",\n    COALESCE(completeness_pct::TEXT || '%', 'N/A') AS \"Completeness\"\nFROM stats\nORDER BY completeness_pct ASC NULLS LAST;",
           "refId": "A",
           "format": "table"
         }
@@ -758,7 +817,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- DQ Flag Summary: Percentage of records with non-null, non-empty dq_flags\n-- Lower is better - indicates cleaner data\n-- dq_flags is TEXT[] array containing rule violation identifiers\n-- Records with dq_flags indicate data that passed but with warnings\n\nWITH dq_stats AS (\n    SELECT \n        'Air Quality' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Weather Obs' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Outdoor AQ' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Forecasts' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    stream AS \"Stream\",\n    total_records AS \"Total Records\",\n    flagged_records AS \"Flagged Records\",\n    CASE \n        WHEN total_records = 0 THEN 0\n        ELSE ROUND(flagged_records::NUMERIC / total_records * 100, 2)\n    END AS \"DQ Flag %\"\nFROM dq_stats\nORDER BY \n    CASE WHEN total_records = 0 THEN 0 ELSE flagged_records::NUMERIC / total_records END DESC;",
+          "rawSql": "-- DQ Flag Summary: Percentage of records with non-null, non-empty dq_flags\n-- Lower is better - indicates cleaner data\n-- dq_flags is TEXT[] array containing rule violation identifiers\n-- Records with dq_flags indicate data that passed but with warnings\n\nWITH dq_stats AS (\n    SELECT \n        'Air Quality' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Weather Obs' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Outdoor AQ' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'Forecasts' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        'State Events' AS stream,\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged_records\n    FROM silver.state_events\n    WHERE event_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    stream AS \"Stream\",\n    total_records AS \"Total Records\",\n    flagged_records AS \"Flagged Records\",\n    CASE \n        WHEN total_records = 0 THEN 0\n        ELSE ROUND(flagged_records::NUMERIC / total_records * 100, 2)\n    END AS \"DQ Flag %\"\nFROM dq_stats\nORDER BY \n    CASE WHEN total_records = 0 THEN 0 ELSE flagged_records::NUMERIC / total_records END DESC;",
           "refId": "A",
           "format": "table"
         }
@@ -845,7 +904,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- DQ Flag Distribution: Overall clean vs flagged records\n-- Aggregates across all Silver tables\n-- Useful for quick assessment of overall data quality\n\nWITH totals AS (\n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n),\naggregated AS (\n    SELECT SUM(total) AS total_records, SUM(flagged) AS flagged_records\n    FROM totals\n)\nSELECT 'Clean Records' AS category, (total_records - flagged_records) AS count FROM aggregated\nUNION ALL\nSELECT 'Flagged Records' AS category, flagged_records AS count FROM aggregated;",
+          "rawSql": "-- DQ Flag Distribution: Overall clean vs flagged records\n-- Aggregates across all Silver tables\n-- Useful for quick assessment of overall data quality\n\nWITH totals AS (\n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.state_events\n    WHERE event_time >= NOW() - INTERVAL '24 hours'\n),\naggregated AS (\n    SELECT SUM(total) AS total_records, SUM(flagged) AS flagged_records\n    FROM totals\n)\nSELECT 'Clean Records' AS category, (total_records - flagged_records) AS count FROM aggregated\nUNION ALL\nSELECT 'Flagged Records' AS category, flagged_records AS count FROM aggregated;",
           "refId": "A",
           "format": "table"
         }
@@ -907,7 +966,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Overall DQ Rate: Percentage of all records with DQ flags\n-- Target: <5% is excellent, <15% is acceptable, >30% needs investigation\n-- Calculates across all Silver tables weighted by record count\n\nWITH totals AS (\n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    CASE \n        WHEN SUM(total) = 0 THEN 0\n        ELSE ROUND(SUM(flagged)::NUMERIC / SUM(total) * 100, 2)\n    END AS dq_rate_pct\nFROM totals;",
+          "rawSql": "-- Overall DQ Rate: Percentage of all records with DQ flags\n-- Target: <5% is excellent, <15% is acceptable, >30% needs investigation\n-- Calculates across all Silver tables weighted by record count\n\nWITH totals AS (\n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.air_quality_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_observations\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= NOW() - INTERVAL '24 hours'\n    \n    UNION ALL\n    \n    SELECT \n        COUNT(*) AS total,\n        COUNT(*) FILTER (WHERE dq_flags IS NOT NULL AND array_length(dq_flags, 1) > 0) AS flagged\n    FROM silver.state_events\n    WHERE event_time >= NOW() - INTERVAL '24 hours'\n)\nSELECT \n    CASE \n        WHEN SUM(total) = 0 THEN 0\n        ELSE ROUND(SUM(flagged)::NUMERIC / SUM(total) * 100, 2)\n    END AS dq_rate_pct\nFROM totals;",
           "refId": "A",
           "format": "table"
         }
@@ -969,7 +1028,7 @@
             "type": "postgres",
             "uid": "timescaledb-silver"
           },
-          "rawSql": "-- Ingestion Timeline: Hourly record counts per stream\n-- Uses time_bucket for efficient grouping (TimescaleDB function)\n-- Shows data volume patterns and identifies gaps\n-- Formatted for Grafana time series: time column + value columns\n\nWITH hourly_counts AS (\n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Air Quality' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.air_quality_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Weather Obs' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.weather_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Outdoor AQ' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', ingestion_time) AS time,\n        'Forecasts' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= $__timeFrom()::timestamptz\n      AND ingestion_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n)\nSELECT \n    time,\n    stream AS metric,\n    record_count AS value\nFROM hourly_counts\nORDER BY time, stream;",
+          "rawSql": "-- Ingestion Timeline: Hourly record counts per stream\n-- Uses time_bucket for efficient grouping (TimescaleDB function)\n-- Shows data volume patterns and identifies gaps\n-- Formatted for Grafana time series: time column + value columns\n\nWITH hourly_counts AS (\n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Air Quality' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.air_quality_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Weather Obs' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.weather_observations\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', observation_time) AS time,\n        'Outdoor AQ' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.outdoor_air_quality\n    WHERE observation_time >= $__timeFrom()::timestamptz\n      AND observation_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', ingestion_time) AS time,\n        'Forecasts' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.weather_forecasts\n    WHERE ingestion_time >= $__timeFrom()::timestamptz\n      AND ingestion_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n    \n    UNION ALL\n    \n    SELECT \n        time_bucket('1 hour', event_time) AS time,\n        'State Events' AS stream,\n        COUNT(*) AS record_count\n    FROM silver.state_events\n    WHERE event_time >= $__timeFrom()::timestamptz\n      AND event_time <= $__timeTo()::timestamptz\n    GROUP BY 1\n)\nSELECT \n    time,\n    stream AS metric,\n    record_count AS value\nFROM hourly_counts\nORDER BY time, stream;",
           "refId": "A",
           "format": "time_series"
         }
@@ -1054,6 +1113,12 @@
             "matcher": { "id": "byName", "options": "Forecasts" },
             "properties": [
               { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "State Events" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }
             ]
           }
         ]
