@@ -2,9 +2,31 @@
 
 ## Document Overview
 
-This document provides the algorithmic design for dp-018's two phases:
+This document provides the algorithmic design for dp-018's JSON pass-through architecture:
 - **Phase 0**: JSON Migration (YAML to JSON with field enrichment)
-- **Phase 1**: Unified Config Loading (ConfigLoader trait, EtcdConfigLoader)
+- **Phase 1**: Pass-Through Sync (ConfigSyncService simplification)
+
+### Architecture Principle: Pass-Through, Not Transformation
+
+The fundamental design principle is **pass-through**:
+
+```
+JSON file (source of truth)
+    | validate against JSON Schema
+    | deserialize to StreamConfig
+    v
+etcd (same JSON blob)
+    | deserialize
+    v
+StreamConfig (complete, including silver_etl)
+```
+
+**Key insight**: We do NOT create:
+- ConfigLoader trait (not needed - use existing StreamRegistry)
+- EtcdConfigLoader (not needed - StreamRegistry already does this)
+- SilverRegistry (not needed - Silver uses same StreamRegistry as Bronze)
+
+Both Bronze and Silver use the same `StreamRegistry.load_stream()` method.
 
 ---
 
@@ -186,7 +208,7 @@ BEGIN
         json_config.entity_schemas <- yaml_content.entity_schemas
     END IF
 
-    // Copy silver_etl config
+    // Copy silver_etl config (CRITICAL - this was being lost before)
     IF yaml_content HAS "silver_etl" THEN
         json_config.silver_etl <- yaml_content.silver_etl
     END IF
@@ -444,145 +466,168 @@ END
 
 ---
 
-## Phase 1: Unified Config Loading
+## Phase 1: Pass-Through Config Sync
 
-### 1.1 ConfigLoader Trait Definition
+### 1.1 ConfigSyncService Algorithm (Simplified)
+
+The key architectural change is **pass-through**: no transformation between JSON file and etcd.
 
 ```
-TRAIT: ConfigLoader
+ALGORITHM: ConfigSyncService.sync_stream
+INPUT: json_path (path to config.json file)
+OUTPUT: Result<(), SyncError>
 
 DESCRIPTION:
-    Unified interface for loading configuration from any source.
-    Implementations must be thread-safe (Send + Sync).
-
-METHODS:
-    async load_stream_config(stream_id: string) -> Result<StreamConfig, ConfigError>
-        // Load complete stream configuration including all sections
-
-    async load_silver_etl_config(stream_id: string) -> Result<SilverEtlConfig, ConfigError>
-        // Load only the silver_etl section for ETL processing
-
-    async list_streams() -> Result<Array<string>, ConfigError>
-        // List all available stream IDs
-
-ERRORS:
-    ConfigError::NotFound(stream_id)        // Stream config does not exist
-    ConfigError::ParseError(message)        // JSON parsing failed
-    ConfigError::ValidationError(message)   // Config failed validation
-    ConfigError::ConnectionError(message)   // Connection to config source failed
-```
-
-### 1.2 EtcdConfigLoader Implementation
-
-```
-ALGORITHM: EtcdConfigLoader.load_stream_config
-INPUT: stream_id (string)
-OUTPUT: Result<StreamConfig, ConfigError>
-
-CONSTANTS:
-    KEY_PREFIX = "/streams"
-    CACHE_TTL = 300 seconds
+    Syncs a JSON config file to etcd WITHOUT transformation.
+    The JSON file is the source of truth.
+    What goes in is what comes out.
 
 BEGIN
-    // Step 1: Check cache
-    cache_key <- stream_id
-    IF cache.has(cache_key) AND NOT cache.is_expired(cache_key) THEN
-        LOG DEBUG "Config loaded from cache for stream={stream_id}"
-        RETURN Ok(cache.get(cache_key))
+    // Step 1: Read JSON file
+    json_content <- read_file(json_path)
+
+    // Step 2: Validate against JSON Schema (catches errors early)
+    validation_result <- validate_against_schema(json_content, SCHEMA_FILE)
+    IF NOT validation_result.valid THEN
+        LOG ERROR "[sync] Schema validation failed for {json_path}: {validation_result.errors}"
+        RETURN Err(SyncError::ValidationFailed(validation_result.errors))
     END IF
 
-    // Step 2: Build etcd key
-    etcd_key <- KEY_PREFIX + "/" + stream_id + "/config"
-
-    // Step 3: Fetch from etcd
+    // Step 3: Deserialize to StreamConfig (same struct everywhere)
+    // NO to_stream_config() transformation - direct deserialization
     TRY
-        response <- etcd_client.get(etcd_key)
-    CATCH connection_error
-        LOG ERROR "etcd connection failed: {connection_error}"
-        RETURN Err(ConfigError::ConnectionError(connection_error.message))
-    END TRY
-
-    // Step 4: Handle not found
-    IF response.kvs IS EMPTY THEN
-        LOG WARN "Config not found for stream={stream_id}"
-        RETURN Err(ConfigError::NotFound(stream_id))
-    END IF
-
-    // Step 5: Parse JSON
-    json_blob <- response.kvs[0].value
-    TRY
-        config <- serde_json::from_slice<StreamConfig>(json_blob)
+        config <- serde_json::from_str<StreamConfig>(json_content)
     CATCH parse_error
-        LOG ERROR "JSON parse error for stream={stream_id}: {parse_error}"
-        RETURN Err(ConfigError::ParseError(parse_error.message))
+        LOG ERROR "[sync] JSON parse error for {json_path}: {parse_error}"
+        RETURN Err(SyncError::ParseError(parse_error))
     END TRY
 
-    // Step 6: Validate config
-    validation_result <- config.validate()
-    IF validation_result IS Err THEN
-        LOG ERROR "Config validation failed for stream={stream_id}: {validation_result.error}"
-        RETURN Err(ConfigError::ValidationError(validation_result.error.message))
+    // Step 4: Save to etcd (pass-through - serializes same struct)
+    // Uses existing StreamRegistry - no new abstractions needed
+    TRY
+        registry.save_stream(config)
+    CATCH save_error
+        LOG ERROR "[sync] Failed to save to etcd for stream={config.stream_id}: {save_error}"
+        RETURN Err(SyncError::EtcdError(save_error))
+    END TRY
+
+    LOG INFO "[sync] Config synced for stream={config.stream_id} config_version={config.config_version}"
+    RETURN Ok(())
+END
+
+NOTE:
+    BEFORE (lossy transformation):
+        yaml: StreamConfigYaml = read_yaml(yaml_path)
+        config: StreamConfig = yaml.to_stream_config()  // LOSSY - silver_etl lost
+        registry.save_stream(config)
+
+    AFTER (pass-through):
+        json_content = read_file(json_path)
+        validate_against_schema(json_content, schema)
+        config: StreamConfig = serde_json::from_str(json_content)  // PASS-THROUGH
+        registry.save_stream(config)
+```
+
+### 1.2 Batch Sync Algorithm
+
+```
+ALGORITHM: ConfigSyncService.sync_all_streams
+INPUT: config_dir (path to config/base/streams/)
+OUTPUT: SyncSummary
+
+STRUCTURE SyncSummary:
+    total: integer
+    succeeded: integer
+    failed: integer
+    errors: array of { stream_id: string, error: string }
+
+BEGIN
+    stream_dirs <- FindAllStreamDirectories(config_dir)
+    summary <- SyncSummary(total: length(stream_dirs))
+
+    FOR EACH stream_dir IN stream_dirs DO
+        json_path <- stream_dir + "/config.json"
+
+        IF NOT FileExists(json_path) THEN
+            LOG WARN "[sync] No config.json found for {stream_dir.name}, skipping"
+            CONTINUE
+        END IF
+
+        result <- sync_stream(json_path)
+
+        IF result IS Ok THEN
+            summary.succeeded <- summary.succeeded + 1
+        ELSE
+            summary.failed <- summary.failed + 1
+            summary.errors.append({
+                stream_id: basename(stream_dir),
+                error: result.error.message
+            })
+        END IF
+    END FOR
+
+    LOG INFO "[sync] Batch sync complete: {summary.succeeded}/{summary.total} succeeded"
+
+    IF summary.failed > 0 THEN
+        LOG ERROR "[sync] {summary.failed} streams failed to sync"
+        FOR EACH err IN summary.errors DO
+            LOG ERROR "[sync]   - {err.stream_id}: {err.error}"
+        END FOR
     END IF
 
-    // Step 7: Update cache
-    cache.set(cache_key, config, ttl: CACHE_TTL)
-
-    // Step 8: Log success
-    LOG INFO "Config loaded from etcd for stream={stream_id} config_version={config.config_version}"
-
-    RETURN Ok(config)
+    RETURN summary
 END
 ```
 
-### 1.3 Load Silver ETL Config Algorithm
+### 1.3 Silver Config Loading (Uses Same StreamRegistry)
 
 ```
-ALGORITHM: EtcdConfigLoader.load_silver_etl_config
-INPUT: stream_id (string)
+ALGORITHM: get_silver_config
+INPUT: registry (StreamRegistry), stream_id (string)
 OUTPUT: Result<SilverEtlConfig, ConfigError>
 
-BEGIN
-    // Step 1: Load full stream config
-    stream_config_result <- load_stream_config(stream_id)
+DESCRIPTION:
+    Silver uses the SAME StreamRegistry as Bronze.
+    No separate SilverRegistry or ConfigLoader trait needed.
+    The config is already complete in etcd (thanks to pass-through).
 
-    IF stream_config_result IS Err THEN
-        RETURN stream_config_result.propagate_error()
+BEGIN
+    // Step 1: Load stream config (same method Bronze uses)
+    config_result <- registry.load_stream(stream_id)
+
+    IF config_result IS Err THEN
+        RETURN Err(config_result.error)
     END IF
 
-    stream_config <- stream_config_result.unwrap()
+    config <- config_result.unwrap()
 
     // Step 2: Extract silver_etl section
-    IF NOT stream_config HAS "silver_etl" OR stream_config.silver_etl IS NULL THEN
-        LOG WARN "No silver_etl config for stream={stream_id}"
-        RETURN Err(ConfigError::NotFound(
-            "silver_etl section not found for stream: " + stream_id
-        ))
+    // This now works because pass-through preserved silver_etl
+    IF config.silver_etl IS None THEN
+        LOG DEBUG "No silver_etl config for stream={stream_id}"
+        RETURN Err(ConfigError::NotFound("silver_etl not configured"))
     END IF
 
-    silver_etl_config <- stream_config.silver_etl
+    silver_etl <- config.silver_etl.unwrap()
 
     // Step 3: Check if enabled
-    IF NOT silver_etl_config.enabled THEN
-        LOG INFO "Silver ETL disabled for stream={stream_id}"
-        RETURN Err(ConfigError::NotFound(
-            "silver_etl is disabled for stream: " + stream_id
-        ))
+    IF NOT silver_etl.enabled THEN
+        LOG DEBUG "Silver ETL disabled for stream={stream_id}"
+        RETURN Err(ConfigError::NotFound("silver_etl is disabled"))
     END IF
 
-    // Step 4: Validate silver_etl config
-    validation_result <- silver_etl_config.validate()
-    IF validation_result IS Err THEN
-        LOG ERROR "Silver ETL config invalid for stream={stream_id}: {validation_result.error}"
-        RETURN Err(ConfigError::ValidationError(validation_result.error.message))
-    END IF
-
-    LOG INFO "Silver ETL config loaded from etcd for stream={stream_id} target_table={silver_etl_config.target_table}"
-
-    RETURN Ok(silver_etl_config)
+    LOG INFO "Silver config loaded for stream={stream_id} target_table={silver_etl.target_table}"
+    RETURN Ok(silver_etl)
 END
+
+NOTE:
+    BEFORE: SilverSubscriber had its own load_silver_etl_config() that read YAML files directly
+    AFTER:  SilverSubscriber calls registry.load_stream() and accesses .silver_etl
+
+    This unifies Bronze and Silver config loading.
 ```
 
-### 1.4 Silver Subscriber Config Loading (Event-Driven)
+### 1.4 Silver Subscriber Event Handler
 
 ```
 ALGORITHM: SilverSubscriber.on_bronze_event
@@ -591,101 +636,68 @@ OUTPUT: ProcessingResult
 
 STATE:
     config_cache: Map<stream_id, CachedConfig>
-    config_loader: ConfigLoader (injected)
+    registry: StreamRegistry (injected - same as Bronze uses)
 
 STRUCTURE CachedConfig:
     config: SilverEtlConfig
     cached_at: timestamp
-    ttl: duration
+    ttl: duration (default 300 seconds)
 
 BEGIN
     stream_id <- event.stream_id
 
     // Step 1: Check config cache
-    IF config_cache.has(stream_id) THEN
-        cached <- config_cache.get(stream_id)
-
-        IF NOT cached.is_expired() THEN
-            // Use cached config
-            config <- cached.config
-        ELSE
-            // Reload expired config
-            config_result <- reload_config(stream_id)
-            IF config_result IS Err THEN
-                RETURN handle_config_error(config_result.error, event)
-            END IF
-            config <- config_result.unwrap()
-        END IF
+    IF config_cache.has(stream_id) AND NOT config_cache.get(stream_id).is_expired() THEN
+        config <- config_cache.get(stream_id).config
     ELSE
-        // First time seeing this stream - load config
-        config_result <- load_and_cache_config(stream_id)
+        // Load/reload config using StreamRegistry
+        config_result <- get_silver_config(registry, stream_id)
+
         IF config_result IS Err THEN
             RETURN handle_config_error(config_result.error, event)
         END IF
+
         config <- config_result.unwrap()
+
+        // Cache the config
+        config_cache.set(stream_id, CachedConfig(
+            config: config,
+            cached_at: now(),
+            ttl: 300 seconds
+        ))
     END IF
 
     // Step 2: Process event with config
     RETURN process_with_config(event, config)
 END
 
-ALGORITHM: SilverSubscriber.load_and_cache_config
-INPUT: stream_id (string)
-OUTPUT: Result<SilverEtlConfig, ConfigError>
-
-BEGIN
-    LOG DEBUG "Loading config for new stream={stream_id}"
-
-    // Load from config loader (etcd)
-    config_result <- config_loader.load_silver_etl_config(stream_id)
-
-    IF config_result IS Err THEN
-        LOG ERROR "Failed to load config for stream={stream_id}: {config_result.error}"
-        RETURN config_result
-    END IF
-
-    config <- config_result.unwrap()
-
-    // Cache the config
-    config_cache.set(stream_id, CachedConfig(
-        config: config,
-        cached_at: now(),
-        ttl: 300 seconds
-    ))
-
-    LOG INFO "Config cached for stream={stream_id} target_table={config.target_table}"
-
-    RETURN Ok(config)
-END
-
-ALGORITHM: SilverSubscriber.handle_config_error
+ALGORITHM: handle_config_error
 INPUT: error (ConfigError), event (BronzeEvent)
 OUTPUT: ProcessingResult
 
 BEGIN
     MATCH error:
-        ConfigError::NotFound(stream_id):
-            // Stream not configured for Silver ETL - this is normal
-            LOG DEBUG "Stream {stream_id} not configured for Silver ETL, skipping"
+        ConfigError::NotFound(_):
+            // Stream not configured for Silver ETL - normal case
+            LOG DEBUG "Stream {event.stream_id} not configured for Silver ETL"
             RETURN ProcessingResult::Skipped
 
-        ConfigError::ValidationError(message):
-            // Config exists but is invalid - this is an error
-            LOG ERROR "Invalid config for stream {event.stream_id}: {message}"
-            RETURN ProcessingResult::Error(error)
-
-        ConfigError::ConnectionError(message):
+        ConfigError::ConnectionError(_):
             // Transient error - should retry
-            LOG WARN "Config fetch failed for stream {event.stream_id}, will retry: {message}"
+            LOG WARN "Config fetch failed for stream {event.stream_id}, will retry"
             RETURN ProcessingResult::RetryLater
 
-        ConfigError::ParseError(message):
-            // Permanent error - config is malformed
-            LOG ERROR "Config parse error for stream {event.stream_id}: {message}"
+        _:
+            // Permanent error
+            LOG ERROR "Config error for stream {event.stream_id}: {error}"
             RETURN ProcessingResult::Error(error)
     END MATCH
 END
 ```
+
+---
+
+## Phase 1: Dictionary Loader (Field Description Fallback)
 
 ### 1.5 Dictionary Loader with Fields Fallback
 
@@ -808,135 +820,95 @@ BEGIN
 END
 ```
 
-### 1.6 Config Source Logging
-
-```
-ALGORITHM: LogConfigSource
-
-DESCRIPTION:
-    Standardized logging format for config loading operations.
-    Used by all config loaders for consistent audit trail.
-
-LOG_FORMAT:
-    "{level} {timestamp} [config] action={action} stream={stream_id} source={source} [details]"
-
-ACTIONS:
-    "loaded"     - Config successfully loaded
-    "cached"     - Config retrieved from cache
-    "not_found"  - Config does not exist
-    "error"      - Error occurred during loading
-    "validated"  - Config passed validation
-    "invalid"    - Config failed validation
-
-EXAMPLES:
-    INFO  2026-02-01T10:30:00Z [config] action=loaded stream=air-quality source=etcd config_version=1.1
-    DEBUG 2026-02-01T10:30:05Z [config] action=cached stream=air-quality cache_age_ms=5000
-    WARN  2026-02-01T10:30:10Z [config] action=not_found stream=unknown-stream source=etcd
-    ERROR 2026-02-01T10:30:15Z [config] action=error stream=air-quality source=etcd error="connection refused"
-
-IMPLEMENTATION:
-
-FUNCTION log_config_loaded(stream_id, source, config):
-    LOG INFO "[config] action=loaded stream={stream_id} source={source} config_version={config.config_version}"
-
-FUNCTION log_config_cached(stream_id, cache_age_ms):
-    LOG DEBUG "[config] action=cached stream={stream_id} cache_age_ms={cache_age_ms}"
-
-FUNCTION log_config_not_found(stream_id, source):
-    LOG WARN "[config] action=not_found stream={stream_id} source={source}"
-
-FUNCTION log_config_error(stream_id, source, error):
-    LOG ERROR "[config] action=error stream={stream_id} source={source} error=\"{error}\""
-
-FUNCTION log_config_validated(stream_id, duration_ms):
-    LOG DEBUG "[config] action=validated stream={stream_id} duration_ms={duration_ms}"
-
-FUNCTION log_config_invalid(stream_id, errors):
-    LOG ERROR "[config] action=invalid stream={stream_id} errors={errors}"
-```
-
-### 1.7 Sync Error Promotion (WARN -> ERROR)
-
-```
-ALGORITHM: PromoteSyncErrors
-
-DESCRIPTION:
-    Promote synchronization errors from WARN to ERROR level.
-    Makes failures visible in logs and monitoring systems.
-
-BEFORE (Silent Failures):
-    WARN  [sync] Failed to load stream config: timeout
-    WARN  [sync] Skipping stream air-quality
-    // Continues processing other streams, no indication of problem
-
-AFTER (Visible Failures):
-    ERROR [sync] Config sync failed for stream=air-quality error="timeout" attempt=3/3
-    ERROR [sync] Stream air-quality will not receive updates until sync succeeds
-    // Alerts fire, operators notified
-
-IMPLEMENTATION:
-
-ALGORITHM: SyncConfigWithErrorPromotion
-INPUT: stream_id (string)
-OUTPUT: SyncResult
-
-CONSTANTS:
-    MAX_RETRIES = 3
-    RETRY_DELAY_MS = 1000
-
-BEGIN
-    retry_count <- 0
-    last_error <- null
-
-    WHILE retry_count < MAX_RETRIES DO
-        TRY
-            // Attempt to sync config
-            result <- sync_config_to_etcd(stream_id)
-
-            IF result.success THEN
-                LOG INFO "[sync] Config sync succeeded for stream={stream_id}"
-                RETURN SyncResult::Success
-            END IF
-
-        CATCH error
-            retry_count <- retry_count + 1
-            last_error <- error
-
-            IF retry_count < MAX_RETRIES THEN
-                LOG WARN "[sync] Config sync attempt {retry_count}/{MAX_RETRIES} failed for stream={stream_id}: {error}"
-                sleep(RETRY_DELAY_MS * retry_count)  // Exponential backoff
-            END IF
-        END TRY
-    END WHILE
-
-    // All retries exhausted - promote to ERROR
-    LOG ERROR "[sync] Config sync FAILED for stream={stream_id} error=\"{last_error}\" attempts={MAX_RETRIES}"
-    LOG ERROR "[sync] Stream {stream_id} will not receive updates until sync succeeds"
-
-    // Optionally increment error metric
-    metrics.increment("config_sync_failures", tags: { stream: stream_id })
-
-    RETURN SyncResult::Failed(last_error)
-END
-```
-
 ---
 
 ## State Transitions
 
-### Config Loading State Machine
+### Config Sync State Machine
+
+```
+STATE MACHINE: ConfigSyncStates
+
+STATES:
+    IDLE            - No sync in progress
+    READING         - Reading JSON file from disk
+    VALIDATING      - Validating against JSON Schema
+    SAVING          - Saving to etcd
+    COMPLETED       - Sync succeeded
+    FAILED          - Sync failed
+
+TRANSITIONS:
+    IDLE -> READING
+        trigger: sync_stream() called
+        action: read JSON file
+
+    READING -> VALIDATING
+        trigger: file read successfully
+        action: validate against schema
+
+    READING -> FAILED
+        trigger: file read error
+        action: log error, return
+
+    VALIDATING -> SAVING
+        trigger: validation passed
+        action: save to etcd
+
+    VALIDATING -> FAILED
+        trigger: validation failed
+        action: log errors, return
+
+    SAVING -> COMPLETED
+        trigger: etcd save succeeded
+        action: log success
+
+    SAVING -> FAILED
+        trigger: etcd save failed
+        action: log error, return
+
+STATE DIAGRAM:
+
+    +--------+
+    |  IDLE  |
+    +---+----+
+        |
+        | sync_stream()
+        v
+    +--------+     error      +--------+
+    |READING +--------------->| FAILED |
+    +---+----+                +--------+
+        |                          ^
+        | success                  |
+        v                          |
+    +----------+   invalid    -----+
+    |VALIDATING+------------------+
+    +---+------+                  |
+        |                         |
+        | valid                   |
+        v                         |
+    +--------+     error     -----+
+    | SAVING +-------------------+
+    +---+----+
+        |
+        | success
+        v
+    +----------+
+    |COMPLETED |
+    +----------+
+```
+
+### Config Loading State Machine (StreamRegistry)
 
 ```
 STATE MACHINE: ConfigLoadingStates
 
 STATES:
-    INITIAL         - No config loaded, fresh start
-    CACHED          - Config available in local cache
-    LOADING         - Fetching config from etcd
-    LOADED          - Config successfully loaded and validated
-    NOT_FOUND       - Config does not exist for stream
-    INVALID         - Config exists but failed validation
-    ERROR           - Transient error (connection, timeout)
+    INITIAL         - No config loaded
+    CACHED          - Config in local cache
+    LOADING         - Fetching from etcd
+    LOADED          - Config loaded and validated
+    NOT_FOUND       - Config does not exist
+    ERROR           - Transient error
 
 TRANSITIONS:
     INITIAL -> LOADING
@@ -945,109 +917,28 @@ TRANSITIONS:
 
     LOADING -> LOADED
         trigger: etcd returns valid config
-        action: cache config, log success
+        action: cache config, return
 
     LOADING -> NOT_FOUND
         trigger: etcd returns empty response
-        action: log warning
-
-    LOADING -> INVALID
-        trigger: config fails validation
-        action: log error, do not cache
+        action: return NotFound error
 
     LOADING -> ERROR
-        trigger: connection failure, timeout
-        action: log error, schedule retry
-
-    CACHED -> LOADING
-        trigger: cache TTL expired
-        action: refresh from etcd
+        trigger: connection failure
+        action: return error, schedule retry
 
     CACHED -> LOADED
         trigger: cache hit (not expired)
         action: return cached config
 
-    ERROR -> LOADING
-        trigger: retry timer fires
-        action: retry etcd fetch
-
-    NOT_FOUND -> LOADING
-        trigger: periodic check or explicit refresh
-        action: check if config now exists
-
-STATE DIAGRAM:
-
-    +----------+
-    | INITIAL  |
-    +----+-----+
-         |
-         | first request
-         v
-    +----------+     success     +----------+
-    | LOADING  +---------------->|  LOADED  |
-    +----+-----+                 +----+-----+
-         |                            ^
-         | cache expired              | cache hit
-         |                            |
-         |    +----------+            |
-         +--->|  CACHED  +------------+
-         |    +----------+
-         |
-         | not found
-         v
-    +----------+
-    |NOT_FOUND |
-    +----------+
-         |
-         | error
-         v
-    +----------+
-    |  ERROR   |----> retry ----> LOADING
-    +----------+
-         |
-         | validation failed
-         v
-    +----------+
-    | INVALID  |
-    +----------+
+    CACHED -> LOADING
+        trigger: cache TTL expired
+        action: refresh from etcd
 ```
 
 ---
 
 ## Decision Trees
-
-### Should Load Config Decision Tree
-
-```
-DECISION TREE: ShouldLoadConfig
-
-START: Received request for stream config
-
-Q1: Is stream_id in local cache?
-    NO  -> Load from etcd
-    YES -> Q2
-
-Q2: Is cached config expired (TTL > threshold)?
-    NO  -> Return cached config (CACHE HIT)
-    YES -> Q3
-
-Q3: Is etcd connection healthy?
-    NO  -> Return stale cache with warning (STALE CACHE)
-    YES -> Load from etcd
-
-LOAD FROM ETCD:
-    Q4: Does key exist in etcd?
-        NO  -> Return NOT_FOUND error
-        YES -> Q5
-
-    Q5: Is JSON valid?
-        NO  -> Return PARSE_ERROR
-        YES -> Q6
-
-    Q6: Does config pass validation?
-        NO  -> Return VALIDATION_ERROR
-        YES -> Cache and return config (SUCCESS)
-```
 
 ### Field Description Source Decision Tree
 
@@ -1085,49 +976,87 @@ Q4a: Does matching attribute have non-empty description?
 
 ## Error Handling Patterns
 
-### Config Loading Error Handling
+### Config Sync Error Handling
 
 ```
-PATTERN: ConfigLoadingErrorHandling
+PATTERN: ConfigSyncErrorHandling
 
 ERROR_TYPES:
-    1. ConnectionError   - Cannot reach etcd
-    2. NotFoundError     - Key does not exist
-    3. ParseError        - JSON is malformed
-    4. ValidationError   - Config structure invalid
-    5. TimeoutError      - Request took too long
+    1. FileNotFound      - JSON file does not exist
+    2. ParseError        - JSON is malformed
+    3. ValidationError   - Schema validation failed
+    4. ConnectionError   - Cannot reach etcd
+    5. SaveError         - etcd rejected the save
 
 HANDLING_STRATEGY:
 
-    ConnectionError:
-        - Log ERROR with connection details
-        - Return stale cache if available
-        - Schedule retry with exponential backoff
-        - Increment connection_failure metric
-        - After N failures, alert operations
-
-    NotFoundError:
-        - Log WARN (this may be expected for new streams)
-        - Return specific NotFound error
-        - Do not retry (permanent until config created)
+    FileNotFound:
+        - Log WARN (stream may not be configured yet)
+        - Skip stream, continue with others
+        - Do not retry
 
     ParseError:
-        - Log ERROR with stream_id and parse error details
-        - Do not cache (permanent error)
-        - Increment parse_error metric
-        - Alert operations (config is corrupt)
+        - Log ERROR with file path and parse error
+        - Do not retry (permanent until file fixed)
+        - Alert operations
 
     ValidationError:
-        - Log ERROR with validation failure details
-        - Do not cache
-        - Increment validation_failure metric
-        - Alert operations (config needs fixing)
+        - Log ERROR with validation failures
+        - Do not retry (permanent until file fixed)
+        - Alert operations
 
-    TimeoutError:
-        - Log WARN with timeout duration
-        - Retry with shorter timeout or backoff
-        - After N retries, return stale cache if available
-        - Increment timeout metric
+    ConnectionError:
+        - Log ERROR with connection details
+        - Retry with exponential backoff
+        - After N failures, promote to ERROR
+        - Alert operations
+
+    SaveError:
+        - Log ERROR with etcd error
+        - Retry with exponential backoff
+        - After N failures, alert operations
+```
+
+### Sync Error Promotion (WARN -> ERROR)
+
+```
+ALGORITHM: SyncConfigWithErrorPromotion
+INPUT: json_path (string)
+OUTPUT: SyncResult
+
+CONSTANTS:
+    MAX_RETRIES = 3
+    RETRY_DELAY_MS = 1000
+
+BEGIN
+    retry_count <- 0
+    last_error <- null
+
+    WHILE retry_count < MAX_RETRIES DO
+        TRY
+            result <- sync_stream(json_path)
+
+            IF result.success THEN
+                LOG INFO "[sync] Config sync succeeded for {json_path}"
+                RETURN SyncResult::Success
+            END IF
+
+        CATCH error
+            retry_count <- retry_count + 1
+            last_error <- error
+
+            IF retry_count < MAX_RETRIES THEN
+                LOG WARN "[sync] Config sync attempt {retry_count}/{MAX_RETRIES} failed: {error}"
+                sleep(RETRY_DELAY_MS * retry_count)
+            END IF
+        END TRY
+    END WHILE
+
+    // All retries exhausted - promote to ERROR
+    LOG ERROR "[sync] Config sync FAILED for {json_path} error=\"{last_error}\" attempts={MAX_RETRIES}"
+
+    RETURN SyncResult::Failed(last_error)
+END
 ```
 
 ---
@@ -1165,19 +1094,39 @@ SPACE COMPLEXITY:
     Peak: O(c + a + e) since processed sequentially
 ```
 
-### Config Loading Complexity
+### Config Sync Complexity
 
 ```
-ALGORITHM: EtcdConfigLoader.load_stream_config
+ALGORITHM: ConfigSyncService.sync_stream
+
+TIME COMPLEXITY:
+    - File read: O(c) where c = config size
+    - Schema validation: O(c + f + r) where f = fields, r = rules
+    - JSON parsing: O(c)
+    - Network round-trip to etcd: O(n) where n = network latency (~10-50ms)
+
+    Total: O(c + f + r + n)
+    Dominated by network latency in practice
+
+SPACE COMPLEXITY:
+    - JSON content: O(c)
+    - Parsed config: O(c)
+    - Validation errors: O(e)
+
+    Total: O(c + e)
+```
+
+### Config Loading Complexity (StreamRegistry)
+
+```
+ALGORITHM: StreamRegistry.load_stream
 
 TIME COMPLEXITY:
     - Cache lookup: O(1) hash map lookup
-    - Network round-trip: O(n) where n = network latency (~10-50ms typically)
+    - Network round-trip: O(n) where n = network latency
     - JSON parsing: O(c) where c = config size
-    - Validation: O(c + f + r) where f = fields, r = DQ rules
-    - Cache update: O(1)
 
-    Cold load: O(n + c + f + r)
+    Cold load: O(n + c)
     Cached load: O(1)
 
 SPACE COMPLEXITY:
@@ -1204,54 +1153,60 @@ SPACE COMPLEXITY:
 
 ---
 
-## Optimization Notes
+## Summary: Pass-Through vs. Transformation
 
-### Migration Performance
+### What We Removed
 
-1. **Parallel Migration**: Streams could be migrated in parallel since they are independent
-   - Current: Sequential for simplicity and error visibility
-   - Future: Add `--parallel` flag for large deployments
+| Component | Reason |
+|-----------|--------|
+| `ConfigLoader` trait | Not needed - StreamRegistry already provides this |
+| `EtcdConfigLoader` | Not needed - StreamRegistry already does this |
+| `SilverRegistry` | Not needed - Silver uses same StreamRegistry as Bronze |
+| `StreamConfigYaml` | Not needed - one struct (StreamConfig) for everything |
+| `to_stream_config()` | This was the source of data loss |
 
-2. **Incremental Migration**: Check for existing JSON files and skip if already v1.1+
-   - Implemented via idempotency check
-   - Enables safe re-runs
+### What We Keep
 
-### Config Loading Performance
+| Component | Purpose |
+|-----------|---------|
+| JSON migration script | One-time conversion from YAML to JSON |
+| Field enrichment | Moves descriptions from entity_schemas to fields |
+| Schema validation | Validates JSON before sync |
+| ConfigSyncService | Simplified to pass-through (no transformation) |
+| StreamRegistry | Existing component - unchanged |
+| Dictionary loader fallback | v1.0 compatibility for entity_schemas |
 
-1. **Cache Warming**: Pre-load configs for known streams at startup
-   - Reduces first-request latency
-   - Trade-off: Startup time vs. request latency
+### The Key Insight
 
-2. **Batch Loading**: Load all stream configs in single etcd range query
-   - More efficient for "list all streams" operations
-   - Already implemented in StreamRegistry.load_all_streams()
+**BEFORE** (lossy):
+```
+YAML -> StreamConfigYaml -> to_stream_config() -> StreamConfig -> etcd
+                                  ^
+                                  |
+                            DATA LOST HERE
+```
 
-3. **Watch for Changes**: Use etcd watch to invalidate cache on config changes
-   - Enables near-real-time config updates
-   - Future enhancement for hot-reload (Phase 4)
-
-### Dictionary Loader Performance
-
-1. **Pre-build Lookup Map**: Convert entity_schemas to hash map at config load time
-   - O(1) field lookup instead of O(e * a) scan
-   - Trade-off: Memory for speed
-
-2. **Memoize Results**: Cache get_field_description results
-   - Useful when repeatedly accessing same field
-   - Clear on config reload
+**AFTER** (pass-through):
+```
+JSON -> validate -> StreamConfig -> etcd
+          |              |
+          v              v
+      (same data)   (same data)
+```
 
 ---
 
 ## References
 
 - [dp-018 SCOPE.md](../SCOPE.md) - Feature scope and acceptance criteria
-- [dp-016 IMPLEMENTATION-ROADMAP.md](../../dp-016/IMPLEMENTATION-ROADMAP.md) - Parent architecture roadmap
-- [ADR-016-001](../../dp-016/architecture/ADR-016-001-config-source-of-truth.md) - Config source of truth decision
+- [ADR-018-001](../architecture/ADR-018-001-config-loader-design.md) - JSON Pass-Through Architecture
+- [dp-016 ADR-016-001](../../dp-016/architecture/ADR-016-001-config-source-of-truth.md) - Config source of truth
 - [config-client](../../../../config-client/src/) - Existing etcd client implementation
-- [core/config/silver_etl.rs](../../../../core/src/config/silver_etl.rs) - Silver ETL config types
+- [core/types/stream_config.rs](../../../../core/src/types/stream_config.rs) - StreamConfig struct
 
 ---
 
 *Pseudocode created: 2026-02-01*
+*Updated: 2026-02-01 - Aligned with JSON pass-through architecture (ADR-018-001)*
 *SPARC Phase: Pseudocode*
 *Parent Feature: dp-018 JSON Config Foundation*

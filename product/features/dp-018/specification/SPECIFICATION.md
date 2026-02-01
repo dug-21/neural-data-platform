@@ -2,9 +2,10 @@
 
 **Document Type**: SPARC Specification (Phase S)
 **Feature**: dp-018 JSON Config Foundation
-**Version**: 1.0
+**Version**: 1.1
 **Date**: 2026-02-01
 **Parent**: dp-016 Configuration Architecture Review
+**Architecture**: ADR-018-001 JSON Pass-Through Architecture
 
 ---
 
@@ -16,9 +17,18 @@ This specification defines the requirements for implementing Phases 0 and 1 of t
 
 1. All stream configurations migrated from YAML to JSON format (v1.1 schema)
 2. Silver ETL subscriber loads config from etcd (same source as Bronze)
-3. Unified `ConfigLoader` trait for consistent config access
-4. Fields enriched with descriptions (preparation for entity_schemas elimination)
-5. Silent failures converted to visible errors
+3. **JSON pass-through architecture** - no transformation between file and etcd
+4. **Eliminate lossy transformation** - delete StreamConfigYaml and to_stream_config()
+5. Fields enriched with descriptions (preparation for entity_schemas elimination)
+6. Silent failures converted to visible errors
+
+### Core Architecture Principle
+
+**JSON file = etcd blob = runtime config**
+
+The fundamental change is eliminating the lossy transformation pipeline:
+- **BEFORE**: YAML -> StreamConfigYaml -> to_stream_config() -> StreamConfig -> etcd (LOSSY)
+- **AFTER**: JSON -> validate -> StreamConfig -> etcd (PASS-THROUGH)
 
 ---
 
@@ -40,18 +50,19 @@ This specification defines the requirements for implementing Phases 0 and 1 of t
 | **FR-008** | Update .gitignore | LOW | Old YAML config files removed after successful migration and verification | Task 0.7 |
 | **FR-009** | Update documentation | LOW | README and docs reference JSON format. No stale YAML references in documentation | Task 0.8 |
 
-#### Phase 1: Unified Config Loading
+#### Phase 1: JSON Pass-Through Architecture
 
 | ID | Requirement | Priority | Acceptance Criteria | Traces To |
 |----|-------------|----------|---------------------|-----------|
-| **FR-010** | Create ConfigLoader trait | HIGH | Trait defined in `neural-core` with `load_stream_config()` and `load_silver_etl_config()` methods. Trait is `Send + Sync` | Task 1.1 |
-| **FR-011** | Implement EtcdConfigLoader | HIGH | JSON-native implementation using `serde_json`. Reads config from etcd, returns typed `StreamConfig` or `SilverEtlConfig`. Located in `core/src/config/etcd_loader.rs` | Task 1.2 |
-| **FR-012** | Fix Silver subscriber config loading | CRITICAL | Silver subscriber in `air-quality-app` uses `EtcdConfigLoader` to read config from etcd. Removes direct YAML file dependency | Task 1.3, P-001 |
-| **FR-013** | Ensure batch ETL uses same loader | HIGH | If batch ETL exists, it uses `EtcdConfigLoader` for consistent behavior with streaming | Task 1.4, P-004 |
-| **FR-014** | Fix data dictionary sync | HIGH | Dictionary sync reads from etcd, not YAML files | Task 1.5, P-013 |
-| **FR-015** | Update dictionary loader for enriched fields | MEDIUM | Dictionary loader reads `description` from `fields.description` with fallback to `entity_schemas`. Works with both v1.0 and v1.1 configs | Task 1.5a |
-| **FR-016** | Add config source logging | MEDIUM | Every config load logs which source the config was loaded from (etcd key path). Format: `"config loaded from etcd: /streams/{stream_id}/config"` | Task 1.6 |
-| **FR-017** | Promote sync errors to ERROR level | HIGH | Config sync failures logged as ERROR (not WARN). Failed streams are explicitly listed. Application behavior configurable via `--strict` mode | Task 1.7, P-017 |
+| **FR-010** | Extend StreamConfig with silver_etl field | HIGH | Add `silver_etl: Option<SilverEtlConfig>` to StreamConfig struct in `core/src/types/stream_config.rs`. Field uses `#[serde(skip_serializing_if = "Option::is_none")]` | Task 1.1, ADR-018-001 |
+| **FR-011** | Delete StreamConfigYaml struct | HIGH | Remove `StreamConfigYaml` from codebase. This struct with `#[serde(flatten)] extra: HashMap` caused lossy transformation | Task 1.2, ADR-018-001 |
+| **FR-012** | Delete to_stream_config() function | HIGH | Remove the lossy transformation function. JSON deserializes directly to StreamConfig | Task 1.2, ADR-018-001 |
+| **FR-013** | Simplify ConfigSyncService | CRITICAL | ConfigSyncService reads JSON, validates against schema, deserializes to StreamConfig, saves to etcd. No transformation step. Pass-through only | Task 1.3, ADR-018-001 |
+| **FR-014** | Delete load_silver_etl_config() function | HIGH | Remove separate Silver config loader. Silver uses `registry.load_stream().silver_etl` like Bronze uses `registry.load_stream().sources` | Task 1.4, ADR-018-001 |
+| **FR-015** | Fix Silver subscriber config loading | CRITICAL | Silver subscriber uses `StreamRegistry.load_stream()` to get config from etcd, then accesses `config.silver_etl`. Same pattern as Bronze | Task 1.5, P-001 |
+| **FR-016** | Update dictionary loader for enriched fields | MEDIUM | Dictionary loader reads `description` from `fields.description` with fallback to `entity_schemas`. Works with both v1.0 and v1.1 configs | Task 1.6 |
+| **FR-017** | Add config source logging | MEDIUM | Every config load logs which source the config was loaded from (etcd key path). Format: `"config loaded from etcd: /streams/{stream_id}/config"` | Task 1.7 |
+| **FR-018** | Promote sync errors to ERROR level | HIGH | Config sync failures logged as ERROR (not WARN). Failed streams are explicitly listed. Application behavior configurable via `--strict` mode | Task 1.8, P-017 |
 
 ### 2.2 Non-Functional Requirements
 
@@ -108,18 +119,33 @@ Feature: JSON Migration (Phase 0)
     And no config.yaml files remain (or are in .gitignore)
 ```
 
-### 3.2 Phase 1: Unified Config Loading - Definition of Done
+### 3.2 Phase 1: JSON Pass-Through Architecture - Definition of Done
 
 ```gherkin
-Feature: Unified Config Loading (Phase 1)
+Feature: JSON Pass-Through Architecture (Phase 1)
 
-  Scenario: Silver subscriber loads config from etcd
+  Scenario: JSON file equals etcd blob (no transformation)
+    Given a JSON config file at config/base/streams/air-quality/config.json
+    When ConfigSyncService syncs the stream to etcd
+    Then the etcd value is the same JSON (no transformation)
+    And StreamConfig deserializes directly from the JSON
+    And no StreamConfigYaml intermediate struct is used
+
+  Scenario: StreamConfig includes silver_etl
+    Given a JSON config with silver_etl section
+    When I deserialize to StreamConfig
+    Then config.silver_etl is Some(SilverEtlConfig)
+    And all silver_etl fields are preserved (no data loss)
+
+  Scenario: Silver subscriber uses StreamRegistry (same as Bronze)
     Given etcd contains stream config at /streams/air-quality/config
     And the config has silver_etl.enabled = true
     When air-quality-app starts
-    Then SilverSubscriber is created for air-quality stream
+    Then SilverSubscriber calls registry.load_stream("air-quality")
+    And SilverSubscriber accesses config.silver_etl
     And log contains "config loaded from etcd: /streams/air-quality/config"
     And no YAML file is read during startup
+    And no load_silver_etl_config() function is called
 
   Scenario: Missing etcd config fails loudly
     Given etcd does not contain /streams/missing-stream/config
@@ -127,6 +153,15 @@ Feature: Unified Config Loading (Phase 1)
     Then ERROR is logged with message containing "config not found"
     And the stream is listed as failed at startup
     And application continues (does not crash)
+
+  Scenario: ConfigSyncService does pass-through (no transformation)
+    Given a JSON config file
+    When ConfigSyncService.sync_stream() runs
+    Then it reads JSON from file
+    And validates against JSON Schema
+    And deserializes directly to StreamConfig (not StreamConfigYaml)
+    And saves StreamConfig to etcd
+    And no to_stream_config() transformation occurs
 
   Scenario: Config sync failure is ERROR not WARN
     Given a stream config with validation error
@@ -145,11 +180,16 @@ Feature: Unified Config Loading (Phase 1)
     Then description is read from entity_schemas (fallback)
     And a deprecation warning is logged
 
-  Scenario: ConfigLoader trait provides unified interface
-    Given EtcdConfigLoader is initialized with etcd endpoints
-    When I call load_stream_config("air-quality")
-    Then I receive a typed StreamConfig
-    And the config includes silver_etl section if present
+  Scenario: Both Bronze and Silver use StreamRegistry.load_stream()
+    Given StreamRegistry is connected to etcd
+    When Bronze needs config for air-quality
+    Then it calls registry.load_stream("air-quality")
+    And accesses config.sources
+
+    When Silver needs config for air-quality
+    Then it calls registry.load_stream("air-quality")
+    And accesses config.silver_etl
+    And both use the SAME StreamConfig struct
 
   Scenario: Config source is always logged
     Given any component loading config from etcd
@@ -168,9 +208,10 @@ Feature: Unified Config Loading (Phase 1)
 | Constraint | Impact | Mitigation |
 |------------|--------|------------|
 | **No Python on Pi** | Migration scripts cannot use Python | Use shell+yq+jq for migration. Scripts run on dev machine, not Pi. Resulting JSON files are committed to git |
-| **Rust-first platform** | New tooling should be Rust | ConfigLoader trait and EtcdConfigLoader implemented in Rust. Leverages existing `config-client` crate |
-| **Existing config-client crate** | Must integrate with existing infrastructure | EtcdConfigLoader wraps/extends existing `ConfigClient` and `StreamRegistry`. Does not replace them |
-| **etcd as runtime store** | etcd is the single runtime config source | All runtime config reads go through etcd. YAML files are source-of-record for version control only |
+| **Rust-first platform** | New tooling should be Rust | StreamConfig extension and ConfigSyncService simplification in Rust. Leverages existing `config-client` crate |
+| **Existing config-client crate** | Must integrate with existing infrastructure | StreamRegistry already provides load_stream(). No new loader classes needed - just extend StreamConfig with silver_etl field |
+| **etcd as runtime store** | etcd is the single runtime config source | All runtime config reads go through etcd via StreamRegistry. JSON files are source-of-record for version control only |
+| **Pass-through architecture** | No transformation between JSON file and etcd | ConfigSyncService validates then passes through. StreamConfig is the single struct for file, etcd, and runtime |
 
 ### 4.2 Architectural Constraints
 
@@ -178,8 +219,10 @@ Feature: Unified Config Loading (Phase 1)
 |------------|-------------|--------|
 | **Silver ETL is a subscriber** | Silver ETL is NOT a separate daemon. It is a subscriber component inside `air-quality-app` that subscribes to the event bus | SCOPE.md clarification |
 | **Legacy silver-etl daemon deprecated** | The `apps/silver-etl/` component is obsolete. Do not modify or use it | dp-017 |
-| **config-client is the foundation** | The `config-client` crate already provides `StreamRegistry` with etcd integration. New code extends this | Existing codebase |
-| **ConfigSyncService pushes to etcd** | On startup, `ConfigSyncService` syncs YAML configs to etcd. This is the "push" direction. ConfigLoader reads from etcd (the "pull" direction) | Existing codebase |
+| **config-client is the foundation** | The `config-client` crate already provides `StreamRegistry` with etcd integration. StreamRegistry.load_stream() is the unified access pattern for both Bronze and Silver | Existing codebase |
+| **ConfigSyncService does pass-through** | On startup, `ConfigSyncService` syncs JSON configs to etcd with NO transformation. JSON file content = etcd blob | ADR-018-001 |
+| **One struct: StreamConfig** | Eliminate StreamConfigYaml. StreamConfig is the single struct used for JSON files, etcd storage, and runtime. Add silver_etl field to StreamConfig | ADR-018-001 |
+| **No new traits or loaders** | Do NOT create ConfigLoader trait, EtcdConfigLoader, or SilverRegistry. Use existing StreamRegistry.load_stream() | ADR-018-001 |
 
 ### 4.3 Business Constraints
 
@@ -329,58 +372,89 @@ entities:
 
 ## 7. Interface Specification
 
-### 7.1 ConfigLoader Trait
+### 7.1 Extended StreamConfig (core/src/types/stream_config.rs)
 
 ```rust
-/// Unified trait for configuration loading
+/// Unified stream configuration struct
 ///
-/// All components needing config should use this trait, not direct etcd access.
-/// This enables testing with mock implementations and ensures consistent behavior.
-pub trait ConfigLoader: Send + Sync {
-    /// Load complete stream configuration
-    ///
-    /// Returns the full StreamConfig including silver_etl if present.
-    ///
-    /// # Errors
-    /// - `ConfigError::NotFound` if stream does not exist in etcd
-    /// - `ConfigError::InvalidConfig` if JSON is malformed or fails validation
-    async fn load_stream_config(&self, stream_id: &str) -> Result<StreamConfig, ConfigError>;
+/// This is the SINGLE struct used everywhere:
+/// - JSON config files (source of truth)
+/// - etcd storage (pass-through, no transformation)
+/// - Runtime access by Bronze and Silver components
+///
+/// Adding silver_etl here eliminates the lossy transformation that
+/// occurred in the old StreamConfigYaml.to_stream_config() pipeline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamConfig {
+    pub stream_id: String,
+    pub description: String,
+    pub version: String,
+    pub enabled: bool,
+    pub retention_days: u32,
+    pub compression_after_days: u32,
+    pub partitioning_strategy: String,
+    pub fields: Vec<SchemaField>,
+    pub sources: Vec<SourceConfig>,
 
-    /// Load Silver ETL configuration for a stream
-    ///
-    /// Convenience method that extracts silver_etl from StreamConfig.
-    /// Returns None if stream exists but has no silver_etl section.
-    ///
-    /// # Errors
-    /// - `ConfigError::NotFound` if stream does not exist in etcd
-    async fn load_silver_etl_config(&self, stream_id: &str) -> Result<Option<SilverEtlConfig>, ConfigError>;
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage: Option<StorageConfig>,
 
-    /// List all stream IDs available in config store
-    async fn list_streams(&self) -> Result<Vec<String>, ConfigError>;
+    /// Silver ETL configuration - now part of unified config
+    /// Bronze ignores this; Silver uses it for ETL configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silver_etl: Option<SilverEtlConfig>,
+
+    /// Entity schemas (deprecated in v1.1, removed in v2.0)
+    /// Use enriched fields instead
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_schemas: Option<Vec<EntitySchema>>,
 }
 ```
 
-### 7.2 EtcdConfigLoader Implementation
+### 7.2 Simplified ConfigSyncService (apps/air-quality-app/src/config_sync/service.rs)
 
 ```rust
-/// ConfigLoader implementation backed by etcd
+/// Pass-through config sync - no transformation
 ///
-/// Reads JSON configuration from etcd keys under /streams/{stream_id}/config.
-/// Logs source of every config load for observability.
-pub struct EtcdConfigLoader {
-    registry: StreamRegistry,
-}
+/// BEFORE (lossy):
+///   YAML -> StreamConfigYaml -> to_stream_config() -> StreamConfig -> etcd
+///
+/// AFTER (pass-through):
+///   JSON -> validate -> StreamConfig -> etcd
+impl ConfigSyncService {
+    pub fn sync_stream(&self, json_path: &Path) -> Result<()> {
+        let json = fs::read_to_string(json_path)?;
 
-impl EtcdConfigLoader {
-    /// Create a new EtcdConfigLoader connected to etcd
-    ///
-    /// # Arguments
-    /// * `endpoints` - etcd endpoint URLs (e.g., ["http://localhost:2379"])
-    pub async fn new(endpoints: &[&str]) -> Result<Self, ConfigError>;
+        // Validate against schema (catches errors early)
+        validate_json_schema(&json, &self.schema)?;
+
+        // Deserialize directly to StreamConfig (same struct everywhere)
+        let config: StreamConfig = serde_json::from_str(&json)?;
+
+        // Save to etcd (serializes same struct - no data loss)
+        self.registry.save_stream(&config)?;
+
+        info!("config synced to etcd: /streams/{}/config", config.stream_id);
+        Ok(())
+    }
 }
 ```
 
-### 7.3 Migration Script Interface
+### 7.3 Unified Config Access Pattern
+
+```rust
+// Bronze component (already correct)
+let config = registry.load_stream("air-quality").await?;
+let sources = &config.sources;  // Access Bronze-specific fields
+
+// Silver component (now fixed - same pattern)
+let config = registry.load_stream("air-quality").await?;
+let silver_etl = config.silver_etl.as_ref()
+    .ok_or_else(|| anyhow!("Stream {} has no silver_etl config", stream_id))?;
+let target_table = &silver_etl.target_table;  // Access Silver-specific fields
+```
+
+### 7.4 Migration Script Interface
 
 ```bash
 # Usage: scripts/migrate-yaml-to-json.sh [options]
@@ -413,10 +487,14 @@ Before completing Phase 0:
 
 Before completing Phase 1:
 
-- [ ] ConfigLoader trait defined in neural-core
-- [ ] EtcdConfigLoader implemented and tested
-- [ ] Silver subscriber uses EtcdConfigLoader
-- [ ] Dictionary sync uses EtcdConfigLoader with fallback
+- [ ] StreamConfig extended with silver_etl field
+- [ ] StreamConfigYaml struct deleted
+- [ ] to_stream_config() function deleted
+- [ ] load_silver_etl_config() function deleted
+- [ ] ConfigSyncService simplified (pass-through, no transformation)
+- [ ] Silver subscriber uses StreamRegistry.load_stream()
+- [ ] JSON file = etcd blob (verified by test)
+- [ ] Dictionary sync uses StreamRegistry with fallback for entity_schemas
 - [ ] All config loads logged with source
 - [ ] Sync failures logged as ERROR (not WARN)
 - [ ] Integration tests pass with DEPLOY_ENV=integration
@@ -427,19 +505,22 @@ Before completing Phase 1:
 
 | Term | Definition |
 |------|------------|
-| **ConfigLoader** | Rust trait defining the interface for loading stream configurations. Implementations can read from etcd, files, or mock sources. Defined in `core/src/config/loader.rs` |
-| **EtcdConfigLoader** | Implementation of ConfigLoader that reads JSON configs from etcd. Uses the existing `config-client` crate infrastructure |
-| **StreamRegistry** | Existing class in `config-client` crate that manages stream configs in etcd. EtcdConfigLoader wraps/extends this |
-| **ConfigSyncService** | Existing service in `air-quality-app` that syncs YAML configs to etcd on startup. Remains unchanged; pushes configs to etcd |
+| **Pass-through architecture** | Design principle where JSON config file content equals etcd blob equals runtime config. No transformation layer. See ADR-018-001 |
+| **StreamConfig** | The SINGLE struct used everywhere: JSON files, etcd storage, and runtime. Extended with `silver_etl` field in dp-018. Located in `core/src/types/stream_config.rs` |
+| **StreamConfigYaml** | DEPRECATED/DELETED. Former intermediate struct with `#[serde(flatten)] extra: HashMap` that caused lossy transformation. Eliminated in dp-018 |
+| **to_stream_config()** | DEPRECATED/DELETED. Former transformation function that converted StreamConfigYaml to StreamConfig, losing silver_etl data. Eliminated in dp-018 |
+| **load_silver_etl_config()** | DEPRECATED/DELETED. Former function for loading Silver config from YAML files. Replaced by `registry.load_stream().silver_etl` |
+| **StreamRegistry** | Existing class in `config-client` crate that manages stream configs in etcd. The unified access point for both Bronze and Silver via `load_stream()` |
+| **ConfigSyncService** | Service in `air-quality-app` that syncs JSON configs to etcd on startup. Simplified to pass-through (no transformation) in dp-018 |
 | **v1.0 schema** | Legacy schema (YAML). entity_schemas required, enriched fields not supported. Pre-migration state |
 | **v1.1 schema** | Transitional schema (JSON). entity_schemas deprecated but accepted, enriched fields supported. dp-018 target state |
 | **v2.0 schema** | Future schema (dp-016 Phase 5). entity_schemas forbidden, enriched fields required. Breaking change with migration tool |
 | **entity_schemas** | Legacy array in config defining field metadata (description, device_class). DEPRECATED in v1.1. Data should be in fields instead |
 | **Enriched fields** | v1.1 pattern where `description` and `device_class` are properties of each field in the `fields` array, not in a separate `entity_schemas` section |
-| **Silver subscriber** | Component in `air-quality-app` that subscribes to the event bus and writes to Silver tables. NOT a separate daemon |
-| **Bronze subscriber** | Component that writes raw data to Parquet files in the Bronze layer |
+| **Silver subscriber** | Component in `air-quality-app` that subscribes to the event bus and writes to Silver tables. Uses `registry.load_stream().silver_etl` for config |
+| **Bronze subscriber** | Component that writes raw data to Parquet files in the Bronze layer. Uses `registry.load_stream().sources` for config |
 | **config-client** | Existing Rust crate providing `ConfigClient` and `StreamRegistry` for etcd access |
-| **SilverEtlConfig** | Configuration for Silver ETL including target table, field mappings, and DQ rules. Part of StreamConfig |
+| **SilverEtlConfig** | Configuration for Silver ETL including target table, field mappings, and DQ rules. Now a field within StreamConfig (not separate) |
 | **DQ rules** | Data Quality rules defining validation checks (range, enum, not_null, etc.) applied during Silver ETL |
 
 ---
@@ -465,6 +546,8 @@ Before completing Phase 1:
 | Existing code breaks with JSON | Low | Medium | v1.1 schema is backward compatible; all existing patterns accepted |
 | etcd connection failures | Low | High | Existing error handling in config-client; enhanced logging in dp-018 |
 | Dictionary sync fails with new loader | Medium | Medium | Fallback logic for v1.0 configs; deprecation warnings |
+| Deleting StreamConfigYaml breaks callers | Low | Medium | Search for all usages before deletion; update all callers to use StreamConfig directly |
+| to_stream_config() callers break | Low | Medium | Eliminate transformation; callers deserialize JSON directly to StreamConfig |
 
 ---
 
@@ -473,7 +556,11 @@ Before completing Phase 1:
 | Metric | Current State | After dp-018 | Measurement |
 |--------|---------------|--------------|-------------|
 | Config format | YAML (v1.0) | JSON (v1.1) | File extension in config/base/streams/ |
-| Silver config source | YAML files | etcd | Grep logs for "config loaded from" |
+| Config structs | 2 (StreamConfigYaml + StreamConfig) | 1 (StreamConfig only) | Grep codebase for struct definitions |
+| Transformation functions | to_stream_config() exists | Deleted | Grep codebase for to_stream_config |
+| Silver config source | YAML files | etcd via StreamRegistry | Grep logs for "config loaded from" |
+| Bronze/Silver config pattern | Different (Bronze: etcd, Silver: YAML) | Same (both use StreamRegistry.load_stream()) | Code review |
+| JSON = etcd blob | No (transformation) | Yes (pass-through) | Integration test comparison |
 | Silent config failures | Common (P-001) | Zero | Grep logs for ERROR level config messages |
 | Config sync failure level | WARN | ERROR | Log level in ConfigSyncService |
 | Field metadata locations | 2 (fields + entity_schemas) | 2 (transitional) | Config structure (1 location in v2.0) |
@@ -484,16 +571,18 @@ Before completing Phase 1:
 
 | Document | Path | Relevance |
 |----------|------|-----------|
+| **ADR-018-001** | `product/features/dp-018/architecture/ADR-018-001-config-loader-design.md` | **JSON Pass-Through Architecture** - defines the core architectural change |
 | dp-018 SCOPE.md | `product/features/dp-018/SCOPE.md` | Feature scope definition |
 | dp-016 IMPLEMENTATION-ROADMAP.md | `product/features/dp-016/IMPLEMENTATION-ROADMAP.md` | Detailed task breakdown |
 | dp-016 PAIN-POINTS.md | `product/features/dp-016/specification/PAIN-POINTS.md` | Problem catalog |
 | ADR-016-001 | `product/features/dp-016/architecture/ADR-016-001-config-source-of-truth.md` | Architecture decision |
 | air-013 SCOPE.md | `product/features/air-013/SCOPE.md` | Absorbed feature |
-| config-client crate | `config-client/` | Existing infrastructure |
-| StreamConfig | `core/src/types/stream_config.rs` | Current type definitions |
+| config-client crate | `config-client/` | StreamRegistry - unified config access |
+| StreamConfig | `core/src/types/stream_config.rs` | Single struct for all config (extended with silver_etl) |
 
 ---
 
 *Specification created: 2026-02-01*
+*Specification updated: 2026-02-01 (v1.1 - aligned with ADR-018-001 pass-through architecture)*
 *SPARC Phase: Specification (S)*
 *Next Phase: Pseudocode (P)*
