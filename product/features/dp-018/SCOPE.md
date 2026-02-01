@@ -12,9 +12,9 @@ This feature implements **Phases 0 and 1** of [dp-016: Configuration Architectur
 
 The NDP configuration system has critical issues causing silent failures:
 
-1. **Dual source of truth** - YAML files vs etcd, components disagree on which to read
-2. **Silver ETL silent failure** - Discovers streams from etcd, but loads config from YAML files
-3. **No JSON standard** - YAML doesn't match MCP/agent workflows, no schema validation
+1. **Dual source of truth** - YAML files vs etcd, components read from different sources
+2. **Silver ETL silent failure** - Discovers streams from etcd, failures return no error and no indication of why it did not load or act
+3. **No JSON standard** - Did not want to transition to different formats and felt JSON provides long term benefits
 4. **Scattered field metadata** - `fields` and `entity_schemas` store overlapping data
 
 These issues were documented in dp-016's pain points analysis (P-001, P-017, P-019).
@@ -24,8 +24,8 @@ These issues were documented in dp-016's pain points analysis (P-001, P-017, P-0
 ## Goals
 
 1. **Establish JSON as platform configuration standard**
-2. **Fix Silver ETL config loading** (reads from etcd like Bronze does)
-3. **Create unified ConfigLoader trait** for consistent config access
+2. **Fix Silver ETL config loading** (reads from etcd like Bronze does) Silver etl is subscriber to event bus in air-quality app
+3. **Create unified ConfigLoader trait** for consistent config access (there is already a config-client used by many components)
 4. **Prepare for entity_schemas elimination** (enrich fields during migration)
 
 ---
@@ -117,7 +117,7 @@ pub struct EtcdConfigLoader {
 | Constraint | Impact | Decision |
 |------------|--------|----------|
 | No Python on Pi | Migration scripts can't be Python | Shell+yq+jq (runs on dev machine) |
-| Rust-first platform | Tooling should match platform | ConfigLoader in Rust |
+| Rust-first platform | Tooling should match platform | ConfigLoader in Rust (there is already a config-client) |
 
 ---
 
@@ -136,7 +136,6 @@ pub struct EtcdConfigLoader {
 ## Success Criteria
 
 1. **All configs in JSON format** with v1.1 schema
-2. **Silver ETL starts correctly** when stream is configured in etcd
 3. **No YAML file reads** in runtime code paths (Silver, Dictionary)
 4. **Config source logged** on every config load
 5. **Sync failures are ERROR level**, not WARN
