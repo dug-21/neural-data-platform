@@ -1,4 +1,4 @@
-# ADR-018-001: Extend StreamConfig with silver_etl
+# ADR-018-001: JSON Config Pass-Through Architecture
 
 **Status**: Proposed
 **Date**: 2026-02-01
@@ -9,57 +9,60 @@
 
 ## Context
 
-The NDP already has a well-designed configuration system:
+### The Real Problem: Lossy Transformation
 
-- **config-client crate** provides `StreamRegistry` for etcd-backed config
-- **StreamRegistry** loads `StreamConfig` with caching
-- **Bronze layer** uses StreamRegistry correctly
-
-The problem is that `StreamConfig` doesn't include `silver_etl`, so Silver ETL loads from YAML files directly. This creates a dual source of truth.
-
-### Current Architecture
+The current config system has a fundamental flaw - it transforms config during sync:
 
 ```
-config-client/
-├── ConfigClient       # Low-level etcd wrapper
-└── StreamRegistry     # Loads StreamConfig from etcd (with cache)
-
-core/src/types/
-└── StreamConfig       # stream_id, fields, sources, storage
-                       # ❌ NO silver_etl field
-
-apps/air-quality-app/
-├── SourceManager      # Uses StreamRegistry ✅
-├── ConfigSyncService  # Syncs YAML → etcd, but DISCARDS silver_etl ❌
-└── load_silver_etl_config()  # Reads YAML files directly ❌
+YAML file
+    ↓ deserialize
+StreamConfigYaml (has silver_etl in 'extra' HashMap)
+    ↓ to_stream_config()  ← LOSSY TRANSFORMATION
+StreamConfig (silver_etl discarded)
+    ↓ serialize
+etcd
+    ↓ deserialize
+StreamConfig (missing silver_etl)
 ```
 
-### The Bug
+The `to_stream_config()` function transforms `StreamConfigYaml` into `StreamConfig`, but:
+- `silver_etl` is captured in `extra` via `#[serde(flatten)]`
+- `to_stream_config()` ignores `extra`
+- Data is lost in transformation
 
-In `ConfigSyncService.to_stream_config()`:
-- YAML `silver_etl` section is captured via `#[serde(flatten)]` into `extra` HashMap
-- But `to_stream_config()` ignores `extra` - silver_etl is never synced to etcd
-- Silver subscriber calls `load_silver_etl_config()` which reads YAML files
-- If YAML file is missing/stale, Silver silently fails
+**This isn't a Silver-specific bug. It's a systemic architecture issue.**
+
+Any config section not explicitly mapped in `to_stream_config()` is silently dropped.
+
+### Why Two Structs?
+
+The codebase has two config structs because YAML and etcd had different shapes:
+- `StreamConfigYaml` - matches YAML file structure
+- `StreamConfig` - matches what components expect
+
+This dual-struct pattern creates the transformation layer where data gets lost.
 
 ---
 
 ## Decision
 
-**Add `silver_etl: Option<SilverEtlConfig>` to StreamConfig.**
+**Migrate to JSON with pass-through architecture. No transformation. One struct.**
 
-This is the simplest fix:
-1. StreamConfig gains the silver_etl field
-2. ConfigSyncService syncs the complete config (including silver_etl)
-3. Silver subscriber uses `StreamRegistry.load_stream()` like Bronze does
-4. No new traits, no new registries, no new abstractions
+```
+JSON file (source of truth)
+    ↓ validate against JSON Schema
+    ↓ sync to etcd AS-IS
+etcd (same JSON blob)
+    ↓ deserialize
+StreamConfig (complete, including silver_etl)
+```
 
-### Why NOT a New ConfigLoader Trait?
+### Key Principles
 
-- StreamRegistry already provides caching, loading, and watching
-- Adding a trait creates unnecessary indirection
-- config-client already handles etcd connections
-- We want consolidation, not more abstractions
+1. **JSON file = etcd blob** - No transformation during sync
+2. **One struct: StreamConfig** - Eliminate StreamConfigYaml
+3. **Schema validation replaces transformation** - Validate at sync time, not transform
+4. **Both Bronze and Silver use same config** - Unified source of truth
 
 ---
 
@@ -67,7 +70,10 @@ This is the simplest fix:
 
 ### 1. Extend StreamConfig (core/src/types/stream_config.rs)
 
+Add `silver_etl` to the canonical struct that everything uses:
+
 ```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {
     pub stream_id: String,
     pub description: String,
@@ -78,94 +84,164 @@ pub struct StreamConfig {
     pub partitioning_strategy: String,
     pub fields: Vec<SchemaField>,
     pub sources: Vec<SourceConfig>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub storage: Option<StorageConfig>,
 
-    // NEW: Silver ETL configuration
+    // Silver ETL configuration - now part of unified config
     #[serde(skip_serializing_if = "Option::is_none")]
     pub silver_etl: Option<SilverEtlConfig>,
+
+    // Entity schemas (deprecated in v1.1, removed in v2.0)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_schemas: Option<Vec<EntitySchema>>,
 }
 ```
 
-### 2. Define SilverEtlConfig (core/src/types/silver_etl.rs)
+### 2. Simplify ConfigSyncService
 
+**Before (lossy transformation):**
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SilverEtlConfig {
-    pub target_table: String,
-    pub timestamp_field: String,
-    pub identity_fields: Vec<String>,
-    pub field_mappings: Vec<SilverFieldMapping>,
-    #[serde(default)]
-    pub dq_rules: Vec<DqRule>,
-    #[serde(default)]
-    pub deduplication: Option<DeduplicationConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SilverFieldMapping {
-    pub target_column: String,
-    pub source_path: String,
-    #[serde(default)]
-    pub target_type: Option<String>,
-    #[serde(default)]
-    pub transform: Option<String>,
+pub fn sync_stream(&self, yaml_path: &Path) -> Result<()> {
+    let yaml: StreamConfigYaml = read_yaml(yaml_path)?;
+    let config: StreamConfig = yaml.to_stream_config(); // LOSSY
+    self.registry.save_stream(&config)?;
 }
 ```
 
-### 3. Fix ConfigSyncService (apps/air-quality-app/src/config_sync/service.rs)
+**After (pass-through):**
+```rust
+pub fn sync_stream(&self, json_path: &Path) -> Result<()> {
+    let json = fs::read_to_string(json_path)?;
+
+    // Validate against schema (catches errors early)
+    validate_json_schema(&json, &self.schema)?;
+
+    // Deserialize directly to StreamConfig (same struct everywhere)
+    let config: StreamConfig = serde_json::from_str(&json)?;
+
+    // Save to etcd (serializes same struct)
+    self.registry.save_stream(&config)?;
+}
+```
+
+### 3. Eliminate StreamConfigYaml
+
+The `StreamConfigYaml` struct with `#[serde(flatten)] extra: HashMap` becomes unnecessary:
 
 ```rust
+// DELETE THIS:
+pub struct StreamConfigYaml {
+    pub stream_id: String,
+    // ... fields ...
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>, // Caught silver_etl but lost it
+}
+
 impl StreamConfigYaml {
-    pub fn to_stream_config(&self) -> StreamConfig {
-        StreamConfig {
-            stream_id: self.stream_id.clone(),
-            description: self.description.clone().unwrap_or_default(),
-            // ... existing fields ...
-
-            // NEW: Extract silver_etl from the config
-            silver_etl: self.silver_etl.clone(),
-        }
+    pub fn to_stream_config(&self) -> StreamConfig { // LOSSY
+        // ...
     }
 }
 ```
 
-### 4. Silver Subscriber Uses StreamRegistry
+With JSON pass-through, we just use `StreamConfig` directly.
+
+### 4. Both Bronze and Silver Use StreamRegistry
 
 ```rust
-// BEFORE (broken):
-fn load_silver_etl_config(stream_id: &str) -> Option<SilverEtlConfig> {
-    let path = format!("config/base/streams/{}/config.yaml", stream_id);
-    let yaml = fs::read_to_string(&path).ok()?;
-    // ... parse YAML ...
-}
+// Bronze (already correct)
+let config = registry.load_stream("air-quality").await?;
+let sources = &config.sources;
 
-// AFTER (fixed):
-async fn get_silver_etl_config(
-    registry: &StreamRegistry,
-    stream_id: &str
-) -> Result<Option<SilverEtlConfig>, ConfigError> {
-    let config = registry.load_stream(stream_id).await?;
-    Ok(config.silver_etl)
-}
+// Silver (now fixed - same pattern)
+let config = registry.load_stream("air-quality").await?;
+let silver_etl = config.silver_etl.as_ref()
+    .ok_or("Stream has no silver_etl config")?;
 ```
 
 ---
 
-## Architecture After Fix
+## Architecture Comparison
+
+### Before: Dual-Struct with Transformation
 
 ```
-config-client/
-└── StreamRegistry     # Loads StreamConfig (now includes silver_etl)
-
-core/src/types/
-├── StreamConfig       # stream_id, fields, sources, storage, silver_etl ✅
-└── SilverEtlConfig    # target_table, field_mappings, dq_rules
-
-apps/air-quality-app/
-├── SourceManager      # Uses StreamRegistry ✅
-├── ConfigSyncService  # Syncs complete config including silver_etl ✅
-└── SilverSubscriber   # Uses StreamRegistry.load_stream() ✅
+┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+│  YAML file  │ ──→ │ StreamConfigYaml │ ──→ │ StreamConfig│
+│             │     │  (with extra)    │     │ (no silver) │
+└─────────────┘     └──────────────────┘     └─────────────┘
+                           ↓                        ↓
+                    to_stream_config()         etcd save
+                      (LOSSY)                       ↓
+                                              ┌─────────────┐
+                                              │    etcd     │
+                                              │ (incomplete)│
+                                              └─────────────┘
 ```
+
+### After: Single-Struct Pass-Through
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  JSON file  │ ──→ │StreamConfig │ ──→ │    etcd     │
+│  (source)   │     │ (complete)  │     │ (same JSON) │
+└─────────────┘     └─────────────┘     └─────────────┘
+       ↓                   ↑                    ↓
+  JSON Schema         Bronze uses          Silver uses
+  validation          same struct          same struct
+```
+
+---
+
+## Cascading Benefits
+
+### Bronze (air-quality-app)
+
+| Component | Change |
+|-----------|--------|
+| ConfigSyncService | Simplified - no transformation |
+| SourceManager | No change - already uses StreamRegistry |
+| IngestionCoordinator | No change - already uses StreamRegistry |
+
+### Silver (air-quality-app subscriber)
+
+| Component | Change |
+|-----------|--------|
+| SilverSubscriber | Use StreamRegistry instead of YAML files |
+| load_silver_etl_config() | Delete - use registry.load_stream().silver_etl |
+
+### MCP Server
+
+| Component | Change |
+|-----------|--------|
+| Data Dictionary | Read from config.fields (enriched with descriptions) |
+| list_streams | No change - already uses StreamRegistry |
+
+---
+
+## Migration Path
+
+### Phase 0: JSON Migration
+
+1. Create JSON Schema for StreamConfig (including silver_etl)
+2. Convert YAML files to JSON: `scripts/migrate-yaml-to-json.sh`
+3. Enrich `fields` with descriptions from `entity_schemas`
+4. Validate all JSON configs against schema
+
+### Phase 1: Code Changes
+
+1. Add `silver_etl` field to StreamConfig
+2. Simplify ConfigSyncService (remove transformation)
+3. Delete StreamConfigYaml struct
+4. Update Silver to use StreamRegistry
+5. Delete load_silver_etl_config() function
+
+### Backward Compatibility
+
+- JSON format accepts both `entity_schemas` (v1.0) and enriched `fields` (v1.1)
+- `silver_etl` is optional - streams without it still work
+- No changes to etcd key structure (`/streams/{id}/config`)
 
 ---
 
@@ -173,38 +249,65 @@ apps/air-quality-app/
 
 ### Positive
 
-1. **Single source of truth** - All config from etcd via StreamRegistry
-2. **No new abstractions** - Extends existing, proven pattern
-3. **Simpler** - One struct, one registry, one code path
-4. **Testable** - StreamRegistry can still be mocked for tests
-5. **Backward compatible** - `silver_etl` is optional
+1. **No data loss** - What goes in is what comes out
+2. **Single source of truth** - JSON file = etcd = runtime config
+3. **Simpler code** - Delete transformation layer
+4. **Unified Bronze/Silver** - Same config path for all components
+5. **Schema validation** - Catch errors at sync time, not runtime
+6. **JSON-native** - Works well with MCP, agents, tooling
 
 ### Negative
 
-1. **StreamConfig grows** - But it's the natural place for this config
-2. **Migration needed** - Existing etcd data needs silver_etl populated
+1. **Migration effort** - Convert all YAML to JSON
+2. **Schema discipline** - Must maintain JSON Schema
 
 ### Neutral
 
-1. **YAML format unchanged** - silver_etl section already exists
-2. **JSON migration still needed** - Part of dp-018 Phase 0
+1. **StreamConfig struct grows** - But it's the natural place
+2. **etcd stores larger blobs** - But cleaner than key fragmentation
 
 ---
 
 ## Validation
 
 ```rust
-// Test that Silver can load config via StreamRegistry
 #[tokio::test]
-async fn test_silver_loads_from_registry() {
-    let registry = StreamRegistry::new(&["http://localhost:2379"]).await?;
-    let config = registry.load_stream("air-quality").await?;
+async fn test_json_pass_through() {
+    // JSON file content
+    let json = r#"{
+        "stream_id": "air-quality",
+        "silver_etl": {
+            "target_table": "silver.air_quality_readings"
+        }
+    }"#;
 
-    assert!(config.silver_etl.is_some());
-    let silver = config.silver_etl.unwrap();
-    assert_eq!(silver.target_table, "silver.air_quality_readings");
+    // Deserialize directly (no transformation)
+    let config: StreamConfig = serde_json::from_str(json)?;
+
+    // Save to etcd
+    registry.save_stream(&config).await?;
+
+    // Load from etcd - should be identical
+    let loaded = registry.load_stream("air-quality").await?;
+
+    assert!(loaded.silver_etl.is_some());
+    assert_eq!(loaded.silver_etl.unwrap().target_table, "silver.air_quality_readings");
 }
 ```
+
+---
+
+## Summary
+
+**The fix isn't "add silver_etl to StreamConfig."**
+
+**The fix is "eliminate the lossy transformation pipeline."**
+
+JSON pass-through architecture:
+- One format (JSON)
+- One struct (StreamConfig)
+- No transformation (pass-through)
+- Both Bronze and Silver benefit
 
 ---
 
@@ -212,4 +315,4 @@ async fn test_silver_loads_from_registry() {
 
 - [dp-016 ADR-016-001: Config Source of Truth](../dp-016/architecture/ADR-016-001-config-source-of-truth.md)
 - [config-client/src/stream/registry.rs](../../../../config-client/src/stream/registry.rs)
-- [core/src/types/stream_config.rs](../../../../core/src/types/stream_config.rs)
+- [apps/air-quality-app/src/config_sync/service.rs](../../../../apps/air-quality-app/src/config_sync/service.rs)
