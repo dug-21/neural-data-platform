@@ -1,20 +1,22 @@
-# Integration Test Environment - Mirrors Production
+# Integration Test Environment - Mirrors Production (deploy/pi)
 # Usage:
 #   docker compose -f docker-compose.integration.yml up -d
 #   docker compose -f docker-compose.integration.yml down -v  # Clean slate
 #
-# This provides the full stack locally:
-#   - Bronze layer (Parquet via air-quality-app)
-#   - Silver layer (TimescaleDB via silver-etl-daemon)
-#   - Config store (etcd)
-#   - MQTT broker (mosquitto)
+# Production stack (dp-017 aligned):
+#   - etcd (config store)
+#   - mosquitto (MQTT broker)
+#   - timescaledb (Silver layer)
+#   - air-quality-app (Bronze + Silver ETL via event subscriber)
+#   - ndp-mcp-server (MCP interface)
+#   - grafana (dashboards, optional profile)
 #
 # Test data injection:
 #   mosquitto_pub -h localhost -t "airgradient/test/measures" \
 #     -m '{"wifi":-50,"pm02":15,"rco2":650,"atmp":22.5,"rhum":55}'
 
 services:
-  # MQTT Broker
+  # MQTT Broker - receives data from sensors
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: integration-mosquitto
@@ -24,6 +26,7 @@ services:
     volumes:
       - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
+      - mosquitto-logs:/mosquitto/log
     healthcheck:
       test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
       interval: 10s
@@ -47,6 +50,7 @@ services:
       - ETCD_INITIAL_CLUSTER=etcd0=http://etcd:2380
       - ETCD_INITIAL_CLUSTER_TOKEN=integration-cluster
       - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_QUOTA_BACKEND_BYTES=536870912
     volumes:
       - etcd-data:/etcd-data
     healthcheck:
@@ -65,6 +69,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=ndp
+      - TIMESCALEDB_TELEMETRY=off
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
       - ./deploy/pi/init-scripts:/docker-entrypoint-initdb.d:ro
@@ -75,7 +80,8 @@ services:
       retries: 5
       start_period: 30s
 
-  # Air Quality App - Bronze Layer (Parquet)
+  # Air Quality App - Bronze Layer + Silver ETL (event subscriber)
+  # Silver ETL is now integrated into this app, not a separate daemon
   air-quality-app:
     build:
       context: .
@@ -88,20 +94,32 @@ services:
       - "8080:8080"
     volumes:
       - bronze-data:/data
+      - ./config/base/streams:/config/streams:ro
+      - ./config/base/processors:/config/processors:ro
     environment:
       - RUST_LOG=info,silver_etl=debug
       - DATA_DIR=/data
       - ETCD_ENDPOINT=http://etcd:2379
       - MQTT_BROKER_URL=mosquitto
       - MQTT_PORT=1883
-      # Mock external APIs for testing (optional)
+      # Silver ETL (integrated event subscriber)
+      - TIMESCALE_URL=postgresql://postgres:postgres@timescaledb:5432/ndp
+      - TIMESCALE_MAX_CONNECTIONS=5
+      - TIMESCALE_TIMEOUT_SECS=10
+      - STREAM_CONFIG_DIR=/config/streams
+      # External APIs (optional for testing)
       - OPENWEATHERMAP_API_KEY=${OPENWEATHERMAP_API_KEY:-}
       - WEATHER_LATITUDE=${WEATHER_LATITUDE:-29.95838}
       - WEATHER_LONGITUDE=${WEATHER_LONGITUDE:--81.30878}
+      # Event notifications (optional)
+      - EVENT_NOTIFIER_ENABLED=${EVENT_NOTIFIER_ENABLED:-false}
+      - THRESHOLD_PROCESSOR_ENABLED=${THRESHOLD_PROCESSOR_ENABLED:-false}
     depends_on:
       mosquitto:
         condition: service_healthy
       etcd:
+        condition: service_healthy
+      timescaledb:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -110,57 +128,57 @@ services:
       retries: 3
       start_period: 30s
 
-  # Silver ETL Daemon - Bronze to Silver transformation
-  silver-etl-daemon:
+  # NDP MCP Server - Bronze + Silver Layer MCP Interface
+  ndp-mcp-server:
     build:
       context: .
-      dockerfile: apps/silver-etl/Dockerfile
+      dockerfile: core/ndp-mcp-server/Dockerfile
       args:
         - BUILDKIT_INLINE_CACHE=1
-    image: ndp/silver-etl:integration
-    container_name: integration-silver-etl
+    image: ndp/ndp-mcp-server:integration
+    container_name: integration-mcp-server
+    ports:
+      - "9100:9100"
     volumes:
-      - bronze-data:/data/raw:ro
-      - ./config/base/streams:/workspaces/neural-data-platform/config/base/streams:ro
+      - bronze-data:/data:ro
     environment:
-      - RUST_LOG=info,silver_etl=debug
-      - BRONZE_DIR=/data/raw
-      - CONFIG_DIR=/workspaces/neural-data-platform/config/base/streams
-      - ETCD_ENDPOINT=http://etcd:2379
-      - POSTGRES_HOST=timescaledb
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=ndp
-      - ETL_INTERVAL_SECS=60
-    command: ["daemon", "--interval", "60"]
+      - RUST_LOG=info
+      - NDP_RAW_PATH=/data/raw
+      - NDP_ETCD_ENDPOINTS=http://etcd:2379
+      - NDP_MCP_LISTEN=0.0.0.0:9100
+      - NDP_TIMESCALE_URL=postgresql://postgres:postgres@timescaledb:5432/ndp
+      - NDP_TIMESCALE_MAX_CONNECTIONS=5
+      - NDP_TIMESCALE_CONNECT_TIMEOUT_SECS=10
     depends_on:
-      timescaledb:
-        condition: service_healthy
       etcd:
         condition: service_healthy
-      air-quality-app:
+      timescaledb:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "silver-etl"]
+      test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 15s
 
-  # Grafana - Optional dashboards
+  # Grafana - Data Visualization (optional)
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:latest-ubuntu
     container_name: integration-grafana
     ports:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - bronze-data:/data:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_LOG_LEVEL=info
+      # DuckDB plugin for Bronze layer queries (matches production)
+      - GF_INSTALL_PLUGINS=https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v0.2.1/motherduck-duckdb-datasource-0.2.1.zip;motherduck-duckdb-datasource
     depends_on:
       - timescaledb
     profiles:
@@ -168,6 +186,7 @@ services:
 
 volumes:
   mosquitto-data:
+  mosquitto-logs:
   etcd-data:
   timescaledb-data:
   bronze-data:
