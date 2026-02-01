@@ -9,7 +9,7 @@
 #   - timescaledb (Silver layer)
 #   - air-quality-app (Bronze + Silver ETL via event subscriber)
 #   - ndp-mcp-server (MCP interface)
-#   - grafana (dashboards, optional profile)
+#   - grafana (dashboards)
 #
 # Test data injection:
 #   mosquitto_pub -h localhost -t "airgradient/test/measures" \
@@ -93,7 +93,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - bronze-data:/data
+      - air-quality-data:/data
       - ./config/base/streams:/config/streams:ro
       - ./config/base/processors:/config/processors:ro
     environment:
@@ -140,7 +140,7 @@ services:
     ports:
       - "9100:9100"
     volumes:
-      - bronze-data:/data:ro
+      - air-quality-data:/data:ro
     environment:
       - RUST_LOG=info
       - NDP_RAW_PATH=/data/raw
@@ -161,7 +161,7 @@ services:
       retries: 3
       start_period: 15s
 
-  # Grafana - Data Visualization (optional)
+  # Grafana - Data Visualization
   grafana:
     image: grafana/grafana:latest-ubuntu
     container_name: integration-grafana
@@ -171,7 +171,7 @@ services:
       - grafana-data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - bronze-data:/data:ro
+      - air-quality-data:/data:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -181,15 +181,13 @@ services:
       - GF_INSTALL_PLUGINS=https://github.com/motherduckdb/grafana-duckdb-datasource/releases/download/v0.2.1/motherduck-duckdb-datasource-0.2.1.zip;motherduck-duckdb-datasource
     depends_on:
       - timescaledb
-    profiles:
-      - dashboards
 
 volumes:
   mosquitto-data:
   mosquitto-logs:
   etcd-data:
   timescaledb-data:
-  bronze-data:
+  air-quality-data:
   grafana-data:
 
 networks:

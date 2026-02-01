@@ -1155,7 +1155,7 @@ status() {
     echo ""
 
     log "Data Volume:"
-    docker exec air-quality-app du -sh /data 2>/dev/null || echo "  Not available"
+    dcx air-quality-app du -sh /data 2>/dev/null || echo "  Not available"
     echo ""
 
     log "Stream Status:"
@@ -1271,7 +1271,7 @@ refresh() {
 
     # Restart Grafana to pick up dashboard/datasource changes
     log "Restarting Grafana..."
-    docker restart grafana
+    dc restart grafana
 
     log "Refresh complete!"
     status
