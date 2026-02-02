@@ -1,0 +1,666 @@
+{
+  "stream_id": "air-quality",
+  "description": "AirGradient sensor readings from MQTT",
+  "version": "1.0.0",
+  "enabled": true,
+  "retention_days": 365,
+  "compression_after_days": 7,
+  "partitioning_strategy": "daily",
+  "fields": [
+    {
+      "name": "pm01",
+      "json_path": "pm01",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "PM1.0 raw mass concentration of particles <= 1µm diameter",
+      "nullable": true,
+      "range": [0, 1000]
+    },
+    {
+      "name": "pm01Standard",
+      "json_path": "pm01Standard",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "PM1.0 standard mass concentration (CF=1 standard particle)",
+      "nullable": true,
+      "range": [0, 1000]
+    },
+    {
+      "name": "pm01Count",
+      "json_path": "pm01Count",
+      "type": "float",
+      "unit": "count/0.1L",
+      "description": "PM1.0 particle count per 0.1L air",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "pm02",
+      "json_path": "pm02",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "PM2.5 raw mass concentration of particles <= 2.5µm diameter",
+      "nullable": false,
+      "range": [0, 1000]
+    },
+    {
+      "name": "pm02Standard",
+      "json_path": "pm02Standard",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "PM2.5 standard mass concentration (CF=1 standard particle)",
+      "nullable": true,
+      "range": [0, 1000]
+    },
+    {
+      "name": "pm02Compensated",
+      "json_path": "pm02Compensated",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "PM2.5 corrected/calibrated value adjusted for humidity and environmental factors",
+      "nullable": true,
+      "range": [0, 1000]
+    },
+    {
+      "name": "pm02Count",
+      "json_path": "pm02Count",
+      "type": "float",
+      "unit": "count/0.1L",
+      "description": "PM2.5 particle count per 0.1L air",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "pm10",
+      "json_path": "pm10",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "PM10 raw mass concentration of particles <= 10µm diameter. Less reliable than PM2.5 on Plantower sensors.",
+      "nullable": true,
+      "range": [0, 2000]
+    },
+    {
+      "name": "pm10Standard",
+      "json_path": "pm10Standard",
+      "type": "float",
+      "unit": "µg/m³",
+      "description": "PM10 standard mass concentration (CF=1 standard particle)",
+      "nullable": true,
+      "range": [0, 2000]
+    },
+    {
+      "name": "pm10Count",
+      "json_path": "pm10Count",
+      "type": "float",
+      "unit": "count/0.1L",
+      "description": "PM10 particle count per 0.1L air",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "pm003Count",
+      "json_path": "pm003Count",
+      "type": "float",
+      "unit": "count/0.1L",
+      "description": "Count of particles >= 0.3µm diameter per 0.1L air. Reveals pollution events mass-based PM may miss.",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "pm005Count",
+      "json_path": "pm005Count",
+      "type": "float",
+      "unit": "count/0.1L",
+      "description": "Count of particles >= 0.5µm diameter per 0.1L air",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "pm50Count",
+      "json_path": "pm50Count",
+      "type": "float",
+      "unit": "count/0.1L",
+      "description": "Count of particles >= 5.0µm diameter per 0.1L air",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "rco2",
+      "json_path": "rco2",
+      "type": "float",
+      "unit": "ppm",
+      "description": "CO2 raw concentration in parts per million. Standard unit for tracking CO2 buildup from human activity.",
+      "nullable": true,
+      "range": [380, 10000]
+    },
+    {
+      "name": "atmp",
+      "json_path": "atmp",
+      "type": "float",
+      "unit": "°C",
+      "description": "Temperature raw reading near sensor. For indoor monitors, reflects ambient room temperature well.",
+      "nullable": true,
+      "range": [-40, 85]
+    },
+    {
+      "name": "atmpCompensated",
+      "json_path": "atmpCompensated",
+      "type": "float",
+      "unit": "°C",
+      "description": "Temperature corrected/calibrated value adjusted for sensor and environmental factors.",
+      "nullable": true,
+      "range": [-40, 85]
+    },
+    {
+      "name": "rhum",
+      "json_path": "rhum",
+      "type": "float",
+      "unit": "%",
+      "description": "Relative humidity raw reading. Indicates water vapor content relative to air saturation.",
+      "nullable": true,
+      "range": [0, 100]
+    },
+    {
+      "name": "rhumCompensated",
+      "json_path": "rhumCompensated",
+      "type": "float",
+      "unit": "%",
+      "description": "Relative humidity corrected/calibrated value adjusted for sensor and environmental factors.",
+      "nullable": true,
+      "range": [0, 100]
+    },
+    {
+      "name": "tvocIndex",
+      "json_path": "tvocIndex",
+      "type": "int",
+      "unit": "index",
+      "description": "TVOC index (1-500). 100=baseline, >100=more VOCs than 24h baseline, <100=fewer VOCs. Adapts sensitivity based on environment.",
+      "nullable": true,
+      "range": [1, 500]
+    },
+    {
+      "name": "tvocRaw",
+      "json_path": "tvocRaw",
+      "type": "float",
+      "unit": "log(R)",
+      "description": "TVOC raw log resistance from MOx sensor. Reducing gases (VOCs) lower resistance. Broadband, non-specific output.",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "noxIndex",
+      "json_path": "noxIndex",
+      "type": "int",
+      "unit": "index",
+      "description": "NOx index (1-500). 1=baseline, >1=more oxidizing gases present. No gain adaptation unlike TVOC.",
+      "nullable": true,
+      "range": [1, 500]
+    },
+    {
+      "name": "noxRaw",
+      "json_path": "noxRaw",
+      "type": "float",
+      "unit": "log(R)",
+      "description": "NOx raw log resistance from MOx sensor. Oxidizing gases increase resistance. General oxidizing gas presence, not specific concentrations.",
+      "nullable": true,
+      "range": [0, 100000]
+    },
+    {
+      "name": "wifi",
+      "json_path": "wifi",
+      "type": "int",
+      "unit": "dBm",
+      "description": "WiFi signal strength in dBm. Useful for monitoring device connectivity health.",
+      "nullable": true,
+      "range": [-100, 0]
+    },
+    {
+      "name": "boot",
+      "json_path": "boot",
+      "type": "int",
+      "unit": "count",
+      "description": "Device boot counter. Tracks device restarts for reliability monitoring.",
+      "nullable": true
+    },
+    {
+      "name": "bootCount",
+      "json_path": "bootCount",
+      "type": "int",
+      "unit": "count",
+      "description": "Device boot counter (alias for boot field).",
+      "nullable": true
+    },
+    {
+      "name": "serialno",
+      "json_path": "serialno",
+      "type": "string",
+      "unit": null,
+      "description": "Device serial number for identification.",
+      "nullable": false,
+      "metadata": true
+    },
+    {
+      "name": "firmware",
+      "json_path": "firmware",
+      "type": "string",
+      "unit": null,
+      "description": "Device firmware version.",
+      "nullable": true,
+      "metadata": true
+    },
+    {
+      "name": "model",
+      "json_path": "model",
+      "type": "string",
+      "unit": null,
+      "description": "Device model identifier (e.g., I-9PSL for AirGradient One Indoor).",
+      "nullable": true,
+      "metadata": true
+    },
+    {
+      "name": "ledMode",
+      "json_path": "ledMode",
+      "type": "string",
+      "unit": null,
+      "description": "Current LED display mode on device (e.g., co2, pm, off).",
+      "nullable": true,
+      "metadata": true
+    }
+  ],
+  "sources": [
+    {
+      "type": "mqtt",
+      "enabled": true,
+      "ndp_id": "aq_airgradient_1",
+      "context": {
+        "device_type": "airgradient",
+        "location": {
+          "coordinates": [
+            29.95838,
+            -81.30878
+          ],
+          "type": "indoor",
+          "path": "/beachhouse/livingroom"
+        },
+        "environment": "indoor"
+      },
+      "broker_url": "mosquitto",
+      "port": 1883,
+      "client_id": "air-quality-app",
+      "topic_pattern": "airgradient/readings/+",
+      "qos": 1,
+      "reconnect_delay_secs": 1,
+      "max_reconnect_delay_secs": 30,
+      "buffer_capacity": 1000,
+      "parser": {
+        "parser_type": "flat_json",
+        "location_id_field": "serialno",
+        "skip_fields": [
+          "serialno",
+          "firmware",
+          "model",
+          "ledMode"
+        ],
+        "default_tags": {
+          "source": "mqtt",
+          "stream_id": "air-quality"
+        }
+      }
+    }
+  ],
+  "mqtt": {
+    "enabled": true,
+    "broker_url": "mosquitto",
+    "port": 1883,
+    "client_id": "air-quality-app",
+    "topic_pattern": "airgradient/readings/+",
+    "qos": 1,
+    "reconnect_delay_secs": 1,
+    "max_reconnect_delay_secs": 30,
+    "buffer_capacity": 1000
+  },
+  "storage": {
+    "batch_size": 100,
+    "batch_timeout_secs": 5,
+    "buffer_capacity": 1000
+  },
+  "entity_schemas": [
+    {
+      "schema_name": "airgradient",
+      "description": "AirGradient indoor air quality sensors (AG One I-9PSL, AG Pro). Based on official AirGradient parameter definitions.",
+      "device_class": "air_quality",
+      "time_resolution": "1-min (Wi-Fi), 3-min (Cellular)",
+      "attributes": [
+        {
+          "name": "pm01",
+          "type": "float",
+          "unit": "µg/m³",
+          "description": "PM1.0 raw mass concentration of particles <= 1µm",
+          "nullable": true,
+          "range": [0, 1000]
+        },
+        {
+          "name": "pm02",
+          "type": "float",
+          "unit": "µg/m³",
+          "description": "PM2.5 raw mass concentration of inhalable particles <= 2.5µm",
+          "nullable": false,
+          "range": [0, 1000]
+        },
+        {
+          "name": "pm02Compensated",
+          "type": "float",
+          "unit": "µg/m³",
+          "description": "PM2.5 corrected value adjusted using calibration formula",
+          "nullable": true,
+          "range": [0, 1000]
+        },
+        {
+          "name": "pm10",
+          "type": "float",
+          "unit": "µg/m³",
+          "description": "PM10 raw mass concentration. Plantower sensors optimized for PM2.5, making PM10 less reliable.",
+          "nullable": true,
+          "range": [0, 2000]
+        },
+        {
+          "name": "pm003Count",
+          "type": "float",
+          "unit": "count/0.1L",
+          "description": "Count of particles >= 0.3µm. Reveals pollution events mass-based PM may miss.",
+          "nullable": true,
+          "range": [0, 100000]
+        },
+        {
+          "name": "rco2",
+          "type": "float",
+          "unit": "ppm",
+          "description": "CO2 raw concentration. PPM reflects volumetric gas concentration from human activity.",
+          "nullable": true,
+          "range": [380, 10000]
+        },
+        {
+          "name": "atmp",
+          "type": "float",
+          "unit": "°C",
+          "description": "Temperature raw. For indoor monitors, reflects ambient room temperature well.",
+          "nullable": true,
+          "range": [-40, 85]
+        },
+        {
+          "name": "atmpCompensated",
+          "type": "float",
+          "unit": "°C",
+          "description": "Temperature corrected for sensor and environmental factors.",
+          "nullable": true,
+          "range": [-40, 85]
+        },
+        {
+          "name": "rhum",
+          "type": "float",
+          "unit": "%",
+          "description": "Relative humidity raw. Water vapor content relative to air saturation.",
+          "nullable": true,
+          "range": [0, 100]
+        },
+        {
+          "name": "rhumCompensated",
+          "type": "float",
+          "unit": "%",
+          "description": "Relative humidity corrected for sensor and environmental factors.",
+          "nullable": true,
+          "range": [0, 100]
+        },
+        {
+          "name": "tvocIndex",
+          "type": "int",
+          "unit": "index (1-500)",
+          "description": "TVOC index. 100=baseline, >100=more VOCs, <100=fewer VOCs vs 24h baseline. Adapts gain based on environment.",
+          "nullable": true,
+          "range": [1, 500]
+        },
+        {
+          "name": "tvocRaw",
+          "type": "float",
+          "unit": "log(R)",
+          "description": "TVOC raw log resistance from MOx sensor. Reducing gases lower resistance.",
+          "nullable": true,
+          "range": [0, 100000]
+        },
+        {
+          "name": "noxIndex",
+          "type": "int",
+          "unit": "index (1-500)",
+          "description": "NOx index. 1=baseline, >1=more oxidizing gases. No gain adaptation unlike TVOC.",
+          "nullable": true,
+          "range": [1, 500]
+        },
+        {
+          "name": "noxRaw",
+          "type": "float",
+          "unit": "log(R)",
+          "description": "NOx raw log resistance from MOx sensor. Oxidizing gases increase resistance.",
+          "nullable": true,
+          "range": [0, 100000]
+        },
+        {
+          "name": "wifi",
+          "type": "int",
+          "unit": "dBm",
+          "description": "WiFi signal strength for connectivity monitoring.",
+          "nullable": true,
+          "range": [-100, 0]
+        },
+        {
+          "name": "boot",
+          "type": "int",
+          "unit": "count",
+          "description": "Device boot counter for reliability monitoring.",
+          "nullable": true
+        }
+      ]
+    }
+  ],
+  "silver_etl": {
+    "enabled": true,
+    "target_table": "silver.air_quality_observations",
+    "description": "Indoor air quality measurements from AirGradient sensors",
+    "grain": "One row per sensor reading (~1 minute intervals)",
+    "timestamp": {
+      "source_field": "timestamp",
+      "target_field": "observation_time",
+      "transform": "microseconds_to_timestamp"
+    },
+    "identity_fields": [
+      {
+        "source": "ndp_id",
+        "target": "ndp_id"
+      }
+    ],
+    "field_mappings": [
+      {
+        "source_path": "raw_payload.pm02Compensated",
+        "target_column": "pm25",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "PM2.5 particulate matter concentration (humidity-compensated)",
+        "nullable": false,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 1000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.pm10",
+        "target_column": "pm10",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "PM10 particulate matter concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 2000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.rco2",
+        "target_column": "co2",
+        "type": "smallint",
+        "unit": "ppm",
+        "description": "Carbon dioxide concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 380,
+            "max": 10000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.atmpCompensated",
+        "target_column": "temperature_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Ambient temperature (sensor-compensated)",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -40,
+            "max": 85,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.rhumCompensated",
+        "target_column": "humidity_pct",
+        "type": "double_precision",
+        "unit": "%",
+        "description": "Relative humidity (compensated)",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 100,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.tvocIndex",
+        "target_column": "tvoc_index",
+        "type": "smallint",
+        "unit": "index",
+        "description": "Total VOC index (1-500 scale)",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 1,
+            "max": 500,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.noxIndex",
+        "target_column": "nox_index",
+        "type": "smallint",
+        "unit": "index",
+        "description": "NOx index (1-500 scale)",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 1,
+            "max": 500,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      }
+    ],
+    "dq_rules": [
+      {
+        "rule": "cross_field_check",
+        "name": "pm10_gte_pm25",
+        "expression": "pm10 IS NULL OR pm25 IS NULL OR pm10 >= pm25",
+        "message": "pm10_less_than_pm25",
+        "action": "flag"
+      },
+      {
+        "rule": "freshness_check",
+        "field": "observation_time",
+        "max_age": "2 hours",
+        "max_future": "5 minutes",
+        "reference": "ingestion_time",
+        "action": "flag"
+      },
+      {
+        "rule": "rate_of_change",
+        "field": "pm25",
+        "max_change_per_minute": 100,
+        "partition_by": [
+          "ndp_id"
+        ],
+        "action": "flag"
+      },
+      {
+        "rule": "rate_of_change",
+        "field": "temperature_c",
+        "max_change_per_minute": 3,
+        "partition_by": [
+          "ndp_id"
+        ],
+        "action": "flag"
+      },
+      {
+        "rule": "completeness_check",
+        "level": "batch",
+        "field": "pm25",
+        "min_completeness": 0.95,
+        "action": "warn"
+      }
+    ],
+    "dq_output": {
+      "enabled": true,
+      "target_column": "dq_flags",
+      "include_rules": true,
+      "include_values": false,
+      "transparency": {
+        "enabled": true,
+        "table": "silver.dq_transparency",
+        "include_sample_payload": true,
+        "max_samples_per_rule": 10
+      }
+    },
+    "deduplication": {
+      "enabled": true,
+      "key_columns": [
+        "observation_time",
+        "ndp_id"
+      ],
+      "strategy": "upsert"
+    },
+    "incremental": {
+      "enabled": true,
+      "watermark_column": "observation_time",
+      "lag_interval": "5 minutes"
+    }
+  },
+  "config_version": "1.1"
+}

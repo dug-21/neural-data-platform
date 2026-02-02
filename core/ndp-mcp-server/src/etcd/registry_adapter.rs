@@ -193,6 +193,8 @@ mod tests {
                 params: std::collections::HashMap::new(),
             }],
             storage: None,
+            silver_etl: None,
+            entity_schemas: None,
         }
     }
 

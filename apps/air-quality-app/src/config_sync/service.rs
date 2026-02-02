@@ -9,11 +9,17 @@ use tracing::{debug, error, info, warn};
 /// Errors that can occur during config sync operations
 #[derive(Debug, Error)]
 pub enum ConfigSyncError {
+    #[error("Failed to read config file: {0}")]
+    ConfigReadError(String),
+
     #[error("Failed to read YAML file: {0}")]
     YamlReadError(String),
 
     #[error("Failed to parse YAML: {0}")]
     YamlParseError(String),
+
+    #[error("Failed to parse JSON: {0}")]
+    JsonParseError(String),
 
     #[error("Invalid stream configuration: {0}")]
     InvalidConfig(String),
@@ -31,6 +37,12 @@ pub enum ConfigSyncError {
 impl From<serde_yaml::Error> for ConfigSyncError {
     fn from(e: serde_yaml::Error) -> Self {
         ConfigSyncError::YamlParseError(e.to_string())
+    }
+}
+
+impl From<serde_json::Error> for ConfigSyncError {
+    fn from(e: serde_json::Error) -> Self {
+        ConfigSyncError::JsonParseError(e.to_string())
     }
 }
 
@@ -141,7 +153,64 @@ impl ConfigSyncService {
         Ok(config)
     }
 
-    /// Discover all stream config YAML files in the config directory
+    /// Load a stream config from a JSON file (DP-018: pass-through architecture)
+    ///
+    /// This method deserializes JSON directly to StreamConfig without any
+    /// intermediate transformation, ensuring all fields (including silver_etl)
+    /// are preserved exactly as specified in the config file.
+    pub async fn load_json_config(
+        &self,
+        json_path: impl AsRef<Path>,
+    ) -> Result<StreamConfig, ConfigSyncError> {
+        let json_path = json_path.as_ref();
+        debug!("Loading JSON config from: {:?}", json_path);
+
+        // Read file content
+        let content = tokio::fs::read_to_string(json_path).await.map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                ConfigSyncError::ConfigReadError(format!("File not found: {:?}", json_path))
+            } else {
+                ConfigSyncError::IoError(e)
+            }
+        })?;
+
+        // Parse JSON directly to StreamConfig (pass-through, no transformation)
+        let config: StreamConfig = serde_json::from_str(&content)?;
+
+        // Validate
+        config.validate()?;
+
+        info!(
+            "config loaded from JSON: {} (silver_etl: {})",
+            config.stream_id,
+            config.silver_etl.is_some()
+        );
+        Ok(config)
+    }
+
+    /// Load a stream config, auto-detecting format based on file extension
+    ///
+    /// Supports both .json (preferred) and .yaml files.
+    /// JSON files are loaded via pass-through (no transformation).
+    /// YAML files are loaded via the legacy transformation path.
+    pub async fn load_config(
+        &self,
+        config_path: impl AsRef<Path>,
+    ) -> Result<StreamConfig, ConfigSyncError> {
+        let config_path = config_path.as_ref();
+
+        if config_path.extension().map_or(false, |ext| ext == "json") {
+            self.load_json_config(config_path).await
+        } else {
+            // Fall back to YAML loading for .yaml/.yml files
+            self.load_yaml_config(config_path).await
+        }
+    }
+
+    /// Discover all stream config files in the config directory
+    ///
+    /// DP-018: Prefers config.json over config.yaml when both exist.
+    /// This supports gradual migration from YAML to JSON format.
     pub async fn discover_stream_configs(&self) -> Result<Vec<PathBuf>, ConfigSyncError> {
         debug!("Discovering stream configs in: {:?}", self.config_dir);
 
@@ -163,7 +232,7 @@ impl ConfigSyncService {
         Ok(configs)
     }
 
-    /// Recursively discover config.yaml files
+    /// Recursively discover config files (DP-018: prefers JSON over YAML)
     fn discover_configs_recursive<'a>(
         &'a self,
         dir: &'a Path,
@@ -178,11 +247,18 @@ impl ConfigSyncService {
                 let metadata = tokio::fs::metadata(&path).await?;
 
                 if metadata.is_dir() {
-                    // Check for config.yaml in this directory
-                    let config_path = path.join("config.yaml");
-                    if tokio::fs::try_exists(&config_path).await? {
-                        debug!("Found config: {:?}", config_path);
-                        configs.push(config_path);
+                    // DP-018: Prefer config.json over config.yaml
+                    let json_path = path.join("config.json");
+                    let yaml_path = path.join("config.yaml");
+
+                    if tokio::fs::try_exists(&json_path).await? {
+                        // JSON takes priority (pass-through architecture)
+                        debug!("Found JSON config: {:?}", json_path);
+                        configs.push(json_path);
+                    } else if tokio::fs::try_exists(&yaml_path).await? {
+                        // Fall back to YAML for backward compatibility
+                        debug!("Found YAML config (legacy): {:?}", yaml_path);
+                        configs.push(yaml_path);
                     }
 
                     // Recurse into subdirectory
@@ -213,39 +289,82 @@ impl ConfigSyncService {
     }
 
     /// Sync all configs from directory to registry
-    pub async fn sync_all(&self, registry: &StreamRegistry) -> Result<usize, ConfigSyncError> {
-        info!("Starting sync_all operation");
+    ///
+    /// DP-018 Task 1.7: Sync failures are logged as ERROR level (not WARN).
+    /// Returns SyncReport with detailed success/failure information.
+    /// Uses auto-detection to load both JSON and YAML configs.
+    /// JSON files are loaded via pass-through (preserving silver_etl).
+    /// YAML files use the legacy transformation path.
+    pub async fn sync_all(&self, registry: &StreamRegistry) -> Result<SyncReport, ConfigSyncError> {
+        info!("[sync] Starting sync_all operation");
 
         let config_paths = self.discover_stream_configs().await?;
-        let mut synced_count = 0;
+        let mut report = SyncReport::new();
 
         for path in config_paths {
-            match self.load_yaml_config(&path).await {
+            // Extract stream_id from path for error reporting
+            let stream_id_from_path = path
+                .parent()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_string_lossy().to_string());
+
+            // DP-018: Use load_config which auto-detects format
+            match self.load_config(&path).await {
                 Ok(config) => {
                     if !config.enabled {
-                        warn!("Skipping disabled stream: {}", config.stream_id);
+                        debug!("[sync] Skipping disabled stream: {}", config.stream_id);
+                        report.skipped.push(config.stream_id.clone());
                         continue;
                     }
 
                     match self.save_to_registry(registry, &config).await {
                         Ok(_) => {
-                            synced_count += 1;
+                            info!(
+                                "[sync] config synced to etcd: /streams/{}/config (silver_etl: {})",
+                                config.stream_id,
+                                config.silver_etl.is_some()
+                            );
+                            report.synced.push(config.stream_id.clone());
                         }
                         Err(e) => {
-                            error!("Failed to save stream {}: {}", config.stream_id, e);
-                            // Continue with other configs
+                            // dp-018 Task 1.7: ERROR level for sync failures
+                            error!(
+                                "[sync] Failed to save stream {}: {}",
+                                config.stream_id, e
+                            );
+                            report.failed.push((config.stream_id.clone(), e.to_string()));
                         }
                     }
                 }
                 Err(e) => {
-                    error!("Failed to load config from {:?}: {}", path, e);
-                    // Continue with other configs
+                    // dp-018 Task 1.7: ERROR level for load failures
+                    error!(
+                        "[sync] Failed to load config from {:?}: {}",
+                        path, e
+                    );
+                    report.failed.push((stream_id_from_path, e.to_string()));
                 }
             }
         }
 
-        info!("Sync complete: {} configs synced", synced_count);
-        Ok(synced_count)
+        // dp-018 Task 1.7: Summary of failed streams at the end
+        if report.has_failures() {
+            let failed_ids: Vec<&str> = report.failed.iter().map(|(id, _)| id.as_str()).collect();
+            error!(
+                "[sync] Sync completed with {} failures: {:?}",
+                report.failed.len(),
+                failed_ids
+            );
+        } else {
+            info!(
+                "[sync] Sync complete: {} synced, {} skipped",
+                report.synced.len(),
+                report.skipped.len()
+            );
+        }
+
+        Ok(report)
     }
 }
 
@@ -270,6 +389,9 @@ struct StreamConfigYaml {
     /// Sources array (new format)
     #[serde(default)]
     sources: Vec<SourceYaml>,
+    /// DP-018: Silver ETL configuration (pass-through from YAML)
+    #[serde(default)]
+    silver_etl: Option<neural_core::config::SilverEtlConfig>,
     #[serde(flatten)]
     extra: std::collections::HashMap<String, serde_yaml::Value>,
 }
@@ -511,6 +633,11 @@ impl StreamConfigYaml {
             fields,
             sources,
             storage,
+            // DP-018: Pass through silver_etl from YAML config
+            silver_etl: self.silver_etl.clone(),
+            // Entity schemas (v1.0 format, deprecated in v1.1) - None for YAML configs
+            // v1.1 configs store metadata directly on SchemaField
+            entity_schemas: None,
         })
     }
 }
@@ -834,25 +961,26 @@ mod tests {
             configs.len()
         );
 
-        // Verify both expected configs are found
-        let has_weather = configs
-            .iter()
-            .any(|p| p.to_string_lossy().contains("outdoor-weather") && p.ends_with("config.yaml"));
+        // Verify both expected configs are found (DP-018: can be .json or .yaml)
+        let has_weather = configs.iter().any(|p| {
+            let path_str = p.to_string_lossy();
+            path_str.contains("outdoor-weather")
+                && (p.ends_with("config.yaml") || p.ends_with("config.json"))
+        });
         let has_air_quality = configs.iter().any(|p| {
-            p.to_string_lossy().contains("outdoor-air-quality") && p.ends_with("config.yaml")
+            let path_str = p.to_string_lossy();
+            path_str.contains("outdoor-air-quality")
+                && (p.ends_with("config.yaml") || p.ends_with("config.json"))
         });
 
-        assert!(has_weather, "Should find outdoor-weather/config.yaml");
-        assert!(
-            has_air_quality,
-            "Should find outdoor-air-quality/config.yaml"
-        );
+        assert!(has_weather, "Should find outdoor-weather config");
+        assert!(has_air_quality, "Should find outdoor-air-quality config");
 
-        // Verify all discovered paths end with config.yaml
+        // Verify all discovered paths end with config.yaml or config.json
         for path in &configs {
             assert!(
-                path.ends_with("config.yaml"),
-                "All discovered paths should end with config.yaml: {:?}",
+                path.ends_with("config.yaml") || path.ends_with("config.json"),
+                "All discovered paths should end with config.yaml or config.json: {:?}",
                 path
             );
         }
@@ -1332,7 +1460,7 @@ sources:
     #[test]
     fn test_config_sync_error_conversions() {
         // Test serde_yaml::Error conversion
-        let yaml_error = serde_yaml::from_str::<StreamConfigYaml>("invalid: yaml: [").unwrap_err();
+        let yaml_error = serde_yaml::from_str::<serde_yaml::Value>("invalid: yaml: [").unwrap_err();
         let sync_error: ConfigSyncError = yaml_error.into();
         assert!(matches!(sync_error, ConfigSyncError::YamlParseError(_)));
 
@@ -1340,5 +1468,236 @@ sources:
         let config_error = neural_core::StreamConfigError::NoFields;
         let sync_error: ConfigSyncError = config_error.into();
         assert!(matches!(sync_error, ConfigSyncError::InvalidConfig(_)));
+    }
+
+    // ==========================================================================
+    // DP-018: JSON PASS-THROUGH TESTS (LONDON TDD)
+    // ==========================================================================
+    // These tests verify the elimination of the lossy transformation layer.
+    // The ConfigSyncService should now:
+    // 1. Read JSON files directly (config.json preferred over config.yaml)
+    // 2. Deserialize directly to StreamConfig (no intermediate struct)
+    // 3. Preserve silver_etl and all other fields without loss
+
+    /// Test that load_json_config reads JSON and deserializes directly to StreamConfig
+    /// This is the core pass-through behavior required by ADR-018-001
+    #[tokio::test]
+    async fn test_load_json_config_deserializes_directly() {
+        // Arrange: Create temp JSON config
+        let json_content = r#"{
+            "stream_id": "test-stream",
+            "description": "Test stream for JSON pass-through",
+            "version": "1.0.0",
+            "enabled": true,
+            "retention_days": 365,
+            "compression_after_days": 7,
+            "partitioning_strategy": "daily",
+            "fields": [
+                {"name": "pm25", "type": "float", "nullable": false}
+            ],
+            "sources": [
+                {"type": "mqtt", "enabled": true}
+            ],
+            "storage": {
+                "batch_size": 100,
+                "batch_timeout_secs": 5,
+                "buffer_capacity": 1000
+            }
+        }"#;
+
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_json_passthrough.json");
+        std::fs::write(&temp_file, json_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+
+        // Act: Load JSON config
+        let result = service.load_json_config(&temp_file).await;
+
+        // Assert
+        assert!(result.is_ok(), "Failed to load JSON config: {:?}", result.err());
+        let config = result.unwrap();
+        assert_eq!(config.stream_id, "test-stream");
+        assert_eq!(config.fields.len(), 1);
+        assert_eq!(config.sources.len(), 1);
+
+        // Cleanup
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    /// Test that silver_etl is PRESERVED after loading JSON config
+    /// This is the critical test - silver_etl was previously lost in transformation
+    #[tokio::test]
+    async fn test_load_json_config_preserves_silver_etl() {
+        // Arrange: Create JSON config with silver_etl section
+        let json_content = r#"{
+            "stream_id": "air-quality",
+            "description": "Air quality with silver_etl",
+            "version": "1.0.0",
+            "enabled": true,
+            "fields": [
+                {"name": "pm25", "type": "float", "nullable": false}
+            ],
+            "sources": [
+                {"type": "mqtt", "enabled": true}
+            ],
+            "silver_etl": {
+                "enabled": true,
+                "target_table": "silver.air_quality_observations",
+                "timestamp": {
+                    "source_field": "timestamp",
+                    "target_field": "observation_time",
+                    "transform": "microseconds_to_timestamp"
+                },
+                "field_mappings": [
+                    {
+                        "source_path": "raw_payload.pm02",
+                        "target_column": "pm25",
+                        "type": "double_precision",
+                        "nullable": false
+                    }
+                ]
+            }
+        }"#;
+
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_silver_etl_preserved.json");
+        std::fs::write(&temp_file, json_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+
+        // Act: Load JSON config
+        let result = service.load_json_config(&temp_file).await;
+
+        // Assert: silver_etl MUST be preserved
+        assert!(result.is_ok(), "Failed to load JSON config: {:?}", result.err());
+        let config = result.unwrap();
+
+        assert!(config.silver_etl.is_some(), "silver_etl must be preserved after loading!");
+        let etl = config.silver_etl.unwrap();
+        assert!(etl.enabled, "silver_etl.enabled should be true");
+        assert_eq!(etl.target_table, "silver.air_quality_observations");
+        assert_eq!(etl.field_mappings.len(), 1);
+        assert_eq!(etl.field_mappings[0].target_column, "pm25");
+
+        // Cleanup
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    /// Test that discover_stream_configs prefers config.json over config.yaml
+    #[tokio::test]
+    async fn test_discover_prefers_json_over_yaml() {
+        // Arrange: Create temp directory with both config.json and config.yaml
+        let temp_dir = std::env::temp_dir().join("dp018_prefer_json");
+        let stream_dir = temp_dir.join("test-stream");
+        std::fs::create_dir_all(&stream_dir).unwrap();
+
+        // Create both files
+        let yaml_content = "stream_id: test-stream\ndescription: YAML version";
+        let json_content = r#"{"stream_id": "test-stream", "description": "JSON version"}"#;
+        std::fs::write(stream_dir.join("config.yaml"), yaml_content).unwrap();
+        std::fs::write(stream_dir.join("config.json"), json_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+
+        // Act: Discover configs
+        let result = service.discover_stream_configs().await;
+
+        // Assert: Should find config.json (preferred)
+        assert!(result.is_ok());
+        let configs = result.unwrap();
+        assert_eq!(configs.len(), 1);
+        assert!(
+            configs[0].to_string_lossy().ends_with("config.json"),
+            "Should prefer config.json over config.yaml, found: {:?}",
+            configs[0]
+        );
+
+        // Cleanup
+        std::fs::remove_dir_all(temp_dir).ok();
+    }
+
+    /// Test that discover_stream_configs falls back to config.yaml when no JSON exists
+    #[tokio::test]
+    async fn test_discover_falls_back_to_yaml() {
+        // Arrange: Create temp directory with only config.yaml
+        let temp_dir = std::env::temp_dir().join("dp018_yaml_fallback");
+        let stream_dir = temp_dir.join("legacy-stream");
+        std::fs::create_dir_all(&stream_dir).unwrap();
+
+        let yaml_content = "stream_id: legacy-stream\ndescription: Legacy YAML";
+        std::fs::write(stream_dir.join("config.yaml"), yaml_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+
+        // Act: Discover configs
+        let result = service.discover_stream_configs().await;
+
+        // Assert: Should find config.yaml as fallback
+        assert!(result.is_ok());
+        let configs = result.unwrap();
+        assert_eq!(configs.len(), 1);
+        assert!(
+            configs[0].to_string_lossy().ends_with("config.yaml"),
+            "Should fall back to config.yaml"
+        );
+
+        // Cleanup
+        std::fs::remove_dir_all(temp_dir).ok();
+    }
+
+    /// Test that load_config auto-detects format based on file extension
+    #[tokio::test]
+    async fn test_load_config_auto_detects_format() {
+        // Arrange: Create JSON config
+        let json_content = r#"{
+            "stream_id": "auto-detect",
+            "description": "Auto-detect format test",
+            "version": "1.0.0",
+            "enabled": true,
+            "fields": [{"name": "value", "type": "float", "nullable": false}],
+            "sources": [{"type": "mqtt", "enabled": true}]
+        }"#;
+
+        let temp_dir = std::env::temp_dir();
+        let json_file = temp_dir.join("test_auto_detect.json");
+        std::fs::write(&json_file, json_content).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+
+        // Act: Load config (should auto-detect JSON)
+        let result = service.load_config(&json_file).await;
+
+        // Assert
+        assert!(result.is_ok(), "Failed to auto-detect JSON format: {:?}", result.err());
+        let config = result.unwrap();
+        assert_eq!(config.stream_id, "auto-detect");
+
+        // Cleanup
+        std::fs::remove_file(json_file).ok();
+    }
+
+    /// Test that JSON parse errors provide clear messages
+    #[tokio::test]
+    async fn test_json_parse_error_is_descriptive() {
+        // Arrange: Create invalid JSON
+        let invalid_json = r#"{ "stream_id": "broken", invalid json here }"#;
+
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_invalid_json.json");
+        std::fs::write(&temp_file, invalid_json).unwrap();
+
+        let service = ConfigSyncService::new(&temp_dir);
+
+        // Act: Try to load invalid JSON
+        let result = service.load_json_config(&temp_file).await;
+
+        // Assert: Should fail with descriptive error
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error, ConfigSyncError::JsonParseError(_)));
+
+        // Cleanup
+        std::fs::remove_file(temp_file).ok();
     }
 }

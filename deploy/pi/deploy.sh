@@ -28,8 +28,8 @@
 #   refresh         - Pull latest configs only (no rebuild, restarts Grafana)
 #
 # Configuration Commands:
-#   sync            - Sync configuration to etcd
-#   init-streams    - Initialize stream configurations in etcd
+#   sync            - Sync configuration to etcd (includes JSON stream configs)
+#   init-streams    - [DEPRECATED] Use 'sync' instead (dp-018)
 #   list-streams    - List configured streams from etcd
 #   sync-dictionary - Sync entity schemas to TimescaleDB data dictionary
 #
@@ -310,38 +310,35 @@ sync_config() {
         sleep 2
     done
 
-    # Run the sync script from the repo root
-    if [ -f "$REPO_ROOT/scripts/sync-config-to-etcd.sh" ]; then
-        ETCD_CONTAINER=$ETCD_CONTAINER "$REPO_ROOT/scripts/sync-config-to-etcd.sh" $ENV_NAME
+    # Sync JSON stream configs (dp-018 architecture)
+    # This is the primary sync method - stores complete JSON blobs at /streams/{id}/config
+    if [ -f "$REPO_ROOT/scripts/sync-streams-to-etcd.sh" ]; then
+        log "Syncing stream configurations (JSON)..."
+        ETCD_CONTAINER=$ETCD_CONTAINER "$REPO_ROOT/scripts/sync-streams-to-etcd.sh" --mode docker
     else
-        warn "Config sync script not found, skipping"
+        warn "Stream sync script not found at $REPO_ROOT/scripts/sync-streams-to-etcd.sh"
+    fi
+
+    # Legacy: sync-config-to-etcd.sh for non-stream configs (if still needed)
+    # TODO(dp-018): Migrate remaining configs to JSON and consolidate
+    if [ -f "$REPO_ROOT/scripts/sync-config-to-etcd.sh" ]; then
+        log "Syncing legacy configurations..."
+        ETCD_CONTAINER=$ETCD_CONTAINER "$REPO_ROOT/scripts/sync-config-to-etcd.sh" $ENV_NAME
     fi
 }
 
 init_streams() {
-    log "Initializing stream configurations..."
+    # DEPRECATED: dp-018 migrates to JSON config files synced via sync_config()
+    warn "DEPRECATED: init-streams command is deprecated since dp-018"
+    warn "Stream configs are now synced via 'sync' command using JSON files from:"
+    warn "  config/base/streams/*/config.json"
+    warn ""
+    warn "To sync streams, run: ./deploy.sh sync"
+    warn ""
 
-    # Wait for etcd to be ready
-    until dcx etcd etcdctl endpoint health >/dev/null 2>&1; do
-        warn "Waiting for etcd to be ready..."
-        sleep 2
-    done
-
-    # Check if streams are already initialized (informational only)
-    if dcx etcd etcdctl get --prefix "/air-quality/streams/" --keys-only >/dev/null 2>&1; then
-        stream_count=$(dcx etcd etcdctl get --prefix "/air-quality/streams/" --keys-only | grep -c "/id$" || echo "0")
-        if [ "$stream_count" -gt 0 ]; then
-            log "Updating existing stream configurations ($stream_count streams found)"
-        fi
-    fi
-
-    # Run stream initialization script
-    if [ -f "$SCRIPT_DIR/configs/streams/init-streams.sh" ]; then
-        bash "$SCRIPT_DIR/configs/streams/init-streams.sh" $ETCD_CONTAINER
-    else
-        warn "Stream initialization script not found at $SCRIPT_DIR/configs/streams/init-streams.sh"
-        warn "Multi-stream mode enabled but no streams configured!"
-    fi
+    # For backward compatibility during transition, run sync_config instead
+    # This ensures streams are synced even if someone runs the old command
+    sync_config
 }
 
 sync_to_data_dictionary() {

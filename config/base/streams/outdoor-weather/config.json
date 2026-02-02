@@ -1,0 +1,646 @@
+{
+  "stream_id": "outdoor-weather",
+  "description": "Outdoor weather data from OpenWeatherMap Current Weather API",
+  "version": "1.0.0",
+  "enabled": true,
+  "retention_days": 90,
+  "compression_after_days": 7,
+  "partitioning_strategy": "daily",
+  "fields": [
+    {
+      "name": "temperature",
+      "type": "float",
+      "nullable": false,
+      "unit": "celsius",
+      "range": [
+        -50,
+        60
+      ],
+      "description": "Current temperature"
+    },
+    {
+      "name": "feels_like",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -50,
+        60
+      ],
+      "description": "Feels-like temperature"
+    },
+    {
+      "name": "pressure",
+      "type": "float",
+      "nullable": true,
+      "unit": "hpa",
+      "range": [
+        800,
+        1200
+      ],
+      "description": "Atmospheric pressure at sea level"
+    },
+    {
+      "name": "humidity",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Relative humidity"
+    },
+    {
+      "name": "wind_speed",
+      "type": "float",
+      "nullable": true,
+      "unit": "m/s",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Wind speed"
+    },
+    {
+      "name": "wind_deg",
+      "type": "float",
+      "nullable": true,
+      "unit": "degrees",
+      "range": [
+        0,
+        360
+      ],
+      "description": "Wind direction in degrees"
+    },
+    {
+      "name": "wind_gust",
+      "type": "float",
+      "nullable": true,
+      "unit": "m/s",
+      "range": [
+        0,
+        150
+      ],
+      "description": "Wind gust speed"
+    },
+    {
+      "name": "clouds",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Cloudiness percentage"
+    },
+    {
+      "name": "visibility",
+      "type": "float",
+      "nullable": true,
+      "unit": "meters",
+      "range": [
+        0,
+        50000
+      ],
+      "description": "Visibility distance"
+    },
+    {
+      "name": "rain_1h",
+      "type": "float",
+      "nullable": true,
+      "unit": "mm",
+      "range": [
+        0,
+        500
+      ],
+      "description": "Rain volume for last 1 hour"
+    },
+    {
+      "name": "snow_1h",
+      "type": "float",
+      "nullable": true,
+      "unit": "mm",
+      "range": [
+        0,
+        500
+      ],
+      "description": "Snow volume for last 1 hour"
+    }
+  ],
+  "sources": [
+    {
+      "type": "http_poll",
+      "enabled": true,
+      "ndp_id": "weather-owm-002",
+      "context": {
+        "source_type": {
+          "provider": "openweathermap",
+          "purpose": "current_weather"
+        },
+        "location": {
+          "coordinates": [
+            29.95838,
+            -81.30878
+          ],
+          "type": "outdoor",
+          "path": "beachhouse"
+        }
+      },
+      "poll_interval_secs": 600,
+      "timeout_secs": 30,
+      "parser_name": "openweathermap_current_weather",
+      "endpoints": [
+        {
+          "endpoint_id": "openweathermap_weather",
+          "location_id": "home",
+          "lat": 29.95838,
+          "lon": -81.30878,
+          "url": "https://api.openweathermap.org/data/2.5/weather?lat=29.95838&lon=-81.30878&units=metric",
+          "auth_type": "query_param",
+          "auth_key": "appid",
+          "auth_value": "${OPENWEATHERMAP_API_KEY}"
+        }
+      ],
+      "parser": {
+        "parser_type": "json_path",
+        "location_id_field": "name",
+        "default_location_id": "${OWM_LOCATION_NAME}",
+        "default_tags": {
+          "source": "openweathermap",
+          "api": "current_weather",
+          "stream_id": "outdoor-weather"
+        },
+        "field_mappings": [
+          {
+            "path": "main.temp",
+            "metric_name": "temperature",
+            "unit": "celsius"
+          },
+          {
+            "path": "main.feels_like",
+            "metric_name": "feels_like",
+            "unit": "celsius"
+          },
+          {
+            "path": "main.pressure",
+            "metric_name": "pressure",
+            "unit": "hpa"
+          },
+          {
+            "path": "main.humidity",
+            "metric_name": "humidity",
+            "unit": "percent"
+          },
+          {
+            "path": "wind.speed",
+            "metric_name": "wind_speed",
+            "unit": "m/s"
+          },
+          {
+            "path": "wind.deg",
+            "metric_name": "wind_deg",
+            "unit": "degrees"
+          },
+          {
+            "path": "wind.gust",
+            "metric_name": "wind_gust",
+            "unit": "m/s"
+          },
+          {
+            "path": "clouds.all",
+            "metric_name": "clouds",
+            "unit": "percent"
+          },
+          {
+            "path": "visibility",
+            "metric_name": "visibility",
+            "unit": "meters"
+          }
+        ]
+      }
+    }
+  ],
+  "storage": {
+    "batch_size": 50,
+    "batch_timeout_secs": 30,
+    "buffer_capacity": 500
+  },
+  "entity_schemas": [
+    {
+      "schema_name": "nws-weather",
+      "description": "Outdoor weather data from OpenWeatherMap Current Weather API",
+      "attributes": [
+        {
+          "name": "temperature",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Current temperature",
+          "nullable": false,
+          "range": [
+            -50,
+            60
+          ]
+        },
+        {
+          "name": "feels_like",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Feels-like temperature",
+          "nullable": true,
+          "range": [
+            -50,
+            60
+          ]
+        },
+        {
+          "name": "pressure",
+          "type": "float",
+          "unit": "hpa",
+          "description": "Atmospheric pressure at sea level",
+          "nullable": true,
+          "range": [
+            800,
+            1200
+          ]
+        },
+        {
+          "name": "humidity",
+          "type": "float",
+          "unit": "percent",
+          "description": "Relative humidity",
+          "nullable": true,
+          "range": [
+            0,
+            100
+          ]
+        },
+        {
+          "name": "wind_speed",
+          "type": "float",
+          "unit": "m/s",
+          "description": "Wind speed",
+          "nullable": true,
+          "range": [
+            0,
+            100
+          ]
+        },
+        {
+          "name": "wind_deg",
+          "type": "float",
+          "unit": "degrees",
+          "description": "Wind direction in degrees",
+          "nullable": true,
+          "range": [
+            0,
+            360
+          ]
+        },
+        {
+          "name": "wind_gust",
+          "type": "float",
+          "unit": "m/s",
+          "description": "Wind gust speed",
+          "nullable": true,
+          "range": [
+            0,
+            150
+          ]
+        },
+        {
+          "name": "clouds",
+          "type": "float",
+          "unit": "percent",
+          "description": "Cloudiness percentage",
+          "nullable": true,
+          "range": [
+            0,
+            100
+          ]
+        },
+        {
+          "name": "visibility",
+          "type": "float",
+          "unit": "meters",
+          "description": "Visibility distance",
+          "nullable": true,
+          "range": [
+            0,
+            50000
+          ]
+        },
+        {
+          "name": "rain_1h",
+          "type": "float",
+          "unit": "mm",
+          "description": "Rain volume for last 1 hour",
+          "nullable": true,
+          "range": [
+            0,
+            500
+          ]
+        },
+        {
+          "name": "snow_1h",
+          "type": "float",
+          "unit": "mm",
+          "description": "Snow volume for last 1 hour",
+          "nullable": true,
+          "range": [
+            0,
+            500
+          ]
+        }
+      ]
+    }
+  ],
+  "silver_etl": {
+    "enabled": true,
+    "target_table": "silver.weather_observations",
+    "description": "Outdoor weather observations from OpenWeatherMap API",
+    "grain": "One row per observation (~10 minute intervals)",
+    "timestamp": {
+      "source_field": "timestamp",
+      "target_field": "observation_time",
+      "transform": "microseconds_to_timestamp"
+    },
+    "identity_fields": [
+      {
+        "source": "ndp_id",
+        "target": "ndp_id"
+      }
+    ],
+    "field_mappings": [
+      {
+        "source_path": "raw_payload.main.temp",
+        "target_column": "temperature_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Ambient air temperature",
+        "nullable": false,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -60,
+            "max": 60,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.main.feels_like",
+        "target_column": "feels_like_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Apparent temperature (feels-like)",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -60,
+            "max": 60,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.main.humidity",
+        "target_column": "humidity_pct",
+        "type": "double_precision",
+        "unit": "%",
+        "description": "Relative humidity",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 100,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.main.pressure",
+        "target_column": "pressure_pa",
+        "type": "double_precision",
+        "unit": "Pa",
+        "description": "Atmospheric pressure",
+        "nullable": true,
+        "transform": {
+          "type": "unit_conversion",
+          "from": "hpa",
+          "to": "pa",
+          "formula": {
+            "type": "linear",
+            "scale": 100,
+            "offset": 0
+          }
+        },
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 80000,
+            "max": 120000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.wind.speed",
+        "target_column": "wind_speed_kmh",
+        "type": "double_precision",
+        "unit": "km/h",
+        "description": "Wind speed",
+        "nullable": true,
+        "transform": {
+          "type": "unit_conversion",
+          "from": "m_s",
+          "to": "km_h",
+          "formula": {
+            "type": "linear",
+            "scale": 3.6,
+            "offset": 0
+          }
+        },
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 400,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.wind.gust",
+        "target_column": "wind_gust_kmh",
+        "type": "double_precision",
+        "unit": "km/h",
+        "description": "Wind gust speed",
+        "nullable": true,
+        "transform": {
+          "type": "unit_conversion",
+          "from": "m_s",
+          "to": "km_h",
+          "formula": {
+            "type": "linear",
+            "scale": 3.6,
+            "offset": 0
+          }
+        },
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 500,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.wind.deg",
+        "target_column": "wind_direction_deg",
+        "type": "double_precision",
+        "unit": "degrees",
+        "description": "Wind direction (0-360, 0=North)",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 360,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.clouds.all",
+        "target_column": "cloud_cover_pct",
+        "type": "double_precision",
+        "unit": "%",
+        "description": "Cloud cover percentage",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 100,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.visibility",
+        "target_column": "visibility_m",
+        "type": "double_precision",
+        "unit": "meters",
+        "description": "Visibility distance",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 50000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.rain.1h",
+        "target_column": "precipitation_mm",
+        "type": "double_precision",
+        "unit": "mm",
+        "description": "Precipitation in last hour",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 500,
+            "action": "flag"
+          }
+        ]
+      }
+    ],
+    "dq_rules": [
+      {
+        "rule": "cross_field_check",
+        "name": "wind_gust_gte_speed",
+        "expression": "wind_gust_kmh IS NULL OR wind_gust_kmh >= wind_speed_kmh",
+        "message": "gust_less_than_sustained",
+        "action": "flag"
+      },
+      {
+        "rule": "cross_field_check",
+        "name": "feels_like_reasonable",
+        "expression": "feels_like_c IS NULL OR ABS(feels_like_c - temperature_c) <= 20",
+        "message": "feels_like_unreasonable",
+        "action": "flag"
+      },
+      {
+        "rule": "freshness_check",
+        "field": "observation_time",
+        "max_age": "3 hours",
+        "max_future": "10 minutes",
+        "reference": "ingestion_time",
+        "action": "flag"
+      },
+      {
+        "rule": "rate_of_change",
+        "field": "temperature_c",
+        "max_change_per_minute": 2,
+        "partition_by": [
+          "ndp_id"
+        ],
+        "action": "flag"
+      },
+      {
+        "rule": "rate_of_change",
+        "field": "pressure_pa",
+        "max_change_per_minute": 500,
+        "partition_by": [
+          "ndp_id"
+        ],
+        "action": "flag"
+      },
+      {
+        "rule": "completeness_check",
+        "level": "batch",
+        "field": "temperature_c",
+        "min_completeness": 0.98,
+        "action": "warn"
+      }
+    ],
+    "dq_output": {
+      "enabled": true,
+      "target_column": "dq_flags",
+      "include_rules": true,
+      "include_values": false,
+      "transparency": {
+        "enabled": true,
+        "table": "silver.dq_transparency",
+        "include_sample_payload": true,
+        "max_samples_per_rule": 10
+      }
+    },
+    "deduplication": {
+      "enabled": true,
+      "key_columns": [
+        "observation_time",
+        "ndp_id"
+      ],
+      "strategy": "upsert"
+    },
+    "incremental": {
+      "enabled": true,
+      "watermark_column": "observation_time",
+      "lag_interval": "5 minutes"
+    }
+  },
+  "config_version": "1.1"
+}

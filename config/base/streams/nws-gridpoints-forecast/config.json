@@ -1,0 +1,1219 @@
+{
+  "stream_id": "nws-gridpoints-forecast",
+  "description": "Raw NWS gridpoint forecast data with 40+ comprehensive weather metrics",
+  "version": "1.0.0",
+  "enabled": true,
+  "retention_days": 30,
+  "compression_after_days": 7,
+  "partitioning_strategy": "daily",
+  "fields": [
+    {
+      "name": "temperature",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -50,
+        60
+      ],
+      "description": "Forecast temperature"
+    },
+    {
+      "name": "dewpoint",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -50,
+        60
+      ],
+      "description": "Forecast dewpoint temperature"
+    },
+    {
+      "name": "max_temperature",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -50,
+        60
+      ],
+      "description": "Daily maximum temperature"
+    },
+    {
+      "name": "min_temperature",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -50,
+        60
+      ],
+      "description": "Daily minimum temperature"
+    },
+    {
+      "name": "apparent_temperature",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -60,
+        70
+      ],
+      "description": "Feels-like temperature"
+    },
+    {
+      "name": "wet_bulb_globe_temperature",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -50,
+        60
+      ],
+      "description": "Wet bulb globe temperature (heat stress)"
+    },
+    {
+      "name": "heat_index",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -50,
+        70
+      ],
+      "description": "Heat index (when applicable)"
+    },
+    {
+      "name": "wind_chill",
+      "type": "float",
+      "nullable": true,
+      "unit": "celsius",
+      "range": [
+        -70,
+        20
+      ],
+      "description": "Wind chill (when applicable)"
+    },
+    {
+      "name": "wind_speed",
+      "type": "float",
+      "nullable": true,
+      "unit": "km/h",
+      "range": [
+        0,
+        300
+      ],
+      "description": "Forecast wind speed"
+    },
+    {
+      "name": "wind_direction",
+      "type": "float",
+      "nullable": true,
+      "unit": "degrees",
+      "range": [
+        0,
+        360
+      ],
+      "description": "Forecast wind direction"
+    },
+    {
+      "name": "wind_gust",
+      "type": "float",
+      "nullable": true,
+      "unit": "km/h",
+      "range": [
+        0,
+        400
+      ],
+      "description": "Forecast wind gust speed"
+    },
+    {
+      "name": "transport_wind_speed",
+      "type": "float",
+      "nullable": true,
+      "unit": "km/h",
+      "range": [
+        0,
+        300
+      ],
+      "description": "Transport wind speed"
+    },
+    {
+      "name": "transport_wind_direction",
+      "type": "float",
+      "nullable": true,
+      "unit": "degrees",
+      "range": [
+        0,
+        360
+      ],
+      "description": "Transport wind direction"
+    },
+    {
+      "name": "twenty_foot_wind_speed",
+      "type": "float",
+      "nullable": true,
+      "unit": "km/h",
+      "range": [
+        0,
+        300
+      ],
+      "description": "20-foot wind speed (fire weather)"
+    },
+    {
+      "name": "twenty_foot_wind_direction",
+      "type": "float",
+      "nullable": true,
+      "unit": "degrees",
+      "range": [
+        0,
+        360
+      ],
+      "description": "20-foot wind direction (fire weather)"
+    },
+    {
+      "name": "probability_of_precipitation",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Precipitation probability"
+    },
+    {
+      "name": "quantitative_precipitation",
+      "type": "float",
+      "nullable": true,
+      "unit": "mm",
+      "range": [
+        0,
+        500
+      ],
+      "description": "Quantitative precipitation forecast"
+    },
+    {
+      "name": "snowfall_amount",
+      "type": "float",
+      "nullable": true,
+      "unit": "mm",
+      "range": [
+        0,
+        1000
+      ],
+      "description": "Snowfall amount"
+    },
+    {
+      "name": "ice_accumulation",
+      "type": "float",
+      "nullable": true,
+      "unit": "mm",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Ice accumulation"
+    },
+    {
+      "name": "sky_cover",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Cloud cover percentage"
+    },
+    {
+      "name": "visibility",
+      "type": "float",
+      "nullable": true,
+      "unit": "meters",
+      "range": [
+        0,
+        50000
+      ],
+      "description": "Visibility distance"
+    },
+    {
+      "name": "ceiling_height",
+      "type": "float",
+      "nullable": true,
+      "unit": "meters",
+      "range": [
+        -100,
+        20000
+      ],
+      "description": "Cloud ceiling height (negative values indicate surface/fog)"
+    },
+    {
+      "name": "relative_humidity",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Relative humidity"
+    },
+    {
+      "name": "dispersion_index",
+      "type": "float",
+      "nullable": true,
+      "unit": "index",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Smoke dispersion index"
+    },
+    {
+      "name": "low_visibility_occurrence_risk_index",
+      "type": "float",
+      "nullable": true,
+      "unit": "index",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Low visibility occurrence risk"
+    },
+    {
+      "name": "probability_of_thunder",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Probability of thunderstorms"
+    },
+    {
+      "name": "mixing_height",
+      "type": "float",
+      "nullable": true,
+      "unit": "meters",
+      "range": [
+        0,
+        10000
+      ],
+      "description": "Atmospheric mixing height"
+    },
+    {
+      "name": "haines_index",
+      "type": "float",
+      "nullable": true,
+      "unit": "index",
+      "range": [
+        2,
+        6
+      ],
+      "description": "Haines index (fire weather)"
+    },
+    {
+      "name": "davis_stability_index",
+      "type": "float",
+      "nullable": true,
+      "unit": "index",
+      "range": [
+        -20,
+        20
+      ],
+      "description": "Davis stability index"
+    },
+    {
+      "name": "atmospheric_dispersion_index",
+      "type": "float",
+      "nullable": true,
+      "unit": "index",
+      "range": [
+        0,
+        10
+      ],
+      "description": "Atmospheric dispersion index"
+    },
+    {
+      "name": "low_visibility_risk",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Low visibility risk percentage"
+    },
+    {
+      "name": "red_flag_threat_index",
+      "type": "float",
+      "nullable": true,
+      "unit": "index",
+      "range": [
+        0,
+        100
+      ],
+      "description": "Red flag threat index (fire weather)"
+    },
+    {
+      "name": "wave_height",
+      "type": "float",
+      "nullable": true,
+      "unit": "meters",
+      "range": [
+        0,
+        30
+      ],
+      "description": "Wave height (coastal areas)"
+    },
+    {
+      "name": "wave_period",
+      "type": "float",
+      "nullable": true,
+      "unit": "seconds",
+      "range": [
+        0,
+        30
+      ],
+      "description": "Wave period (coastal areas)"
+    },
+    {
+      "name": "wave_direction",
+      "type": "float",
+      "nullable": true,
+      "unit": "degrees",
+      "range": [
+        0,
+        360
+      ],
+      "description": "Wave direction (coastal areas)"
+    },
+    {
+      "name": "primary_swell_height",
+      "type": "float",
+      "nullable": true,
+      "unit": "meters",
+      "range": [
+        0,
+        30
+      ],
+      "description": "Primary swell height"
+    },
+    {
+      "name": "primary_swell_direction",
+      "type": "float",
+      "nullable": true,
+      "unit": "degrees",
+      "range": [
+        0,
+        360
+      ],
+      "description": "Primary swell direction"
+    },
+    {
+      "name": "secondary_swell_height",
+      "type": "float",
+      "nullable": true,
+      "unit": "meters",
+      "range": [
+        0,
+        30
+      ],
+      "description": "Secondary swell height"
+    },
+    {
+      "name": "secondary_swell_direction",
+      "type": "float",
+      "nullable": true,
+      "unit": "degrees",
+      "range": [
+        0,
+        360
+      ],
+      "description": "Secondary swell direction"
+    }
+  ],
+  "sources": [
+    {
+      "type": "http_poll",
+      "enabled": true,
+      "ndp_id": "weather-nws-002",
+      "context": {
+        "source_type": {
+          "provider": "nws",
+          "purpose": "forecast_hourly",
+          "grid_office": "JAX",
+          "station": "ksgj"
+        },
+        "location": {
+          "coordinates": [
+            29.95838,
+            -81.30878
+          ],
+          "type": "outdoor",
+          "path": "beachhouse"
+        }
+      },
+      "poll_interval_secs": 3600,
+      "timeout_secs": 30,
+      "retry_attempts": 3,
+      "retry_delay_secs": 5,
+      "buffer_capacity": 2500,
+      "parser_name": "nws_gridpoints",
+      "endpoints": [
+        {
+          "endpoint_id": "nws_jax_80_50_gridpoints",
+          "location_id": "ksgj_gridpoints",
+          "grid_office": "JAX",
+          "grid_x": 80,
+          "grid_y": 50,
+          "url": "https://api.weather.gov/gridpoints/JAX/80,50",
+          "auth_type": "none",
+          "headers": {
+            "User-Agent": "(neural-data-platform/1.0, something1@gmail.com)",
+            "Accept": "application/geo+json"
+          }
+        }
+      ],
+      "parser": {
+        "parser_type": "column_oriented",
+        "location_id_field": "properties.gridId",
+        "default_location_id": "ksgj_gridpoints",
+        "default_tags": {
+          "source": "nws",
+          "api": "gridpoints",
+          "stream_id": "nws-gridpoints-forecast",
+          "grid_office": "JAX",
+          "grid_x": "80",
+          "grid_y": "50"
+        },
+        "column_config": {
+          "metrics_base_path": "properties",
+          "timestamp_format": {
+            "type": "iso8601_duration"
+          },
+          "columns": [
+            {
+              "metric_path": "temperature",
+              "field_name": "temperature",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "dewpoint",
+              "field_name": "dewpoint",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "maxTemperature",
+              "field_name": "max_temperature",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "minTemperature",
+              "field_name": "min_temperature",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "apparentTemperature",
+              "field_name": "apparent_temperature",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "wetBulbGlobeTemperature",
+              "field_name": "wet_bulb_globe_temperature",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "heatIndex",
+              "field_name": "heat_index",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "windChill",
+              "field_name": "wind_chill",
+              "unit": "celsius"
+            },
+            {
+              "metric_path": "windSpeed",
+              "field_name": "wind_speed",
+              "unit": "km/h"
+            },
+            {
+              "metric_path": "windDirection",
+              "field_name": "wind_direction",
+              "unit": "degrees"
+            },
+            {
+              "metric_path": "windGust",
+              "field_name": "wind_gust",
+              "unit": "km/h"
+            },
+            {
+              "metric_path": "transportWindSpeed",
+              "field_name": "transport_wind_speed",
+              "unit": "km/h"
+            },
+            {
+              "metric_path": "transportWindDirection",
+              "field_name": "transport_wind_direction",
+              "unit": "degrees"
+            },
+            {
+              "metric_path": "twentyFootWindSpeed",
+              "field_name": "twenty_foot_wind_speed",
+              "unit": "km/h"
+            },
+            {
+              "metric_path": "twentyFootWindDirection",
+              "field_name": "twenty_foot_wind_direction",
+              "unit": "degrees"
+            },
+            {
+              "metric_path": "probabilityOfPrecipitation",
+              "field_name": "probability_of_precipitation",
+              "unit": "percent"
+            },
+            {
+              "metric_path": "quantitativePrecipitation",
+              "field_name": "quantitative_precipitation",
+              "unit": "mm"
+            },
+            {
+              "metric_path": "snowfallAmount",
+              "field_name": "snowfall_amount",
+              "unit": "mm"
+            },
+            {
+              "metric_path": "iceAccumulation",
+              "field_name": "ice_accumulation",
+              "unit": "mm"
+            },
+            {
+              "metric_path": "skyCover",
+              "field_name": "sky_cover",
+              "unit": "percent"
+            },
+            {
+              "metric_path": "visibility",
+              "field_name": "visibility",
+              "unit": "meters"
+            },
+            {
+              "metric_path": "ceilingHeight",
+              "field_name": "ceiling_height",
+              "unit": "meters"
+            },
+            {
+              "metric_path": "relativeHumidity",
+              "field_name": "relative_humidity",
+              "unit": "percent"
+            },
+            {
+              "metric_path": "dispersionIndex",
+              "field_name": "dispersion_index",
+              "unit": "index"
+            },
+            {
+              "metric_path": "lowVisibilityOccurrenceRiskIndex",
+              "field_name": "low_visibility_occurrence_risk_index",
+              "unit": "index"
+            },
+            {
+              "metric_path": "probabilityOfThunder",
+              "field_name": "probability_of_thunder",
+              "unit": "percent"
+            },
+            {
+              "metric_path": "mixingHeight",
+              "field_name": "mixing_height",
+              "unit": "meters"
+            },
+            {
+              "metric_path": "hainesIndex",
+              "field_name": "haines_index",
+              "unit": "index"
+            },
+            {
+              "metric_path": "davisStabilityIndex",
+              "field_name": "davis_stability_index",
+              "unit": "index"
+            },
+            {
+              "metric_path": "atmosphericDispersionIndex",
+              "field_name": "atmospheric_dispersion_index",
+              "unit": "index"
+            },
+            {
+              "metric_path": "lowVisibilityRisk",
+              "field_name": "low_visibility_risk",
+              "unit": "percent"
+            },
+            {
+              "metric_path": "redFlagThreatIndex",
+              "field_name": "red_flag_threat_index",
+              "unit": "index"
+            },
+            {
+              "metric_path": "waveHeight",
+              "field_name": "wave_height",
+              "unit": "meters"
+            },
+            {
+              "metric_path": "wavePeriod",
+              "field_name": "wave_period",
+              "unit": "seconds"
+            },
+            {
+              "metric_path": "waveDirection",
+              "field_name": "wave_direction",
+              "unit": "degrees"
+            },
+            {
+              "metric_path": "primarySwellHeight",
+              "field_name": "primary_swell_height",
+              "unit": "meters"
+            },
+            {
+              "metric_path": "primarySwellDirection",
+              "field_name": "primary_swell_direction",
+              "unit": "degrees"
+            },
+            {
+              "metric_path": "secondarySwellHeight",
+              "field_name": "secondary_swell_height",
+              "unit": "meters"
+            },
+            {
+              "metric_path": "secondarySwellDirection",
+              "field_name": "secondary_swell_direction",
+              "unit": "degrees"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "storage": {
+    "batch_size": 200,
+    "batch_timeout_secs": 60,
+    "buffer_capacity": 2500
+  },
+  "entity_schemas": [
+    {
+      "schema_name": "nws-gridpoints",
+      "description": "Raw NWS gridpoint forecast data with comprehensive weather metrics",
+      "attributes": [
+        {
+          "name": "temperature",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Forecast temperature",
+          "nullable": true,
+          "range": [
+            -50,
+            60
+          ]
+        },
+        {
+          "name": "dewpoint",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Forecast dewpoint temperature",
+          "nullable": true,
+          "range": [
+            -50,
+            60
+          ]
+        },
+        {
+          "name": "max_temperature",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Daily maximum temperature",
+          "nullable": true,
+          "range": [
+            -50,
+            60
+          ]
+        },
+        {
+          "name": "min_temperature",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Daily minimum temperature",
+          "nullable": true,
+          "range": [
+            -50,
+            60
+          ]
+        },
+        {
+          "name": "apparent_temperature",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Feels-like temperature",
+          "nullable": true,
+          "range": [
+            -60,
+            70
+          ]
+        },
+        {
+          "name": "wind_speed",
+          "type": "float",
+          "unit": "km/h",
+          "description": "Forecast wind speed",
+          "nullable": true,
+          "range": [
+            0,
+            300
+          ]
+        },
+        {
+          "name": "wind_direction",
+          "type": "float",
+          "unit": "degrees",
+          "description": "Forecast wind direction",
+          "nullable": true,
+          "range": [
+            0,
+            360
+          ]
+        },
+        {
+          "name": "wind_gust",
+          "type": "float",
+          "unit": "km/h",
+          "description": "Forecast wind gust speed",
+          "nullable": true,
+          "range": [
+            0,
+            400
+          ]
+        },
+        {
+          "name": "probability_of_precipitation",
+          "type": "float",
+          "unit": "percent",
+          "description": "Precipitation probability",
+          "nullable": true,
+          "range": [
+            0,
+            100
+          ]
+        },
+        {
+          "name": "quantitative_precipitation",
+          "type": "float",
+          "unit": "mm",
+          "description": "Quantitative precipitation forecast",
+          "nullable": true,
+          "range": [
+            0,
+            500
+          ]
+        },
+        {
+          "name": "sky_cover",
+          "type": "float",
+          "unit": "percent",
+          "description": "Cloud cover percentage",
+          "nullable": true,
+          "range": [
+            0,
+            100
+          ]
+        },
+        {
+          "name": "relative_humidity",
+          "type": "float",
+          "unit": "percent",
+          "description": "Relative humidity",
+          "nullable": true,
+          "range": [
+            0,
+            100
+          ]
+        },
+        {
+          "name": "visibility",
+          "type": "float",
+          "unit": "meters",
+          "description": "Visibility distance",
+          "nullable": true,
+          "range": [
+            0,
+            50000
+          ]
+        }
+      ]
+    }
+  ],
+  "silver_etl": {
+    "enabled": true,
+    "target_table": "silver.weather_forecasts",
+    "description": "Weather forecasts from NWS gridpoint API with lead time tracking",
+    "grain": "One row per forecast hour per issue time",
+    "pre_transform": {
+      "transform_type": {
+        "type": "array_explosion",
+        "metrics_base_path": "properties",
+        "timestamp_field": "validTime",
+        "value_field": "value",
+        "values_path": "values",
+        "metrics": [
+          {
+            "metric_path": "temperature",
+            "target_column": "temperature",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "dewpoint",
+            "target_column": "dewpoint",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "apparentTemperature",
+            "target_column": "apparent_temperature",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "heatIndex",
+            "target_column": "heat_index",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "windChill",
+            "target_column": "wind_chill",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "windSpeed",
+            "target_column": "wind_speed",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "windGust",
+            "target_column": "wind_gust",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "windDirection",
+            "target_column": "wind_direction",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "relativeHumidity",
+            "target_column": "relative_humidity",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "skyCover",
+            "target_column": "sky_cover",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "visibility",
+            "target_column": "visibility",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "probabilityOfPrecipitation",
+            "target_column": "precip_probability",
+            "type": "double_precision"
+          },
+          {
+            "metric_path": "quantitativePrecipitation",
+            "target_column": "precip_amount",
+            "type": "double_precision"
+          }
+        ]
+      }
+    },
+    "timestamp": {
+      "source_field": "timestamp",
+      "target_field": "issue_time",
+      "transform": "microseconds_to_timestamp"
+    },
+    "valid_timestamp": {
+      "target_field": "valid_time",
+      "transform": "nws_duration",
+      "source": "array_explosion"
+    },
+    "identity_fields": [
+      {
+        "source": "ndp_id",
+        "target": "ndp_id"
+      }
+    ],
+    "field_mappings": [
+      {
+        "source_path": "temperature",
+        "target_column": "temperature_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Forecast temperature",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -50,
+            "max": 60,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "dewpoint",
+        "target_column": "dewpoint_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Forecast dew point",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -50,
+            "max": 60,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "apparent_temperature",
+        "target_column": "apparent_temp_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Forecast apparent temperature",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -60,
+            "max": 70,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "heat_index",
+        "target_column": "heat_index_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Forecast heat index",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -50,
+            "max": 70,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "wind_chill",
+        "target_column": "wind_chill_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Forecast wind chill",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": -70,
+            "max": 30,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "wind_speed",
+        "target_column": "wind_speed_kmh",
+        "type": "double_precision",
+        "unit": "km/h",
+        "description": "Forecast wind speed",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 300,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "wind_direction",
+        "target_column": "wind_direction_deg",
+        "type": "double_precision",
+        "unit": "degrees",
+        "description": "Forecast wind direction",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 360,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "wind_gust",
+        "target_column": "wind_gust_kmh",
+        "type": "double_precision",
+        "unit": "km/h",
+        "description": "Forecast wind gust",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 400,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "precip_probability",
+        "target_column": "precip_probability_pct",
+        "type": "double_precision",
+        "unit": "%",
+        "description": "Probability of precipitation",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 100,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "precip_amount",
+        "target_column": "precip_amount_mm",
+        "type": "double_precision",
+        "unit": "mm",
+        "description": "Forecast precipitation amount",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 500,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "relative_humidity",
+        "target_column": "humidity_pct",
+        "type": "double_precision",
+        "unit": "%",
+        "description": "Forecast relative humidity",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 100,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "sky_cover",
+        "target_column": "sky_cover_pct",
+        "type": "double_precision",
+        "unit": "%",
+        "description": "Forecast cloud cover",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 100,
+            "action": "clamp",
+            "clamp_to_bounds": true
+          }
+        ]
+      },
+      {
+        "source_path": "visibility",
+        "target_column": "visibility_m",
+        "type": "double_precision",
+        "unit": "meters",
+        "description": "Forecast visibility",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 50000,
+            "action": "flag"
+          }
+        ]
+      }
+    ],
+    "dq_rules": [
+      {
+        "rule": "cross_field_check",
+        "name": "wind_gust_gte_speed",
+        "expression": "wind_gust_kmh IS NULL OR wind_speed_kmh IS NULL OR wind_gust_kmh >= wind_speed_kmh",
+        "message": "gust_less_than_sustained",
+        "action": "flag"
+      },
+      {
+        "rule": "cross_field_check",
+        "name": "valid_time_after_issue",
+        "expression": "valid_time >= issue_time",
+        "message": "valid_time_before_issue",
+        "action": "flag"
+      },
+      {
+        "rule": "cross_field_check",
+        "name": "forecast_horizon_reasonable",
+        "expression": "EXTRACT(EPOCH FROM (valid_time - issue_time)) <= 604800",
+        "message": "forecast_horizon_exceeds_7_days",
+        "action": "flag"
+      },
+      {
+        "rule": "cross_field_check",
+        "name": "dewpoint_lte_temp",
+        "expression": "dewpoint_c IS NULL OR temperature_c IS NULL OR dewpoint_c <= temperature_c",
+        "message": "dewpoint_exceeds_temperature",
+        "action": "flag"
+      }
+    ],
+    "dq_output": {
+      "enabled": true,
+      "target_column": "dq_flags",
+      "include_rules": true,
+      "include_values": false
+    },
+    "deduplication": {
+      "enabled": true,
+      "key_columns": [
+        "issue_time",
+        "valid_time",
+        "ndp_id"
+      ],
+      "strategy": "upsert"
+    },
+    "incremental": {
+      "enabled": true,
+      "watermark_column": "issue_time",
+      "lag_interval": "1 hour"
+    }
+  },
+  "config_version": "1.1"
+}

@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+// DP-018: Import SilverEtlConfig for unified stream configuration
+use crate::config::SilverEtlConfig;
+
 /// Errors that can occur during stream configuration validation
 #[derive(Debug, Error, PartialEq)]
 pub enum StreamConfigError {
@@ -364,6 +367,51 @@ impl CsvSourceConfig {
     }
 }
 
+/// Entity schema attribute (v1.0 format, deprecated in v1.1)
+///
+/// Used for backward compatibility with v1.0 configs where field metadata
+/// was stored in entity_schemas rather than directly on fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntitySchemaAttribute {
+    /// Attribute name (matches field name)
+    pub name: String,
+
+    /// Human-readable description
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    /// Device class for Home Assistant integration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_class: Option<String>,
+
+    /// Physical unit
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+
+    /// Valid range [min, max]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range: Option<Vec<f64>>,
+}
+
+/// Entity schema (v1.0 format, deprecated in v1.1)
+///
+/// This structure is deprecated. In v1.1+, field metadata should be
+/// stored directly on SchemaField. This is retained for backward
+/// compatibility during migration from v1.0 configs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntitySchema {
+    /// Schema name (e.g., "airgradient", "openweathermap")
+    pub schema_name: String,
+
+    /// Device class for the entity
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_class: Option<String>,
+
+    /// Attributes with metadata
+    #[serde(default)]
+    pub attributes: Vec<EntitySchemaAttribute>,
+}
+
 /// Stream configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StreamConfig {
@@ -402,6 +450,25 @@ pub struct StreamConfig {
     /// Storage configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub storage: Option<StorageConfig>,
+
+    /// Silver ETL configuration (DP-018: unified config)
+    ///
+    /// When present, defines how Bronze data is transformed into Silver layer.
+    /// Bronze layer ignores this field; Silver ETL uses it for transformation config.
+    /// This enables single-file configuration for the full Bronze->Silver pipeline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub silver_etl: Option<SilverEtlConfig>,
+
+    /// Entity schemas (v1.0 format, deprecated in v1.1)
+    ///
+    /// This field is deprecated. In v1.1+, field metadata (description, unit, range)
+    /// should be stored directly on SchemaField. This is retained for backward
+    /// compatibility during migration from v1.0 configs.
+    ///
+    /// dp-018 Task 1.5: get_field_description() reads from fields first,
+    /// falling back to entity_schemas for v1.0 compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_schemas: Option<Vec<EntitySchema>>,
 }
 
 fn default_version() -> String {
@@ -475,6 +542,149 @@ impl StreamConfig {
     pub fn has_field(&self, name: &str) -> bool {
         self.get_field(name).is_some()
     }
+
+    /// Get field description with fallback to entity_schemas (dp-018 Task 1.5)
+    ///
+    /// Retrieves field description with fallback logic for v1.0/v1.1 compatibility:
+    /// - v1.1+: Reads from fields[].description (preferred)
+    /// - v1.0: Falls back to entity_schemas[].attributes[].description
+    ///
+    /// # Arguments
+    ///
+    /// * `field_name` - The name of the field to get description for
+    ///
+    /// # Returns
+    ///
+    /// The field description if found in either location, None otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let config = load_stream_config("air-quality").await?;
+    /// if let Some(desc) = config.get_field_description("pm25") {
+    ///     println!("PM2.5: {}", desc);
+    /// }
+    /// ```
+    pub fn get_field_description(&self, field_name: &str) -> Option<String> {
+        // Priority 1: Try enriched fields first (v1.1+ pattern)
+        if let Some(field) = self.get_field(field_name) {
+            if let Some(ref desc) = field.description {
+                if !desc.is_empty() {
+                    tracing::debug!(
+                        field = %field_name,
+                        "Description found in fields (v1.1)"
+                    );
+                    return Some(desc.clone());
+                }
+            }
+        }
+
+        // Priority 2: Fallback to entity_schemas (v1.0 compatibility)
+        if let Some(ref schemas) = self.entity_schemas {
+            for schema in schemas {
+                for attr in &schema.attributes {
+                    if attr.name == field_name {
+                        if let Some(ref desc) = attr.description {
+                            if !desc.is_empty() {
+                                tracing::debug!(
+                                    field = %field_name,
+                                    "Description found in entity_schemas (v1.0 fallback)"
+                                );
+                                return Some(desc.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Not found in either location
+        tracing::debug!(
+            field = %field_name,
+            "No description found for field"
+        );
+        None
+    }
+
+    /// Get complete field metadata with fallback to entity_schemas (dp-018 Task 1.5)
+    ///
+    /// Retrieves all field metadata with fallback logic for v1.0/v1.1 compatibility.
+    /// Fields defined in fields[] take precedence; entity_schemas fills in gaps.
+    ///
+    /// # Arguments
+    ///
+    /// * `field_name` - The name of the field to get metadata for
+    ///
+    /// # Returns
+    ///
+    /// A FieldMetadata struct with all available metadata merged from both sources.
+    pub fn get_field_metadata(&self, field_name: &str) -> Option<FieldMetadata> {
+        let field = self.get_field(field_name)?;
+
+        let mut metadata = FieldMetadata {
+            name: field.name.clone(),
+            field_type: field.field_type.clone(),
+            nullable: field.nullable,
+            unit: field.unit.clone(),
+            description: field.description.clone(),
+            range: field.range.clone(),
+            device_class: None, // Not on SchemaField, only in entity_schemas
+        };
+
+        // Fill gaps from entity_schemas (v1.0 compatibility)
+        if let Some(ref schemas) = self.entity_schemas {
+            for schema in schemas {
+                for attr in &schema.attributes {
+                    if attr.name == field_name {
+                        // Only fill if not already set
+                        if metadata.description.is_none() {
+                            metadata.description = attr.description.clone();
+                        }
+                        if metadata.unit.is_none() {
+                            metadata.unit = attr.unit.clone();
+                        }
+                        if metadata.range.is_none() {
+                            metadata.range = attr.range.clone();
+                        }
+                        if metadata.device_class.is_none() {
+                            metadata.device_class = attr.device_class.clone();
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        Some(metadata)
+    }
+}
+
+/// Field metadata with all attributes (dp-018 Task 1.5)
+///
+/// This struct combines metadata from fields[] and entity_schemas[]
+/// with fields[] taking precedence.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldMetadata {
+    /// Field name
+    pub name: String,
+
+    /// Field data type
+    pub field_type: FieldType,
+
+    /// Whether field can be null
+    pub nullable: bool,
+
+    /// Physical unit
+    pub unit: Option<String>,
+
+    /// Human-readable description
+    pub description: Option<String>,
+
+    /// Valid range [min, max]
+    pub range: Option<Vec<f64>>,
+
+    /// Device class (from entity_schemas)
+    pub device_class: Option<String>,
 }
 
 /// Validate stream ID format (kebab-case, 3-64 chars)
@@ -898,6 +1108,477 @@ mod tests {
                 params: HashMap::new(),
             }],
             storage: None,
+            silver_etl: None,
+            entity_schemas: None,
         }
+    }
+
+    // ========== DP-018: SILVER ETL FIELD TESTS (LONDON TDD) ==========
+    //
+    // These tests verify StreamConfig can include an optional silver_etl section
+    // for unified Bronze+Silver configuration (ADR-018-001 pass-through architecture).
+
+    #[test]
+    fn test_stream_config_deserializes_silver_etl() {
+        // RED: This test should fail until we add silver_etl field to StreamConfig
+        let json = r#"{
+            "stream_id": "air-quality",
+            "description": "Air quality sensor data",
+            "fields": [{"name": "pm25", "type": "float"}],
+            "sources": [{"type": "mqtt", "enabled": true}],
+            "silver_etl": {
+                "enabled": true,
+                "target_table": "silver.air_quality_observations",
+                "timestamp": {
+                    "source_field": "timestamp",
+                    "target_field": "observation_time",
+                    "transform": "microseconds_to_timestamp"
+                },
+                "field_mappings": []
+            }
+        }"#;
+
+        let config: StreamConfig = serde_json::from_str(json).expect("Should deserialize with silver_etl");
+        assert!(config.silver_etl.is_some());
+        let etl = config.silver_etl.unwrap();
+        assert!(etl.enabled);
+        assert_eq!(etl.target_table, "silver.air_quality_observations");
+    }
+
+    #[test]
+    fn test_stream_config_without_silver_etl_is_backward_compatible() {
+        // RED: Verify backward compatibility - configs without silver_etl still work
+        let json = r#"{
+            "stream_id": "test-stream",
+            "description": "Legacy config without silver_etl",
+            "fields": [{"name": "value", "type": "float"}],
+            "sources": [{"type": "mqtt", "enabled": true}]
+        }"#;
+
+        let config: StreamConfig = serde_json::from_str(json).expect("Should deserialize without silver_etl");
+        assert!(config.silver_etl.is_none());
+    }
+
+    #[test]
+    fn test_stream_config_serializes_silver_etl_only_when_present() {
+        // RED: Verify silver_etl is omitted from JSON when None (skip_serializing_if)
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test stream".to_string(),
+            version: "1.0.0".to_string(),
+            enabled: true,
+            retention_days: 0,
+            compression_after_days: 0,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![SchemaField::new("test".to_string(), FieldType::Float)],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: None, // Explicitly None
+            entity_schemas: None,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(!json.contains("silver_etl"), "silver_etl should not appear in JSON when None");
+    }
+
+    #[test]
+    fn test_stream_config_serializes_silver_etl_when_present() {
+        // RED: Verify silver_etl IS serialized when Some
+        use crate::config::SilverEtlConfig;
+
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test stream".to_string(),
+            version: "1.0.0".to_string(),
+            enabled: true,
+            retention_days: 0,
+            compression_after_days: 0,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![SchemaField::new("test".to_string(), FieldType::Float)],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: Some(SilverEtlConfig::default()),
+            entity_schemas: None,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("silver_etl"), "silver_etl should appear in JSON when Some");
+        assert!(json.contains("target_table"), "silver_etl fields should be serialized");
+    }
+
+    #[test]
+    fn test_stream_config_silver_etl_round_trip() {
+        // RED: Verify silver_etl survives serialization round-trip
+        use crate::config::SilverEtlConfig;
+
+        let original = StreamConfig {
+            stream_id: "round-trip".to_string(),
+            description: "Round-trip test".to_string(),
+            version: "1.0.0".to_string(),
+            enabled: true,
+            retention_days: 365,
+            compression_after_days: 7,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![SchemaField::new("pm25".to_string(), FieldType::Float)],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: Some(SilverEtlConfig {
+                enabled: true,
+                target_table: "silver.test".to_string(),
+                ..SilverEtlConfig::default()
+            }),
+            entity_schemas: None,
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&original).expect("Serialization should succeed");
+
+        // Deserialize back
+        let restored: StreamConfig = serde_json::from_str(&json).expect("Deserialization should succeed");
+
+        // Verify silver_etl survived
+        assert!(restored.silver_etl.is_some());
+        let etl = restored.silver_etl.unwrap();
+        assert!(etl.enabled);
+        assert_eq!(etl.target_table, "silver.test");
+    }
+
+    // ========== DP-018 TASK 1.5: FIELD DESCRIPTION FALLBACK TESTS ==========
+    //
+    // These tests verify the get_field_description() method correctly implements
+    // the v1.0/v1.1 fallback logic for dictionary loading.
+
+    #[test]
+    fn test_get_field_description_from_fields_v11() {
+        // v1.1 pattern: description is on the field directly
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test".to_string(),
+            version: "1.1.0".to_string(),
+            enabled: true,
+            retention_days: 30,
+            compression_after_days: 7,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![
+                SchemaField::new("pm25".to_string(), FieldType::Float)
+                    .with_description("Fine particulate matter (2.5 micrometers)".to_string())
+                    .with_unit("ug/m3".to_string()),
+            ],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: None,
+            entity_schemas: None, // No legacy schemas
+        };
+
+        let desc = config.get_field_description("pm25");
+        assert!(desc.is_some());
+        assert_eq!(
+            desc.unwrap(),
+            "Fine particulate matter (2.5 micrometers)"
+        );
+    }
+
+    #[test]
+    fn test_get_field_description_fallback_to_entity_schemas_v10() {
+        // v1.0 pattern: description is in entity_schemas, not on field
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test".to_string(),
+            version: "1.0.0".to_string(),
+            enabled: true,
+            retention_days: 30,
+            compression_after_days: 7,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![
+                SchemaField::new("pm25".to_string(), FieldType::Float)
+                    .with_unit("ug/m3".to_string()),
+                // Note: no description on field
+            ],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: None,
+            entity_schemas: Some(vec![EntitySchema {
+                schema_name: "airgradient".to_string(),
+                device_class: None,
+                attributes: vec![EntitySchemaAttribute {
+                    name: "pm25".to_string(),
+                    description: Some("PM2.5 concentration from legacy schema".to_string()),
+                    device_class: Some("pm25".to_string()),
+                    unit: Some("ug/m3".to_string()),
+                    range: Some(vec![0.0, 500.0]),
+                }],
+            }]),
+        };
+
+        let desc = config.get_field_description("pm25");
+        assert!(desc.is_some());
+        assert_eq!(
+            desc.unwrap(),
+            "PM2.5 concentration from legacy schema"
+        );
+    }
+
+    #[test]
+    fn test_get_field_description_fields_takes_precedence() {
+        // Both v1.1 field and v1.0 entity_schemas have descriptions
+        // Field description should take precedence
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test".to_string(),
+            version: "1.1.0".to_string(),
+            enabled: true,
+            retention_days: 30,
+            compression_after_days: 7,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![
+                SchemaField::new("pm25".to_string(), FieldType::Float)
+                    .with_description("Primary description from v1.1".to_string()),
+            ],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: None,
+            entity_schemas: Some(vec![EntitySchema {
+                schema_name: "airgradient".to_string(),
+                device_class: None,
+                attributes: vec![EntitySchemaAttribute {
+                    name: "pm25".to_string(),
+                    description: Some("Legacy description from v1.0".to_string()),
+                    device_class: None,
+                    unit: None,
+                    range: None,
+                }],
+            }]),
+        };
+
+        let desc = config.get_field_description("pm25");
+        assert!(desc.is_some());
+        assert_eq!(
+            desc.unwrap(),
+            "Primary description from v1.1"  // v1.1 wins
+        );
+    }
+
+    #[test]
+    fn test_get_field_description_none_when_not_found() {
+        // No description in either location
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test".to_string(),
+            version: "1.1.0".to_string(),
+            enabled: true,
+            retention_days: 30,
+            compression_after_days: 7,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![
+                SchemaField::new("pm25".to_string(), FieldType::Float),
+            ],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: None,
+            entity_schemas: None,
+        };
+
+        let desc = config.get_field_description("pm25");
+        assert!(desc.is_none());
+
+        // Also test for a completely unknown field
+        let desc2 = config.get_field_description("unknown_field");
+        assert!(desc2.is_none());
+    }
+
+    #[test]
+    fn test_get_field_description_ignores_empty_strings() {
+        // Empty descriptions should be treated as None
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test".to_string(),
+            version: "1.1.0".to_string(),
+            enabled: true,
+            retention_days: 30,
+            compression_after_days: 7,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![
+                SchemaField::new("pm25".to_string(), FieldType::Float)
+                    .with_description("".to_string()), // Empty v1.1 description
+            ],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: None,
+            entity_schemas: Some(vec![EntitySchema {
+                schema_name: "airgradient".to_string(),
+                device_class: None,
+                attributes: vec![EntitySchemaAttribute {
+                    name: "pm25".to_string(),
+                    description: Some("Fallback description".to_string()),
+                    device_class: None,
+                    unit: None,
+                    range: None,
+                }],
+            }]),
+        };
+
+        // Should skip empty v1.1 description and fall back to entity_schemas
+        let desc = config.get_field_description("pm25");
+        assert!(desc.is_some());
+        assert_eq!(desc.unwrap(), "Fallback description");
+    }
+
+    #[test]
+    fn test_get_field_metadata_merges_sources() {
+        // Test that get_field_metadata combines v1.1 and v1.0 sources
+        let config = StreamConfig {
+            stream_id: "test-stream".to_string(),
+            description: "Test".to_string(),
+            version: "1.1.0".to_string(),
+            enabled: true,
+            retention_days: 30,
+            compression_after_days: 7,
+            partitioning_strategy: "daily".to_string(),
+            fields: vec![
+                SchemaField::new("pm25".to_string(), FieldType::Float)
+                    .with_description("PM2.5 from fields".to_string())
+                    .with_unit("ug/m3".to_string()),
+                    // Note: no range on field
+            ],
+            sources: vec![SourceConfig {
+                source_type: SourceType::Mqtt,
+                enabled: true,
+                ndp_id: None,
+                context: None,
+                params: HashMap::new(),
+            }],
+            storage: None,
+            silver_etl: None,
+            entity_schemas: Some(vec![EntitySchema {
+                schema_name: "airgradient".to_string(),
+                device_class: None,
+                attributes: vec![EntitySchemaAttribute {
+                    name: "pm25".to_string(),
+                    description: Some("Ignored - v1.1 takes precedence".to_string()),
+                    device_class: Some("pm25".to_string()),  // Only in entity_schemas
+                    unit: Some("ignored_unit".to_string()),  // Should be ignored
+                    range: Some(vec![0.0, 500.0]),           // Should be filled from v1.0
+                }],
+            }]),
+        };
+
+        let metadata = config.get_field_metadata("pm25");
+        assert!(metadata.is_some());
+
+        let meta = metadata.unwrap();
+        assert_eq!(meta.name, "pm25");
+        assert_eq!(meta.field_type, FieldType::Float);
+        // From v1.1 field
+        assert_eq!(meta.description, Some("PM2.5 from fields".to_string()));
+        assert_eq!(meta.unit, Some("ug/m3".to_string()));
+        // From v1.0 entity_schemas (filled gap)
+        assert_eq!(meta.device_class, Some("pm25".to_string()));
+        assert_eq!(meta.range, Some(vec![0.0, 500.0]));
+    }
+
+    #[test]
+    fn test_get_field_metadata_returns_none_for_unknown_field() {
+        let config = create_test_stream_config();
+        let metadata = config.get_field_metadata("nonexistent_field");
+        assert!(metadata.is_none());
+    }
+
+    #[test]
+    fn test_entity_schemas_deserializes_from_json() {
+        // Verify entity_schemas can be deserialized from JSON
+        let json = r#"{
+            "stream_id": "air-quality",
+            "description": "Air quality sensor data",
+            "fields": [{"name": "pm25", "type": "float"}],
+            "sources": [{"type": "mqtt", "enabled": true}],
+            "entity_schemas": [
+                {
+                    "schema_name": "airgradient",
+                    "device_class": "sensor",
+                    "attributes": [
+                        {
+                            "name": "pm25",
+                            "description": "PM2.5 concentration",
+                            "device_class": "pm25",
+                            "unit": "ug/m3",
+                            "range": [0, 500]
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let config: StreamConfig = serde_json::from_str(json)
+            .expect("Should deserialize with entity_schemas");
+
+        assert!(config.entity_schemas.is_some());
+        let schemas = config.entity_schemas.unwrap();
+        assert_eq!(schemas.len(), 1);
+        assert_eq!(schemas[0].schema_name, "airgradient");
+        assert_eq!(schemas[0].attributes.len(), 1);
+        assert_eq!(schemas[0].attributes[0].name, "pm25");
+        assert_eq!(
+            schemas[0].attributes[0].description,
+            Some("PM2.5 concentration".to_string())
+        );
+    }
+
+    #[test]
+    fn test_entity_schemas_omitted_from_json_when_none() {
+        // Verify entity_schemas is not serialized when None
+        let config = create_test_stream_config();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(
+            !json.contains("entity_schemas"),
+            "entity_schemas should not appear in JSON when None"
+        );
     }
 }

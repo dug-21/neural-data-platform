@@ -1148,6 +1148,8 @@ mod tests {
                 params: HashMap::new(),
             }],
             storage: None,
+            silver_etl: None,
+            entity_schemas: None,
         }
     }
 

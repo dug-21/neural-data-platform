@@ -59,6 +59,8 @@ fn create_test_stream_config() -> StreamConfig {
             batch_timeout_secs: 5,
             buffer_capacity: 1000,
         }),
+        silver_etl: None,
+        entity_schemas: None,
     }
 }
 
@@ -85,6 +87,8 @@ fn create_minimal_stream_config() -> StreamConfig {
             params: mqtt_params,
         }],
         storage: None, // No storage config - should use defaults
+        silver_etl: None,
+        entity_schemas: None,
     }
 }
 
@@ -114,6 +118,8 @@ fn create_http_stream_config() -> StreamConfig {
             params: http_params,
         }],
         storage: None,
+        silver_etl: None,
+        entity_schemas: None,
     }
 }
 
@@ -272,6 +278,8 @@ fn test_mqtt_source_uses_default_port_when_missing() {
             params: mqtt_params,
         }],
         storage: None,
+        silver_etl: None,
+        entity_schemas: None,
     };
 
     // When: Extracting port parameter
@@ -327,6 +335,8 @@ fn test_missing_broker_url_is_error() {
             params: mqtt_params,
         }],
         storage: None,
+        silver_etl: None,
+        entity_schemas: None,
     };
 
     // When: Extracting broker_url parameter
@@ -365,6 +375,8 @@ fn test_invalid_qos_value_outside_range() {
             params: mqtt_params,
         }],
         storage: None,
+        silver_etl: None,
+        entity_schemas: None,
     };
 
     // When: Extracting QoS parameter
@@ -419,6 +431,8 @@ fn test_stream_with_multiple_sources_finds_mqtt() {
             },
         ],
         storage: None,
+        silver_etl: None,
+        entity_schemas: None,
     };
 
     // When: Searching for MQTT source

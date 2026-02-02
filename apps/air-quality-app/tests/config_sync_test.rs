@@ -341,16 +341,16 @@ async fn test_full_sync_to_etcd() {
         .expect("Failed to connect to etcd");
 
     // Sync all configs
-    let synced_count = service
+    let report = service
         .sync_all(&registry)
         .await
         .expect("Failed to sync configs to etcd");
 
     // Verify at least 2 configs were synced
     assert!(
-        synced_count >= 2,
+        report.synced.len() >= 2,
         "Should sync at least 2 configs, synced {}",
-        synced_count
+        report.synced.len()
     );
 
     // Verify registry.list_streams() returns our configs
