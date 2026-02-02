@@ -1,7 +1,7 @@
 # dp-020: Declarative Deploy
 
 ## Current Phase
-refinement (integration testing)
+**completion** ✓
 
 ## Progress
 - [x] SCOPE.md created
@@ -9,9 +9,10 @@ refinement (integration testing)
 - [x] SPARC Pseudocode
 - [x] SPARC Architecture
 - [x] SPARC Refinement
-- [ ] SPARC Completion
+- [x] SPARC Completion
 - [x] All tests passing
-- [ ] Documentation updated
+- [x] Documentation updated
+- [x] Committed to main (8467204)
 
 ---
 
@@ -51,7 +52,7 @@ refinement (integration testing)
 | 3.5 | Implement migration action | Complete | handle_migration() |
 | 3.6 | Implement dimensions action | Complete | handle_dimensions() |
 | 3.7 | Implement dictionary action | Complete | handle_dictionary() |
-| 3.8 | Implement reload logic | Partial | reload field parsed but not yet applied |
+| 3.8 | Implement reload logic | Complete | reload field triggers container restart |
 
 ---
 
@@ -80,8 +81,11 @@ All tests passing (2026-02-02):
 | schemas/manifest.schema.json | Created | JSON Schema for manifest validation |
 | deploy/pi/ddl-generator.sh | Created | DDL generation functions |
 | deploy/pi/deploy.sh | Modified | Added apply command, 9-phase orchestration |
+| deploy/pi/README.md | Modified | Added declarative deploy documentation |
+| docs/procedures/DEPLOYMENT-DECLARATIVES.md | Created | Full manifest reference documentation |
 | .deploy/manifest.json | Created | Template manifest |
-| config/base/streams/_test-dp020/config.json | Created | Test stream config |
+| .deploy/releases/ | Created | Versioned release manifests directory |
+| scripts/integration-test-dp020.sh | Created | Integration test suite |
 
 ---
 
@@ -104,5 +108,8 @@ All tests passing (2026-02-02):
 ## Branch
 main (trunk-based development)
 
-## Last Updated
+## Completed
 2026-02-02
+
+## Commit
+8467204 - feat(dp-020): Implement Declarative Deploy with 9-phase orchestration
