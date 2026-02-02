@@ -12,6 +12,11 @@
       "const": "1.0",
       "description": "Manifest schema version"
     },
+    "release_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?$",
+      "description": "Semantic version of this release (e.g., '1.2.0', '2.0.0-beta.1'). Required for release manifests in .deploy/releases/. Format: MAJOR.MINOR.PATCH with optional pre-release suffix."
+    },
     "description": {
       "type": "string",
       "description": "Human-readable description of this deployment manifest"

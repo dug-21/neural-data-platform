@@ -1,10 +1,10 @@
 use air_quality_app::{
     api::create_router,
     config::AppConfig,
-    coordinator::{IngestionCoordinator, IngestionRouter, SourceManager},
+    coordinator::{ConfigWatchHandle, ConfigWatcher, IngestionCoordinator, IngestionRouter, SourceManager},
     stream_integration::load_from_stream_config,
 };
-use config_client::StreamRegistry;
+use config_client::{ConfigClient, StreamRegistry};
 use neural_core::ParquetStore;
 // DP-012: EventBus subscriber infrastructure
 use neural_core::{
@@ -175,26 +175,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //
     // DP-012: Also initializes EventBus and SubscriberCoordinator for multi-consumer
     // event broadcasting. BronzeSubscriber writes to Parquet via EventBus.
-    let (coordinator_task, subscriber_task) =
+    //
+    // DP-021: Also returns source_manager for ConfigWatcher hot-reload support and HTTP API.
+    let (coordinator_task, subscriber_task, config_watch_handle, source_manager_for_api) =
         match initialize_multi_stream_coordinator(&etcd_endpoint, store.clone()).await {
-            Ok((_coordinator, coord_task, sub_task)) => {
+            Ok((_coordinator, source_manager, coord_task, sub_task)) => {
                 tracing::info!(
                     "Multi-stream coordinator initialized - managing all sources (MQTT + HTTP)"
                 );
                 tracing::info!("DP-012: SubscriberCoordinator started with BronzeSubscriber");
-                (Some(coord_task), Some(sub_task))
+
+                // DP-021: Clone for API endpoints before moving to ConfigWatcher
+                let source_manager_for_api = source_manager.clone();
+
+                // DP-021: Start ConfigWatcher for hot-reload support
+                let watch_handle = match start_config_watcher(&etcd_endpoint, source_manager).await
+                {
+                    Ok(handle) => {
+                        tracing::info!("DP-021: ConfigWatcher started for hot-reload");
+                        Some(handle)
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "DP-021: ConfigWatcher not started (hot-reload disabled): {}",
+                            e
+                        );
+                        None
+                    }
+                };
+
+                (
+                    Some(coord_task),
+                    Some(sub_task),
+                    watch_handle,
+                    Some(source_manager_for_api),
+                )
             }
             Err(e) => {
                 tracing::warn!(
                     "Multi-stream coordinator not available: {}. All data sources disabled.",
                     e
                 );
-                (None, None)
+                (None, None, None, None)
             }
         };
 
     // Create mock source and forecast (these will be replaced in future tasks)
-    let services = create_services_with_real_store(store.clone());
+    // DP-021: Pass source_manager for stream hot-reload HTTP endpoints
+    let services = create_services_with_real_store(store.clone(), source_manager_for_api);
 
     // Create router
     let app = create_router(services);
@@ -229,6 +257,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ = &mut shutdown_rx => {
             tracing::info!("Starting graceful shutdown...");
 
+            // DP-021: Stop ConfigWatcher first to stop receiving new config changes
+            if let Some(handle) = config_watch_handle {
+                tracing::debug!("Stopping ConfigWatcher...");
+                handle.stop().await;
+            }
+
             // Wait for background tasks to complete
             if let Some(task) = coordinator_task {
                 tracing::debug!("Waiting for ingestion coordinator to stop...");
@@ -248,6 +282,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// DP-021: Start ConfigWatcher for hot-reload support
+///
+/// This connects etcd watch events to the SourceManager for automatic
+/// source reconfiguration when stream configs change.
+async fn start_config_watcher(
+    etcd_endpoint: &str,
+    source_manager: Arc<RwLock<SourceManager>>,
+) -> Result<ConfigWatchHandle, Box<dyn std::error::Error + Send + Sync>> {
+    // Create ConfigClient for watching
+    let config_client = Arc::new(
+        ConfigClient::new(&[etcd_endpoint])
+            .await
+            .map_err(|e| format!("Failed to create ConfigClient for watcher: {}", e))?,
+    );
+
+    // Create and start ConfigWatcher
+    let watcher = ConfigWatcher::new(source_manager);
+    let handle = watcher
+        .start_watching(config_client)
+        .await
+        .map_err(|e| format!("Failed to start ConfigWatcher: {}", e))?;
+
+    Ok(handle)
+}
+
 /// Initialize the multi-stream ingestion coordinator (AIR-005)
 ///
 /// This sets up HTTP polling sources for external APIs like OpenWeatherMap
@@ -256,12 +315,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// DP-012: Also initializes EventBus and SubscriberCoordinator with BronzeSubscriber
 /// for multi-consumer event broadcasting. The subscriber coordinator runs alongside
 /// the existing mpsc-based storage pipeline.
+///
+/// DP-021: Returns source_manager for ConfigWatcher hot-reload support.
 async fn initialize_multi_stream_coordinator(
     etcd_endpoint: &str,
     store: Arc<ParquetStore>,
 ) -> Result<
     (
         Arc<IngestionCoordinator>,
+        Arc<RwLock<SourceManager>>,
         tokio::task::JoinHandle<()>,
         tokio::task::JoinHandle<()>,
     ),
@@ -313,7 +375,9 @@ async fn initialize_multi_stream_coordinator(
     // BronzeSubscriber handles all Bronze layer writes via EventBus subscription
 
     // Create source manager (EventBus will be set during coordinator.start())
+    // DP-021: Clone source_manager reference for ConfigWatcher hot-reload
     let source_manager = Arc::new(RwLock::new(SourceManager::new(registry.clone())));
+    let source_manager_for_watcher = source_manager.clone();
 
     // Create coordinator (but don't start yet - subscribers must be ready first)
     let coordinator = Arc::new(IngestionCoordinator::new(
@@ -418,13 +482,16 @@ async fn initialize_multi_stream_coordinator(
         }
     });
 
-    Ok((coordinator, monitor_task, subscriber_task))
+    Ok((coordinator, source_manager_for_watcher, monitor_task, subscriber_task))
 }
 
 /// Create services with real ParquetStore
 /// Note: Source and Forecast still use mock implementations (to be replaced in future tasks)
+///
+/// DP-021: Accepts optional source_manager for stream hot-reload endpoints.
 fn create_services_with_real_store(
     store: Arc<ParquetStore>,
+    source_manager: Option<Arc<RwLock<SourceManager>>>,
 ) -> air_quality_app::api::routes::AppServices {
     use air_quality_app::api::handlers::alerts::AlertStore;
     use air_quality_app::api::handlers::locations::LocationStore;
@@ -490,6 +557,7 @@ fn create_services_with_real_store(
         forecast: Arc::new(MockForecast),
         alert_store: Arc::new(AlertStore::new()),
         location_store: Arc::new(LocationStore::new()),
+        source_manager, // DP-021: For stream hot-reload endpoints
     }
 }
 

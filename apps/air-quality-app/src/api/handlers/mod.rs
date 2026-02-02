@@ -3,9 +3,13 @@ pub mod forecast;
 pub mod health;
 pub mod locations;
 pub mod readings;
+pub mod streams;
 
 pub use alerts::alerts_handler;
 pub use forecast::forecast_handler;
 pub use health::health_handler;
 pub use locations::locations_handler;
 pub use readings::{aggregate_handler, latest_readings_handler, readings_handler};
+pub use streams::{
+    list_streams_handler, reload_stream_handler, stream_health_handler, StreamManagerState,
+};

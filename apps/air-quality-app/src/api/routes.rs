@@ -3,9 +3,10 @@ use crate::api::handlers::health::AppState;
 use crate::api::handlers::locations::LocationStore;
 use crate::api::handlers::{
     aggregate_handler, alerts_handler, forecast_handler, health_handler, latest_readings_handler,
-    locations_handler, readings_handler,
+    list_streams_handler, locations_handler, readings_handler, reload_stream_handler,
+    stream_health_handler, StreamManagerState,
 };
-use axum::{routing::get, Router};
+use axum::{routing::get, routing::post, Router};
 use neural_core::{Forecast, Source, Store};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -16,6 +17,8 @@ pub struct AppServices {
     pub forecast: Arc<dyn Forecast>,
     pub alert_store: Arc<AlertStore>,
     pub location_store: Arc<LocationStore>,
+    /// DP-021: Optional SourceManager for stream hot-reload endpoints
+    pub source_manager: Option<StreamManagerState>,
 }
 
 pub fn create_router(services: AppServices) -> Router {
@@ -55,13 +58,32 @@ pub fn create_router(services: AppServices) -> Router {
 
     // Merge all routers into a base router
     // NOTE: Testing merge order hypothesis - locations works, let's test alerts after health
-    Router::new()
+    let mut router = Router::new()
         .merge(health_router)
         .merge(alerts_router)
         .merge(readings_router)
         .merge(forecast_router)
-        .merge(locations_router)
-        .layer(cors)
+        .merge(locations_router);
+
+    // DP-021: Add stream management routes if SourceManager is available
+    if let Some(source_manager) = services.source_manager {
+        let streams_router = Router::new()
+            .route("/api/v1/streams", get(list_streams_handler))
+            .route(
+                "/api/v1/streams/:stream_id/reload",
+                post(reload_stream_handler),
+            )
+            .route(
+                "/api/v1/streams/:stream_id/health",
+                get(stream_health_handler),
+            )
+            .with_state(source_manager);
+
+        router = router.merge(streams_router);
+        tracing::info!("DP-021: Stream management endpoints enabled (/api/v1/streams/*)");
+    }
+
+    router.layer(cors)
 }
 
 #[cfg(test)]
@@ -175,6 +197,7 @@ mod tests {
             forecast: Arc::new(mock_forecast),
             alert_store: Arc::new(alert_store),
             location_store: Arc::new(location_store),
+            source_manager: None, // DP-021: Tests don't need stream management
         }
     }
 
@@ -292,6 +315,7 @@ mod tests {
             forecast: Arc::new(MockTestForecast::new()),
             alert_store: Arc::new(AlertStore::new()),
             location_store: Arc::new(LocationStore::new()),
+            source_manager: None,
         };
 
         let app = create_router(services);
@@ -361,6 +385,7 @@ mod tests {
             forecast: Arc::new(MockTestForecast::new()),
             alert_store: Arc::new(AlertStore::new()),
             location_store: Arc::new(LocationStore::new()),
+            source_manager: None,
         };
 
         let app = create_router(services);
@@ -424,6 +449,7 @@ mod tests {
             forecast: Arc::new(MockTestForecast::new()),
             alert_store: Arc::new(AlertStore::new()),
             location_store: Arc::new(LocationStore::new()),
+            source_manager: None,
         };
 
         let app = create_router(services);
@@ -494,6 +520,7 @@ mod tests {
             forecast: Arc::new(mock_forecast),
             alert_store: Arc::new(AlertStore::new()),
             location_store: Arc::new(LocationStore::new()),
+            source_manager: None,
         };
 
         let app = create_router(services);

@@ -1,0 +1,14 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "X.Y.Z",
+  "description": "Release vX.Y.Z: [Brief description of this release]",
+  "changes": [
+    {
+      "_comment": "Remove this example and add your actual changes below",
+      "type": "stream",
+      "id": "example-stream",
+      "action": "update"
+    }
+  ]
+}

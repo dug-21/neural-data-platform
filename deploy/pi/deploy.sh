@@ -1652,20 +1652,74 @@ apply() {
         done
     fi
 
-    # Phase 9: Device State Update
+    # Phase 9: Device State Update (FR-R.4)
     log ""
     log "Phase 9: Device State Update"
     log "-------------------"
-    local deployed_version=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+    # Extract release_version from manifest if present (FR-R.4.1)
+    local release_version=$(jq -r '.release_version // empty' "$manifest_file")
+    local deployed_version
+
+    if [ -n "$release_version" ]; then
+        # Use release_version from manifest (normalize with 'v' prefix)
+        deployed_version="v${release_version#v}"
+        log "  Release Version: $deployed_version (from manifest)"
+    else
+        # Fallback to git describe for ad-hoc manifests
+        deployed_version=$(git -C "$REPO_ROOT" describe --tags --always 2>/dev/null || echo "unknown")
+        log "  Version: $deployed_version (from git)"
+    fi
+
     local deployed_at=$(date -Iseconds)
+    log "  Deployed At: $deployed_at"
 
-    log "  Version: $deployed_version"
-    log "  Time: $deployed_at"
+    # Calculate manifest hash for integrity tracking (FR-R.4.5)
+    local manifest_hash=""
+    if command -v sha256sum &> /dev/null; then
+        manifest_hash=$(sha256sum "$manifest_file" | cut -d' ' -f1)
+    elif command -v shasum &> /dev/null; then
+        manifest_hash=$(shasum -a 256 "$manifest_file" | cut -d' ' -f1)
+    fi
+    log "  Manifest Hash: ${manifest_hash:0:16}..."
 
-    # Update device state files (if writable)
-    if [ -d "/var/ndp" ]; then
-        echo "$deployed_version" > /var/ndp/deployed-version 2>/dev/null || true
-        echo "$deployed_at" > /var/ndp/deployed-at 2>/dev/null || true
+    # Get relative manifest path for tracking
+    local manifest_relative="${manifest_file#$REPO_ROOT/}"
+    log "  Manifest Path: $manifest_relative"
+
+    # Update device state files (FR-R.4.1, FR-R.4.3, FR-R.4.5, FR-R.4.6)
+    local state_dir="/var/ndp"
+
+    # Create state directory if it doesn't exist
+    if mkdir -p "$state_dir" 2>/dev/null; then
+        # Write via temp file + rename for atomicity (FR-R.4.3)
+        local temp_version=$(mktemp "$state_dir/deployed-version.XXXXXX" 2>/dev/null)
+        local temp_at=$(mktemp "$state_dir/deployed-at.XXXXXX" 2>/dev/null)
+        local temp_manifest=$(mktemp "$state_dir/manifest-applied.XXXXXX" 2>/dev/null)
+
+        if [ -n "$temp_version" ] && [ -n "$temp_at" ] && [ -n "$temp_manifest" ]; then
+            echo "$deployed_version" > "$temp_version"
+            echo "$deployed_at" > "$temp_at"
+            echo "$manifest_hash" > "$temp_manifest"
+
+            mv "$temp_version" "$state_dir/deployed-version" 2>/dev/null || true
+            mv "$temp_at" "$state_dir/deployed-at" 2>/dev/null || true
+            mv "$temp_manifest" "$state_dir/manifest-applied" 2>/dev/null || true
+
+            log "  Device state updated in $state_dir"
+        else
+            # Fallback to direct write if temp file creation fails
+            echo "$deployed_version" > "$state_dir/deployed-version" 2>/dev/null || true
+            echo "$deployed_at" > "$state_dir/deployed-at" 2>/dev/null || true
+            echo "$manifest_hash" > "$state_dir/manifest-applied" 2>/dev/null || true
+            log "  Device state updated (fallback mode)"
+        fi
+    else
+        # Integration mode - echo state instead of writing
+        log "  Device state (integration mode - not written):"
+        log "    deployed-version: $deployed_version"
+        log "    deployed-at: $deployed_at"
+        log "    manifest-applied: $manifest_hash"
     fi
 
     log ""
@@ -1710,6 +1764,7 @@ case "${1:-deploy}" in
         echo "Declarative Deploy (dp-020):"
         echo "  apply [file]    - Apply changes from manifest (default: .deploy/manifest.json)"
         echo "                    Orchestrates: builds, migrations, DDL, streams, dictionary"
+        echo "  version         - Show deployed version, timestamp, and manifest hash"
         echo ""
         echo "Dimension Commands:"
         echo "  sync-dimensions      - Sync dimension tables from config/base/dimensions/"
@@ -1871,6 +1926,25 @@ case "${1:-deploy}" in
             echo "  Status: Not running"
             echo "  Start with: ./deploy.sh silver-daemon"
         fi
+        ;;
+    version)
+        # Display deployed version information (FR-R.4.4)
+        log "Deployed Version Information:"
+        echo ""
+        local state_dir="/var/ndp"
+        if [ -f "$state_dir/deployed-version" ]; then
+            echo "  Deployed Version: $(cat "$state_dir/deployed-version")"
+            echo "  Deployed At:      $(cat "$state_dir/deployed-at" 2>/dev/null || echo 'unknown')"
+            echo "  Manifest Hash:    $(cat "$state_dir/manifest-applied" 2>/dev/null || echo 'unknown')"
+        else
+            warn "No deployment state found in $state_dir"
+            warn "Run './deploy.sh apply <manifest>' to deploy and track version."
+            # Fallback to git info
+            echo ""
+            echo "  Git HEAD: $(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+            echo "  Git Tag:  $(git -C "$REPO_ROOT" describe --tags --exact-match 2>/dev/null || echo 'no tag')"
+        fi
+        echo ""
         ;;
     *)
         echo "Error: Unknown command '$1'"

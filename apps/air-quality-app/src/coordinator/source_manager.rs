@@ -4,6 +4,9 @@
 //!
 //! DP-012: Sources publish to EventBus instead of mpsc channel.
 //! The EventBus is the single source of truth for all data flow.
+//!
+//! DP-021: Hot-reload support for sources. Sources can be reconfigured
+//! without application restart by watching etcd for config changes.
 
 use config_client::StreamRegistry;
 use neural_core::parsers::{create_parser_from_config, ParserConfig, ParserType};
@@ -35,6 +38,69 @@ pub enum SourceHealth {
     Degraded { reason: String },
     Unhealthy { reason: String },
     Unknown,
+}
+
+/// DP-021: Result of a hot-reload operation
+#[derive(Debug, Clone)]
+pub struct HotReloadResult {
+    /// Whether the reload succeeded
+    pub success: bool,
+    /// Stream that was reloaded
+    pub stream_id: String,
+    /// Source IDs that were stopped during reload
+    pub sources_stopped: Vec<String>,
+    /// Source IDs that were started during reload
+    pub sources_started: Vec<String>,
+    /// Duration of the reload operation in milliseconds
+    pub duration_ms: u64,
+    /// Error message if reload failed
+    pub error: Option<String>,
+}
+
+impl HotReloadResult {
+    /// Create a successful reload result
+    pub fn success(
+        stream_id: String,
+        sources_stopped: Vec<String>,
+        sources_started: Vec<String>,
+        duration_ms: u64,
+    ) -> Self {
+        Self {
+            success: true,
+            stream_id,
+            sources_stopped,
+            sources_started,
+            duration_ms,
+            error: None,
+        }
+    }
+
+    /// Create a failed reload result
+    pub fn failure(stream_id: String, error: String, duration_ms: u64) -> Self {
+        Self {
+            success: false,
+            stream_id,
+            sources_stopped: Vec::new(),
+            sources_started: Vec::new(),
+            duration_ms,
+            error: Some(error),
+        }
+    }
+}
+
+/// DP-021: Type of configuration change detected
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConfigChangeType {
+    /// New stream config created
+    Created,
+    /// Existing stream config modified
+    Updated,
+    /// Stream config deleted
+    Deleted,
+    /// Stream disabled (enabled: false)
+    Disabled,
+    /// Stream re-enabled (enabled: true)
+    Enabled,
 }
 
 /// Source manager error
@@ -1098,6 +1164,353 @@ impl SourceManager {
         Ok(())
     }
 
+    // =========================================================================
+    // DP-021: Hot-Reload Methods
+    // =========================================================================
+
+    /// DP-021: Handle configuration change from etcd watch
+    ///
+    /// This is the main entry point for hot-reload. It determines the type of
+    /// change and dispatches to the appropriate handler.
+    ///
+    /// # Arguments
+    /// * `stream_id` - The stream that changed
+    /// * `new_config` - The new configuration (None if deleted)
+    ///
+    /// # Returns
+    /// HotReloadResult with details of what was changed
+    pub async fn on_config_change(
+        &mut self,
+        stream_id: &str,
+        new_config: Option<StreamConfig>,
+    ) -> HotReloadResult {
+        let start_time = std::time::Instant::now();
+
+        info!(
+            stream_id = %stream_id,
+            has_new_config = new_config.is_some(),
+            "Config change detected"
+        );
+
+        // Determine change type
+        let has_current_sources = self.has_sources_for_stream(stream_id).await;
+        let config_enabled = new_config.as_ref().map(|c| c.enabled).unwrap_or(false);
+        let change_type =
+            Self::determine_change_type(has_current_sources, new_config.is_some(), config_enabled);
+
+        debug!(
+            stream_id = %stream_id,
+            change_type = ?change_type,
+            has_current_sources = has_current_sources,
+            config_enabled = config_enabled,
+            "Determined change type"
+        );
+
+        // Validate new config if applicable
+        if let Some(ref config) = new_config {
+            if matches!(
+                change_type,
+                ConfigChangeType::Created | ConfigChangeType::Updated | ConfigChangeType::Enabled
+            ) {
+                if let Err(e) = config.validate() {
+                    let duration_ms = start_time.elapsed().as_millis() as u64;
+                    error!(
+                        stream_id = %stream_id,
+                        error = %e,
+                        "Hot-reload aborted: invalid config"
+                    );
+                    return HotReloadResult::failure(
+                        stream_id.to_string(),
+                        format!("Config validation failed: {}", e),
+                        duration_ms,
+                    );
+                }
+            }
+        }
+
+        // Execute the appropriate change
+        let result = match change_type {
+            ConfigChangeType::Created => {
+                self.handle_stream_created(stream_id, new_config.unwrap())
+                    .await
+            }
+            ConfigChangeType::Updated => {
+                self.handle_stream_updated(stream_id, new_config.unwrap())
+                    .await
+            }
+            ConfigChangeType::Deleted => self.handle_stream_deleted(stream_id).await,
+            ConfigChangeType::Disabled => self.handle_stream_disabled(stream_id).await,
+            ConfigChangeType::Enabled => {
+                self.handle_stream_enabled(stream_id, new_config.unwrap())
+                    .await
+            }
+        };
+
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        // Create result with timing
+        let final_result = match result {
+            Ok((stopped, started)) => {
+                info!(
+                    stream_id = %stream_id,
+                    change_type = ?change_type,
+                    sources_stopped = ?stopped,
+                    sources_started = ?started,
+                    duration_ms = duration_ms,
+                    "Hot-reload complete"
+                );
+                HotReloadResult::success(stream_id.to_string(), stopped, started, duration_ms)
+            }
+            Err(e) => {
+                error!(
+                    stream_id = %stream_id,
+                    error = %e,
+                    duration_ms = duration_ms,
+                    "Hot-reload failed"
+                );
+                HotReloadResult::failure(stream_id.to_string(), e.to_string(), duration_ms)
+            }
+        };
+
+        final_result
+    }
+
+    /// DP-021: Determine the type of configuration change
+    fn determine_change_type(
+        has_current_sources: bool,
+        has_new_config: bool,
+        config_enabled: bool,
+    ) -> ConfigChangeType {
+        match (has_current_sources, has_new_config, config_enabled) {
+            // New stream config created and enabled
+            (false, true, true) => ConfigChangeType::Created,
+            // Existing stream updated
+            (true, true, true) => ConfigChangeType::Updated,
+            // Stream config deleted
+            (true, false, _) => ConfigChangeType::Deleted,
+            // Stream disabled
+            (true, true, false) => ConfigChangeType::Disabled,
+            // New stream but disabled - treat as disabled (no-op)
+            (false, true, false) => ConfigChangeType::Disabled,
+            // Re-enabling a previously disabled stream
+            (false, false, _) => ConfigChangeType::Deleted, // Edge case: no sources, no config
+        }
+    }
+
+    /// DP-021: Check if we have any sources for a given stream
+    async fn has_sources_for_stream(&self, stream_id: &str) -> bool {
+        let sources = self.sources.read().await;
+        sources.iter().any(|(_, info)| info.stream_id == stream_id)
+    }
+
+    /// DP-021: Get current source IDs for a stream
+    async fn get_source_ids_for_stream(&self, stream_id: &str) -> Vec<String> {
+        let sources = self.sources.read().await;
+        sources
+            .iter()
+            .filter(|(_, info)| info.stream_id == stream_id)
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// DP-021: Handle new stream creation
+    async fn handle_stream_created(
+        &mut self,
+        stream_id: &str,
+        config: StreamConfig,
+    ) -> Result<(Vec<String>, Vec<String>), SourceManagerError> {
+        info!(stream_id = %stream_id, "Creating sources for new stream");
+
+        let mut started = Vec::new();
+
+        for source_config in &config.sources {
+            if !source_config.enabled {
+                debug!(
+                    stream_id = %stream_id,
+                    source_type = ?source_config.source_type,
+                    "Skipping disabled source"
+                );
+                continue;
+            }
+
+            match self.spawn_source(stream_id, source_config).await {
+                Ok(source_id) => {
+                    started.push(source_id);
+                }
+                Err(e) => {
+                    warn!(
+                        stream_id = %stream_id,
+                        error = %e,
+                        "Failed to spawn source during stream creation"
+                    );
+                    // Continue with other sources
+                }
+            }
+        }
+
+        Ok((Vec::new(), started))
+    }
+
+    /// DP-021: Handle stream update with intelligent diffing
+    ///
+    /// This method compares old and new source configurations and:
+    /// - Stops sources that are removed or changed
+    /// - Starts new sources or sources with changed config
+    /// - Preserves unchanged sources
+    async fn handle_stream_updated(
+        &mut self,
+        stream_id: &str,
+        new_config: StreamConfig,
+    ) -> Result<(Vec<String>, Vec<String>), SourceManagerError> {
+        info!(stream_id = %stream_id, "Updating sources for stream");
+
+        let mut stopped = Vec::new();
+        let mut started = Vec::new();
+
+        // Get current source IDs for this stream
+        let current_source_ids = self.get_source_ids_for_stream(stream_id).await;
+
+        // Build map of new source configs by generated ID
+        let mut new_source_map: HashMap<String, &SourceConfig> = HashMap::new();
+        for source_config in &new_config.sources {
+            if source_config.enabled {
+                let source_id = format!("{}-{:?}", stream_id, source_config.source_type);
+                new_source_map.insert(source_id, source_config);
+            }
+        }
+
+        // Identify sources to remove (in current but not in new)
+        let to_remove: Vec<String> = current_source_ids
+            .iter()
+            .filter(|id| !new_source_map.contains_key(*id))
+            .cloned()
+            .collect();
+
+        // Identify sources to add (in new but not in current)
+        let to_add: Vec<String> = new_source_map
+            .keys()
+            .filter(|id| !current_source_ids.contains(*id))
+            .cloned()
+            .collect();
+
+        // Identify sources to update (in both - we stop and restart for safety)
+        let to_update: Vec<String> = current_source_ids
+            .iter()
+            .filter(|id| new_source_map.contains_key(*id))
+            .cloned()
+            .collect();
+
+        debug!(
+            stream_id = %stream_id,
+            to_remove = ?to_remove,
+            to_add = ?to_add,
+            to_update = ?to_update,
+            "Source diff calculated"
+        );
+
+        // Stop sources that are being removed or updated
+        for source_id in to_remove.iter().chain(to_update.iter()) {
+            if let Err(e) = self.stop_source(source_id).await {
+                warn!(
+                    source_id = %source_id,
+                    error = %e,
+                    "Failed to stop source during update"
+                );
+            }
+            stopped.push(source_id.clone());
+        }
+
+        // Start new sources and updated sources
+        for source_id in to_add.iter().chain(to_update.iter()) {
+            if let Some(source_config) = new_source_map.get(source_id) {
+                match self.spawn_source(stream_id, source_config).await {
+                    Ok(new_id) => {
+                        started.push(new_id);
+                    }
+                    Err(e) => {
+                        error!(
+                            source_id = %source_id,
+                            error = %e,
+                            "Failed to start source during update"
+                        );
+                        // Continue with other sources
+                    }
+                }
+            }
+        }
+
+        Ok((stopped, started))
+    }
+
+    /// DP-021: Handle stream deletion - stop all sources
+    async fn handle_stream_deleted(
+        &mut self,
+        stream_id: &str,
+    ) -> Result<(Vec<String>, Vec<String>), SourceManagerError> {
+        info!(stream_id = %stream_id, "Removing sources for deleted stream");
+
+        let source_ids = self.get_source_ids_for_stream(stream_id).await;
+        let mut stopped = Vec::new();
+
+        for source_id in source_ids {
+            if let Err(e) = self.stop_source(&source_id).await {
+                warn!(
+                    source_id = %source_id,
+                    error = %e,
+                    "Failed to stop source during deletion"
+                );
+            }
+            stopped.push(source_id);
+        }
+
+        Ok((stopped, Vec::new()))
+    }
+
+    /// DP-021: Handle stream being disabled
+    async fn handle_stream_disabled(
+        &mut self,
+        stream_id: &str,
+    ) -> Result<(Vec<String>, Vec<String>), SourceManagerError> {
+        info!(stream_id = %stream_id, "Disabling sources for stream");
+        // Same as delete - stop all sources
+        self.handle_stream_deleted(stream_id).await
+    }
+
+    /// DP-021: Handle stream being re-enabled
+    async fn handle_stream_enabled(
+        &mut self,
+        stream_id: &str,
+        config: StreamConfig,
+    ) -> Result<(Vec<String>, Vec<String>), SourceManagerError> {
+        info!(stream_id = %stream_id, "Enabling sources for stream");
+        // Same as create - start all sources
+        self.handle_stream_created(stream_id, config).await
+    }
+
+    /// DP-021: Trigger a manual reload for a stream
+    ///
+    /// This is useful for the optional HTTP reload endpoint.
+    /// It clears the registry cache and reloads the config.
+    pub async fn trigger_reload(&mut self, stream_id: &str) -> HotReloadResult {
+        info!(stream_id = %stream_id, "Manual reload triggered");
+
+        // Clear cache to force fresh load from etcd
+        self.registry.clear_cache().await;
+
+        // Load fresh config
+        match self.registry.load_stream(stream_id).await {
+            Ok(config) => self.on_config_change(stream_id, Some(config)).await,
+            Err(e) => {
+                error!(
+                    stream_id = %stream_id,
+                    error = %e,
+                    "Failed to load stream config for reload"
+                );
+                HotReloadResult::failure(stream_id.to_string(), e.to_string(), 0)
+            }
+        }
+    }
+
     /// Get count of active sources
     pub async fn active_source_count(&self) -> usize {
         let sources = self.sources.read().await;
@@ -1903,5 +2316,271 @@ mod tests {
 
         // DP-012: EventBus is the data flow mechanism (subscriber count > 0 verifies connection)
         assert!(event_bus.subscriber_count() > 0);
+    }
+
+    // ========== DP-021: HOT-RELOAD TESTS ==========
+
+    #[test]
+    fn test_determine_change_type_created() {
+        // No current sources, has new config, enabled
+        assert_eq!(
+            SourceManager::determine_change_type(false, true, true),
+            ConfigChangeType::Created
+        );
+    }
+
+    #[test]
+    fn test_determine_change_type_updated() {
+        // Has current sources, has new config, enabled
+        assert_eq!(
+            SourceManager::determine_change_type(true, true, true),
+            ConfigChangeType::Updated
+        );
+    }
+
+    #[test]
+    fn test_determine_change_type_deleted() {
+        // Has current sources, no new config
+        assert_eq!(
+            SourceManager::determine_change_type(true, false, false),
+            ConfigChangeType::Deleted
+        );
+    }
+
+    #[test]
+    fn test_determine_change_type_disabled() {
+        // Has current sources, has new config, disabled
+        assert_eq!(
+            SourceManager::determine_change_type(true, true, false),
+            ConfigChangeType::Disabled
+        );
+    }
+
+    #[test]
+    fn test_hot_reload_result_success() {
+        let result = HotReloadResult::success(
+            "test-stream".to_string(),
+            vec!["source-1".to_string()],
+            vec!["source-2".to_string()],
+            100,
+        );
+
+        assert!(result.success);
+        assert_eq!(result.stream_id, "test-stream");
+        assert_eq!(result.sources_stopped, vec!["source-1"]);
+        assert_eq!(result.sources_started, vec!["source-2"]);
+        assert_eq!(result.duration_ms, 100);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_hot_reload_result_failure() {
+        let result = HotReloadResult::failure(
+            "test-stream".to_string(),
+            "Config validation failed".to_string(),
+            50,
+        );
+
+        assert!(!result.success);
+        assert_eq!(result.stream_id, "test-stream");
+        assert!(result.sources_stopped.is_empty());
+        assert!(result.sources_started.is_empty());
+        assert_eq!(result.duration_ms, 50);
+        assert_eq!(result.error, Some("Config validation failed".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_has_sources_for_stream() {
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+        let mut manager = SourceManager::new(registry);
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
+
+        // Initially no sources
+        assert!(!manager.has_sources_for_stream("test-stream").await);
+
+        // Spawn a source
+        let source_config = SourceConfig {
+            source_type: SourceType::Mqtt,
+            enabled: true,
+            ndp_id: None,
+            context: None,
+            params: HashMap::new(),
+        };
+        manager
+            .spawn_source("test-stream", &source_config)
+            .await
+            .unwrap();
+
+        // Now has sources
+        assert!(manager.has_sources_for_stream("test-stream").await);
+
+        // Different stream has no sources
+        assert!(!manager.has_sources_for_stream("other-stream").await);
+    }
+
+    #[tokio::test]
+    async fn test_get_source_ids_for_stream() {
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+        let mut manager = SourceManager::new(registry);
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
+
+        // Spawn sources for different streams
+        let source_config = SourceConfig {
+            source_type: SourceType::Mqtt,
+            enabled: true,
+            ndp_id: None,
+            context: None,
+            params: HashMap::new(),
+        };
+
+        manager
+            .spawn_source("stream-a", &source_config)
+            .await
+            .unwrap();
+        manager
+            .spawn_source("stream-b", &source_config)
+            .await
+            .unwrap();
+
+        let ids_a = manager.get_source_ids_for_stream("stream-a").await;
+        let ids_b = manager.get_source_ids_for_stream("stream-b").await;
+
+        assert_eq!(ids_a.len(), 1);
+        assert!(ids_a[0].contains("stream-a"));
+
+        assert_eq!(ids_b.len(), 1);
+        assert!(ids_b[0].contains("stream-b"));
+    }
+
+    #[tokio::test]
+    async fn test_on_config_change_with_invalid_config() {
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+        let mut manager = SourceManager::new(registry);
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
+
+        // Create an invalid config (no fields)
+        let mut invalid_config = create_test_stream_config("test-stream", SourceType::Mqtt);
+        invalid_config.fields.clear();
+
+        // Hot-reload should fail validation
+        let result = manager
+            .on_config_change("test-stream", Some(invalid_config))
+            .await;
+
+        assert!(!result.success);
+        assert!(result.error.is_some());
+        assert!(result.error.unwrap().contains("validation failed"));
+    }
+
+    #[tokio::test]
+    async fn test_on_config_change_delete() {
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+        let mut manager = SourceManager::new(registry);
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
+
+        // Spawn a source
+        let source_config = SourceConfig {
+            source_type: SourceType::Mqtt,
+            enabled: true,
+            ndp_id: None,
+            context: None,
+            params: HashMap::new(),
+        };
+        manager
+            .spawn_source("test-stream", &source_config)
+            .await
+            .unwrap();
+
+        assert!(manager.has_sources_for_stream("test-stream").await);
+
+        // Delete the stream config
+        let result = manager.on_config_change("test-stream", None).await;
+
+        assert!(result.success);
+        assert!(!manager.has_sources_for_stream("test-stream").await);
+        assert_eq!(result.sources_stopped.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_handle_stream_disabled() {
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+        let mut manager = SourceManager::new(registry);
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
+
+        // Spawn a source
+        let source_config = SourceConfig {
+            source_type: SourceType::Mqtt,
+            enabled: true,
+            ndp_id: None,
+            context: None,
+            params: HashMap::new(),
+        };
+        manager
+            .spawn_source("test-stream", &source_config)
+            .await
+            .unwrap();
+
+        // Disable the stream
+        let mut disabled_config = create_test_stream_config("test-stream", SourceType::Mqtt);
+        disabled_config.enabled = false;
+
+        let result = manager
+            .on_config_change("test-stream", Some(disabled_config))
+            .await;
+
+        assert!(result.success);
+        assert!(!manager.has_sources_for_stream("test-stream").await);
+    }
+
+    #[tokio::test]
+    async fn test_trigger_reload() {
+        let registry = Arc::new(
+            StreamRegistry::new(&["http://localhost:2379"])
+                .await
+                .unwrap(),
+        );
+
+        // Save a config to registry
+        let config = create_test_stream_config("reload-test", SourceType::Mqtt);
+        registry.save_stream(&config).await.unwrap();
+
+        let mut manager = SourceManager::new(registry.clone());
+        let event_bus = create_test_event_bus();
+        manager.set_event_bus(event_bus);
+
+        // Trigger reload
+        let result = manager.trigger_reload("reload-test").await;
+
+        assert!(result.success);
+        // New sources should be started (from the saved config)
+        assert!(!result.sources_started.is_empty());
+
+        // Cleanup
+        registry.delete_stream("reload-test").await.unwrap();
     }
 }
