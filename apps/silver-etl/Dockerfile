@@ -22,6 +22,7 @@ COPY apps ./apps
 COPY domains ./domains
 COPY config-client ./config-client
 COPY config ./config
+COPY crates ./crates
 
 # Build with cache mounts for incremental compilation
 RUN --mount=type=cache,target=/app/target,sharing=locked \
