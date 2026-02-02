@@ -37,6 +37,10 @@ mod timescale_silver;
 mod traits;
 mod types;
 
+// dp-018 Dictionary loader tests
+#[cfg(test)]
+mod dictionary_tests;
+
 // Bronze layer exports
 pub use local::LocalParquetStorage;
 pub use traits::BronzeStorage;

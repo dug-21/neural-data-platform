@@ -34,8 +34,8 @@ pub use types::GenericTimeSeriesPoint;
 
 // New multi-stream types (AIR-004)
 pub use types::{
-    FieldType, RecordMetadata, SchemaField, SourceConfig, SourceType, StorageConfig, StreamConfig,
-    StreamConfigError, StreamRecord,
+    EntitySchema, EntitySchemaAttribute, FieldType, RecordMetadata, SchemaField, SourceConfig,
+    SourceType, StorageConfig, StreamConfig, StreamConfigError, StreamRecord,
 };
 
 // Silver ETL config types (DP-006)

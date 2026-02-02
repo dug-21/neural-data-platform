@@ -3,7 +3,11 @@
 //! This module contains configuration structures for various platform components,
 //! including Silver layer ETL configuration.
 
+pub mod mock_loader;
 pub mod silver_etl;
+
+// ConfigLoader trait and MockConfigLoader for infrastructure-free testing (dp-018)
+pub use mock_loader::{ConfigLoader, ConfigLoaderError, MockConfigLoader};
 
 pub use silver_etl::{
     // Pre-transform configuration types (dp-007)

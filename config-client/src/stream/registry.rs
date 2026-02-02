@@ -54,7 +54,11 @@ impl StreamRegistry {
             cache.insert(stream_id.to_string(), config.clone());
         }
 
-        info!("Loaded stream configuration: {}", stream_id);
+        // dp-018 Task 1.6: Log config source for observability
+        info!(
+            "config loaded from etcd: /streams/{}/config",
+            stream_id
+        );
         Ok(config)
     }
 

@@ -17,8 +17,8 @@ pub use raw_data_point::RawDataPoint;
 
 // Re-export new multi-stream types
 pub use stream_config::{
-    CsvSourceConfig, FieldType, OnError, SchemaField, SourceConfig, SourceType, StorageConfig,
-    StreamConfig, StreamConfigError, TimestampFormat,
+    CsvSourceConfig, EntitySchema, EntitySchemaAttribute, FieldType, OnError, SchemaField,
+    SourceConfig, SourceType, StorageConfig, StreamConfig, StreamConfigError, TimestampFormat,
 };
 pub use stream_record::{RecordMetadata, StreamRecord};
 

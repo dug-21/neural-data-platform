@@ -11,7 +11,7 @@ use neural_core::{
     BronzeSubscriber, BronzeSubscriberConfig, NoBronzeReader, Subscriber, SubscriberCoordinator,
 };
 // DP-012 Phase 4: SilverSubscriber for real-time Bronze-to-Silver ETL
-use neural_core::config::SilverEtlConfig;
+// DP-018: SilverEtlConfig removed - now accessed via StreamConfig.silver_etl from etcd
 use neural_core::silver::outputs::{SilverOutput, TimescaleConfig, TimescaleOutput};
 use neural_core::subscribers::{SilverSubscriber, SilverSubscriberConfig};
 use std::collections::HashMap;
@@ -146,10 +146,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Create a temporary registry for syncing
         match config_client::StreamRegistry::new(&[&etcd_endpoint]).await {
             Ok(registry) => match sync_service.sync_all(&registry).await {
-                Ok(count) => {
+                Ok(report) => {
                     tracing::info!(
-                        "Synced {} stream configs to etcd (AIR-005 config sync)",
-                        count
+                        "Synced {} stream configs to etcd (AIR-005 config sync), {} skipped, {} failed",
+                        report.synced.len(),
+                        report.skipped.len(),
+                        report.failed.len()
                     );
                 }
                 Err(e) => {
@@ -497,6 +499,9 @@ fn create_services_with_real_store(
 
 /// Create SilverSubscribers for streams with enabled silver_etl configuration.
 /// If TimescaleDB is unavailable, returns error and caller continues without Silver.
+///
+/// DP-018: Loads config from etcd via StreamRegistry (same as Bronze layer).
+/// REMOVED: load_silver_etl_config() YAML file reader - etcd is single source of truth.
 async fn create_silver_subscribers(
     _event_bus: Arc<neural_core::EventBus>,
     registry: Arc<StreamRegistry>,
@@ -504,24 +509,46 @@ async fn create_silver_subscribers(
     let timescale_url = std::env::var("TIMESCALE_URL")
         .map_err(|_| "TIMESCALE_URL environment variable not set")?;
 
-    let config_dir = std::env::var("STREAM_CONFIG_DIR")
-        .unwrap_or_else(|_| "/workspaces/neural-data-platform/config/base/streams".to_string());
-
-    // Build table_mapping from ETL configs (source of truth: YAML config.target_table)
-    // This matches how batch silver-etl uses config.target_table from YAML
+    // DP-018: Load stream configs from etcd via StreamRegistry (single source of truth)
+    // This mirrors Bronze layer config loading - both use registry.load_stream()
     let streams = registry.list_streams().await.unwrap_or_default();
     let mut table_mapping = HashMap::new();
 
     for stream_id in &streams {
-        if let Ok(Some(silver_config)) = load_silver_etl_config(&config_dir, stream_id).await {
-            if silver_config.enabled {
-                // Use target_table directly from config (e.g., "silver.air_quality_observations")
-                tracing::debug!(
+        match registry.load_stream(stream_id).await {
+            Ok(config) => {
+                tracing::info!(
                     stream_id = %stream_id,
-                    target_table = %silver_config.target_table,
-                    "Adding table mapping from silver_etl config"
+                    "config loaded from etcd: /streams/{}/config",
+                    stream_id
                 );
-                table_mapping.insert(stream_id.clone(), silver_config.target_table.clone());
+                if let Some(ref silver_etl) = config.silver_etl {
+                    if silver_etl.enabled {
+                        tracing::debug!(
+                            stream_id = %stream_id,
+                            target_table = %silver_etl.target_table,
+                            "Adding table mapping from silver_etl config"
+                        );
+                        table_mapping.insert(stream_id.clone(), silver_etl.target_table.clone());
+                    } else {
+                        tracing::debug!(
+                            stream_id = %stream_id,
+                            "silver_etl disabled, skipping"
+                        );
+                    }
+                } else {
+                    tracing::info!(
+                        stream_id = %stream_id,
+                        "No silver_etl config for stream, skipping Silver layer"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    stream_id = %stream_id,
+                    error = %e,
+                    "Failed to load config from etcd for stream"
+                );
             }
         }
     }
@@ -563,28 +590,39 @@ async fn create_silver_subscribers(
         Err(e) => return Err(format!("Failed to create TimescaleDB connection: {}", e).into()),
     };
 
-    // Reuse streams list from earlier (already loaded for table_mapping)
+    // DP-018: Load silver_etl configs from etcd (already loaded in table_mapping loop)
     let mut subscribers: Vec<Box<dyn Subscriber>> = Vec::new();
 
     for stream_id in streams {
-        if let Ok(Some(silver_config)) = load_silver_etl_config(&config_dir, &stream_id).await {
-            if silver_config.enabled {
-                tracing::debug!(stream_id = %stream_id, "Found enabled silver_etl config");
+        match registry.load_stream(&stream_id).await {
+            Ok(config) => {
+                if let Some(silver_config) = config.silver_etl {
+                    if silver_config.enabled {
+                        tracing::debug!(stream_id = %stream_id, "Found enabled silver_etl config");
 
-                let mut etl_configs = std::collections::HashMap::new();
-                etl_configs.insert(stream_id.clone(), silver_config);
+                        let mut etl_configs = std::collections::HashMap::new();
+                        etl_configs.insert(stream_id.clone(), silver_config);
 
-                let subscriber_config = SilverSubscriberConfig {
-                    subscriber_id: format!("silver-{}", stream_id),
-                    stream_filter: std::collections::HashSet::from([stream_id.clone()]),
-                    etl_configs,
-                    ..Default::default()
-                };
+                        let subscriber_config = SilverSubscriberConfig {
+                            subscriber_id: format!("silver-{}", stream_id),
+                            stream_filter: std::collections::HashSet::from([stream_id.clone()]),
+                            etl_configs,
+                            ..Default::default()
+                        };
 
-                // Use NoBronzeReader as we don't support catch-up yet
-                let subscriber: SilverSubscriber<TimescaleOutput, NoBronzeReader> =
-                    SilverSubscriber::new(subscriber_config, timescale_output.clone());
-                subscribers.push(Box::new(subscriber));
+                        // Use NoBronzeReader as we don't support catch-up yet
+                        let subscriber: SilverSubscriber<TimescaleOutput, NoBronzeReader> =
+                            SilverSubscriber::new(subscriber_config, timescale_output.clone());
+                        subscribers.push(Box::new(subscriber));
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    stream_id = %stream_id,
+                    error = %e,
+                    "Failed to load config from etcd when creating subscriber"
+                );
             }
         }
     }
@@ -596,34 +634,4 @@ async fn create_silver_subscribers(
     }
 
     Ok(subscribers)
-}
-
-#[allow(dead_code)]
-async fn load_silver_etl_config(
-    config_dir: &str,
-    stream_id: &str,
-) -> Result<Option<SilverEtlConfig>, Box<dyn std::error::Error + Send + Sync>> {
-    use std::path::Path;
-
-    let dir_path = Path::new(config_dir).join(stream_id).join("config.yaml");
-    let flat_path = Path::new(config_dir).join(format!("{}.yaml", stream_id));
-
-    let yaml_path = if dir_path.exists() {
-        dir_path
-    } else if flat_path.exists() {
-        flat_path
-    } else {
-        return Ok(None);
-    };
-
-    let contents = tokio::fs::read_to_string(&yaml_path).await?;
-
-    #[derive(serde::Deserialize)]
-    struct StreamConfigWithSilver {
-        #[serde(default)]
-        silver_etl: Option<SilverEtlConfig>,
-    }
-
-    let config: StreamConfigWithSilver = serde_yaml::from_str(&contents)?;
-    Ok(config.silver_etl)
 }

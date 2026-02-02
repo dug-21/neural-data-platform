@@ -1,0 +1,931 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neural-data-platform.local/schemas/stream-config.v1.1.schema.json",
+  "title": "Stream Configuration v1.1",
+  "description": "Configuration for a data stream in the Neural Data Platform. v1.1 supports enriched fields (description, device_class in fields array) and deprecates entity_schemas.",
+  "type": "object",
+  "required": ["stream_id", "description", "fields", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "config_version": {
+      "type": "string",
+      "const": "1.1",
+      "description": "Schema version identifier. Set to '1.1' for this schema version."
+    },
+    "stream_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,63}$",
+      "description": "Unique stream identifier (kebab-case, 3-64 characters, starts with letter)"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable description of the stream"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "default": "1.0.0",
+      "description": "Stream schema version (semver format)"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether stream is active for data collection"
+    },
+    "retention_days": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Days to retain data (0 = infinite retention)"
+    },
+    "compression_after_days": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Days before applying compression (0 = no compression)"
+    },
+    "partitioning_strategy": {
+      "type": "string",
+      "enum": ["daily", "hourly", "monthly"],
+      "default": "daily",
+      "description": "Time-based partitioning strategy for storage"
+    },
+    "fields": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/field" },
+      "description": "Field definitions with optional enriched metadata (description, device_class)"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/source" },
+      "description": "Data source configurations"
+    },
+    "storage": {
+      "$ref": "#/$defs/storage",
+      "description": "Storage configuration for Bronze layer"
+    },
+    "mqtt": {
+      "$ref": "#/$defs/mqtt_legacy",
+      "description": "Legacy MQTT configuration (deprecated, use sources instead)"
+    },
+    "entity_schemas": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity_schema" },
+      "deprecated": true,
+      "description": "DEPRECATED in v1.1. Use fields[].description and fields[].device_class instead. Retained for backward compatibility during migration."
+    },
+    "silver_etl": {
+      "$ref": "#/$defs/silver_etl",
+      "description": "Silver ETL configuration for Bronze-to-Silver transformation"
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "description": "Field definition with optional enriched metadata",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "description": "Field name (snake_case, 1-64 characters, starts with letter)"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["float", "int", "string", "bool", "json"],
+          "description": "Field data type"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Physical unit (e.g., 'ug/m3', 'celsius', 'percent')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description for data dictionary (NEW in v1.1)"
+        },
+        "device_class": {
+          "type": "string",
+          "description": "Device/sensor class (e.g., 'air_quality', 'temperature', 'weather') (NEW in v1.1)"
+        },
+        "range": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Expected value range [min, max] for numeric types"
+        },
+        "display_precision": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Decimal places for display formatting"
+        },
+        "nullable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether field can contain null values"
+        },
+        "default": {
+          "description": "Default value if field is not provided in source data"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "description": "Data source configuration",
+      "required": ["type", "enabled"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["mqtt", "http_poll", "http_push", "file_watch"],
+          "description": "Source type"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether this source is active"
+        },
+        "ndp_id": {
+          "type": "string",
+          "description": "Unique identifier for this source instance"
+        },
+        "context": {
+          "$ref": "#/$defs/source_context",
+          "description": "Source context metadata"
+        },
+        "broker_url": {
+          "type": "string",
+          "description": "MQTT broker URL (for mqtt type)"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "MQTT broker port (for mqtt type)"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "MQTT client identifier"
+        },
+        "topic_pattern": {
+          "type": "string",
+          "description": "MQTT topic pattern (supports wildcards)"
+        },
+        "qos": {
+          "type": "integer",
+          "enum": [0, 1, 2],
+          "description": "MQTT Quality of Service level"
+        },
+        "reconnect_delay_secs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Initial reconnect delay in seconds"
+        },
+        "max_reconnect_delay_secs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum reconnect delay in seconds"
+        },
+        "buffer_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Message buffer capacity"
+        },
+        "poll_interval_secs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Polling interval in seconds (for http_poll type)"
+        },
+        "timeout_secs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Request timeout in seconds (for http_poll type)"
+        },
+        "parser_name": {
+          "type": "string",
+          "description": "Name of parser to use"
+        },
+        "endpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/endpoint" },
+          "description": "HTTP endpoints to poll (for http_poll type)"
+        },
+        "parser": {
+          "$ref": "#/$defs/parser",
+          "description": "Parser configuration"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "mqtt" } }
+          },
+          "then": {
+            "required": ["broker_url"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "http_poll" } }
+          },
+          "then": {
+            "required": ["poll_interval_secs"]
+          }
+        }
+      ]
+    },
+    "source_context": {
+      "type": "object",
+      "description": "Source context metadata for provenance",
+      "properties": {
+        "device_type": {
+          "type": "string",
+          "description": "Type of device (e.g., 'airgradient')"
+        },
+        "source_type": {
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string" },
+            "purpose": { "type": "string" }
+          }
+        },
+        "location": {
+          "$ref": "#/$defs/location",
+          "description": "Location information"
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["indoor", "outdoor"],
+          "description": "Environment type"
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "description": "Location information",
+      "properties": {
+        "coordinates": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Geographic coordinates [latitude, longitude]"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["indoor", "outdoor"],
+          "description": "Location type"
+        },
+        "path": {
+          "type": "string",
+          "description": "Location path (e.g., '/beachhouse/livingroom')"
+        }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "description": "HTTP endpoint configuration",
+      "required": ["endpoint_id", "url"],
+      "properties": {
+        "endpoint_id": {
+          "type": "string",
+          "description": "Unique endpoint identifier"
+        },
+        "location_id": {
+          "type": "string",
+          "description": "Location identifier for this endpoint"
+        },
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90,
+          "description": "Latitude"
+        },
+        "lon": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180,
+          "description": "Longitude"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Endpoint URL"
+        },
+        "auth_type": {
+          "type": "string",
+          "enum": ["none", "query_param", "header", "basic"],
+          "description": "Authentication type"
+        },
+        "auth_key": {
+          "type": "string",
+          "description": "Authentication key name"
+        },
+        "auth_value": {
+          "type": "string",
+          "description": "Authentication value (supports ${ENV_VAR} substitution)"
+        }
+      }
+    },
+    "parser": {
+      "type": "object",
+      "description": "Parser configuration for source data",
+      "required": ["parser_type"],
+      "properties": {
+        "parser_type": {
+          "type": "string",
+          "enum": ["flat_json", "json_path", "csv", "xml"],
+          "description": "Parser type"
+        },
+        "location_id_field": {
+          "type": "string",
+          "description": "Field name containing location identifier"
+        },
+        "default_location_id": {
+          "type": "string",
+          "description": "Default location ID if not found in data"
+        },
+        "skip_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fields to skip during parsing"
+        },
+        "default_tags": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Default tags to add to all records"
+        },
+        "field_mappings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parser_field_mapping" },
+          "description": "Field mappings for json_path parser"
+        }
+      }
+    },
+    "parser_field_mapping": {
+      "type": "object",
+      "description": "Field mapping for parser",
+      "required": ["path", "metric_name"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "JSON path to source field"
+        },
+        "metric_name": {
+          "type": "string",
+          "description": "Target metric name"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit for the metric"
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "description": "Storage configuration for Bronze layer",
+      "properties": {
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100,
+          "description": "Number of records per batch"
+        },
+        "batch_timeout_secs": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 5,
+          "description": "Maximum seconds to wait before flushing batch"
+        },
+        "buffer_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1000,
+          "description": "In-memory buffer capacity"
+        }
+      }
+    },
+    "mqtt_legacy": {
+      "type": "object",
+      "description": "Legacy MQTT configuration (deprecated, use sources instead)",
+      "deprecated": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "broker_url": { "type": "string" },
+        "port": { "type": "integer" },
+        "client_id": { "type": "string" },
+        "topic_pattern": { "type": "string" },
+        "qos": { "type": "integer" },
+        "reconnect_delay_secs": { "type": "integer" },
+        "max_reconnect_delay_secs": { "type": "integer" },
+        "buffer_capacity": { "type": "integer" }
+      }
+    },
+    "entity_schema": {
+      "type": "object",
+      "description": "DEPRECATED: Entity schema for data dictionary. Use fields[].description instead.",
+      "deprecated": true,
+      "required": ["schema_name"],
+      "properties": {
+        "schema_name": {
+          "type": "string",
+          "description": "Schema name identifier"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description"
+        },
+        "device_class": {
+          "type": "string",
+          "description": "Device/sensor class"
+        },
+        "attributes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entity_attribute" },
+          "description": "Attribute definitions"
+        }
+      }
+    },
+    "entity_attribute": {
+      "type": "object",
+      "description": "Entity schema attribute (deprecated)",
+      "deprecated": true,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "unit": { "type": "string" },
+        "description": { "type": "string" },
+        "nullable": { "type": "boolean" },
+        "range": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "silver_etl": {
+      "type": "object",
+      "description": "Silver ETL configuration for Bronze-to-Silver transformation",
+      "required": ["enabled", "target_table", "timestamp"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether Silver ETL is enabled for this stream"
+        },
+        "target_table": {
+          "type": "string",
+          "pattern": "^silver\\.[a-z_][a-z0-9_]*$",
+          "description": "Target table in silver schema (format: silver.table_name)"
+        },
+        "target_schema": {
+          "type": "string",
+          "default": "silver",
+          "description": "Target schema name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the Silver table"
+        },
+        "grain": {
+          "type": "string",
+          "description": "Description of table grain (what each row represents)"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/timestamp_mapping",
+          "description": "Timestamp field mapping (required)"
+        },
+        "valid_timestamp": {
+          "$ref": "#/$defs/valid_timestamp_mapping",
+          "description": "Valid timestamp mapping for slowly changing dimensions"
+        },
+        "pre_transform": {
+          "$ref": "#/$defs/pre_transform",
+          "description": "Pre-transformation operations"
+        },
+        "identity_fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identity_field" },
+          "description": "Identity fields for deduplication and upsert"
+        },
+        "field_mappings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/silver_field_mapping" },
+          "description": "Field mappings from Bronze to Silver"
+        },
+        "dq_rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dq_rule" },
+          "description": "Data quality rules applied during ETL"
+        },
+        "dq_output": {
+          "$ref": "#/$defs/dq_output",
+          "description": "Data quality output configuration"
+        },
+        "deduplication": {
+          "$ref": "#/$defs/deduplication",
+          "description": "Deduplication strategy"
+        },
+        "incremental": {
+          "$ref": "#/$defs/incremental",
+          "description": "Incremental processing configuration"
+        }
+      }
+    },
+    "timestamp_mapping": {
+      "type": "object",
+      "description": "Timestamp field mapping from Bronze to Silver",
+      "required": ["source_field", "target_field"],
+      "additionalProperties": false,
+      "properties": {
+        "source_field": {
+          "type": "string",
+          "description": "Source field name in Bronze data"
+        },
+        "target_field": {
+          "type": "string",
+          "description": "Target column name in Silver table"
+        },
+        "transform": {
+          "type": "string",
+          "enum": ["microseconds_to_timestamp", "milliseconds_to_timestamp", "seconds_to_timestamp", "iso8601_to_timestamp", "none"],
+          "default": "none",
+          "description": "Timestamp transformation to apply"
+        }
+      }
+    },
+    "valid_timestamp_mapping": {
+      "type": "object",
+      "description": "Valid timestamp mapping for slowly changing dimensions",
+      "properties": {
+        "source_field": { "type": "string" },
+        "target_field": { "type": "string" },
+        "transform": { "type": "string" }
+      }
+    },
+    "pre_transform": {
+      "type": "object",
+      "description": "Pre-transformation operations applied before field mappings",
+      "properties": {
+        "flatten_json": {
+          "type": "boolean",
+          "description": "Flatten nested JSON structures"
+        },
+        "extract_arrays": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source_path": { "type": "string" },
+              "target_prefix": { "type": "string" }
+            }
+          },
+          "description": "Array extraction configurations"
+        }
+      }
+    },
+    "identity_field": {
+      "type": "object",
+      "description": "Identity field mapping for deduplication",
+      "required": ["source", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Source field name in Bronze data"
+        },
+        "target": {
+          "type": "string",
+          "description": "Target column name in Silver table"
+        }
+      }
+    },
+    "silver_field_mapping": {
+      "type": "object",
+      "description": "Field mapping from Bronze to Silver",
+      "required": ["source_path", "target_column", "type"],
+      "properties": {
+        "source_path": {
+          "type": "string",
+          "pattern": "^raw_payload\\..+$",
+          "description": "Source path in Bronze data (format: raw_payload.field_path)"
+        },
+        "target_column": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Target column name in Silver table"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["double_precision", "real", "smallint", "integer", "bigint", "text", "boolean", "jsonb", "timestamptz"],
+          "description": "PostgreSQL data type for target column"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Physical unit after transformation"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the field"
+        },
+        "nullable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the field can be NULL"
+        },
+        "transform": {
+          "$ref": "#/$defs/field_transform",
+          "description": "Transformation to apply during mapping"
+        },
+        "dq_rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/field_dq_rule" },
+          "description": "Field-level data quality rules"
+        }
+      }
+    },
+    "field_transform": {
+      "type": "object",
+      "description": "Field transformation configuration",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["unit_conversion", "scale", "offset", "expression", "lookup", "coalesce"],
+          "description": "Transformation type"
+        },
+        "from": {
+          "type": "string",
+          "description": "Source unit (for unit_conversion)"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target unit (for unit_conversion)"
+        },
+        "formula": {
+          "$ref": "#/$defs/transform_formula",
+          "description": "Transformation formula"
+        },
+        "expression": {
+          "type": "string",
+          "description": "SQL expression (for expression type)"
+        },
+        "lookup_table": {
+          "type": "string",
+          "description": "Lookup table name (for lookup type)"
+        },
+        "fallback_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fallback field paths (for coalesce type)"
+        }
+      }
+    },
+    "transform_formula": {
+      "type": "object",
+      "description": "Mathematical transformation formula",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["linear", "polynomial", "logarithmic"],
+          "description": "Formula type"
+        },
+        "scale": {
+          "type": "number",
+          "description": "Scale factor (multiplier)"
+        },
+        "offset": {
+          "type": "number",
+          "description": "Offset value (addend)"
+        },
+        "coefficients": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Polynomial coefficients"
+        }
+      }
+    },
+    "field_dq_rule": {
+      "type": "object",
+      "description": "Field-level data quality rule",
+      "required": ["rule"],
+      "properties": {
+        "rule": {
+          "type": "string",
+          "enum": ["range_check", "not_null", "enum_check", "regex_check", "length_check"],
+          "description": "Rule type"
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum value (for range_check)"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum value (for range_check)"
+        },
+        "allowed_values": {
+          "type": "array",
+          "description": "Allowed values (for enum_check)"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern (for regex_check)"
+        },
+        "min_length": {
+          "type": "integer",
+          "description": "Minimum length (for length_check)"
+        },
+        "max_length": {
+          "type": "integer",
+          "description": "Maximum length (for length_check)"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["flag", "reject", "clamp", "nullify", "warn"],
+          "default": "flag",
+          "description": "Action to take when rule fails"
+        },
+        "clamp_to_bounds": {
+          "type": "boolean",
+          "description": "Whether to clamp values to bounds (for clamp action)"
+        }
+      }
+    },
+    "dq_rule": {
+      "type": "object",
+      "description": "Batch-level or cross-field data quality rule",
+      "required": ["rule"],
+      "properties": {
+        "rule": {
+          "type": "string",
+          "enum": ["cross_field_check", "freshness_check", "rate_of_change", "completeness_check", "uniqueness_check", "referential_check"],
+          "description": "Rule type"
+        },
+        "name": {
+          "type": "string",
+          "description": "Rule name identifier"
+        },
+        "expression": {
+          "type": "string",
+          "description": "SQL expression for validation (for cross_field_check)"
+        },
+        "message": {
+          "type": "string",
+          "description": "Error message or flag code when rule fails"
+        },
+        "field": {
+          "type": "string",
+          "description": "Field to check (for single-field rules)"
+        },
+        "max_age": {
+          "type": "string",
+          "description": "Maximum age (for freshness_check, e.g., '2 hours')"
+        },
+        "max_future": {
+          "type": "string",
+          "description": "Maximum future offset (for freshness_check)"
+        },
+        "reference": {
+          "type": "string",
+          "enum": ["ingestion_time", "current_time", "batch_time"],
+          "description": "Reference time for freshness check"
+        },
+        "max_change_per_minute": {
+          "type": "number",
+          "description": "Maximum rate of change per minute (for rate_of_change)"
+        },
+        "partition_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Partition fields for rate calculation"
+        },
+        "level": {
+          "type": "string",
+          "enum": ["row", "batch", "stream"],
+          "description": "Rule application level (for completeness_check)"
+        },
+        "min_completeness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum completeness ratio (for completeness_check)"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["flag", "reject", "warn", "abort"],
+          "default": "flag",
+          "description": "Action to take when rule fails"
+        }
+      }
+    },
+    "dq_output": {
+      "type": "object",
+      "description": "Data quality output configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to output DQ information"
+        },
+        "target_column": {
+          "type": "string",
+          "default": "dq_flags",
+          "description": "Column name for DQ flags in Silver table"
+        },
+        "include_rules": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include rule names in flags"
+        },
+        "include_values": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include original values that failed validation"
+        },
+        "transparency": {
+          "$ref": "#/$defs/dq_transparency",
+          "description": "DQ transparency table configuration"
+        }
+      }
+    },
+    "dq_transparency": {
+      "type": "object",
+      "description": "DQ transparency table configuration for audit and debugging",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to write to transparency table"
+        },
+        "table": {
+          "type": "string",
+          "pattern": "^silver\\.[a-z_][a-z0-9_]*$",
+          "default": "silver.dq_transparency",
+          "description": "Transparency table name"
+        },
+        "include_sample_payload": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include sample of failing payload"
+        },
+        "max_samples_per_rule": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "Maximum samples to store per rule per batch"
+        }
+      }
+    },
+    "deduplication": {
+      "type": "object",
+      "description": "Deduplication configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether deduplication is enabled"
+        },
+        "key_columns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Columns forming the deduplication key"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["upsert", "skip", "last_wins", "first_wins"],
+          "default": "upsert",
+          "description": "Deduplication strategy"
+        }
+      }
+    },
+    "incremental": {
+      "type": "object",
+      "description": "Incremental processing configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether incremental processing is enabled"
+        },
+        "watermark_column": {
+          "type": "string",
+          "description": "Column to use as watermark for incremental processing"
+        },
+        "lag_interval": {
+          "type": "string",
+          "description": "Lag interval for late-arriving data (e.g., '5 minutes')"
+        },
+        "lookback_window": {
+          "type": "string",
+          "description": "Lookback window for reprocessing (e.g., '1 hour')"
+        }
+      }
+    }
+  }
+}
