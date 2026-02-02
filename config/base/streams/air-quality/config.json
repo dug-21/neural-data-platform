@@ -220,8 +220,7 @@
       "type": "int",
       "unit": "count",
       "description": "Device boot counter. Tracks device restarts for reliability monitoring.",
-      "nullable": true,
-      "range": [0, null]
+      "nullable": true
     },
     {
       "name": "bootCount",
@@ -229,8 +228,7 @@
       "type": "int",
       "unit": "count",
       "description": "Device boot counter (alias for boot field).",
-      "nullable": true,
-      "range": [0, null]
+      "nullable": true
     },
     {
       "name": "serialno",
