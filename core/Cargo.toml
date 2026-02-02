@@ -9,6 +9,9 @@ default = []
 timescale = ["tokio-postgres", "bb8", "bb8-postgres"]
 
 [dependencies]
+# NDP types (single source of truth)
+ndp-types = { workspace = true }
+
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

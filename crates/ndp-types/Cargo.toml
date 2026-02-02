@@ -1,0 +1,26 @@
+[package]
+name = "ndp-types"
+version = "0.1.0"
+edition = "2021"
+description = "Single source of truth for NDP configuration types"
+license = "MIT"
+repository = "https://github.com/neural-data-platform/ndp"
+keywords = ["ndp", "types", "validation", "schema"]
+categories = ["data-structures", "config"]
+
+[dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# JSON Schema generation
+schemars = "0.8"
+
+# Enum utilities (iteration, string conversion, display)
+strum = { version = "0.26", features = ["derive"] }
+
+# Error handling
+thiserror = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4"

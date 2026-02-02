@@ -5,6 +5,9 @@ use thiserror::Error;
 // DP-018: Import SilverEtlConfig for unified stream configuration
 use crate::config::SilverEtlConfig;
 
+// BUG-001-fix: Import types from ndp-types (single source of truth)
+pub use ndp_types::{FieldType, SourceType};
+
 /// Errors that can occur during stream configuration validation
 #[derive(Debug, Error, PartialEq)]
 pub enum StreamConfigError {
@@ -27,16 +30,7 @@ pub enum StreamConfigError {
     InvalidRange { field: String, reason: String },
 }
 
-/// Field data types supported in stream schemas
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum FieldType {
-    Float,
-    Int,
-    String,
-    Bool,
-    Json,
-}
+// FieldType is now imported from ndp-types above
 
 /// Field definition in a stream schema
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -179,16 +173,7 @@ impl SchemaField {
     }
 }
 
-/// Source type enumeration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SourceType {
-    Mqtt,
-    HttpPoll,
-    Webhook,
-    FileWatch,
-    Csv, // dp-013: CSV file source
-}
+// SourceType is now imported from ndp-types above
 
 /// Source configuration within a stream
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

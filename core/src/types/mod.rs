@@ -9,6 +9,12 @@ pub mod raw_data_point;
 pub mod stream_config;
 pub mod stream_record;
 
+// BUG-001-fix: Re-export types from ndp-types for backward compatibility
+// Consumers can use either:
+//   use neural_core::types::SourceType;  (re-exported)
+//   use ndp_types::SourceType;           (preferred)
+pub use ndp_types::{DqAction, DqRuleType, ErrorCode, FieldType, MonotonicDirection, SourceType};
+
 // Re-export existing types for backward compatibility
 pub use air_quality::{AirQualityReading, GenericTimeSeriesPoint};
 
@@ -16,9 +22,10 @@ pub use air_quality::{AirQualityReading, GenericTimeSeriesPoint};
 pub use raw_data_point::RawDataPoint;
 
 // Re-export new multi-stream types
+// Note: FieldType and SourceType are re-exported from ndp-types above
 pub use stream_config::{
-    CsvSourceConfig, EntitySchema, EntitySchemaAttribute, FieldType, OnError, SchemaField,
-    SourceConfig, SourceType, StorageConfig, StreamConfig, StreamConfigError, TimestampFormat,
+    CsvSourceConfig, EntitySchema, EntitySchemaAttribute, OnError, SchemaField,
+    SourceConfig, StorageConfig, StreamConfig, StreamConfigError, TimestampFormat,
 };
 pub use stream_record::{RecordMetadata, StreamRecord};
 

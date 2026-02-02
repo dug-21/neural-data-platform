@@ -3,9 +3,11 @@ members = [
     "config-client",
     "core",
     "core/ndp-mcp-server",
+    "crates/ndp-types",
     "domains/air-quality",
     "apps/air-quality-app",
-    "apps/silver-etl"
+    "apps/silver-etl",
+    "tools/ndp-validate"
 ]
 resolver = "2"
 
@@ -26,6 +28,9 @@ redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
 rumqttc = "0.24"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 polars = { version = "0.35", features = ["parquet", "lazy", "dtype-datetime"] }
+
+# NDP crates
+ndp-types = { path = "crates/ndp-types" }
 
 # Note: NO [package] section
 # Note: NO [[bin]] sections

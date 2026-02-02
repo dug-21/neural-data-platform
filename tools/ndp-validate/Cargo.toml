@@ -1,0 +1,51 @@
+[package]
+name = "ndp-validate"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neural Data Platform Team"]
+description = "Two-layer config validation tool for NDP stream configurations"
+
+[[bin]]
+name = "ndp-validate"
+path = "src/main.rs"
+
+[dependencies]
+# NDP types - Single source of truth for configuration types
+ndp-types = { workspace = true }
+
+# JSON Schema validation (Layer 1)
+jsonschema = "0.17"
+
+# JSON Schema generation from Rust types
+schemars = "0.8"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Error handling
+thiserror = "1.0"
+
+# SQL parsing for semantic validation (Layer 2)
+sqlparser = { version = "0.50", features = ["visitor"] }
+
+# Regex for pattern validation
+regex = "1.0"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# CLI interface
+clap = { version = "4", features = ["derive", "env"] }
+
+# String similarity for suggestions
+strsim = "0.11"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3.8"
+tokio-test = "0.4"
