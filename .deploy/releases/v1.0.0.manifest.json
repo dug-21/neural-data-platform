@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "release_version": "1.0.0",
+  "description": "Release v1.0.0: Declarative deployment with hot-reload support",
+  "changes": [
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "build"
+    },
+    {
+      "type": "stream",
+      "id": "air-quality",
+      "action": "update"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    },
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "restart"
+    }
+  ]
+}

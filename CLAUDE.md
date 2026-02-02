@@ -460,6 +460,116 @@ Features follow `{phase}-{NNN}` pattern:
 
 ---
 
+## 📦 Release Methodology (REQUIRED)
+
+All releases MUST follow this methodology. See `docs/procedures/RELEASE-POLICY.md` for full details.
+
+### Semantic Versioning
+
+NDP uses **Semantic Versioning 2.0.0**:
+
+```
+MAJOR.MINOR.PATCH
+
+MAJOR - Breaking changes (schema migration, API breaking change)
+MINOR - New features (new stream, new Silver table, new MCP tool)
+PATCH - Bug fixes (config corrections, DQ rule adjustments)
+```
+
+### Release Artifacts (3 Required)
+
+Every release consists of:
+
+| Artifact | Location | Description |
+|----------|----------|-------------|
+| **Manifest** | `.deploy/releases/vX.Y.Z.manifest.json` | Declares what changed |
+| **Git Tag** | `vX.Y.Z` (annotated) | Version control marker |
+| **Changelog** | `CHANGELOG.md` | Human-readable description |
+
+### Quick Release Workflow
+
+```bash
+# 1. Create release manifest
+cat > .deploy/releases/v1.1.0.manifest.json << 'EOF'
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.0",
+  "description": "Release v1.1.0: Add new-sensor stream",
+  "changes": [
+    {"type": "stream", "id": "new-sensor", "action": "create"},
+    {"type": "silver-table", "stream_id": "new-sensor", "action": "sync"},
+    {"type": "dictionary", "action": "sync"}
+  ]
+}
+EOF
+
+# 2. Update CHANGELOG.md
+
+# 3. Commit and tag
+git add .deploy/releases/v1.1.0.manifest.json CHANGELOG.md
+git commit -m "release: v1.1.0 - Add new-sensor stream"
+git tag -a v1.1.0 -m "Release v1.1.0: Add new-sensor stream"
+git push && git push origin v1.1.0
+
+# 4. Deploy on Pi
+ssh pi@your-pi
+cd /path/to/neural-data-platform
+git pull
+./deploy/pi/deploy.sh apply .deploy/releases/v1.1.0.manifest.json
+```
+
+### Declaration Types
+
+| Type | Purpose | Required Fields |
+|------|---------|-----------------|
+| `stream` | Sync config to etcd | `id` |
+| `silver-table` | Generate DDL from config | `stream_id` |
+| `migration` | Run SQL file | `file` |
+| `dimensions` | Sync dimension CSVs | - |
+| `dictionary` | Sync data dictionary | - |
+| `container` | Build/restart container | `target`, `action` |
+
+### Deployment Verification
+
+```bash
+# Check deployed version on Pi
+cat /var/ndp/deployed-version      # Shows vX.Y.Z
+cat /var/ndp/deployed-manifest     # Shows manifest path
+cat /var/ndp/deployed-timestamp    # Shows deploy time
+
+# Verify services
+./deploy/pi/deploy.sh status
+
+# Check logs
+./deploy/pi/deploy.sh logs
+```
+
+### Key Documentation
+
+| Document | Purpose |
+|----------|---------|
+| `docs/procedures/RELEASE-POLICY.md` | Full versioning standard and release workflow |
+| `docs/procedures/DEPLOYMENT-DECLARATIVES.md` | Manifest format and all declaration types |
+| `deploy/pi/README.md` | Pi deployment commands |
+| `.deploy/releases/TEMPLATE.manifest.json` | Template for new releases |
+
+### Version Bump Decision Guide
+
+| Change | Bump | Example |
+|--------|------|---------|
+| New stream | MINOR | 1.0.0 → 1.1.0 |
+| New Silver table | MINOR | 1.1.0 → 1.2.0 |
+| Bug fix in config | PATCH | 1.2.0 → 1.2.1 |
+| Remove deprecated field | MAJOR | 1.2.1 → 2.0.0 |
+| API breaking change | MAJOR | 2.0.0 → 3.0.0 |
+
+### Current Version
+
+**v1.0.0** - Initial stable release with declarative deployment (2026-02-02)
+
+---
+
 ## 🎯 Skills System (REQUIRED)
 
 ### Pattern Workflow
