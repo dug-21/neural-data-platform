@@ -237,12 +237,12 @@ show_diff() {
     old_version=$(jq -r '.config_version // "unset"' "$config_file")
     info "    - Set config_version: $old_version -> 2"
 
-    # Show size change
+    # Show size change (compare pretty-printed to pretty-printed)
     local old_size new_size
-    old_size=$(jq -c '.' "$config_file" | wc -c)
+    old_size=$(jq '.' "$config_file" | wc -c)
     new_size=$(transform_v1_1_to_v2 "$config_file" | wc -c)
     local size_change=$((old_size - new_size))
-    info "    - Size: $old_size -> $new_size bytes (-$size_change bytes)"
+    info "    - Size: $old_size -> $new_size bytes (+$size_change bytes saved)"
 }
 
 # -----------------------------------------------------------------------------
