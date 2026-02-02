@@ -31,9 +31,10 @@ These issues were documented in dp-016's pain points (P-010, P-011, P-012, P-013
 
 1. **Single command deployment** - `./deploy.sh apply` executes everything
 2. **Declarative manifest** - Agents declare what changed, deploy figures out actions
-3. **DDL generation** - Silver tables created from config (no manual SQL)
-4. **Correct ordering** - Dependencies resolved automatically
-5. **Device state tracking** - Pi knows what's deployed
+3. **DDL generation** - Silver tables created/updated from config (no manual SQL)
+4. **Schema evolution** - New columns added automatically when field_mappings change
+5. **Correct ordering** - Dependencies resolved automatically
+6. **Device state tracking** - Pi knows what's deployed
 
 ---
 
@@ -67,6 +68,7 @@ These issues were documented in dp-016's pain points (P-010, P-011, P-012, P-013
 | 3.4d | DDL generator: Policies | Apply compression and retention policies | Matches existing tables |
 | 3.4e | DDL generator: Permissions | Grant to ndp_app, grafana_reader roles | Consistent permissions |
 | 3.4f | Idempotent execution | IF NOT EXISTS everywhere | Safe to re-run |
+| 3.4g | DDL generator: ADD COLUMN | Add new columns to existing tables | Schema evolution support |
 
 **Action: Other Declarations**
 
@@ -79,9 +81,14 @@ These issues were documented in dp-016's pain points (P-010, P-011, P-012, P-013
 
 ### Out of Scope
 
+- **Modify column type** - ALTER TABLE ALTER COLUMN (breaking change)
+- **Remove column** - ALTER TABLE DROP COLUMN (breaking change)
+- **Rename column** - Requires data migration
 - Hot-reload implementation details (dp-021)
 - Schema migration tool v1.1→v2.0 (dp-021)
 - MCP write tools (dp-021)
+
+*Note: Adding new columns IS supported (3.4g). Only destructive schema changes are excluded.*
 
 ---
 
@@ -103,7 +110,7 @@ These issues were documented in dp-016's pain points (P-010, P-011, P-012, P-013
     {
       "type": "silver-table",
       "stream_id": "air-quality",
-      "action": "create"
+      "action": "sync"
     },
     {
       "type": "migration",
@@ -126,7 +133,7 @@ These issues were documented in dp-016's pain points (P-010, P-011, P-012, P-013
 | Type | Actions | Description |
 |------|---------|-------------|
 | `stream` | validate → sync → reload | Stream config changed |
-| `silver-table` | generate DDL → apply | Create Silver table from config |
+| `silver-table` | generate DDL → apply | Create table or add columns from config |
 | `migration` | apply SQL file | Run database migration |
 | `dimensions` | sync CSV → TimescaleDB | Update dimension data |
 | `dictionary` | sync config → data_dictionary | Refresh data dictionary |
@@ -179,6 +186,19 @@ SELECT add_retention_policy('silver.air_quality_readings',
 -- 3.4e: Permissions
 GRANT SELECT, INSERT ON silver.air_quality_readings TO ndp_app;
 GRANT SELECT ON silver.air_quality_readings TO grafana_reader;
+
+-- 3.4g: ADD COLUMN (for existing tables with new field_mappings)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'silver'
+        AND table_name = 'air_quality_readings'
+        AND column_name = 'humidity'
+    ) THEN
+        ALTER TABLE silver.air_quality_readings ADD COLUMN humidity DOUBLE PRECISION;
+    END IF;
+END $$;
 ```
 
 ### Deploy Flow
@@ -224,6 +244,52 @@ git pull
 | DDL generator | `tools/ndp-ddl-gen/` or inline in deploy | Generates Silver table SQL |
 | deploy.sh v2 | `deploy/pi/deploy.sh` | Manifest-driven deployment |
 | Device state | `/var/ndp/` | Deployment tracking files |
+| **Deployment Guide** | `docs/procedures/DEPLOYMENT-DECLARATIVES.md` | Reference for all declaration types |
+| **AgentDB Pattern** | Stored via `save-pattern` | Points agents to deployment guide |
+
+### Deployment Guide Requirements
+
+The `DEPLOYMENT-DECLARATIVES.md` must document:
+
+1. **Each declaration type** with:
+   - Purpose and when to use
+   - Required and optional fields
+   - Example manifest entry
+   - What actions deploy.sh executes
+   - How to verify success
+
+2. **Declaration types to document:**
+   - `stream` - Config sync to etcd
+   - `silver-table` - DDL generation (CREATE TABLE, ADD COLUMN)
+   - `migration` - SQL file execution
+   - `dimensions` - CSV sync to TimescaleDB
+   - `dictionary` - Data dictionary sync
+
+3. **Common workflows:**
+   - Adding a new stream end-to-end
+   - Adding a column to existing stream
+   - Running a database migration
+   - Full deployment sequence
+
+### AgentDB Pattern Requirement
+
+After completing dp-020, store a pattern via `/save-pattern`:
+
+```
+taskType: "deployment:manifest-declaratives"
+approach: "When deploying changes to NDP, agents MUST:
+  1. Read docs/procedures/DEPLOYMENT-DECLARATIVES.md for available declaration types
+  2. Create/update .deploy/manifest.json with required changes
+  3. Run DEPLOY_ENV=integration ./deploy.sh apply to test locally
+  4. Verify changes before production deployment
+
+  Declaration types: stream, silver-table, migration, dimensions, dictionary
+
+  Reference: docs/procedures/DEPLOYMENT-DECLARATIVES.md"
+tags: ["deployment", "manifest", "declarative", "deploy.sh"]
+```
+
+This ensures future agents searching for "how to deploy" or "add stream" find the authoritative reference.
 
 ---
 
@@ -231,33 +297,104 @@ git pull
 
 1. **Single command** - `./deploy.sh apply` handles all deployment
 2. **DDL generated** - Silver tables created from config without manual SQL
-3. **Correct ordering** - Migrations before tables, tables before data
-4. **Idempotent** - Safe to run multiple times
-5. **State tracked** - Device knows deployed version and timestamp
+3. **Schema evolution** - New columns added to existing tables automatically
+4. **Correct ordering** - Migrations before tables, tables before data
+5. **Idempotent** - Safe to run multiple times
+6. **State tracked** - Device knows deployed version and timestamp
+7. **Documented** - All declaration types documented in DEPLOYMENT-DECLARATIVES.md
+8. **Discoverable** - AgentDB pattern stored so future agents find deployment guide
 
 ### Verification Commands
 
 ```bash
-# Create manifest for new stream
+# Scenario 1: New stream (CREATE TABLE)
 cat > .deploy/manifest.json << 'EOF'
 {
   "version": "1.0",
   "changes": [
     {"type": "stream", "id": "new-sensor", "action": "create"},
-    {"type": "silver-table", "stream_id": "new-sensor", "action": "create"},
+    {"type": "silver-table", "stream_id": "new-sensor", "action": "sync"},
     {"type": "dictionary", "action": "sync"}
   ]
 }
 EOF
 
-# Deploy (integration environment)
+DEPLOY_ENV=integration ./deploy.sh apply
+psql -c "\d silver.new_sensor_readings"  # Table exists
+
+# Scenario 2: Add column to existing stream (ALTER TABLE ADD COLUMN)
+# Edit config/base/streams/air-quality/config.json to add new field_mapping
+cat > .deploy/manifest.json << 'EOF'
+{
+  "version": "1.0",
+  "changes": [
+    {"type": "stream", "id": "air-quality", "action": "update"},
+    {"type": "silver-table", "stream_id": "air-quality", "action": "sync"},
+    {"type": "dictionary", "action": "sync"}
+  ]
+}
+EOF
+
+DEPLOY_ENV=integration ./deploy.sh apply
+psql -c "\d silver.air_quality_observations"  # New column exists
+```
+
+---
+
+## Testing Expectations
+
+All dp-020 functionality MUST be tested in the local Docker integration environment before deployment to Pi.
+
+### Infrastructure
+
+| Component | Location | Notes |
+|-----------|----------|-------|
+| Docker stack | `docker-compose.integration.yml` | etcd, TimescaleDB, MQTT, app, MCP, Grafana |
+| Test runner | `scripts/integration-test.sh` | start/stop/clean/status |
+| Deploy automation | `DEPLOY_ENV=integration ./deploy.sh` | Same script, different target |
+
+### Test Scenarios
+
+| ID | Scenario | Verification Command |
+|----|----------|---------------------|
+| T1 | New stream → CREATE TABLE | `psql -c "\d silver.{table}"` |
+| T2 | Add field_mapping → ADD COLUMN | `psql -c "\d silver.{table}"` shows new column |
+| T3 | Idempotent (run twice) | No errors on second run |
+| T4 | Type mapping | Column types match config |
+| T5 | Indexes created | `psql -c "\di silver.*"` |
+| T6 | Hypertable conversion | `SELECT * FROM timescaledb_information.hypertables` |
+| T7 | Compression policy | `SELECT * FROM timescaledb_information.jobs WHERE proc_name = 'policy_compression'` |
+| T8 | Retention policy | `SELECT * FROM timescaledb_information.jobs WHERE proc_name = 'policy_retention'` |
+| T9 | Permissions | `psql -U ndp_app -c "SELECT 1 FROM silver.{table} LIMIT 1"` |
+| T10 | Device state | `cat /var/ndp/deployed-version` |
+
+### Test Workflow
+
+```bash
+# 1. Start integration environment
+./scripts/integration-test.sh start
+
+# 2. Test new stream (T1, T4-T9)
 DEPLOY_ENV=integration ./deploy.sh apply
 
-# Verify
-DEPLOY_ENV=integration ./deploy.sh status
-cat /var/ndp/deployed-version
-psql -c "\d silver.new_sensor_readings"
+# 3. Verify table created
+docker exec integration-timescaledb psql -U postgres -d ndp -c "\d silver.air_quality_observations"
+
+# 4. Test add column (T2) - modify config, re-apply
+DEPLOY_ENV=integration ./deploy.sh apply
+
+# 5. Test idempotent (T3) - run again
+DEPLOY_ENV=integration ./deploy.sh apply  # Should succeed with no changes
+
+# 6. Clean up
+./scripts/integration-test.sh clean
 ```
+
+### Test Artifacts
+
+Test-specific configs (if needed) go in:
+- `config/base/streams/_test-dp020/config.json` - Underscore prefix = excluded from prod
+- `.deploy/manifest.json` - Test manifest
 
 ---
 
@@ -281,4 +418,5 @@ psql -c "\d silver.new_sensor_readings"
 ---
 
 *Scope created: 2026-02-01*
+*Scope updated: 2026-02-02 - Added ADD COLUMN support (3.4g), testing expectations, documentation requirements*
 *Parent: dp-016 Configuration Architecture Review*

@@ -91,6 +91,13 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # ============================================================================
+# DDL Generator Functions (dp-020)
+# ============================================================================
+if [ -f "$SCRIPT_DIR/ddl-generator.sh" ]; then
+    source "$SCRIPT_DIR/ddl-generator.sh"
+fi
+
+# ============================================================================
 # YAML Helper Functions
 # Used by sync_to_data_dictionary and sync_dimensions
 # ============================================================================
@@ -103,7 +110,11 @@ yaml_get() {
     local default="$3"
     local result=""
 
-    if command -v yq &> /dev/null; then
+    # For JSON files, use jq (more reliable)
+    if [[ "$file" == *.json ]] && command -v jq &> /dev/null; then
+        local jq_path=".${key}"
+        result=$(jq -r "$jq_path // \"$default\"" "$file" 2>/dev/null)
+    elif command -v yq &> /dev/null; then
         # Detect which yq variant is installed
         if yq --version 2>&1 | grep -q "mikefarah"; then
             # Go yq (mikefarah/yq)
@@ -159,7 +170,10 @@ yaml_array_len() {
     local key="$2"
     local result=0
 
-    if command -v yq &> /dev/null; then
+    # For JSON files, use jq
+    if [[ "$file" == *.json ]] && command -v jq &> /dev/null; then
+        result=$(jq -r ".${key} | length // 0" "$file" 2>/dev/null || echo "0")
+    elif command -v yq &> /dev/null; then
         if yq --version 2>&1 | grep -q "mikefarah"; then
             result=$(yq eval ".$key | length" "$file" 2>/dev/null || echo "0")
         else
@@ -209,7 +223,10 @@ yaml_array_get() {
     local default="$3"
     local result=""
 
-    if command -v yq &> /dev/null; then
+    # For JSON files, use jq (more reliable)
+    if [[ "$file" == *.json ]] && command -v jq &> /dev/null; then
+        result=$(jq -r "$path // \"$default\"" "$file" 2>/dev/null)
+    elif command -v yq &> /dev/null; then
         if yq --version 2>&1 | grep -q "mikefarah"; then
             result=$(yq eval "$path // \"$default\"" "$file" 2>/dev/null)
         else
@@ -1274,6 +1291,391 @@ refresh() {
     status
 }
 
+# ============================================================================
+# DECLARATIVE DEPLOY (dp-020)
+# Applies changes from .deploy/manifest.json
+# ============================================================================
+
+MANIFEST_FILE=".deploy/manifest.json"
+
+# Validate manifest JSON against schema
+# Returns: 0 if valid, 1 if invalid
+validate_manifest() {
+    local manifest_file="${1:-$REPO_ROOT/$MANIFEST_FILE}"
+
+    if [ ! -f "$manifest_file" ]; then
+        error "Manifest not found: $manifest_file"
+    fi
+
+    # Check required fields
+    local version=$(jq -r '.version // empty' "$manifest_file")
+    if [ -z "$version" ] || [ "$version" != "1.0" ]; then
+        error "Invalid or missing manifest version (expected: 1.0, got: $version)"
+    fi
+
+    local changes_count=$(jq '.changes | length' "$manifest_file")
+    if [ "$changes_count" -eq 0 ]; then
+        warn "Manifest has no changes to apply"
+        return 1
+    fi
+
+    log "Manifest valid: $changes_count change(s) declared"
+    return 0
+}
+
+# Handle stream declaration
+# Args: $1 = declaration JSON
+# Note: Currently syncs all streams when any stream is declared.
+# TODO: Add individual stream sync support to sync-streams-to-etcd.sh
+handle_stream() {
+    local declaration="$1"
+    local stream_id=$(echo "$declaration" | jq -r '.id')
+    local action=$(echo "$declaration" | jq -r '.action // "update"')
+    local reload=$(echo "$declaration" | jq -r '.reload // "none"')
+
+    log "Stream: $stream_id (action=$action, reload=$reload)"
+
+    local config_file="$REPO_ROOT/config/base/streams/$stream_id/config.json"
+    local config_yaml="$REPO_ROOT/config/base/streams/$stream_id/config.yaml"
+
+    if [ ! -f "$config_file" ] && [ ! -f "$config_yaml" ]; then
+        error "Stream config not found: $config_file or $config_yaml"
+    fi
+
+    case "$action" in
+        create|update)
+            # Sync all stream configs to etcd
+            # Note: Individual stream sync not yet supported
+            log "  Syncing all streams to etcd..."
+            ETCD_CONTAINER=$ETCD_CONTAINER "$REPO_ROOT/scripts/sync-streams-to-etcd.sh" --mode docker
+            ;;
+        validate-only)
+            log "  Validation only - no changes applied"
+            ;;
+        *)
+            error "Unknown stream action: $action"
+            ;;
+    esac
+
+    return 0
+}
+
+# Handle silver-table declaration
+# Args: $1 = declaration JSON
+handle_silver_table() {
+    local declaration="$1"
+    local stream_id=$(echo "$declaration" | jq -r '.stream_id')
+    local action=$(echo "$declaration" | jq -r '.action // "sync"')
+
+    log "Silver Table: $stream_id (action=$action)"
+
+    # Check if ddl-generator functions are available
+    if ! type generate_silver_ddl &>/dev/null; then
+        error "DDL generator not loaded. Check ddl-generator.sh"
+    fi
+
+    # Set DDL_REPO_ROOT for ddl-generator.sh
+    export DDL_REPO_ROOT="$REPO_ROOT"
+
+    case "$action" in
+        sync)
+            # Generate DDL (mode=full)
+            local ddl=$(generate_silver_ddl "$stream_id" "full" 2>&1)
+
+            if echo "$ddl" | grep -q "^-- SKIP"; then
+                warn "  Skipped: silver_etl not enabled or no target_table"
+                return 0
+            fi
+
+            if echo "$ddl" | grep -q "^-- ERROR"; then
+                error "DDL generation failed: $ddl"
+            fi
+
+            # Apply DDL to TimescaleDB
+            log "  Applying DDL to TimescaleDB..."
+            echo "$ddl" | dcx timescaledb psql -U postgres -d ndp
+            ;;
+        validate-only)
+            log "  Validation only - DDL generation test"
+            generate_silver_ddl "$stream_id" "full" > /dev/null
+            ;;
+        *)
+            error "Unknown silver-table action: $action"
+            ;;
+    esac
+
+    return 0
+}
+
+# Handle migration declaration
+# Args: $1 = declaration JSON
+handle_migration() {
+    local declaration="$1"
+    local migration_file=$(echo "$declaration" | jq -r '.file')
+
+    log "Migration: $migration_file"
+
+    local full_path="$REPO_ROOT/$migration_file"
+    if [ ! -f "$full_path" ]; then
+        error "Migration file not found: $full_path"
+    fi
+
+    # Apply migration to TimescaleDB
+    log "  Applying migration..."
+    dcx timescaledb psql -U postgres -d ndp -f "$full_path"
+
+    return 0
+}
+
+# Handle dimensions declaration
+# Args: $1 = declaration JSON
+handle_dimensions() {
+    local declaration="$1"
+    local action=$(echo "$declaration" | jq -r '.action // "sync"')
+
+    log "Dimensions: (action=$action)"
+
+    case "$action" in
+        sync)
+            sync_dimensions
+            ;;
+        *)
+            error "Unknown dimensions action: $action"
+            ;;
+    esac
+
+    return 0
+}
+
+# Handle dictionary declaration
+# Args: $1 = declaration JSON
+handle_dictionary() {
+    local declaration="$1"
+    local action=$(echo "$declaration" | jq -r '.action // "sync"')
+
+    log "Dictionary: (action=$action)"
+
+    case "$action" in
+        sync)
+            sync_to_data_dictionary
+            ;;
+        *)
+            error "Unknown dictionary action: $action"
+            ;;
+    esac
+
+    return 0
+}
+
+# Handle container build declaration
+# Args: $1 = declaration JSON
+handle_container_build() {
+    local declaration="$1"
+    local target=$(echo "$declaration" | jq -r '.target')
+    local no_cache=$(echo "$declaration" | jq -r '.no_cache // false')
+
+    log "Container Build: $target (no_cache=$no_cache)"
+
+    local build_args=""
+    if [ "$no_cache" = "true" ]; then
+        build_args="--no-cache"
+    fi
+
+    case "$target" in
+        air-quality-app)
+            dc build $build_args air-quality-app
+            ;;
+        ndp-mcp-server)
+            dc build $build_args ndp-mcp-server
+            ;;
+        silver-etl)
+            dc --profile silver build $build_args silver-etl
+            ;;
+        grafana)
+            dc build $build_args grafana
+            ;;
+        *)
+            error "Unknown container target: $target"
+            ;;
+    esac
+
+    return 0
+}
+
+# Handle container restart declaration
+# Args: $1 = declaration JSON
+handle_container_restart() {
+    local declaration="$1"
+    local target=$(echo "$declaration" | jq -r '.target')
+
+    log "Container Restart: $target"
+
+    case "$target" in
+        air-quality-app)
+            dc restart air-quality-app
+            wait_for_health air-quality-app 60
+            ;;
+        ndp-mcp-server)
+            dc restart ndp-mcp-server
+            wait_for_health ndp-mcp-server 60
+            ;;
+        silver-etl)
+            # Silver ETL runs as one-shot, not a daemon - skip restart
+            warn "  silver-etl is not a persistent service, skipping restart"
+            ;;
+        grafana)
+            dc restart grafana
+            wait_for_health grafana 60
+            ;;
+        *)
+            error "Unknown container target: $target"
+            ;;
+    esac
+
+    return 0
+}
+
+# Main apply function - orchestrates 9-phase deployment
+# Args: $1 = manifest file (optional, defaults to .deploy/manifest.json)
+apply() {
+    local manifest_file="${1:-$REPO_ROOT/$MANIFEST_FILE}"
+
+    log "=========================================="
+    log "Declarative Deploy (dp-020)"
+    log "Manifest: $manifest_file"
+    log "=========================================="
+
+    # Phase 1: Validation
+    log ""
+    log "Phase 1: Validation"
+    log "-------------------"
+
+    if ! validate_manifest "$manifest_file"; then
+        return 0  # No changes to apply
+    fi
+
+    # Wait for infrastructure
+    log "Checking infrastructure readiness..."
+    until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+        warn "Waiting for TimescaleDB to be ready..."
+        sleep 2
+    done
+    until dcx etcd etcdctl endpoint health >/dev/null 2>&1; do
+        warn "Waiting for etcd to be ready..."
+        sleep 2
+    done
+    log "Infrastructure ready"
+
+    # Parse manifest into phases
+    local container_builds=$(jq -c '[.changes[] | select(.type == "container" and .action == "build")]' "$manifest_file")
+    local migrations=$(jq -c '[.changes[] | select(.type == "migration")]' "$manifest_file")
+    local silver_tables=$(jq -c '[.changes[] | select(.type == "silver-table")]' "$manifest_file")
+    local streams=$(jq -c '[.changes[] | select(.type == "stream")]' "$manifest_file")
+    local dimensions=$(jq -c '[.changes[] | select(.type == "dimensions")]' "$manifest_file")
+    local dictionary=$(jq -c '[.changes[] | select(.type == "dictionary")]' "$manifest_file")
+    local container_restarts=$(jq -c '[.changes[] | select(.type == "container" and .action == "restart")]' "$manifest_file")
+
+    # Phase 2: Container Builds
+    local build_count=$(echo "$container_builds" | jq 'length')
+    if [ "$build_count" -gt 0 ]; then
+        log ""
+        log "Phase 2: Container Builds ($build_count)"
+        log "-------------------"
+        echo "$container_builds" | jq -c '.[]' | while read -r decl; do
+            handle_container_build "$decl"
+        done
+    fi
+
+    # Phase 3: Migrations
+    local migration_count=$(echo "$migrations" | jq 'length')
+    if [ "$migration_count" -gt 0 ]; then
+        log ""
+        log "Phase 3: Migrations ($migration_count)"
+        log "-------------------"
+        echo "$migrations" | jq -c '.[]' | while read -r decl; do
+            handle_migration "$decl"
+        done
+    fi
+
+    # Phase 4: Silver Tables
+    local silver_count=$(echo "$silver_tables" | jq 'length')
+    if [ "$silver_count" -gt 0 ]; then
+        log ""
+        log "Phase 4: Silver Tables ($silver_count)"
+        log "-------------------"
+        echo "$silver_tables" | jq -c '.[]' | while read -r decl; do
+            handle_silver_table "$decl"
+        done
+    fi
+
+    # Phase 5: Streams
+    local stream_count=$(echo "$streams" | jq 'length')
+    if [ "$stream_count" -gt 0 ]; then
+        log ""
+        log "Phase 5: Streams ($stream_count)"
+        log "-------------------"
+        echo "$streams" | jq -c '.[]' | while read -r decl; do
+            handle_stream "$decl"
+        done
+    fi
+
+    # Phase 6: Dimensions
+    local dim_count=$(echo "$dimensions" | jq 'length')
+    if [ "$dim_count" -gt 0 ]; then
+        log ""
+        log "Phase 6: Dimensions ($dim_count)"
+        log "-------------------"
+        echo "$dimensions" | jq -c '.[]' | while read -r decl; do
+            handle_dimensions "$decl"
+        done
+    fi
+
+    # Phase 7: Dictionary
+    local dict_count=$(echo "$dictionary" | jq 'length')
+    if [ "$dict_count" -gt 0 ]; then
+        log ""
+        log "Phase 7: Dictionary ($dict_count)"
+        log "-------------------"
+        echo "$dictionary" | jq -c '.[]' | while read -r decl; do
+            handle_dictionary "$decl"
+        done
+    fi
+
+    # Phase 8: Container Restarts
+    local restart_count=$(echo "$container_restarts" | jq 'length')
+    if [ "$restart_count" -gt 0 ]; then
+        log ""
+        log "Phase 8: Container Restarts ($restart_count)"
+        log "-------------------"
+        echo "$container_restarts" | jq -c '.[]' | while read -r decl; do
+            handle_container_restart "$decl"
+        done
+    fi
+
+    # Phase 9: Device State Update
+    log ""
+    log "Phase 9: Device State Update"
+    log "-------------------"
+    local deployed_version=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    local deployed_at=$(date -Iseconds)
+
+    log "  Version: $deployed_version"
+    log "  Time: $deployed_at"
+
+    # Update device state files (if writable)
+    if [ -d "/var/ndp" ]; then
+        echo "$deployed_version" > /var/ndp/deployed-version 2>/dev/null || true
+        echo "$deployed_at" > /var/ndp/deployed-at 2>/dev/null || true
+    fi
+
+    log ""
+    log "=========================================="
+    log "Declarative Deploy Complete!"
+    log "=========================================="
+
+    return 0
+}
+
 # Main
 case "${1:-deploy}" in
     -h|--help|help)
@@ -1304,6 +1706,10 @@ case "${1:-deploy}" in
         echo "  init-streams    - Initialize stream configurations in etcd"
         echo "  list-streams    - List configured streams from etcd"
         echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
+        echo ""
+        echo "Declarative Deploy (dp-020):"
+        echo "  apply [file]    - Apply changes from manifest (default: .deploy/manifest.json)"
+        echo "                    Orchestrates: builds, migrations, DDL, streams, dictionary"
         echo ""
         echo "Dimension Commands:"
         echo "  sync-dimensions      - Sync dimension tables from config/base/dimensions/"
@@ -1379,6 +1785,10 @@ case "${1:-deploy}" in
         ;;
     sync-dictionary)
         sync_to_data_dictionary
+        ;;
+    apply)
+        shift  # remove 'apply' from args
+        apply "$@"
         ;;
     sync-dimensions)
         sync_dimensions

@@ -1,0 +1,6 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "description": "Production deployment manifest - edit this for each release",
+  "changes": []
+}
