@@ -65,33 +65,6 @@
     "batch_timeout_secs": 60,
     "buffer_capacity": 100
   },
-  "entity_schemas": [
-    {
-      "schema_name": "ha-binary-sensor",
-      "description": "Home Assistant binary sensor state events (windows, doors)",
-      "device_class": "binary_sensor",
-      "attributes": [
-        {
-          "name": "state",
-          "type": "string",
-          "unit": null,
-          "description": "Binary state (on=open, off=closed)",
-          "nullable": false,
-          "enum": [
-            "on",
-            "off"
-          ]
-        },
-        {
-          "name": "source_entity_id",
-          "type": "string",
-          "unit": null,
-          "description": "Original Home Assistant entity identifier",
-          "nullable": true
-        }
-      ]
-    }
-  ],
   "silver_etl": {
     "enabled": true,
     "target_table": "silver.state_events",
@@ -174,5 +147,5 @@
       "critical": "72 hours"
     }
   },
-  "config_version": "1.1"
+  "config_version": 2
 }

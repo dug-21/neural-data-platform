@@ -11,8 +11,8 @@
       "name": "pm01",
       "json_path": "pm01",
       "type": "float",
-      "unit": "\u00b5g/m\u00b3",
-      "description": "PM1.0 raw mass concentration of particles <= 1\u00b5m diameter",
+      "unit": "µg/m³",
+      "description": "PM1.0 raw mass concentration of particles <= 1µm diameter",
       "nullable": true,
       "range": [
         0,
@@ -23,7 +23,7 @@
       "name": "pm01_standard",
       "json_path": "pm01Standard",
       "type": "float",
-      "unit": "\u00b5g/m\u00b3",
+      "unit": "µg/m³",
       "description": "PM1.0 standard mass concentration (CF=1 standard particle)",
       "nullable": true,
       "range": [
@@ -47,8 +47,8 @@
       "name": "pm02",
       "json_path": "pm02",
       "type": "float",
-      "unit": "\u00b5g/m\u00b3",
-      "description": "PM2.5 raw mass concentration of particles <= 2.5\u00b5m diameter",
+      "unit": "µg/m³",
+      "description": "PM2.5 raw mass concentration of particles <= 2.5µm diameter",
       "nullable": false,
       "range": [
         0,
@@ -59,7 +59,7 @@
       "name": "pm02_standard",
       "json_path": "pm02Standard",
       "type": "float",
-      "unit": "\u00b5g/m\u00b3",
+      "unit": "µg/m³",
       "description": "PM2.5 standard mass concentration (CF=1 standard particle)",
       "nullable": true,
       "range": [
@@ -71,7 +71,7 @@
       "name": "pm02_compensated",
       "json_path": "pm02Compensated",
       "type": "float",
-      "unit": "\u00b5g/m\u00b3",
+      "unit": "µg/m³",
       "description": "PM2.5 corrected/calibrated value adjusted for humidity and environmental factors",
       "nullable": true,
       "range": [
@@ -95,8 +95,8 @@
       "name": "pm10",
       "json_path": "pm10",
       "type": "float",
-      "unit": "\u00b5g/m\u00b3",
-      "description": "PM10 raw mass concentration of particles <= 10\u00b5m diameter. Less reliable than PM2.5 on Plantower sensors.",
+      "unit": "µg/m³",
+      "description": "PM10 raw mass concentration of particles <= 10µm diameter. Less reliable than PM2.5 on Plantower sensors.",
       "nullable": true,
       "range": [
         0,
@@ -107,7 +107,7 @@
       "name": "pm10_standard",
       "json_path": "pm10Standard",
       "type": "float",
-      "unit": "\u00b5g/m\u00b3",
+      "unit": "µg/m³",
       "description": "PM10 standard mass concentration (CF=1 standard particle)",
       "nullable": true,
       "range": [
@@ -132,7 +132,7 @@
       "json_path": "pm003Count",
       "type": "float",
       "unit": "count/0.1L",
-      "description": "Count of particles >= 0.3\u00b5m diameter per 0.1L air. Reveals pollution events mass-based PM may miss.",
+      "description": "Count of particles >= 0.3µm diameter per 0.1L air. Reveals pollution events mass-based PM may miss.",
       "nullable": true,
       "range": [
         0,
@@ -144,7 +144,7 @@
       "json_path": "pm005Count",
       "type": "float",
       "unit": "count/0.1L",
-      "description": "Count of particles >= 0.5\u00b5m diameter per 0.1L air",
+      "description": "Count of particles >= 0.5µm diameter per 0.1L air",
       "nullable": true,
       "range": [
         0,
@@ -156,7 +156,7 @@
       "json_path": "pm50Count",
       "type": "float",
       "unit": "count/0.1L",
-      "description": "Count of particles >= 5.0\u00b5m diameter per 0.1L air",
+      "description": "Count of particles >= 5.0µm diameter per 0.1L air",
       "nullable": true,
       "range": [
         0,
@@ -179,7 +179,7 @@
       "name": "atmp",
       "json_path": "atmp",
       "type": "float",
-      "unit": "\u00b0C",
+      "unit": "°C",
       "description": "Temperature raw reading near sensor. For indoor monitors, reflects ambient room temperature well.",
       "nullable": true,
       "range": [
@@ -191,7 +191,7 @@
       "name": "atmp_compensated",
       "json_path": "atmpCompensated",
       "type": "float",
-      "unit": "\u00b0C",
+      "unit": "°C",
       "description": "Temperature corrected/calibrated value adjusted for sensor and environmental factors.",
       "nullable": true,
       "range": [
@@ -393,188 +393,6 @@
     "batch_timeout_secs": 5,
     "buffer_capacity": 1000
   },
-  "entity_schemas": [
-    {
-      "schema_name": "airgradient",
-      "description": "AirGradient indoor air quality sensors (AG One I-9PSL, AG Pro). Based on official AirGradient parameter definitions.",
-      "device_class": "air_quality",
-      "time_resolution": "1-min (Wi-Fi), 3-min (Cellular)",
-      "attributes": [
-        {
-          "name": "pm01",
-          "type": "float",
-          "unit": "\u00b5g/m\u00b3",
-          "description": "PM1.0 raw mass concentration of particles <= 1\u00b5m",
-          "nullable": true,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "pm02",
-          "type": "float",
-          "unit": "\u00b5g/m\u00b3",
-          "description": "PM2.5 raw mass concentration of inhalable particles <= 2.5\u00b5m",
-          "nullable": false,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "pm02Compensated",
-          "type": "float",
-          "unit": "\u00b5g/m\u00b3",
-          "description": "PM2.5 corrected value adjusted using calibration formula",
-          "nullable": true,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "pm10",
-          "type": "float",
-          "unit": "\u00b5g/m\u00b3",
-          "description": "PM10 raw mass concentration. Plantower sensors optimized for PM2.5, making PM10 less reliable.",
-          "nullable": true,
-          "range": [
-            0,
-            2000
-          ]
-        },
-        {
-          "name": "pm003Count",
-          "type": "float",
-          "unit": "count/0.1L",
-          "description": "Count of particles >= 0.3\u00b5m. Reveals pollution events mass-based PM may miss.",
-          "nullable": true,
-          "range": [
-            0,
-            100000
-          ]
-        },
-        {
-          "name": "rco2",
-          "type": "float",
-          "unit": "ppm",
-          "description": "CO2 raw concentration. PPM reflects volumetric gas concentration from human activity.",
-          "nullable": true,
-          "range": [
-            380,
-            10000
-          ]
-        },
-        {
-          "name": "atmp",
-          "type": "float",
-          "unit": "\u00b0C",
-          "description": "Temperature raw. For indoor monitors, reflects ambient room temperature well.",
-          "nullable": true,
-          "range": [
-            -40,
-            85
-          ]
-        },
-        {
-          "name": "atmpCompensated",
-          "type": "float",
-          "unit": "\u00b0C",
-          "description": "Temperature corrected for sensor and environmental factors.",
-          "nullable": true,
-          "range": [
-            -40,
-            85
-          ]
-        },
-        {
-          "name": "rhum",
-          "type": "float",
-          "unit": "%",
-          "description": "Relative humidity raw. Water vapor content relative to air saturation.",
-          "nullable": true,
-          "range": [
-            0,
-            100
-          ]
-        },
-        {
-          "name": "rhumCompensated",
-          "type": "float",
-          "unit": "%",
-          "description": "Relative humidity corrected for sensor and environmental factors.",
-          "nullable": true,
-          "range": [
-            0,
-            100
-          ]
-        },
-        {
-          "name": "tvocIndex",
-          "type": "int",
-          "unit": "index (1-500)",
-          "description": "TVOC index. 100=baseline, >100=more VOCs, <100=fewer VOCs vs 24h baseline. Adapts gain based on environment.",
-          "nullable": true,
-          "range": [
-            1,
-            500
-          ]
-        },
-        {
-          "name": "tvocRaw",
-          "type": "float",
-          "unit": "log(R)",
-          "description": "TVOC raw log resistance from MOx sensor. Reducing gases lower resistance.",
-          "nullable": true,
-          "range": [
-            0,
-            100000
-          ]
-        },
-        {
-          "name": "noxIndex",
-          "type": "int",
-          "unit": "index (1-500)",
-          "description": "NOx index. 1=baseline, >1=more oxidizing gases. No gain adaptation unlike TVOC.",
-          "nullable": true,
-          "range": [
-            1,
-            500
-          ]
-        },
-        {
-          "name": "noxRaw",
-          "type": "float",
-          "unit": "log(R)",
-          "description": "NOx raw log resistance from MOx sensor. Oxidizing gases increase resistance.",
-          "nullable": true,
-          "range": [
-            0,
-            100000
-          ]
-        },
-        {
-          "name": "wifi",
-          "type": "int",
-          "unit": "dBm",
-          "description": "WiFi signal strength for connectivity monitoring.",
-          "nullable": true,
-          "range": [
-            -100,
-            0
-          ]
-        },
-        {
-          "name": "boot",
-          "type": "int",
-          "unit": "count",
-          "description": "Device boot counter for reliability monitoring.",
-          "nullable": true
-        }
-      ]
-    }
-  ],
   "silver_etl": {
     "enabled": true,
     "target_table": "silver.air_quality_observations",
@@ -776,5 +594,5 @@
       "lag_interval": "5 minutes"
     }
   },
-  "config_version": "1.1"
+  "config_version": 2
 }

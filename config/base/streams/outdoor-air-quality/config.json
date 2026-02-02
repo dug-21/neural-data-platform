@@ -205,113 +205,6 @@
     "batch_timeout_secs": 30,
     "buffer_capacity": 500
   },
-  "entity_schemas": [
-    {
-      "schema_name": "airnow",
-      "description": "Outdoor air quality data from OpenWeatherMap Air Pollution API",
-      "attributes": [
-        {
-          "name": "aqi",
-          "type": "float",
-          "unit": "1-5_scale",
-          "description": "Air Quality Index (1=Good, 5=Very Poor)",
-          "nullable": false,
-          "range": [
-            1,
-            5
-          ]
-        },
-        {
-          "name": "co",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Carbon Monoxide concentration",
-          "nullable": true,
-          "range": [
-            0,
-            50000
-          ]
-        },
-        {
-          "name": "no",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Nitrogen Monoxide concentration",
-          "nullable": true,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "no2",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Nitrogen Dioxide concentration",
-          "nullable": true,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "o3",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Ozone concentration",
-          "nullable": true,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "so2",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Sulfur Dioxide concentration",
-          "nullable": true,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "pm2_5",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Particulate Matter 2.5 micrometers",
-          "nullable": false,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "pm10",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Particulate Matter 10 micrometers",
-          "nullable": true,
-          "range": [
-            0,
-            1000
-          ]
-        },
-        {
-          "name": "nh3",
-          "type": "float",
-          "unit": "ug/m3",
-          "description": "Ammonia concentration",
-          "nullable": true,
-          "range": [
-            0,
-            200
-          ]
-        }
-      ]
-    }
-  ],
   "silver_etl": {
     "enabled": true,
     "target_table": "silver.outdoor_air_quality",
@@ -556,5 +449,5 @@
       "lag_interval": "5 minutes"
     }
   },
-  "config_version": "1.1"
+  "config_version": 2
 }
