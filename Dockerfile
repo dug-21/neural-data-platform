@@ -22,6 +22,7 @@ COPY domains ./domains
 COPY config-client ./config-client
 COPY config ./config
 COPY crates ./crates
+COPY tools ./tools
 
 # Build with cache mounts for incremental compilation
 # - /app/target: compiled artifacts persist across builds
