@@ -1,16 +1,16 @@
-# Roadmap: Current State to V2.0
+# Roadmap: v1.0 to v2.0
 
 > **Created:** 2026-02-03
-> **Current State:** Bronze → Silver via config
-> **Target:** Cross-domain edge intelligence
+> **Current State:** v1.0.0 - Bronze → Silver via declarative config
+> **Target:** v2.0 - Cross-domain edge intelligence
 
 ---
 
 ## The Journey
 
 ```
-CURRENT     V0.5        V1.0         V1.5         V2.0
-───────     ────        ────         ────         ────
+v1.0.0      v1.1        v1.2         v1.3         v2.0
+──────      ────        ────         ────         ────
 Bronze  →   Gold    →   Discovery →  Prediction → Cross-Domain
 Silver      Features    Correlation  Actions      Intelligence
 Config      Objectives  Causation    Learning     Multi-Domain
@@ -22,15 +22,15 @@ Config      Objectives  Causation    Learning     Multi-Domain
 
 | Version | Focus | What It Enables |
 |---------|-------|-----------------|
-| **Current** | Data pipeline | Bronze → Silver working, config-driven |
-| **V0.5** | Gold Layer | ML-ready features, stream classification, declared objectives |
-| **V1.0** | Discovery | Automatic correlation detection, no manual relationship definition |
-| **V1.5** | Intelligence | Causal validation, predictions, model selection, actions |
-| **V2.0** | Multi-Domain | Financial adapter, cross-domain correlation discovery |
+| **v1.0.0** | Data pipeline | Bronze → Silver working, declarative deployment ✅ |
+| **v1.1** | Gold Layer | ML-ready features, stream classification, declared objectives |
+| **v1.2** | Discovery | Automatic correlation detection, no manual relationship definition |
+| **v1.3** | Intelligence | Causal validation, predictions, model selection, actions |
+| **v2.0** | Multi-Domain | Financial adapter, cross-domain correlation discovery |
 
 ---
 
-## V0.5: Gold Layer Foundation
+## v1.1: Gold Layer Foundation
 
 **Build:** Feature computation, stream classification, objectives framework
 
@@ -38,15 +38,17 @@ Config      Objectives  Causation    Learning     Multi-Domain
 
 ---
 
-## V1.0: Discovery Engine
+## v1.2: Discovery Engine
 
 **Build:** Transition tracking, response detection, correlation aggregation, candidate promotion
 
 **Outcome:** System discovers "window open correlates with CO2 drop" without being told
 
+**This is the proof point.**
+
 ---
 
-## V1.5: Prediction & Actions
+## v1.3: Prediction & Actions
 
 **Build:** Causal validation, model zoo, tournament/seeded selection, action scoring, outcome tracking
 
@@ -54,7 +56,7 @@ Config      Objectives  Causation    Learning     Multi-Domain
 
 ---
 
-## V2.0: Cross-Domain Intelligence
+## v2.0: Cross-Domain Intelligence
 
 **Build:** Financial domain adapter (FRED, Alpaca, Finnhub), seeded models (HMM regime, indicators), cross-domain scanner
 
@@ -66,10 +68,10 @@ Config      Objectives  Causation    Learning     Multi-Domain
 
 | Version | Weeks | Cumulative |
 |---------|-------|------------|
-| V0.5 | 5 | 5 |
-| V1.0 | 6 | 11 |
-| V1.5 | 11 | 22 |
-| V2.0 | 11 | 33 |
+| v1.1 | 5 | 5 |
+| v1.2 | 6 | 11 |
+| v1.3 | 11 | 22 |
+| v2.0 | 11 | 33 |
 
 **~8 months to full vision**
 
@@ -78,11 +80,11 @@ Config      Objectives  Causation    Learning     Multi-Domain
 ## Dependencies
 
 ```
-V0.5 ──→ V1.0 ──→ V1.5
+v1.1 ──→ v1.2 ──→ v1.3
   │                 │
-  └──→ V2.0 Financial (can parallel after V0.5 pattern established)
+  └──→ v2.0 Financial (can parallel after v1.1 pattern established)
               │
-              └──→ V2.0 Cross-Domain (needs both domains)
+              └──→ v2.0 Cross-Domain (needs both domains)
 ```
 
 ---
@@ -91,11 +93,11 @@ V0.5 ──→ V1.0 ──→ V1.5
 
 | At Version | Decision |
 |------------|----------|
-| V0.5 | Gold layer architecture (continuous aggregates vs materialized views) |
-| V1.0 | Correlation thresholds (tune based on real data) |
-| V1.5 | Neural causal validation vs declarative rules |
-| V1.5 | Model selection strategy (tournament vs seeded vs hybrid) |
-| V2.0 | Additional domains to support |
+| v1.1 | Gold layer architecture (continuous aggregates vs materialized views) |
+| v1.2 | Correlation thresholds (tune based on real data) |
+| v1.3 | Neural causal validation vs declarative rules |
+| v1.3 | Model selection strategy (tournament vs seeded vs hybrid) |
+| v2.0 | Additional domains to support |
 
 ---
 
@@ -103,10 +105,10 @@ V0.5 ──→ V1.0 ──→ V1.5
 
 | Version | Proof Point |
 |---------|-------------|
-| V0.5 | Features computed automatically for all streams |
-| V1.0 | Window→CO2 discovered without manual configuration |
-| V1.5 | Predictions trigger correct actions >80% of time |
-| V2.0 | Financial regime detection + air quality on same device |
+| v1.1 | Features computed automatically for all streams |
+| v1.2 | Window→CO2 discovered without manual configuration |
+| v1.3 | Predictions trigger correct actions >80% of time |
+| v2.0 | Financial regime detection + air quality on same device |
 
 ---
 
