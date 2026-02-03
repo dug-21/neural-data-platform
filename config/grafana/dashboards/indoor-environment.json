@@ -338,10 +338,73 @@
       }
     },
     {
+      "id": 103,
+      "type": "row",
+      "title": "Door Status",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Door Sensors - Last Known State",
+      "description": "Current state of window/door sensors from Home Assistant",
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 4},
+      "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
+      "targets": [
+        {
+          "rawSql": "-- DOOR SENSOR STATUS\n-- Shows last known state and time for each door sensor\n-- Source: state_events from Home Assistant MQTT\n\nWITH latest_states AS (\n    SELECT DISTINCT ON (source_entity_id)\n        source_entity_id,\n        state,\n        event_time\n    FROM silver.state_events\n    WHERE source_entity_id LIKE 'door_%'\n    ORDER BY source_entity_id, event_time DESC\n)\nSELECT\n    REPLACE(INITCAP(REPLACE(source_entity_id, '_', ' ')), 'Door ', '') AS \"Door\",\n    CASE\n        WHEN state = 'on' THEN 'Open'\n        WHEN state = 'off' THEN 'Closed'\n        ELSE state\n    END AS \"State\",\n    TO_CHAR(event_time, 'HH24:MI:SS') AS \"Last Update\",\n    EXTRACT(EPOCH FROM (NOW() - event_time))::INTEGER AS \"age_seconds\"\nFROM latest_states\nORDER BY source_entity_id",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {"type": "auto"}
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "State"},
+            "properties": [
+              {"id": "custom.align", "value": "center"},
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"Open": {"text": "Open", "color": "yellow"}}},
+                  {"type": "value", "options": {"Closed": {"text": "Closed", "color": "green"}}}
+                ]
+              },
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "age_seconds"},
+            "properties": [
+              {"id": "custom.hidden", "value": true}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Door"},
+            "properties": [
+              {"id": "custom.width", "value": 120}
+            ]
+          }
+        ]
+      }
+    },
+    {
       "id": 101,
       "type": "row",
       "title": "Ventilation Decision",
-      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 1},
       "collapsed": false
     },
     {
@@ -349,7 +412,7 @@
       "type": "stat",
       "title": "Ventilation Recommendation",
       "description": "Should you open windows for fresh air?",
-      "gridPos": {"x": 0, "y": 6, "w": 8, "h": 6},
+      "gridPos": {"x": 0, "y": 11, "w": 8, "h": 6},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
@@ -391,7 +454,7 @@
       "type": "table",
       "title": "Ventilation Factors",
       "description": "Status of each factor in the ventilation decision",
-      "gridPos": {"x": 8, "y": 6, "w": 8, "h": 6},
+      "gridPos": {"x": 8, "y": 11, "w": 8, "h": 6},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
@@ -443,7 +506,7 @@
       "type": "table",
       "title": "Upcoming Conditions (Next 6-12h)",
       "description": "Weather forecast summary for planning",
-      "gridPos": {"x": 16, "y": 6, "w": 8, "h": 6},
+      "gridPos": {"x": 16, "y": 11, "w": 8, "h": 6},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
@@ -491,7 +554,7 @@
       "id": 102,
       "type": "row",
       "title": "Trends",
-      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 17, "w": 24, "h": 1},
       "collapsed": false
     },
     {
@@ -499,7 +562,7 @@
       "type": "timeseries",
       "title": "Indoor vs Outdoor Temperature",
       "description": "Temperature comparison over time",
-      "gridPos": {"x": 0, "y": 13, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 18, "w": 12, "h": 8},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
@@ -559,7 +622,7 @@
       "type": "timeseries",
       "title": "Indoor vs Outdoor PM2.5",
       "description": "PM2.5 comparison with indoor/outdoor ratio",
-      "gridPos": {"x": 12, "y": 13, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 18, "w": 12, "h": 8},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
@@ -644,7 +707,7 @@
       "type": "timeseries",
       "title": "CO2 Trend (24h)",
       "description": "CO2 levels with threshold reference lines at 800 and 1200 ppm",
-      "gridPos": {"x": 0, "y": 21, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 26, "w": 12, "h": 8},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
@@ -698,7 +761,7 @@
       "type": "timeseries",
       "title": "Humidity Comparison",
       "description": "Indoor vs outdoor humidity with 60% indoor threshold",
-      "gridPos": {"x": 12, "y": 21, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 26, "w": 12, "h": 8},
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
