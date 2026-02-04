@@ -9,7 +9,9 @@ This document describes the declarative deployment system for the Neural Data Pl
 - [Declaration Types](#declaration-types)
   - [stream](#stream)
   - [silver-table](#silver-table)
+  - [tool](#tool)
   - [migration](#migration)
+  - [gold-tables](#gold-tables)
   - [dimensions](#dimensions)
   - [dictionary](#dictionary)
   - [container](#container)
@@ -151,6 +153,40 @@ Generates and applies Silver layer DDL from stream configuration.
 
 ---
 
+### tool
+
+Builds a Rust CLI tool required for deployment (fe-001 Phase B).
+
+```json
+{
+  "type": "tool",
+  "id": "ndp-gold-ddl",
+  "action": "build",
+  "profile": "release"
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `type` | string | **Yes** | - | Must be `"tool"` |
+| `id` | string | **Yes** | - | Tool identifier (see supported tools) |
+| `action` | enum | No | `"build"` | Only `"build"` is supported |
+| `profile` | enum | No | `"release"` | Build profile: `"release"` or `"debug"` |
+
+**Supported Tools:**
+
+| Tool ID | Description | Source |
+|---------|-------------|--------|
+| `ndp-gold-ddl` | Gold layer DDL generator | `tools/ndp-gold-ddl/` |
+| `ndp-validate` | Configuration validator | `tools/ndp-validate/` |
+
+**Notes:**
+- Tool builds run in Phase 2.5, after Container Builds but before Migrations
+- Ensures tools are available before Gold Tables phase (which depends on ndp-gold-ddl)
+- Uses `cargo build` with the specified profile
+
+---
+
 ### migration
 
 Executes a SQL migration file.
@@ -158,19 +194,53 @@ Executes a SQL migration file.
 ```json
 {
   "type": "migration",
-  "file": "migrations/002-add-forecast-table.sql"
+  "file": "deploy/pi/init-scripts/004_stream_classification.sql"
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | **Yes** | Must be `"migration"` |
-| `file` | string | **Yes** | Path to SQL file (must be in `migrations/` directory) |
+| `file` | string | **Yes** | Path to SQL file (relative to repository root) |
 
 **Notes:**
 - Migrations run in declaration order
 - File path is relative to repository root
-- Pattern must match: `migrations/*.sql`
+- Common locations: `migrations/`, `deploy/pi/init-scripts/`
+
+---
+
+### gold-tables
+
+Generates and applies Gold layer DDL from stream configuration (fe-001).
+
+```json
+{
+  "type": "gold-tables",
+  "stream_id": "air-quality",
+  "action": "sync"
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `type` | string | **Yes** | - | Must be `"gold-tables"` |
+| `stream_id` | string | **Yes** | - | Stream ID with `gold_etl` configuration |
+| `action` | enum | No | `"sync"` | `"sync"` or `"recreate"` |
+
+**Actions:**
+- `sync` - Create if not exists (idempotent)
+- `recreate` - Drop and recreate
+
+**Generated DDL includes:**
+- `CREATE MATERIALIZED VIEW` with TimescaleDB continuous aggregate
+- Time bucket expressions for each granularity
+- Aggregate functions (mean, std, min, max, p95, etc.)
+- Refresh policies
+
+**Prerequisites:**
+- `ndp-gold-ddl` tool must be built (use `tool` declaration)
+- Stream config must have `gold_etl.enabled: true`
 
 ---
 
@@ -256,23 +326,28 @@ Builds or restarts Docker containers.
 
 ## Execution Order
 
-The `apply` command executes declarations in a fixed 9-phase order to ensure dependencies are met:
+The `apply` command executes declarations in a fixed 12-phase order to ensure dependencies are met:
 
 | Phase | Declarations | Description |
 |-------|--------------|-------------|
 | 1 | - | **Validation**: Validate manifest and check infrastructure |
 | 2 | `container` (build) | **Container Builds**: Build new images |
+| 2.5 | `tool` | **Tool Builds**: Build Rust CLI tools (fe-001) |
 | 3 | `migration` | **Migrations**: Run SQL migrations |
 | 4 | `silver-table` | **Silver Tables**: Generate and apply DDL |
-| 5 | `stream` | **Streams**: Sync configs to etcd |
-| 6 | `dimensions` | **Dimensions**: Sync dimension CSVs |
-| 7 | `dictionary` | **Dictionary**: Sync data dictionary |
-| 8 | `container` (restart) | **Container Restarts**: Restart services |
-| 9 | - | **Device State**: Update deployment tracking files |
+| 5 | `gold-tables` | **Gold Tables**: Generate Gold layer continuous aggregates (fe-001) |
+| 6 | `domains` | **Domains**: Generate cross-stream aligned views (fe-001) |
+| 7 | `stream` | **Streams**: Sync configs to etcd |
+| 8 | `dimensions` | **Dimensions**: Sync dimension CSVs |
+| 9 | `dictionary` | **Dictionary**: Sync data dictionary |
+| 10 | `container` (restart) | **Container Restarts**: Restart services |
+| 11 | - | **Device State**: Update deployment tracking files |
 
 **Rationale:**
 - Builds happen early so new code is available for migrations
-- Migrations run before Silver tables (schema dependencies)
+- Tool builds (2.5) happen after container builds but before migrations, ensuring Rust CLI tools are ready
+- Migrations run before Silver/Gold tables (schema dependencies)
+- Gold tables depend on tool builds completing first (ndp-gold-ddl)
 - Streams sync before dictionary (dictionary reads stream configs)
 - Restarts happen last so containers pick up all changes
 

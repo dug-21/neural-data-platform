@@ -45,15 +45,18 @@ Phase B is the first phase that **deploys** Gold layer objects to the Pi. The `n
    {"type": "tool", "id": "ndp-gold-ddl", "action": "build"}
    ```
 
-2. **Add cargo build step** to deploy.sh pre-flight:
-   ```bash
-   # In deploy.sh apply(), before Phase 5 (Gold Tables)
-   cargo build --release -p ndp-gold-ddl
-   ```
+2. ~~Add cargo build step to deploy.sh pre-flight~~ (violates declarative promise)
 
-3. **Include in container build** process
+3. ~~Include in container build process~~ (couples tool builds to container lifecycle)
 
-**Chosen Approach:** Add cargo build step for tools in deploy.sh (simplest, maintains current architecture).
+**Chosen Approach:** Option 1 - Add `tool` declaration type (maintains declarative deployment architecture).
+
+The `tool` declaration allows manifests to specify which Rust CLI tools need to be built before deployment. This runs in Phase 2.5, after Container Builds but before Migrations, ensuring tools are available when Gold Tables phase executes.
+
+Example manifest entry:
+```json
+{"type": "tool", "id": "ndp-gold-ddl", "action": "build", "profile": "release"}
+```
 
 ### Release Preparation (RELEASE-POLICY Compliance)
 

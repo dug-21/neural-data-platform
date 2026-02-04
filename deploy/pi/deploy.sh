@@ -1565,6 +1565,90 @@ handle_container_build() {
 }
 
 # ============================================================================
+# TOOL BUILD HANDLERS (fe-001 Phase B)
+# ============================================================================
+
+# Handle tool declaration - builds Rust CLI tools declaratively
+# Args: $1 = declaration JSON
+# Example: {"type": "tool", "id": "ndp-gold-ddl", "action": "build"}
+#
+# Supported tools:
+#   - ndp-gold-ddl: Gold layer DDL generator
+#   - ndp-validate: Configuration validator
+#
+# This handler maintains the declarative deployment promise by allowing
+# tool builds to be specified in manifests rather than hardcoded in deploy.sh
+handle_tool() {
+    local declaration="$1"
+    local tool_id=$(echo "$declaration" | jq -r '.id')
+    local action=$(echo "$declaration" | jq -r '.action // "build"')
+    local profile=$(echo "$declaration" | jq -r '.profile // "release"')
+
+    log "Tool Build: $tool_id (action=$action, profile=$profile)"
+
+    # Validate tool_id is provided
+    if [ -z "$tool_id" ] || [ "$tool_id" = "null" ]; then
+        error "Tool declaration missing 'id' field"
+        return 1
+    fi
+
+    # Validate action
+    if [ "$action" != "build" ]; then
+        error "Tool declaration has unsupported action: $action (only 'build' supported)"
+        return 1
+    fi
+
+    # Map tool_id to Cargo package name and binary location
+    local cargo_package=""
+    local binary_name=""
+    case "$tool_id" in
+        ndp-gold-ddl)
+            cargo_package="ndp-gold-ddl"
+            binary_name="ndp-gold-ddl"
+            ;;
+        ndp-validate)
+            cargo_package="ndp-validate"
+            binary_name="ndp-validate"
+            ;;
+        *)
+            error "Unknown tool: $tool_id"
+            error "Supported tools: ndp-gold-ddl, ndp-validate"
+            return 1
+            ;;
+    esac
+
+    # Determine build profile
+    local build_args=""
+    local target_dir=""
+    if [ "$profile" = "release" ]; then
+        build_args="--release"
+        target_dir="release"
+    else
+        target_dir="debug"
+    fi
+
+    # Build the tool
+    log "  Building $cargo_package with profile=$profile..."
+    if ! cargo build $build_args --manifest-path "$REPO_ROOT/tools/$cargo_package/Cargo.toml" 2>&1 | while read -r line; do
+        # Show cargo output with indentation
+        echo "    $line"
+    done; then
+        error "Failed to build $tool_id"
+        return 1
+    fi
+
+    # Verify binary was created
+    local binary_path="$REPO_ROOT/target/$target_dir/$binary_name"
+    if [ ! -x "$binary_path" ]; then
+        error "Build succeeded but binary not found at: $binary_path"
+        return 1
+    fi
+
+    log "  ✓ Built: $binary_path"
+    return 0
+}
+
+# ============================================================================
 # GOLD LAYER HANDLERS (fe-001 Phase A)
 # ============================================================================
 
@@ -1910,6 +1994,7 @@ apply() {
 
     # Parse manifest into phases (handle both old .changes and new .declarations formats)
     local container_builds=$(jq -c '[(.changes // [])[] | select(.type == "container" and .action == "build")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local tool_builds=$(jq -c '[(.changes // [])[] | select(.type == "tool")]' "$manifest_file" 2>/dev/null || echo "[]")
     local migrations=$(jq -c '[(.changes // [])[] | select(.type == "migration")]' "$manifest_file" 2>/dev/null || echo "[]")
     local silver_tables=$(jq -c '[(.changes // [])[] | select(.type == "silver-table")]' "$manifest_file" 2>/dev/null || echo "[]")
     local streams=$(jq -c '[(.changes // [])[] | select(.type == "stream")]' "$manifest_file" 2>/dev/null || echo "[]")
@@ -1926,6 +2011,19 @@ apply() {
         log "-------------------"
         echo "$container_builds" | jq -c '.[]' | while read -r decl; do
             handle_container_build "$decl"
+        done
+    fi
+
+    # Phase 2.5: Tool Builds (fe-001 Phase B)
+    # Builds Rust CLI tools required by later phases (e.g., ndp-gold-ddl for Gold Tables)
+    local tool_count=$(echo "$tool_builds" | jq 'length' 2>/dev/null || echo "0")
+    tool_count=${tool_count:-0}
+    if [ "$tool_count" -gt 0 ]; then
+        log ""
+        log "Phase 2.5: Tool Builds ($tool_count)"
+        log "-------------------"
+        echo "$tool_builds" | jq -c '.[]' | while read -r decl; do
+            handle_tool "$decl"
         done
     fi
 
@@ -1954,8 +2052,11 @@ apply() {
     fi
 
     # Phase 5: Gold Tables (fe-001)
-    # Parse gold-tables from declarations array (new manifest format)
-    local gold_tables=$(jq -c '.declarations["gold-tables"] // []' "$manifest_file" 2>/dev/null || echo "[]")
+    # Parse gold-tables from both .changes array and .declarations format (for backwards compat)
+    local gold_tables_changes=$(jq -c '[(.changes // [])[] | select(.type == "gold-tables")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local gold_tables_decl=$(jq -c '.declarations["gold-tables"] // []' "$manifest_file" 2>/dev/null || echo "[]")
+    # Merge both sources
+    local gold_tables=$(echo "[$gold_tables_changes, $gold_tables_decl]" | jq -c 'flatten')
     local gold_count=$(echo "$gold_tables" | jq 'length' 2>/dev/null || echo "0")
     gold_count=${gold_count:-0}
     if [ "$gold_count" -gt 0 ] && [ "$gold_tables" != "[]" ] && [ "$gold_tables" != "null" ]; then

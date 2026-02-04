@@ -5,9 +5,14 @@
   "description": "Release v1.1.1: Gold Layer Foundation - Phase B (First Stream)",
   "changes": [
     {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build",
+      "profile": "release"
+    },
+    {
       "type": "migration",
-      "id": "004_stream_classification",
-      "action": "apply"
+      "file": "deploy/pi/init-scripts/004_stream_classification.sql"
     },
     {
       "type": "stream",
