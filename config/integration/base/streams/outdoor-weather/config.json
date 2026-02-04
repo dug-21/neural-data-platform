@@ -1,0 +1,141 @@
+{
+  "stream_id": "outdoor-weather",
+  "description": "Integration test stream - outdoor weather (mock data)",
+  "version": "1.0.0",
+  "enabled": true,
+  "retention_days": 1,
+  "compression_after_days": 1,
+  "partitioning_strategy": "daily",
+  "fields": [
+    {
+      "name": "temperature",
+      "type": "float",
+      "nullable": false,
+      "unit": "celsius",
+      "range": [
+        -50.0,
+        60.0
+      ]
+    },
+    {
+      "name": "humidity",
+      "type": "float",
+      "nullable": true,
+      "unit": "percent",
+      "range": [
+        0.0,
+        100.0
+      ]
+    },
+    {
+      "name": "pressure",
+      "type": "float",
+      "nullable": true,
+      "unit": "hpa",
+      "range": [
+        800.0,
+        1200.0
+      ]
+    }
+  ],
+  "sources": [],
+  "storage": {
+    "batch_size": 10,
+    "batch_timeout_secs": 5,
+    "buffer_capacity": 100
+  },
+  "entity_schemas": [
+    {
+      "schema_name": "integration-weather",
+      "description": "Integration test weather data",
+      "attributes": [
+        {
+          "name": "temperature",
+          "type": "float",
+          "unit": "celsius",
+          "description": "Test temperature",
+          "nullable": false,
+          "range": [
+            -50,
+            60
+          ]
+        },
+        {
+          "name": "humidity",
+          "type": "float",
+          "unit": "percent",
+          "description": "Test humidity",
+          "nullable": true,
+          "range": [
+            0,
+            100
+          ]
+        }
+      ]
+    }
+  ],
+  "silver_etl": {
+    "enabled": true,
+    "target_table": "silver.weather_observations",
+    "description": "Integration test weather observations",
+    "grain": "One row per test observation",
+    "timestamp": {
+      "source_field": "timestamp",
+      "target_field": "observation_time",
+      "transform": "microseconds_to_timestamp"
+    },
+    "identity_fields": [
+      {
+        "source": "ndp_id",
+        "target": "ndp_id"
+      }
+    ],
+    "field_mappings": [
+      {
+        "source_path": "raw_payload.main.temp",
+        "target_column": "temperature_c",
+        "type": "double_precision",
+        "unit": "Celsius",
+        "description": "Test temperature",
+        "nullable": false
+      },
+      {
+        "source_path": "raw_payload.main.humidity",
+        "target_column": "humidity_pct",
+        "type": "double_precision",
+        "unit": "%",
+        "description": "Test humidity",
+        "nullable": true
+      }
+    ],
+    "dq_rules": [
+      {
+        "rule": "freshness_check",
+        "field": "observation_time",
+        "max_age": "24 hours",
+        "max_future": "1 hour",
+        "reference": "ingestion_time",
+        "action": "flag"
+      }
+    ],
+    "dq_output": {
+      "enabled": true,
+      "target_column": "dq_flags",
+      "include_rules": true,
+      "include_values": false
+    },
+    "deduplication": {
+      "enabled": true,
+      "key_columns": [
+        "observation_time",
+        "ndp_id"
+      ],
+      "strategy": "upsert"
+    },
+    "incremental": {
+      "enabled": true,
+      "watermark_column": "observation_time",
+      "lag_interval": "5 minutes"
+    }
+  }
+}

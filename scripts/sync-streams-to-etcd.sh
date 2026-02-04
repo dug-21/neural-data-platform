@@ -17,6 +17,10 @@
 #   --help                 Show usage information
 #
 # Environment Variables:
+#   DEPLOY_ENV             pi (default) | integration | development
+#                          - pi/production: uses config/base/streams/
+#                          - integration: uses config/integration/base/streams/
+#                          - development: uses config/development/base/streams/
 #   ETCD_CONTAINER         Override container name for docker mode
 #   ETCD_ENDPOINT          Override endpoint for local mode
 #
@@ -33,12 +37,26 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Defaults
 MODE=""  # Will be auto-detected if not specified
-ETCD_CONTAINER="${ETCD_CONTAINER:-etcd}"
-ETCD_ENDPOINT="${ETCD_ENDPOINT:-http://localhost:2379}"
-CONFIG_DIR="${REPO_ROOT}/config/base/streams"
 VALIDATE=false
 DRY_RUN=false
 VERBOSE=false
+
+# Environment-based configuration
+# DEPLOY_ENV: pi (default/production) | integration | development
+DEPLOY_ENV="${DEPLOY_ENV:-pi}"
+
+# Set CONFIG_DIR and ETCD_CONTAINER based on environment
+# Production (pi): config/base/streams, container=etcd
+# Non-production: config/{env}/base/streams, container={env}-etcd
+if [[ "$DEPLOY_ENV" == "pi" || "$DEPLOY_ENV" == "production" ]]; then
+    CONFIG_DIR="${REPO_ROOT}/config/base/streams"
+    ETCD_CONTAINER="${ETCD_CONTAINER:-etcd}"
+else
+    CONFIG_DIR="${REPO_ROOT}/config/${DEPLOY_ENV}/base/streams"
+    ETCD_CONTAINER="${ETCD_CONTAINER:-${DEPLOY_ENV}-etcd}"
+fi
+
+ETCD_ENDPOINT="${ETCD_ENDPOINT:-http://localhost:2379}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -81,6 +99,8 @@ Options:
   --help                 Show this help message
 
 Environment Variables:
+  DEPLOY_ENV             pi (default) | integration | development
+                         Sets config directory based on environment
   ETCD_CONTAINER         Override container name for docker mode
   ETCD_ENDPOINT          Override endpoint for local mode
 
@@ -341,7 +361,8 @@ sync_stream() {
 
 # Main sync function
 sync_all_streams() {
-    log "Environment: $MODE$([ "$MODE" = "docker" ] && echo " (container: $ETCD_CONTAINER)" || echo " (endpoint: $ETCD_ENDPOINT)")"
+    log "Deploy environment: $DEPLOY_ENV"
+    log "Mode: $MODE$([ "$MODE" = "docker" ] && echo " (container: $ETCD_CONTAINER)" || echo " (endpoint: $ETCD_ENDPOINT)")"
     log "Config directory: $CONFIG_DIR"
 
     if [ "$DRY_RUN" = true ]; then

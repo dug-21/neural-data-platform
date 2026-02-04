@@ -62,11 +62,24 @@ if [ "$DEPLOY_ENV" = "integration" ]; then
     ENV_NAME="development"
     # Container names for external scripts that can't use docker compose exec
     ETCD_CONTAINER="integration-etcd"
+    # Config paths for integration environment
+    CONFIG_STREAMS_DIR="$REPO_ROOT/config/integration/base/streams"
+    CONFIG_DOMAINS_DIR="$REPO_ROOT/config/integration/domains"
 else
     COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
     ENV_NAME="production"
     # Container names for external scripts that can't use docker compose exec
     ETCD_CONTAINER="etcd"
+    # Config paths for production (pi) environment
+    CONFIG_STREAMS_DIR="$REPO_ROOT/config/base/streams"
+    CONFIG_DOMAINS_DIR="$REPO_ROOT/config/domains"
+fi
+
+# Fallback: If env-specific directory doesn't exist, use production
+if [ ! -d "$CONFIG_STREAMS_DIR" ]; then
+    warn "Config directory not found: $CONFIG_STREAMS_DIR"
+    warn "Falling back to production config: config/base/streams"
+    CONFIG_STREAMS_DIR="$REPO_ROOT/config/base/streams"
 fi
 
 # Helper to run docker compose with the correct file
@@ -310,6 +323,7 @@ except Exception as e:
 
 # Show environment on startup
 log "Environment: $DEPLOY_ENV (compose: $(basename $COMPOSE_FILE))"
+log "Config paths: streams=${CONFIG_STREAMS_DIR#$REPO_ROOT/}"
 
 check_prereqs() {
     log "Checking prerequisites..."
@@ -367,7 +381,7 @@ sync_to_data_dictionary() {
         sleep 2
     done
 
-    local CONFIG_DIR="$REPO_ROOT/config/base/streams"
+    local CONFIG_DIR="$CONFIG_STREAMS_DIR"
     local SQL_FILE="/tmp/data_dictionary_sync_$$.sql"
 
     # Note: yaml_get, yaml_array_len, yaml_array_get are defined at top-level
@@ -1377,8 +1391,8 @@ handle_stream() {
         return 0
     fi
 
-    local config_file="$REPO_ROOT/config/base/streams/$stream_id/config.json"
-    local config_yaml="$REPO_ROOT/config/base/streams/$stream_id/config.yaml"
+    local config_file="$CONFIG_STREAMS_DIR/$stream_id/config.json"
+    local config_yaml="$CONFIG_STREAMS_DIR/$stream_id/config.yaml"
 
     if [ ! -f "$config_file" ] && [ ! -f "$config_yaml" ]; then
         error "Stream config not found: $config_file or $config_yaml"
@@ -1645,16 +1659,16 @@ handle_domain() {
         return 0
     fi
 
-    # Check if domain config exists
-    local config_file="$REPO_ROOT/config/domains/$domain_id/domain.yaml"
-    local config_file_alt="$REPO_ROOT/config/base/domains/$domain_id/domain.yaml"
+    # Check if domain config exists (env-specific or fallback to production)
+    local config_file="$CONFIG_DOMAINS_DIR/$domain_id/domain.yaml"
+    local config_file_fallback="$REPO_ROOT/config/domains/$domain_id/domain.yaml"
 
     if [ -f "$config_file" ]; then
-        : # Use config_file
-    elif [ -f "$config_file_alt" ]; then
-        config_file="$config_file_alt"
+        : # Use env-specific config_file
+    elif [ -f "$config_file_fallback" ]; then
+        config_file="$config_file_fallback"
     else
-        warn "  Domain config not found: $config_file (or $config_file_alt)"
+        warn "  Domain config not found: $config_file"
         warn "  Create config/domains/$domain_id/domain.yaml to configure this domain"
         return 0
     fi
