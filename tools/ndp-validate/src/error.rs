@@ -81,6 +81,17 @@ pub enum ErrorCode {
     InvalidInterval,
     InvalidTransform,
 
+    // Layer 2: Semantic - Gold Layer (400-408)
+    InvalidGoldField,          // gold_etl references field not in stream
+    InvalidStreamType,         // transitions on non-state_event stream
+    UnknownAlignmentStream,    // alignment references unknown stream
+    InvalidAggregateMetric,    // unknown metric type
+    InvalidDomainStream,       // domain references non-existent stream
+    InvalidFeatureType,        // unknown feature type
+    InvalidGranularity,        // granularity format not recognized
+    CircularDomainDependency,  // domain references itself
+    InvalidObjectiveCondition, // objective condition not supported
+
     // Warnings (900-999)
     UnknownDeviceClass,
 }
@@ -119,6 +130,15 @@ impl ErrorCode {
             | ErrorCode::InvalidRegex
             | ErrorCode::InvalidInterval
             | ErrorCode::InvalidTransform
+            | ErrorCode::InvalidGoldField
+            | ErrorCode::InvalidStreamType
+            | ErrorCode::UnknownAlignmentStream
+            | ErrorCode::InvalidAggregateMetric
+            | ErrorCode::InvalidDomainStream
+            | ErrorCode::InvalidFeatureType
+            | ErrorCode::InvalidGranularity
+            | ErrorCode::CircularDomainDependency
+            | ErrorCode::InvalidObjectiveCondition
             | ErrorCode::UnknownDeviceClass => ValidationLayer::Semantic,
         }
     }
@@ -129,7 +149,8 @@ impl ErrorCode {
             ErrorCode::UnknownDeviceClass
             | ErrorCode::TableCheckFailed
             | ErrorCode::ColumnCheckFailed
-            | ErrorCode::TypeMismatch => Severity::Warning,
+            | ErrorCode::TypeMismatch
+            | ErrorCode::InvalidStreamType => Severity::Warning, // Transitions on non-state_event is a warning
             _ => Severity::Error,
         }
     }
@@ -168,6 +189,15 @@ impl std::fmt::Display for ErrorCode {
             ErrorCode::InvalidRegex => "INVALID_REGEX",
             ErrorCode::InvalidInterval => "INVALID_INTERVAL",
             ErrorCode::InvalidTransform => "INVALID_TRANSFORM",
+            ErrorCode::InvalidGoldField => "INVALID_GOLD_FIELD",
+            ErrorCode::InvalidStreamType => "INVALID_STREAM_TYPE",
+            ErrorCode::UnknownAlignmentStream => "UNKNOWN_ALIGNMENT_STREAM",
+            ErrorCode::InvalidAggregateMetric => "INVALID_AGGREGATE_METRIC",
+            ErrorCode::InvalidDomainStream => "INVALID_DOMAIN_STREAM",
+            ErrorCode::InvalidFeatureType => "INVALID_FEATURE_TYPE",
+            ErrorCode::InvalidGranularity => "INVALID_GRANULARITY",
+            ErrorCode::CircularDomainDependency => "CIRCULAR_DOMAIN_DEPENDENCY",
+            ErrorCode::InvalidObjectiveCondition => "INVALID_OBJECTIVE_CONDITION",
             ErrorCode::UnknownDeviceClass => "UNKNOWN_DEVICE_CLASS",
         };
         write!(f, "{}", s)
@@ -293,14 +323,73 @@ mod tests {
         assert_eq!(ErrorCode::MissingRequired.layer(), ValidationLayer::Schema);
         assert_eq!(ErrorCode::InvalidType.layer(), ValidationLayer::Schema);
         assert_eq!(ErrorCode::UnknownField.layer(), ValidationLayer::Schema);
-        assert_eq!(ErrorCode::InvalidSourcePath.layer(), ValidationLayer::Semantic);
+        assert_eq!(
+            ErrorCode::InvalidSourcePath.layer(),
+            ValidationLayer::Semantic
+        );
+        // Gold layer error codes
+        assert_eq!(
+            ErrorCode::InvalidGoldField.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::InvalidStreamType.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::UnknownAlignmentStream.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::InvalidAggregateMetric.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::InvalidDomainStream.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::InvalidFeatureType.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::InvalidGranularity.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::CircularDomainDependency.layer(),
+            ValidationLayer::Semantic
+        );
+        assert_eq!(
+            ErrorCode::InvalidObjectiveCondition.layer(),
+            ValidationLayer::Semantic
+        );
     }
 
     #[test]
     fn test_error_code_default_severity() {
         assert_eq!(ErrorCode::SyntaxError.default_severity(), Severity::Error);
-        assert_eq!(ErrorCode::UnknownDeviceClass.default_severity(), Severity::Warning);
-        assert_eq!(ErrorCode::MissingRequired.default_severity(), Severity::Error);
+        assert_eq!(
+            ErrorCode::UnknownDeviceClass.default_severity(),
+            Severity::Warning
+        );
+        assert_eq!(
+            ErrorCode::MissingRequired.default_severity(),
+            Severity::Error
+        );
+        // Gold layer error codes
+        assert_eq!(
+            ErrorCode::InvalidGoldField.default_severity(),
+            Severity::Error
+        );
+        assert_eq!(
+            ErrorCode::InvalidStreamType.default_severity(),
+            Severity::Warning
+        );
+        assert_eq!(
+            ErrorCode::InvalidAggregateMetric.default_severity(),
+            Severity::Error
+        );
     }
 
     #[test]
@@ -323,7 +412,7 @@ mod tests {
         let err = ValidationError::schema_error(
             ErrorCode::UnknownField,
             "$.silver_elt",
-            "Unknown field 'silver_elt'"
+            "Unknown field 'silver_elt'",
         )
         .with_suggestion("Did you mean 'silver_etl'?");
 

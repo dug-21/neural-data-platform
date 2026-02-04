@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://neural-data-platform.local/schemas/gold-etl.schema.json",
+  "title": "NDP Gold ETL Configuration Schema",
+  "description": "Schema for the gold_etl section of NDP stream configurations. Defines aggregates, features (lag, rolling, trend), and state transitions for Gold layer processing.",
+
+  "definitions": {
+    "granularity": {
+      "type": "string",
+      "pattern": "^\\d+\\s+(minute|hour|day)s?$",
+      "description": "Time bucket granularity. Examples: '1 hour', '15 minutes', '1 day', '7 days'. Must match pattern: <number> <unit>.",
+      "examples": ["1 hour", "15 minutes", "1 day", "7 days", "30 minutes"]
+    },
+
+    "metric": {
+      "type": "string",
+      "enum": ["mean", "std", "min", "max", "count", "p95", "p99", "first", "last"],
+      "description": "Aggregate metric type. mean=average, std=standard deviation, min/max=extremes, count=samples, p95/p99=percentiles, first/last=bucket boundaries."
+    },
+
+    "stat": {
+      "type": "string",
+      "enum": ["mean", "std", "min", "max"],
+      "description": "Feature statistic type for rolling windows. Limited to mean, std, min, max."
+    },
+
+    "field_config": {
+      "type": "object",
+      "description": "Per-field metric configuration for aggregation",
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/metric" },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Metrics to compute for this field. Must have at least one metric."
+        },
+        "exclude_from_default": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, do not apply default_metrics to this field. Field will only get explicitly listed metrics."
+        }
+      }
+    },
+
+    "aggregates": {
+      "type": "object",
+      "description": "Aggregate configuration for Gold continuous aggregates. Defines time buckets and metrics per field.",
+      "additionalProperties": false,
+      "required": ["granularities"],
+      "properties": {
+        "granularities": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/granularity" },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Time bucket sizes for aggregation. Each granularity generates a separate continuous aggregate."
+        },
+        "default_metrics": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/metric" },
+          "default": ["mean", "count"],
+          "uniqueItems": true,
+          "description": "Default metrics applied to all numeric fields unless overridden or excluded."
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/field_config" },
+          "description": "Per-field metric configuration. Keys are field names from the stream."
+        }
+      }
+    },
+
+    "lag_features": {
+      "type": "object",
+      "description": "Lag feature configuration for ML training. Creates lagged versions of fields for time-series analysis.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether lag features are enabled"
+        },
+        "lags_hours": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Lag offset in hours"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Lag offsets in hours. Example: [1, 6, 24] creates field_lag_1h, field_lag_6h, field_lag_24h."
+        },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fields to compute lags for. If empty, applies to all numeric fields."
+        }
+      },
+      "if": {
+        "properties": { "enabled": { "const": true } },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["lags_hours"]
+      }
+    },
+
+    "rolling_features": {
+      "type": "object",
+      "description": "Rolling window statistics for ML training. Computes stats over sliding windows.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether rolling features are enabled"
+        },
+        "windows": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/granularity" },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Rolling window sizes. Example: ['4 hours', '24 hours'] creates rolling_mean_4h, rolling_mean_24h."
+        },
+        "stats": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/stat" },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Statistics to compute over rolling windows."
+        },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fields to compute rolling stats for. If empty, applies to all numeric fields."
+        }
+      },
+      "if": {
+        "properties": { "enabled": { "const": true } },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["windows", "stats"]
+      }
+    },
+
+    "trend_features": {
+      "type": "object",
+      "description": "Trend calculation for ML training. Computes simple slope approximation over a window.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether trend features are enabled"
+        },
+        "window": {
+          "$ref": "#/definitions/granularity",
+          "description": "Window for trend calculation. Example: '4 hours' computes (last - first) / 4.0."
+        },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Fields to compute trends for. Required when enabled."
+        }
+      },
+      "if": {
+        "properties": { "enabled": { "const": true } },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["window", "fields"]
+      }
+    },
+
+    "features": {
+      "type": "object",
+      "description": "Feature engineering configuration for ML training data.",
+      "additionalProperties": false,
+      "properties": {
+        "lag": { "$ref": "#/definitions/lag_features" },
+        "rolling": { "$ref": "#/definitions/rolling_features" },
+        "trend": { "$ref": "#/definitions/trend_features" }
+      }
+    },
+
+    "transitions": {
+      "type": "object",
+      "description": "State transition tracking for state_event streams. Extracts state changes and durations.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether transition tracking is enabled. Only valid for state_event streams."
+        },
+        "state_field": {
+          "type": "string",
+          "default": "state",
+          "description": "Field containing the state value to track transitions on."
+        },
+        "entity_field": {
+          "type": "string",
+          "default": "ndp_id",
+          "description": "Field identifying the entity whose state is being tracked."
+        },
+        "track_duration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to track duration in previous state before transition."
+        },
+        "include_in_alignment": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to include transitions in the domain aligned view."
+        }
+      }
+    },
+
+    "gold_etl": {
+      "type": "object",
+      "description": "Gold layer ETL configuration for a stream. Defines aggregates, features, and transitions.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Gold layer processing for this stream."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the Gold transformation."
+        },
+        "aggregates": { "$ref": "#/definitions/aggregates" },
+        "features": { "$ref": "#/definitions/features" },
+        "transitions": { "$ref": "#/definitions/transitions" }
+      },
+      "if": {
+        "properties": { "enabled": { "const": true } },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["aggregates"]
+      }
+    }
+  },
+
+  "type": "object",
+  "$ref": "#/definitions/gold_etl"
+}

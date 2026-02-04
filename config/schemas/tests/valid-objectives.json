@@ -1,0 +1,59 @@
+{
+  "objectives": [
+    {
+      "id": "healthy_co2",
+      "description": "Maintain CO2 below 800ppm for cognitive performance",
+      "target": {
+        "stream": "air-quality",
+        "metric": "co2",
+        "condition": "<",
+        "threshold": 800,
+        "unit": "ppm"
+      },
+      "priority": "high",
+      "tags": ["health", "cognitive"]
+    },
+    {
+      "id": "comfortable_temp",
+      "description": "Maintain comfortable temperature range",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature_c",
+        "condition": "between",
+        "threshold": [20, 24],
+        "unit": "celsius"
+      },
+      "priority": "medium",
+      "tags": ["comfort"]
+    },
+    {
+      "id": "night_quiet",
+      "description": "Reduce ventilation noise at night",
+      "target": {
+        "stream": "home-assistant-state",
+        "metric": "fan_speed",
+        "condition": "<=",
+        "threshold": 2
+      },
+      "priority": "low",
+      "time_window": {
+        "start": "22:00",
+        "end": "07:00",
+        "timezone": "local"
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "id": "outdoor_air_safe",
+      "description": "Only ventilate when outdoor air is acceptable",
+      "condition": {
+        "stream": "outdoor-air-quality",
+        "metric": "pm25",
+        "operator": "<",
+        "threshold": 35
+      },
+      "applies_to": ["open_window", "increase_ventilation"]
+    }
+  ]
+}

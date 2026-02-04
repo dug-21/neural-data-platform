@@ -1,0 +1,15 @@
+{
+  "objectives": [{
+    "id": "night_quiet",
+    "target": {
+      "stream": "home-assistant-state",
+      "metric": "fan_speed",
+      "condition": "<=",
+      "threshold": 2
+    },
+    "time_window": {
+      "start": "10pm",
+      "end": "7am"
+    }
+  }]
+}

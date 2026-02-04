@@ -214,27 +214,29 @@ pub fn validate_dq_rules(
 
         // Validate field reference (for field-based rules)
         if let Some(field) = &rule.field {
-            if rule.rule != "cross_field_check" && rule.rule != "conditional_check"
-                && !silver_columns.contains(field) {
-                    let suggestion = find_closest_match(field, silver_columns);
-                    errors.push(ValidationError {
-                        layer: ValidationLayer::Semantic,
-                        code: ErrorCode::InvalidDqColumn,
-                        path: format!("{}.field", base_path),
-                        message: format!(
-                            "DQ rule references unknown column '{}'. Available columns: {}",
-                            field,
-                            silver_columns
-                                .iter()
-                                .cloned()
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ),
-                        severity: Severity::Error,
-                        suggestion,
-                        context: None,
-                    });
-                }
+            if rule.rule != "cross_field_check"
+                && rule.rule != "conditional_check"
+                && !silver_columns.contains(field)
+            {
+                let suggestion = find_closest_match(field, silver_columns);
+                errors.push(ValidationError {
+                    layer: ValidationLayer::Semantic,
+                    code: ErrorCode::InvalidDqColumn,
+                    path: format!("{}.field", base_path),
+                    message: format!(
+                        "DQ rule references unknown column '{}'. Available columns: {}",
+                        field,
+                        silver_columns
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    severity: Severity::Error,
+                    suggestion,
+                    context: None,
+                });
+            }
         }
 
         // Rule-specific validation
@@ -417,7 +419,7 @@ fn validate_pattern_check(rule: &DqRule, base_path: &str) -> Vec<ValidationError
             context: None,
         });
     } else if let Some(pattern) = &rule.pattern {
-            // Validate regex syntax
+        // Validate regex syntax
         if let Err(e) = Regex::new(pattern) {
             errors.push(ValidationError {
                 layer: ValidationLayer::Semantic,
@@ -504,7 +506,9 @@ fn validate_monotonic_check(
             layer: ValidationLayer::Semantic,
             code: ErrorCode::InvalidDqRule,
             path: format!("{}.direction", base_path),
-            message: "monotonic_check requires 'direction' (increasing|decreasing|strict_increasing)".to_string(),
+            message:
+                "monotonic_check requires 'direction' (increasing|decreasing|strict_increasing)"
+                    .to_string(),
             severity: Severity::Error,
             suggestion: None,
             context: None,
@@ -808,9 +812,10 @@ fn validate_conditional_check(
             let nested_errors = validate_dq_rules(&[*then_rule.clone()], silver_columns);
             // Update paths for nested errors
             for mut err in nested_errors {
-                err.path = err
-                    .path
-                    .replace("$.silver_etl.dq_rules[0]", &format!("{}.then_rule", base_path));
+                err.path = err.path.replace(
+                    "$.silver_etl.dq_rules[0]",
+                    &format!("{}.then_rule", base_path),
+                );
                 errors.push(err);
             }
         }
@@ -854,10 +859,7 @@ fn validate_completeness_check(rule: &DqRule, base_path: &str) -> Vec<Validation
                 layer: ValidationLayer::Semantic,
                 code: ErrorCode::InvalidDqRule,
                 path: format!("{}.min_completeness", base_path),
-                message: format!(
-                    "min_completeness must be between 0.0 and 1.0, got {}",
-                    val
-                ),
+                message: format!("min_completeness must be between 0.0 and 1.0, got {}", val),
                 severity: Severity::Error,
                 suggestion: None,
                 context: None,

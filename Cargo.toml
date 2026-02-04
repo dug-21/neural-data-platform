@@ -7,7 +7,8 @@ members = [
     "domains/air-quality",
     "apps/air-quality-app",
     "apps/silver-etl",
-    "tools/ndp-validate"
+    "tools/ndp-validate",
+    "tools/ndp-gold-ddl"
 ]
 resolver = "2"
 

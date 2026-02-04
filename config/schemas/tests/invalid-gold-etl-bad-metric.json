@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "aggregates": {
+    "granularities": ["1 hour"],
+    "fields": {
+      "pm25": {
+        "metrics": ["mean", "average"]
+      }
+    }
+  }
+}

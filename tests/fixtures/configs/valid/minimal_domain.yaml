@@ -1,0 +1,8 @@
+domain:
+  id: test-domain
+  streams:
+    - stream_id: air-quality
+      role: primary
+  alignment:
+    view_name: test_aligned
+    granularity: "1 hour"

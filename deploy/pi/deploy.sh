@@ -1307,19 +1307,55 @@ validate_manifest() {
         error "Manifest not found: $manifest_file"
     fi
 
-    # Check required fields
+    # Check required fields - support both version formats
     local version=$(jq -r '.version // empty' "$manifest_file")
-    if [ -z "$version" ] || [ "$version" != "1.0" ]; then
-        error "Invalid or missing manifest version (expected: 1.0, got: $version)"
+    if [ -z "$version" ]; then
+        error "Invalid or missing manifest version"
     fi
 
-    local changes_count=$(jq '.changes | length' "$manifest_file")
-    if [ "$changes_count" -eq 0 ]; then
+    # Version can be "1.0" (old format) or semver like "1.0.0" (release format)
+    # Accept "1.0", "1.0.x", or any valid release version
+    if [[ ! "$version" =~ ^1\.0($|\..*$|$) ]] && [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+        error "Invalid manifest version format (got: $version)"
+    fi
+
+    # Support both old format (.changes array) and new format (.declarations object)
+    local changes_count=0
+    local declarations_count=0
+
+    # Check old format: .changes array
+    changes_count=$(jq '.changes | length // 0' "$manifest_file" 2>/dev/null || echo "0")
+
+    # Check new format: .declarations object (fe-001 Gold layer)
+    # Count all items in all declaration arrays
+    declarations_count=$(jq '[.declarations // {} | to_entries[] | .value | length] | add // 0' "$manifest_file" 2>/dev/null || echo "0")
+
+    local total_count=$((changes_count + declarations_count))
+
+    if [ "$total_count" -eq 0 ]; then
         warn "Manifest has no changes to apply"
         return 1
     fi
 
-    log "Manifest valid: $changes_count change(s) declared"
+    # Log what was found
+    if [ "$changes_count" -gt 0 ] && [ "$declarations_count" -gt 0 ]; then
+        log "Manifest valid: $changes_count change(s) + $declarations_count declaration(s)"
+    elif [ "$changes_count" -gt 0 ]; then
+        log "Manifest valid: $changes_count change(s) declared"
+    else
+        log "Manifest valid: $declarations_count declaration(s)"
+    fi
+
+    # Validate known declaration types (fe-001)
+    local known_types='["etcd-config", "dimensions", "silver-tables", "streams", "dashboards", "gold-tables", "domains", "migrations"]'
+    local unknown_types=$(jq -r --argjson known "$known_types" '
+        [.declarations // {} | keys[] | select(. as $k | $known | index($k) | not)] | join(", ")
+    ' "$manifest_file" 2>/dev/null || echo "")
+
+    if [ -n "$unknown_types" ]; then
+        warn "Unknown declaration types will be ignored: $unknown_types"
+    fi
+
     return 0
 }
 
@@ -1334,6 +1370,12 @@ handle_stream() {
     local reload=$(echo "$declaration" | jq -r '.reload // "none"')
 
     log "Stream: $stream_id (action=$action, reload=$reload)"
+
+    # Check for dry-run mode
+    if [ "${DRY_RUN:-false}" = "true" ]; then
+        log "  [DRY-RUN] Would sync stream $stream_id to etcd"
+        return 0
+    fi
 
     local config_file="$REPO_ROOT/config/base/streams/$stream_id/config.json"
     local config_yaml="$REPO_ROOT/config/base/streams/$stream_id/config.yaml"
@@ -1368,6 +1410,12 @@ handle_silver_table() {
     local action=$(echo "$declaration" | jq -r '.action // "sync"')
 
     log "Silver Table: $stream_id (action=$action)"
+
+    # Check for dry-run mode
+    if [ "${DRY_RUN:-false}" = "true" ]; then
+        log "  [DRY-RUN] Would generate and apply Silver DDL for $stream_id"
+        return 0
+    fi
 
     # Check if ddl-generator functions are available
     if ! type generate_silver_ddl &>/dev/null; then
@@ -1502,6 +1550,173 @@ handle_container_build() {
     return 0
 }
 
+# ============================================================================
+# GOLD LAYER HANDLERS (fe-001 Phase A)
+# ============================================================================
+
+# Handle gold-table declaration
+# Args: $1 = declaration JSON
+# Calls ndp-gold-ddl Rust tool to generate DDL, then applies to TimescaleDB
+handle_gold_table() {
+    local declaration="$1"
+    local stream_id=$(echo "$declaration" | jq -r '.stream_id')
+    local action=$(echo "$declaration" | jq -r '.action // "sync"')
+
+    log "Gold Table: $stream_id (action=$action)"
+
+    # Validate stream_id is provided
+    if [ -z "$stream_id" ] || [ "$stream_id" = "null" ]; then
+        error "Gold table declaration missing stream_id"
+        return 1
+    fi
+
+    # Check for dry-run mode (set by --dry-run flag)
+    if [ "${DRY_RUN:-false}" = "true" ]; then
+        log "  [DRY-RUN] Would call: ndp-gold-ddl generate --stream $stream_id --action $action"
+        return 0
+    fi
+
+    # Check if ndp-gold-ddl tool is available
+    if ! command -v ndp-gold-ddl &> /dev/null; then
+        # Try looking in common locations
+        local gold_ddl_tool=""
+        if [ -x "/opt/ndp/bin/ndp-gold-ddl" ]; then
+            gold_ddl_tool="/opt/ndp/bin/ndp-gold-ddl"
+        elif [ -x "$REPO_ROOT/target/release/ndp-gold-ddl" ]; then
+            gold_ddl_tool="$REPO_ROOT/target/release/ndp-gold-ddl"
+        elif [ -x "$REPO_ROOT/target/debug/ndp-gold-ddl" ]; then
+            gold_ddl_tool="$REPO_ROOT/target/debug/ndp-gold-ddl"
+        else
+            warn "  ndp-gold-ddl tool not found, skipping Gold DDL generation"
+            warn "  Build the tool with: cargo build --release -p ndp-gold-ddl"
+            return 0
+        fi
+    else
+        gold_ddl_tool="ndp-gold-ddl"
+    fi
+
+    # Call Rust tool for DDL generation
+    log "  Generating Gold DDL using $gold_ddl_tool..."
+    local ddl
+    ddl=$("$gold_ddl_tool" generate --stream "$stream_id" --action "$action" --config-dir "$REPO_ROOT/config" 2>&1)
+    local exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+        error "Gold DDL generation failed: $ddl"
+        return 1
+    fi
+
+    # Check if DDL is empty or just comments (no actual changes)
+    if [ -z "$ddl" ] || echo "$ddl" | grep -qE '^--.*$|^$' && ! echo "$ddl" | grep -q 'CREATE'; then
+        log "  No Gold DDL changes required for $stream_id"
+        return 0
+    fi
+
+    # Apply DDL to TimescaleDB
+    log "  Applying Gold DDL to TimescaleDB..."
+    if echo "$ddl" | dcx timescaledb psql -U postgres -d ndp; then
+        log "  Gold table(s) for $stream_id created/updated successfully"
+        return 0
+    else
+        error "Failed to apply Gold DDL to TimescaleDB"
+        return 1
+    fi
+}
+
+# Handle domain declaration
+# Args: $1 = declaration JSON
+# Syncs domain config to etcd and generates aligned view DDL
+handle_domain() {
+    local declaration="$1"
+    local domain_id=$(echo "$declaration" | jq -r '.domain_id')
+    local action=$(echo "$declaration" | jq -r '.action // "sync"')
+
+    log "Domain: $domain_id (action=$action)"
+
+    # Validate domain_id is provided
+    if [ -z "$domain_id" ] || [ "$domain_id" = "null" ]; then
+        error "Domain declaration missing domain_id"
+        return 1
+    fi
+
+    # Check for dry-run mode
+    if [ "${DRY_RUN:-false}" = "true" ]; then
+        log "  [DRY-RUN] Would sync domain config to etcd and generate aligned view DDL"
+        return 0
+    fi
+
+    # Check if domain config exists
+    local config_file="$REPO_ROOT/config/domains/$domain_id/domain.yaml"
+    local config_file_alt="$REPO_ROOT/config/base/domains/$domain_id/domain.yaml"
+
+    if [ -f "$config_file" ]; then
+        : # Use config_file
+    elif [ -f "$config_file_alt" ]; then
+        config_file="$config_file_alt"
+    else
+        warn "  Domain config not found: $config_file (or $config_file_alt)"
+        warn "  Create config/domains/$domain_id/domain.yaml to configure this domain"
+        return 0
+    fi
+
+    # Sync domain config to etcd if available
+    log "  Syncing domain config to etcd..."
+    if dcx etcd etcdctl endpoint health >/dev/null 2>&1; then
+        if cat "$config_file" | dcx etcd etcdctl put "/domains/$domain_id/config" -; then
+            log "  Domain config synced to etcd at /domains/$domain_id/config"
+        else
+            warn "  Failed to sync domain config to etcd (non-fatal)"
+        fi
+    else
+        warn "  etcd not available, skipping domain config sync"
+    fi
+
+    # Check if ndp-gold-ddl tool is available for aligned view generation
+    local gold_ddl_tool=""
+    if command -v ndp-gold-ddl &> /dev/null; then
+        gold_ddl_tool="ndp-gold-ddl"
+    elif [ -x "/opt/ndp/bin/ndp-gold-ddl" ]; then
+        gold_ddl_tool="/opt/ndp/bin/ndp-gold-ddl"
+    elif [ -x "$REPO_ROOT/target/release/ndp-gold-ddl" ]; then
+        gold_ddl_tool="$REPO_ROOT/target/release/ndp-gold-ddl"
+    elif [ -x "$REPO_ROOT/target/debug/ndp-gold-ddl" ]; then
+        gold_ddl_tool="$REPO_ROOT/target/debug/ndp-gold-ddl"
+    fi
+
+    if [ -z "$gold_ddl_tool" ]; then
+        warn "  ndp-gold-ddl tool not found, skipping aligned view DDL generation"
+        warn "  Build the tool with: cargo build --release -p ndp-gold-ddl"
+        return 0
+    fi
+
+    # Generate and apply aligned view DDL
+    log "  Generating aligned view DDL using $gold_ddl_tool..."
+    local ddl
+    ddl=$("$gold_ddl_tool" generate --domain "$domain_id" --action "$action" --config-dir "$REPO_ROOT/config" 2>&1)
+    local exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+        error "Domain DDL generation failed: $ddl"
+        return 1
+    fi
+
+    # Check if DDL is empty or just comments
+    if [ -z "$ddl" ] || echo "$ddl" | grep -qE '^--.*$|^$' && ! echo "$ddl" | grep -q 'CREATE'; then
+        log "  No Domain DDL changes required for $domain_id"
+        return 0
+    fi
+
+    # Apply DDL to TimescaleDB
+    log "  Applying Domain DDL to TimescaleDB..."
+    if echo "$ddl" | dcx timescaledb psql -U postgres -d ndp; then
+        log "  Aligned view(s) for domain $domain_id created/updated successfully"
+        return 0
+    else
+        error "Failed to apply Domain DDL to TimescaleDB"
+        return 1
+    fi
+}
+
 # Handle container restart declaration
 # Args: $1 = declaration JSON
 handle_container_restart() {
@@ -1554,29 +1769,34 @@ apply() {
         return 0  # No changes to apply
     fi
 
-    # Wait for infrastructure
-    log "Checking infrastructure readiness..."
-    until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
-        warn "Waiting for TimescaleDB to be ready..."
-        sleep 2
-    done
-    until dcx etcd etcdctl endpoint health >/dev/null 2>&1; do
-        warn "Waiting for etcd to be ready..."
-        sleep 2
-    done
-    log "Infrastructure ready"
+    # Wait for infrastructure (skip in dry-run mode)
+    if [ "${DRY_RUN:-false}" = "true" ]; then
+        log "Skipping infrastructure readiness check (dry-run mode)"
+    else
+        log "Checking infrastructure readiness..."
+        until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+            warn "Waiting for TimescaleDB to be ready..."
+            sleep 2
+        done
+        until dcx etcd etcdctl endpoint health >/dev/null 2>&1; do
+            warn "Waiting for etcd to be ready..."
+            sleep 2
+        done
+        log "Infrastructure ready"
+    fi
 
-    # Parse manifest into phases
-    local container_builds=$(jq -c '[.changes[] | select(.type == "container" and .action == "build")]' "$manifest_file")
-    local migrations=$(jq -c '[.changes[] | select(.type == "migration")]' "$manifest_file")
-    local silver_tables=$(jq -c '[.changes[] | select(.type == "silver-table")]' "$manifest_file")
-    local streams=$(jq -c '[.changes[] | select(.type == "stream")]' "$manifest_file")
-    local dimensions=$(jq -c '[.changes[] | select(.type == "dimensions")]' "$manifest_file")
-    local dictionary=$(jq -c '[.changes[] | select(.type == "dictionary")]' "$manifest_file")
-    local container_restarts=$(jq -c '[.changes[] | select(.type == "container" and .action == "restart")]' "$manifest_file")
+    # Parse manifest into phases (handle both old .changes and new .declarations formats)
+    local container_builds=$(jq -c '[(.changes // [])[] | select(.type == "container" and .action == "build")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local migrations=$(jq -c '[(.changes // [])[] | select(.type == "migration")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local silver_tables=$(jq -c '[(.changes // [])[] | select(.type == "silver-table")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local streams=$(jq -c '[(.changes // [])[] | select(.type == "stream")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local dimensions=$(jq -c '[(.changes // [])[] | select(.type == "dimensions")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local dictionary=$(jq -c '[(.changes // [])[] | select(.type == "dictionary")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local container_restarts=$(jq -c '[(.changes // [])[] | select(.type == "container" and .action == "restart")]' "$manifest_file" 2>/dev/null || echo "[]")
 
     # Phase 2: Container Builds
-    local build_count=$(echo "$container_builds" | jq 'length')
+    local build_count=$(echo "$container_builds" | jq 'length' 2>/dev/null || echo "0")
+    build_count=${build_count:-0}
     if [ "$build_count" -gt 0 ]; then
         log ""
         log "Phase 2: Container Builds ($build_count)"
@@ -1587,7 +1807,8 @@ apply() {
     fi
 
     # Phase 3: Migrations
-    local migration_count=$(echo "$migrations" | jq 'length')
+    local migration_count=$(echo "$migrations" | jq 'length' 2>/dev/null || echo "0")
+    migration_count=${migration_count:-0}
     if [ "$migration_count" -gt 0 ]; then
         log ""
         log "Phase 3: Migrations ($migration_count)"
@@ -1598,7 +1819,8 @@ apply() {
     fi
 
     # Phase 4: Silver Tables
-    local silver_count=$(echo "$silver_tables" | jq 'length')
+    local silver_count=$(echo "$silver_tables" | jq 'length' 2>/dev/null || echo "0")
+    silver_count=${silver_count:-0}
     if [ "$silver_count" -gt 0 ]; then
         log ""
         log "Phase 4: Silver Tables ($silver_count)"
@@ -1608,53 +1830,85 @@ apply() {
         done
     fi
 
-    # Phase 5: Streams
-    local stream_count=$(echo "$streams" | jq 'length')
+    # Phase 5: Gold Tables (fe-001)
+    # Parse gold-tables from declarations array (new manifest format)
+    local gold_tables=$(jq -c '.declarations["gold-tables"] // []' "$manifest_file" 2>/dev/null || echo "[]")
+    local gold_count=$(echo "$gold_tables" | jq 'length' 2>/dev/null || echo "0")
+    gold_count=${gold_count:-0}
+    if [ "$gold_count" -gt 0 ] && [ "$gold_tables" != "[]" ] && [ "$gold_tables" != "null" ]; then
+        log ""
+        log "Phase 5: Gold Tables ($gold_count)"
+        log "-------------------"
+        echo "$gold_tables" | jq -c '.[]' | while read -r decl; do
+            handle_gold_table "$decl" || true
+        done
+    fi
+
+    # Phase 6: Domains (fe-001)
+    # Parse domains from declarations array (new manifest format)
+    local domains=$(jq -c '.declarations["domains"] // []' "$manifest_file" 2>/dev/null || echo "[]")
+    local domain_count=$(echo "$domains" | jq 'length' 2>/dev/null || echo "0")
+    domain_count=${domain_count:-0}
+    if [ "$domain_count" -gt 0 ] && [ "$domains" != "[]" ] && [ "$domains" != "null" ]; then
+        log ""
+        log "Phase 6: Domains ($domain_count)"
+        log "-------------------"
+        echo "$domains" | jq -c '.[]' | while read -r decl; do
+            handle_domain "$decl" || true
+        done
+    fi
+
+    # Phase 7: Streams
+    local stream_count=$(echo "$streams" | jq 'length' 2>/dev/null || echo "0")
+    stream_count=${stream_count:-0}
     if [ "$stream_count" -gt 0 ]; then
         log ""
-        log "Phase 5: Streams ($stream_count)"
+        log "Phase 7: Streams ($stream_count)"
         log "-------------------"
         echo "$streams" | jq -c '.[]' | while read -r decl; do
             handle_stream "$decl"
         done
     fi
 
-    # Phase 6: Dimensions
-    local dim_count=$(echo "$dimensions" | jq 'length')
+    # Phase 8: Dimensions
+    local dim_count=$(echo "$dimensions" | jq 'length' 2>/dev/null || echo "0")
+    dim_count=${dim_count:-0}
     if [ "$dim_count" -gt 0 ]; then
         log ""
-        log "Phase 6: Dimensions ($dim_count)"
+        log "Phase 8: Dimensions ($dim_count)"
         log "-------------------"
         echo "$dimensions" | jq -c '.[]' | while read -r decl; do
             handle_dimensions "$decl"
         done
     fi
 
-    # Phase 7: Dictionary
-    local dict_count=$(echo "$dictionary" | jq 'length')
+    # Phase 9: Dictionary
+    local dict_count=$(echo "$dictionary" | jq 'length' 2>/dev/null || echo "0")
+    dict_count=${dict_count:-0}
     if [ "$dict_count" -gt 0 ]; then
         log ""
-        log "Phase 7: Dictionary ($dict_count)"
+        log "Phase 9: Dictionary ($dict_count)"
         log "-------------------"
         echo "$dictionary" | jq -c '.[]' | while read -r decl; do
             handle_dictionary "$decl"
         done
     fi
 
-    # Phase 8: Container Restarts
-    local restart_count=$(echo "$container_restarts" | jq 'length')
+    # Phase 10: Container Restarts
+    local restart_count=$(echo "$container_restarts" | jq 'length' 2>/dev/null || echo "0")
+    restart_count=${restart_count:-0}
     if [ "$restart_count" -gt 0 ]; then
         log ""
-        log "Phase 8: Container Restarts ($restart_count)"
+        log "Phase 10: Container Restarts ($restart_count)"
         log "-------------------"
         echo "$container_restarts" | jq -c '.[]' | while read -r decl; do
             handle_container_restart "$decl"
         done
     fi
 
-    # Phase 9: Device State Update (FR-R.4)
+    # Phase 11: Device State Update (FR-R.4)
     log ""
-    log "Phase 9: Device State Update"
+    log "Phase 11: Device State Update"
     log "-------------------"
 
     # Extract release_version from manifest if present (FR-R.4.1)
@@ -1761,9 +2015,21 @@ case "${1:-deploy}" in
         echo "  list-streams    - List configured streams from etcd"
         echo "  sync-dictionary - Sync entity schemas to TimescaleDB data dictionary"
         echo ""
-        echo "Declarative Deploy (dp-020):"
-        echo "  apply [file]    - Apply changes from manifest (default: .deploy/manifest.json)"
-        echo "                    Orchestrates: builds, migrations, DDL, streams, dictionary"
+        echo "Declarative Deploy (dp-020, fe-001):"
+        echo "  apply [file] [--dry-run]"
+        echo "                  - Apply changes from manifest (default: .deploy/manifest.json)"
+        echo "                    Orchestrates 11 phases:"
+        echo "                      1. Validation"
+        echo "                      2. Container Builds"
+        echo "                      3. Migrations"
+        echo "                      4. Silver Tables"
+        echo "                      5. Gold Tables (fe-001)"
+        echo "                      6. Domains (fe-001)"
+        echo "                      7. Streams"
+        echo "                      8. Dimensions"
+        echo "                      9. Dictionary"
+        echo "                      10. Container Restarts"
+        echo "                      11. Device State Update"
         echo "  version         - Show deployed version, timestamp, and manifest hash"
         echo ""
         echo "Dimension Commands:"
@@ -1843,7 +2109,22 @@ case "${1:-deploy}" in
         ;;
     apply)
         shift  # remove 'apply' from args
-        apply "$@"
+        # Parse apply options
+        APPLY_MANIFEST_ARG=""
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --dry-run)
+                    export DRY_RUN=true
+                    log "Dry-run mode enabled"
+                    shift
+                    ;;
+                *)
+                    APPLY_MANIFEST_ARG="$1"
+                    shift
+                    ;;
+            esac
+        done
+        apply "$APPLY_MANIFEST_ARG"
         ;;
     sync-dimensions)
         sync_dimensions

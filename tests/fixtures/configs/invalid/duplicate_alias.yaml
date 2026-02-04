@@ -1,0 +1,13 @@
+domain:
+  id: test-duplicate-alias
+  description: "Domain with duplicate stream aliases"
+  streams:
+    - stream_id: air-quality
+      alias: indoor
+      role: primary
+    - stream_id: outdoor-air-quality
+      alias: indoor
+      role: context
+  alignment:
+    view_name: test_aligned
+    granularity: "1 hour"

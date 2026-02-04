@@ -1,0 +1,67 @@
+{
+  "objectives": [
+    {
+      "id": "test_lt",
+      "target": {
+        "stream": "air-quality",
+        "metric": "co2",
+        "condition": "<",
+        "threshold": 800
+      }
+    },
+    {
+      "id": "test_lte",
+      "target": {
+        "stream": "air-quality",
+        "metric": "pm25",
+        "condition": "<=",
+        "threshold": 12
+      }
+    },
+    {
+      "id": "test_gt",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature_c",
+        "condition": ">",
+        "threshold": 18
+      }
+    },
+    {
+      "id": "test_gte",
+      "target": {
+        "stream": "air-quality",
+        "metric": "humidity_pct",
+        "condition": ">=",
+        "threshold": 30
+      }
+    },
+    {
+      "id": "test_eq",
+      "target": {
+        "stream": "home-assistant-state",
+        "metric": "state",
+        "condition": "==",
+        "threshold": "on"
+      }
+    },
+    {
+      "id": "test_ne",
+      "target": {
+        "stream": "home-assistant-state",
+        "metric": "state",
+        "condition": "!=",
+        "threshold": "error"
+      }
+    },
+    {
+      "id": "test_between",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature_c",
+        "condition": "between",
+        "threshold": [18, 24]
+      }
+    }
+  ]
+}

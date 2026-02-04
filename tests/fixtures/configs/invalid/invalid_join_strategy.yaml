@@ -1,0 +1,14 @@
+domain:
+  id: test-invalid-join
+  description: "Domain with invalid join strategy"
+  streams:
+    - stream_id: air-quality
+      alias: indoor
+      role: primary
+    - stream_id: outdoor-weather
+      alias: outdoor
+      role: context
+  alignment:
+    view_name: test_aligned
+    granularity: "1 hour"
+    join_strategy: outer

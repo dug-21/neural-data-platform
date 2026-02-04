@@ -1,0 +1,11 @@
+{
+  "gold_etl": {
+    "enabled": true,
+    "aggregates": {
+      "granularities": ["hourly"],
+      "fields": {
+        "pm25": { "metrics": ["mean"] }
+      }
+    }
+  }
+}

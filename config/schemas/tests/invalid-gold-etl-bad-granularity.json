@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "aggregates": {
+    "granularities": ["1 hour", "hourly"]
+  }
+}

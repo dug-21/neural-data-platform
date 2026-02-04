@@ -1,0 +1,315 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://neural-data-platform.local/schemas/domain.schema.json",
+  "title": "NDP Domain Configuration",
+  "description": "Schema for domain configurations combining streams, alignment, and objectives. A domain represents an intelligence context for correlation analysis and optimization.",
+
+  "definitions": {
+    "granularity": {
+      "type": "string",
+      "pattern": "^\\d+\\s+(minute|hour|day)s?$",
+      "description": "Time bucket granularity."
+    },
+
+    "stream_role": {
+      "type": "string",
+      "enum": ["primary", "context", "actuator", "constraint"],
+      "description": "Role of stream in the domain."
+    },
+
+    "join_strategy": {
+      "type": "string",
+      "enum": ["full_outer", "left", "inner"],
+      "default": "full_outer"
+    },
+
+    "null_handling": {
+      "type": "string",
+      "enum": ["preserve", "carry_forward", "interpolate"],
+      "default": "preserve"
+    },
+
+    "timestamp_alignment": {
+      "type": "string",
+      "enum": ["bucket_start", "bucket_end"],
+      "default": "bucket_start"
+    },
+
+    "stream_reference": {
+      "type": "object",
+      "description": "Reference to a stream for inclusion in the domain.",
+      "additionalProperties": false,
+      "required": ["stream_id", "role"],
+      "properties": {
+        "stream_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Reference to an existing stream configuration."
+        },
+        "alias": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 20,
+          "description": "Short alias for column naming. Must be unique within the domain."
+        },
+        "role": {
+          "$ref": "#/definitions/stream_role"
+        },
+        "null_handling": {
+          "$ref": "#/definitions/null_handling",
+          "description": "Override default NULL handling for this stream."
+        }
+      }
+    },
+
+    "alignment": {
+      "type": "object",
+      "description": "Alignment configuration for joining multiple streams.",
+      "additionalProperties": false,
+      "required": ["view_name", "granularity"],
+      "properties": {
+        "view_name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 63,
+          "description": "Name for the aligned view (PostgreSQL identifier)."
+        },
+        "granularity": {
+          "$ref": "#/definitions/granularity"
+        },
+        "join_strategy": {
+          "$ref": "#/definitions/join_strategy"
+        },
+        "null_handling": {
+          "$ref": "#/definitions/null_handling"
+        },
+        "timestamp_alignment": {
+          "$ref": "#/definitions/timestamp_alignment"
+        }
+      }
+    },
+
+    "condition_operator": {
+      "type": "string",
+      "enum": ["<", "<=", ">", ">=", "==", "!=", "between"]
+    },
+
+    "priority": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"],
+      "default": "medium"
+    },
+
+    "time_24h": {
+      "type": "string",
+      "pattern": "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+    },
+
+    "time_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/definitions/time_24h" },
+        "end": { "$ref": "#/definitions/time_24h" },
+        "timezone": {
+          "type": "string",
+          "enum": ["local", "utc"],
+          "default": "local"
+        },
+        "days": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+
+    "threshold_value": {
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        { "type": "string" }
+      ]
+    },
+
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stream", "metric", "condition", "threshold"],
+      "properties": {
+        "stream": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "metric": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "condition": { "$ref": "#/definitions/condition_operator" },
+        "threshold": { "$ref": "#/definitions/threshold_value" },
+        "unit": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "condition": { "const": "between" } }
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "target"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 50
+        },
+        "description": { "type": "string" },
+        "target": { "$ref": "#/definitions/target" },
+        "priority": { "$ref": "#/definitions/priority" },
+        "time_window": { "$ref": "#/definitions/time_window" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "aggregation": {
+          "type": "string",
+          "enum": ["all", "any"],
+          "default": "all"
+        }
+      }
+    },
+
+    "constraint_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stream", "metric", "operator", "threshold"],
+      "properties": {
+        "stream": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "metric": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "operator": { "$ref": "#/definitions/condition_operator" },
+        "threshold": { "$ref": "#/definitions/threshold_value" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "operator": { "const": "between" } }
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "constraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "condition"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 50
+        },
+        "description": { "type": "string" },
+        "condition": { "$ref": "#/definitions/constraint_condition" },
+        "applies_to": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+
+    "domain_content": {
+      "type": "object",
+      "description": "Domain configuration content.",
+      "additionalProperties": false,
+      "required": ["id", "streams", "alignment"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Unique domain identifier (kebab-case)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable domain description."
+        },
+        "streams": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/stream_reference" },
+          "minItems": 1,
+          "description": "Streams included in this domain. At least one stream with role 'primary' is required (semantic validation)."
+        },
+        "alignment": {
+          "$ref": "#/definitions/alignment",
+          "description": "Alignment configuration for joining streams."
+        },
+        "objectives": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/objective" },
+          "description": "List of objectives for optimization."
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/constraint" },
+          "description": "List of constraints limiting actions."
+        }
+      }
+    }
+  },
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["domain"],
+  "properties": {
+    "domain": {
+      "$ref": "#/definitions/domain_content",
+      "description": "Domain configuration."
+    }
+  }
+}

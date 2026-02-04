@@ -1,0 +1,43 @@
+# Test fixtures for all valid join strategies
+
+# full_outer join - preserves all rows from all streams
+---
+domain:
+  id: test-full-outer
+  streams:
+    - stream_id: air-quality
+      role: primary
+    - stream_id: outdoor-weather
+      role: context
+  alignment:
+    view_name: test_full_outer
+    granularity: "1 hour"
+    join_strategy: full_outer
+
+# left join - keeps all rows from first (primary) stream
+---
+domain:
+  id: test-left
+  streams:
+    - stream_id: air-quality
+      role: primary
+    - stream_id: outdoor-weather
+      role: context
+  alignment:
+    view_name: test_left
+    granularity: "1 hour"
+    join_strategy: left
+
+# inner join - only rows where all streams have data
+---
+domain:
+  id: test-inner
+  streams:
+    - stream_id: air-quality
+      role: primary
+    - stream_id: outdoor-weather
+      role: context
+  alignment:
+    view_name: test_inner
+    granularity: "1 hour"
+    join_strategy: inner

@@ -21,7 +21,7 @@
 //! ndp-validate --verify-schema schemas/stream-config.v1.2.schema.json
 //! ```
 
-use ndp_types::{SourceType, FieldType, DqRuleType, DqAction, MonotonicDirection};
+use ndp_types::{DqAction, DqRuleType, FieldType, MonotonicDirection, SourceType};
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -111,14 +111,13 @@ pub fn generate_schema() -> SchemaGenResult<String> {
         );
         obj.insert(
             "description".to_string(),
-            serde_json::json!("JSON Schema for NDP configuration types. Generated from ndp-types crate."),
+            serde_json::json!(
+                "JSON Schema for NDP configuration types. Generated from ndp-types crate."
+            ),
         );
 
         // Add generation metadata
-        obj.insert(
-            "x-ndp-version".to_string(),
-            serde_json::json!("1.0.0"),
-        );
+        obj.insert("x-ndp-version".to_string(), serde_json::json!("1.0.0"));
         obj.insert(
             "x-generated-from".to_string(),
             serde_json::json!("ndp-types crate via schemars"),
@@ -201,7 +200,12 @@ pub fn compare_schemas(path: &Path) -> SchemaGenResult<Vec<SchemaDifference>> {
 
     // Find differences
     let mut differences = Vec::new();
-    find_differences("$", &existing_normalized, &generated_normalized, &mut differences);
+    find_differences(
+        "$",
+        &existing_normalized,
+        &generated_normalized,
+        &mut differences,
+    );
 
     Ok(differences)
 }
@@ -296,7 +300,10 @@ fn find_differences(
                 if !g_map.contains_key(key) {
                     differences.push(SchemaDifference {
                         path: format!("{}.{}", path, key),
-                        description: format!("Extra key '{}' in existing schema (not in generated)", key),
+                        description: format!(
+                            "Extra key '{}' in existing schema (not in generated)",
+                            key
+                        ),
                         existing: Some(e_map[key].clone()),
                         generated: None,
                     });
@@ -307,12 +314,7 @@ fn find_differences(
             for key in g_map.keys() {
                 if let Some(e_val) = e_map.get(key) {
                     let g_val = &g_map[key];
-                    find_differences(
-                        &format!("{}.{}", path, key),
-                        e_val,
-                        g_val,
-                        differences,
-                    );
+                    find_differences(&format!("{}.{}", path, key), e_val, g_val, differences);
                 }
             }
         }
@@ -395,8 +397,8 @@ fn find_differences(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     // TC-401: Generate Schema Produces Valid JSON
     #[test]
@@ -425,10 +427,7 @@ mod tests {
 
         // SourceType should be present somewhere in the schema
         // (it may be inlined or in definitions)
-        assert!(
-            schema_json.contains("mqtt"),
-            "Schema should contain 'mqtt'"
-        );
+        assert!(schema_json.contains("mqtt"), "Schema should contain 'mqtt'");
         assert!(
             schema_json.contains("http_poll"),
             "Schema should contain 'http_poll'"
@@ -441,10 +440,7 @@ mod tests {
             schema_json.contains("file_watch"),
             "Schema should contain 'file_watch'"
         );
-        assert!(
-            schema_json.contains("csv"),
-            "Schema should contain 'csv'"
-        );
+        assert!(schema_json.contains("csv"), "Schema should contain 'csv'");
     }
 
     #[test]

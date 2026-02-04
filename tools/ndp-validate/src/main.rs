@@ -12,8 +12,7 @@ use std::process::ExitCode;
 use tracing_subscriber::EnvFilter;
 
 use ndp_validate::cli::{
-    determine_exit_code, exit_codes, output_human, output_json, Cli, OutputFormat,
-    ValidationResult,
+    determine_exit_code, exit_codes, output_human, output_json, Cli, OutputFormat, ValidationResult,
 };
 use ndp_validate::error::ValidationError;
 use ndp_validate::schema_gen;
@@ -68,10 +67,7 @@ async fn main() -> ExitCode {
 
 /// Run validation on the specified config(s)
 async fn run_validation(cli: &Cli) -> Result<ValidationResult, Box<dyn std::error::Error>> {
-    let config_path = cli
-        .config_path
-        .as_ref()
-        .ok_or("No config path specified")?;
+    let config_path = cli.config_path.as_ref().ok_or("No config path specified")?;
 
     // Check file exists
     if !config_path.exists() {
@@ -138,12 +134,11 @@ async fn run_validation(cli: &Cli) -> Result<ValidationResult, Box<dyn std::erro
     }
 
     // Layer 2b: Table existence check (if --check-tables)
-    if cli.check_tables
-        && cli.verbose {
-            eprintln!("Checking table existence in TimescaleDB...");
-        }
-        // TODO: Implement table existence check
-        // This requires database connection which is out of scope for initial implementation
+    if cli.check_tables && cli.verbose {
+        eprintln!("Checking table existence in TimescaleDB...");
+    }
+    // TODO: Implement table existence check
+    // This requires database connection which is out of scope for initial implementation
 
     Ok(result)
 }

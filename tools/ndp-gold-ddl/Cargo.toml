@@ -1,0 +1,30 @@
+[package]
+name = "ndp-gold-ddl"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neural Data Platform Team"]
+description = "Gold layer DDL generation tool for NDP stream configurations"
+
+[[bin]]
+name = "ndp-gold-ddl"
+path = "src/main.rs"
+
+[dependencies]
+# CLI interface
+clap = { version = "4", features = ["derive", "env"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Error handling
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3.8"
+pretty_assertions = "1.4"

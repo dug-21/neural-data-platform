@@ -594,5 +594,37 @@
       "lag_interval": "5 minutes"
     }
   },
+  "gold_etl": {
+    "enabled": true,
+    "description": "Gold layer aggregates for air quality",
+    "aggregates": {
+      "granularities": ["1 hour", "1 day"],
+      "default_metrics": ["mean", "count"],
+      "fields": {
+        "pm25": { "metrics": ["mean", "std", "min", "max", "p95"] },
+        "co2": { "metrics": ["mean", "std", "min", "max"] },
+        "temperature_c": { "metrics": ["mean", "min", "max"] },
+        "humidity_pct": { "metrics": ["mean", "min", "max"] }
+      }
+    },
+    "features": {
+      "lag": {
+        "enabled": true,
+        "lags_hours": [1, 6, 24],
+        "fields": ["pm25", "co2"]
+      },
+      "rolling": {
+        "enabled": true,
+        "windows": ["4 hours", "24 hours"],
+        "stats": ["mean", "std"],
+        "fields": ["pm25"]
+      },
+      "trend": {
+        "enabled": true,
+        "window": "4 hours",
+        "fields": ["pm25", "co2"]
+      }
+    }
+  },
   "config_version": 2
 }

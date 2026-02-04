@@ -339,7 +339,7 @@ mod tests {
 
         // AND: Multiple field_mappings with errors
         let field_mappings = vec![
-            (0, "raw_payload.pm02".to_string()),       // Valid
+            (0, "raw_payload.pm02".to_string()),        // Valid
             (1, "raw_payload.temperature".to_string()), // Invalid - not in fields
             (2, "humidity".to_string()),                // Invalid - missing prefix
             (3, "raw_payload.pressure".to_string()),    // Invalid - not in fields
@@ -386,10 +386,7 @@ mod tests {
             .expect("Should have available_fields array");
 
         // AND: Available fields should be sorted alphabetically
-        let field_strs: Vec<_> = available
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
+        let field_strs: Vec<_> = available.iter().filter_map(|v| v.as_str()).collect();
         assert!(field_strs.contains(&"pm02"));
         assert!(field_strs.contains(&"temperature"));
         assert!(field_strs.contains(&"humidity"));
@@ -491,11 +488,11 @@ mod tests {
 
         // Test various typos
         let test_cases = vec![
-            ("temperture", Some("temperature")),   // Missing 'a'
-            ("tmperature", Some("temperature")),   // Missing 'e'
-            ("humidty", Some("humidity")),         // Missing 'i'
-            ("presure", Some("pressure")),         // Missing 's'
-            ("completely_wrong", None),            // Too different
+            ("temperture", Some("temperature")), // Missing 'a'
+            ("tmperature", Some("temperature")), // Missing 'e'
+            ("humidty", Some("humidity")),       // Missing 'i'
+            ("presure", Some("pressure")),       // Missing 's'
+            ("completely_wrong", None),          // Too different
         ];
 
         for (typo, expected) in test_cases {

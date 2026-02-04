@@ -1,0 +1,51 @@
+# Domain: Indoor Air Quality
+# Cross-stream alignment for correlation analysis
+#
+# This domain combines indoor air quality sensor data with outdoor weather
+# and home automation state for pattern detection.
+
+id: indoor-air-quality
+description: Indoor air quality monitoring with environmental context
+
+streams:
+  - stream_id: air-quality
+    alias: indoor
+    role: primary
+    # null_handling: preserve  # Default for observation
+
+  - stream_id: outdoor-weather
+    alias: outdoor
+    role: context
+    # null_handling: preserve  # Default for observation
+
+  - stream_id: home-assistant-state
+    alias: state
+    role: actuator
+    null_handling: carry_forward  # State persists until changed
+
+alignment:
+  view_name: indoor_air_quality_aligned
+  granularity: "1 hour"
+  join_strategy: full_outer
+  null_handling: preserve
+
+objectives:
+  - id: healthy_co2
+    description: Keep CO2 below healthy threshold
+    target:
+      stream: air-quality
+      metric: co2
+      condition: "<"
+      threshold: 800
+      unit: ppm
+    priority: high
+
+  - id: comfortable_humidity
+    description: Maintain comfortable humidity range
+    target:
+      stream: air-quality
+      metric: humidity_pct
+      condition: between
+      threshold: 45
+      unit: percent
+    priority: medium

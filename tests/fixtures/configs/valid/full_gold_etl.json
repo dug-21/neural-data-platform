@@ -1,0 +1,43 @@
+{
+  "gold_etl": {
+    "enabled": true,
+    "description": "Full gold layer configuration with all features",
+    "aggregates": {
+      "granularities": ["15 minutes", "1 hour", "1 day", "7 days"],
+      "default_metrics": ["mean", "count"],
+      "fields": {
+        "pm25": {
+          "metrics": ["mean", "std", "min", "max", "p95", "p99", "count"]
+        },
+        "co2": {
+          "metrics": ["mean", "std", "min", "max", "first", "last"]
+        },
+        "temperature_c": {
+          "metrics": ["mean", "min", "max"],
+          "exclude_from_default": true
+        }
+      }
+    },
+    "features": {
+      "lag": {
+        "enabled": true,
+        "lags_hours": [1, 3, 6, 12, 24],
+        "fields": ["pm25", "co2"]
+      },
+      "rolling": {
+        "enabled": true,
+        "windows": ["1 hour", "4 hours", "24 hours"],
+        "stats": ["mean", "std", "min", "max"],
+        "fields": ["pm25"]
+      },
+      "trend": {
+        "enabled": true,
+        "window": "4 hours",
+        "fields": ["pm25", "co2", "temperature_c"]
+      }
+    },
+    "transitions": {
+      "enabled": false
+    }
+  }
+}

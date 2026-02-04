@@ -1,0 +1,10 @@
+domain:
+  id: test-missing-view
+  description: "Domain without view_name"
+  streams:
+    - stream_id: air-quality
+      alias: indoor
+      role: primary
+  alignment:
+    granularity: "1 hour"
+    join_strategy: full_outer

@@ -1,0 +1,4 @@
+{
+  "enabled": true,
+  "description": "Gold ETL without required aggregates"
+}

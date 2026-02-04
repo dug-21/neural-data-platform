@@ -1,0 +1,12 @@
+{
+  "objectives": [{
+    "id": "test_objective",
+    "target": {
+      "stream": "air-quality",
+      "metric": "co2",
+      "condition": "less_than",
+      "threshold": 800
+    },
+    "priority": "high"
+  }]
+}

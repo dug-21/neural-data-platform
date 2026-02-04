@@ -1,0 +1,7 @@
+{
+  "view_name": "indoor_air_quality_aligned",
+  "granularity": "1 hour",
+  "join_strategy": "full_outer",
+  "null_handling": "preserve",
+  "timestamp_alignment": "bucket_start"
+}

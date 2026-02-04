@@ -217,7 +217,11 @@ impl ValidationResult {
             ValidationLayer::Schema => "schema",
             ValidationLayer::Semantic => "semantic",
         };
-        *self.summary.by_layer.entry(layer_name.to_string()).or_insert(0) += 1;
+        *self
+            .summary
+            .by_layer
+            .entry(layer_name.to_string())
+            .or_insert(0) += 1;
         self.errors.push(error);
     }
 
@@ -290,16 +294,14 @@ impl BatchValidationResult {
 
 /// Format a single validation result as JSON
 pub fn output_json(result: &ValidationResult) -> String {
-    serde_json::to_string_pretty(result).unwrap_or_else(|e| {
-        format!(r#"{{"error": "JSON serialization failed: {}"}}"#, e)
-    })
+    serde_json::to_string_pretty(result)
+        .unwrap_or_else(|e| format!(r#"{{"error": "JSON serialization failed: {}"}}"#, e))
 }
 
 /// Format batch validation results as JSON
 pub fn output_json_batch(results: &BatchValidationResult) -> String {
-    serde_json::to_string_pretty(results).unwrap_or_else(|e| {
-        format!(r#"{{"error": "JSON serialization failed: {}"}}"#, e)
-    })
+    serde_json::to_string_pretty(results)
+        .unwrap_or_else(|e| format!(r#"{{"error": "JSON serialization failed: {}"}}"#, e))
 }
 
 /// Format a single validation result for human-readable terminal output
@@ -990,18 +992,19 @@ mod tests {
 
         let result = cli.validate_args();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("--output requires --generate-schema"));
+        assert!(result
+            .unwrap_err()
+            .contains("--output requires --generate-schema"));
     }
 
     #[test]
     fn test_parse_verify_schema_flag() {
-        let cli = Cli::parse_from([
-            "ndp-validate",
-            "--verify-schema",
-            "schemas/existing.json",
-        ]);
+        let cli = Cli::parse_from(["ndp-validate", "--verify-schema", "schemas/existing.json"]);
 
-        assert_eq!(cli.verify_schema, Some(PathBuf::from("schemas/existing.json")));
+        assert_eq!(
+            cli.verify_schema,
+            Some(PathBuf::from("schemas/existing.json"))
+        );
         assert!(cli.config_path.is_none());
         assert!(!cli.all);
         assert!(!cli.generate_schema);
@@ -1009,11 +1012,7 @@ mod tests {
 
     #[test]
     fn test_generate_schema_conflicts_with_config_path() {
-        let result = Cli::try_parse_from([
-            "ndp-validate",
-            "--generate-schema",
-            "config.json",
-        ]);
+        let result = Cli::try_parse_from(["ndp-validate", "--generate-schema", "config.json"]);
 
         assert!(result.is_err());
     }
@@ -1032,12 +1031,8 @@ mod tests {
 
     #[test]
     fn test_verify_schema_conflicts_with_all() {
-        let result = Cli::try_parse_from([
-            "ndp-validate",
-            "--verify-schema",
-            "schema.json",
-            "--all",
-        ]);
+        let result =
+            Cli::try_parse_from(["ndp-validate", "--verify-schema", "schema.json", "--all"]);
 
         assert!(result.is_err());
     }

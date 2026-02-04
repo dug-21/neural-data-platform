@@ -19,13 +19,29 @@
 //!   Supports graceful degradation when database connection is unavailable.
 //!
 //! - **dq_rules**: Validates DQ rule syntax, column references, and action compatibility.
+//!
+//! - **gold** (FE-001): Validates Gold ETL configuration semantics:
+//!   - Field references in aggregates/features
+//!   - Metric and stat types
+//!   - Granularity format
+//!   - Transitions on appropriate stream types
+//!
+//! - **domain** (FE-001): Validates domain configuration semantics:
+//!   - Stream references exist
+//!   - Unique aliases
+//!   - Objective conditions
+//!   - Alignment configuration
 
+pub mod domain;
 pub mod dq_rules;
+pub mod gold;
 pub mod source_path;
 pub mod sources;
 pub mod table_exists;
 
+pub use domain::validate_domain;
 pub use dq_rules::validate_dq_rules;
+pub use gold::validate_gold_etl;
 pub use source_path::validate_source_paths;
 pub use sources::validate_sources;
 pub use table_exists::{parse_table_reference, validate_table_exists};
@@ -54,6 +70,7 @@ impl SemanticValidator {
     /// - FR-022: Source path cross-reference validation
     /// - FR-023: Table existence validation (graceful degradation)
     /// - DQ rules validation
+    /// - FE-001: Gold ETL validation
     pub fn validate(&self, config: &Value) -> Vec<ValidationError> {
         let mut errors = Vec::new();
 
@@ -121,6 +138,9 @@ impl SemanticValidator {
                 errors.extend(validate_dq_rules(&dq_rules, &silver_columns));
             }
         }
+
+        // FE-001: Validate Gold ETL configuration
+        errors.extend(validate_gold_etl(config));
 
         errors
     }

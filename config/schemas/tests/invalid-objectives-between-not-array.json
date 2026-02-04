@@ -1,0 +1,13 @@
+{
+  "objectives": [
+    {
+      "id": "temp_range",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature",
+        "condition": "between",
+        "threshold": 20
+      }
+    }
+  ]
+}

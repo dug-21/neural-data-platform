@@ -57,4 +57,4 @@ pub use error::{ErrorCode, Severity, ValidationError, ValidationLayer};
 pub use schema::SchemaValidator;
 
 // Re-export schema generation
-pub use schema_gen::{generate_schema, verify_schema, compare_schemas, SchemaGenError};
+pub use schema_gen::{compare_schemas, generate_schema, verify_schema, SchemaGenError};

@@ -1,0 +1,94 @@
+domain:
+  id: comprehensive-test-domain
+  description: "Full domain configuration with all features"
+
+  streams:
+    - stream_id: air-quality
+      alias: indoor
+      role: primary
+
+    - stream_id: outdoor-weather
+      alias: outdoor
+      role: context
+
+    - stream_id: home-assistant-state
+      alias: state
+      role: actuator
+      null_handling: carry_forward
+
+    - stream_id: outdoor-air-quality
+      alias: outdoor_aqi
+      role: constraint
+
+  alignment:
+    view_name: comprehensive_test_aligned
+    granularity: "1 hour"
+    join_strategy: full_outer
+    null_handling: preserve
+    timestamp_alignment: bucket_start
+
+  objectives:
+    - id: healthy_co2
+      description: "Maintain CO2 below 800ppm for cognitive performance"
+      target:
+        stream: air-quality
+        metric: co2
+        condition: "<"
+        threshold: 800
+        unit: ppm
+      priority: high
+      tags: ["health", "cognitive"]
+
+    - id: healthy_pm25
+      description: "Keep PM2.5 below EPA 24-hour standard"
+      target:
+        stream: air-quality
+        metric: pm25
+        condition: "<"
+        threshold: 12
+        unit: "ug/m3"
+      priority: high
+      tags: ["health", "respiratory"]
+
+    - id: comfortable_temp
+      description: "Maintain comfortable temperature range"
+      target:
+        stream: air-quality
+        metric: temperature_c
+        condition: between
+        threshold: [20, 24]
+        unit: celsius
+      priority: medium
+      tags: ["comfort"]
+
+    - id: night_quiet
+      description: "Reduce activity at night"
+      target:
+        stream: home-assistant-state
+        metric: state
+        condition: "=="
+        threshold: "off"
+      priority: low
+      time_window:
+        start: "22:00"
+        end: "07:00"
+        timezone: local
+
+  constraints:
+    - id: outdoor_air_safe
+      description: "Only ventilate when outdoor air is acceptable"
+      condition:
+        stream: outdoor-air-quality
+        metric: pm25
+        operator: "<"
+        threshold: 35
+      applies_to: ["open_window", "increase_ventilation"]
+
+    - id: not_raining
+      description: "Don't open window when raining"
+      condition:
+        stream: outdoor-weather
+        metric: precipitation_mm
+        operator: "=="
+        threshold: 0
+      applies_to: ["open_window"]

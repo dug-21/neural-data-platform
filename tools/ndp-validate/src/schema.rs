@@ -563,7 +563,10 @@ mod tests {
         assert_eq!(error.layer, ValidationLayer::Syntax);
         assert_eq!(error.code, ErrorCode::SyntaxError);
         assert_eq!(error.severity, Severity::Error);
-        assert!(error.path.contains("line"), "Error path should contain line number");
+        assert!(
+            error.path.contains("line"),
+            "Error path should contain line number"
+        );
         let ctx = error.context.expect("Should have context");
         assert!(ctx.get("line").is_some(), "Context should have line");
         assert!(ctx.get("column").is_some(), "Context should have column");
@@ -601,7 +604,9 @@ mod tests {
         });
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty(), "Should have validation errors");
-        let missing_error = errors.iter().find(|e| e.code == ErrorCode::MissingRequired)
+        let missing_error = errors
+            .iter()
+            .find(|e| e.code == ErrorCode::MissingRequired)
             .expect("Should have MISSING_REQUIRED error");
         assert_eq!(missing_error.layer, ValidationLayer::Schema);
     }
@@ -617,7 +622,9 @@ mod tests {
         });
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty());
-        let error = errors.iter().find(|e| e.code == ErrorCode::MissingRequired)
+        let error = errors
+            .iter()
+            .find(|e| e.code == ErrorCode::MissingRequired)
             .expect("Should have MISSING_REQUIRED error");
         assert!(error.path.contains("fields"));
     }
@@ -633,7 +640,9 @@ mod tests {
         config["silver_elt"] = serde_json::json!({ "enabled": true });
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty(), "Should detect unknown field");
-        let unknown_error = errors.iter().find(|e| e.code == ErrorCode::UnknownField)
+        let unknown_error = errors
+            .iter()
+            .find(|e| e.code == ErrorCode::UnknownField)
             .expect("Should have UNKNOWN_FIELD error");
         assert_eq!(unknown_error.layer, ValidationLayer::Schema);
         if let Some(suggestion) = &unknown_error.suggestion {
@@ -652,7 +661,9 @@ mod tests {
         });
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty());
-        let error = errors.iter().find(|e| e.code == ErrorCode::UnknownField)
+        let error = errors
+            .iter()
+            .find(|e| e.code == ErrorCode::UnknownField)
             .expect("Should have UNKNOWN_FIELD error");
         assert!(error.path.contains("fields") && error.path.contains("[0]"));
     }
@@ -673,7 +684,9 @@ mod tests {
         });
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty(), "Should detect type error");
-        let type_error = errors.iter().find(|e| e.code == ErrorCode::InvalidType)
+        let type_error = errors
+            .iter()
+            .find(|e| e.code == ErrorCode::InvalidType)
             .expect("Should have INVALID_TYPE error");
         assert_eq!(type_error.layer, ValidationLayer::Schema);
         assert!(type_error.path.contains("retention_days"));
@@ -695,7 +708,9 @@ mod tests {
         });
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty(), "Should detect enum violation");
-        let enum_error = errors.iter().find(|e| e.code == ErrorCode::EnumViolation)
+        let enum_error = errors
+            .iter()
+            .find(|e| e.code == ErrorCode::EnumViolation)
             .expect("Should have ENUM_VIOLATION error");
         assert_eq!(enum_error.layer, ValidationLayer::Schema);
         assert!(enum_error.path.contains("partitioning_strategy"));
@@ -741,7 +756,11 @@ mod tests {
     fn test_valid_config_produces_no_errors() {
         let validator = create_v1_1_validator();
         let errors = validator.validate_schema(&valid_v1_1_config());
-        assert!(errors.is_empty(), "Valid config should have no errors: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Valid config should have no errors: {:?}",
+            errors
+        );
     }
 
     #[test]
@@ -771,7 +790,11 @@ mod tests {
             }
         });
         let errors = validator.validate_schema(&config);
-        assert!(errors.is_empty(), "Valid config should have no errors: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Valid config should have no errors: {:?}",
+            errors
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -795,7 +818,8 @@ mod tests {
             "fields": [{ "name": "temp", "type": "float" }],
             "sources": [{ "type": "mqtt", "enabled": true }],
             "unknown_field": true
-        })).unwrap();
+        }))
+        .unwrap();
         let errors = validator.validate(&json_str);
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.code == ErrorCode::UnknownField));
@@ -856,7 +880,11 @@ mod tests {
             "sources": [{ "type": "mqtt", "enabled": true }]
         });
         let errors = validator.validate_schema(&config);
-        assert!(errors.len() >= 2, "Should have multiple errors: {:?}", errors);
+        assert!(
+            errors.len() >= 2,
+            "Should have multiple errors: {:?}",
+            errors
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -887,7 +915,8 @@ mod tests {
     #[test]
     fn test_valid_minimal_config() {
         let validator = create_validator();
-        let config = serde_json::json!({ "info": { "stream_id": "test-stream", "version": "1.0.0" } });
+        let config =
+            serde_json::json!({ "info": { "stream_id": "test-stream", "version": "1.0.0" } });
         let errors = validator.validate_schema(&config);
         assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
     }
@@ -904,7 +933,8 @@ mod tests {
     #[test]
     fn test_invalid_stream_id_pattern() {
         let validator = create_validator();
-        let config = serde_json::json!({ "info": { "stream_id": "TestStream", "version": "1.0.0" } });
+        let config =
+            serde_json::json!({ "info": { "stream_id": "TestStream", "version": "1.0.0" } });
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.code == ErrorCode::PatternMismatch));

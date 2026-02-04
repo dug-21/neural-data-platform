@@ -1,0 +1,6 @@
+{
+  "gold_etl": {
+    "enabled": true,
+    "description": "Gold ETL enabled without aggregates section"
+  }
+}

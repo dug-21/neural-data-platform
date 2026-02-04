@@ -1,0 +1,277 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://neural-data-platform.local/schemas/objectives.schema.json",
+  "title": "NDP Objectives Configuration",
+  "description": "Schema for objectives and constraints in domain configurations. Defines measurable targets, thresholds, and constraints for optimization.",
+
+  "definitions": {
+    "condition_operator": {
+      "type": "string",
+      "enum": ["<", "<=", ">", ">=", "==", "!=", "between"],
+      "description": "Comparison operator for threshold. Use 'between' for range conditions with array threshold."
+    },
+
+    "priority": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"],
+      "default": "medium",
+      "description": "Objective priority level. critical=must always be met, high=strong preference, medium=normal importance, low=nice to have."
+    },
+
+    "time_24h": {
+      "type": "string",
+      "pattern": "^([01]?[0-9]|2[0-3]):[0-5][0-9]$",
+      "description": "Time in 24-hour format (HH:MM). Examples: '07:00', '22:30', '23:59'."
+    },
+
+    "day_of_week": {
+      "type": "string",
+      "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      "description": "Day of week (lowercase, abbreviated)."
+    },
+
+    "timezone_type": {
+      "type": "string",
+      "enum": ["local", "utc"],
+      "default": "local",
+      "description": "Timezone for time window. 'local' uses system timezone, 'utc' uses UTC."
+    },
+
+    "time_window": {
+      "type": "object",
+      "description": "Time-based applicability window for an objective.",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {
+          "$ref": "#/definitions/time_24h",
+          "description": "Start time of the window (inclusive)."
+        },
+        "end": {
+          "$ref": "#/definitions/time_24h",
+          "description": "End time of the window (exclusive). Can wrap around midnight (e.g., 22:00-07:00)."
+        },
+        "timezone": {
+          "$ref": "#/definitions/timezone_type",
+          "description": "Timezone for interpreting start/end times. Defaults to 'local'."
+        },
+        "days": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/day_of_week" },
+          "uniqueItems": true,
+          "description": "Days when this window applies. If omitted, applies to all days."
+        }
+      }
+    },
+
+    "threshold_value": {
+      "oneOf": [
+        {
+          "type": "number",
+          "description": "Single numeric threshold for comparison operators (<, <=, >, >=, ==, !=)."
+        },
+        {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Range threshold [min, max] for 'between' condition (inclusive)."
+        },
+        {
+          "type": "string",
+          "description": "String value for state comparisons (==, !=)."
+        }
+      ],
+      "description": "Threshold value: number, [min, max] array for 'between', or string for state comparison."
+    },
+
+    "target": {
+      "type": "object",
+      "description": "Target definition specifying what to measure and the threshold condition.",
+      "additionalProperties": false,
+      "required": ["stream", "metric", "condition", "threshold"],
+      "properties": {
+        "stream": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Reference to stream_id containing the metric."
+        },
+        "metric": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Field/metric name from the stream."
+        },
+        "condition": {
+          "$ref": "#/definitions/condition_operator",
+          "description": "Comparison operator."
+        },
+        "threshold": {
+          "$ref": "#/definitions/threshold_value",
+          "description": "Threshold value or range."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measurement (for documentation/display)."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "condition": { "const": "between" } }
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "Range [min, max] required for 'between' condition."
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "objective": {
+      "type": "object",
+      "description": "A measurable objective defining what the system should optimize for.",
+      "additionalProperties": false,
+      "required": ["id", "target"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 50,
+          "description": "Unique objective identifier within the domain."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the objective."
+        },
+        "target": {
+          "$ref": "#/definitions/target",
+          "description": "Target definition with stream, metric, condition, and threshold."
+        },
+        "priority": {
+          "$ref": "#/definitions/priority",
+          "description": "Objective priority level. Defaults to 'medium'."
+        },
+        "time_window": {
+          "$ref": "#/definitions/time_window",
+          "description": "Optional time-based applicability window."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "Categorization tags for filtering and grouping objectives."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "References to other objective IDs this objective depends on."
+        },
+        "aggregation": {
+          "type": "string",
+          "enum": ["all", "any"],
+          "default": "all",
+          "description": "How to combine dependent objectives. 'all'=AND, 'any'=OR."
+        }
+      }
+    },
+
+    "constraint_condition": {
+      "type": "object",
+      "description": "Condition that must be true before taking an action.",
+      "additionalProperties": false,
+      "required": ["stream", "metric", "operator", "threshold"],
+      "properties": {
+        "stream": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Reference to stream_id containing the metric."
+        },
+        "metric": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Field/metric name from the stream."
+        },
+        "operator": {
+          "$ref": "#/definitions/condition_operator",
+          "description": "Comparison operator."
+        },
+        "threshold": {
+          "$ref": "#/definitions/threshold_value",
+          "description": "Threshold value or range."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "operator": { "const": "between" } }
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "constraint": {
+      "type": "object",
+      "description": "A constraint defining conditions that MUST be true before taking action.",
+      "additionalProperties": false,
+      "required": ["id", "condition"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 50,
+          "description": "Unique constraint identifier within the domain."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the constraint."
+        },
+        "condition": {
+          "$ref": "#/definitions/constraint_condition",
+          "description": "Condition that must be satisfied."
+        },
+        "applies_to": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "Actions this constraint applies to. If empty, applies to all actions."
+        }
+      }
+    },
+
+    "objectives_list": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/objective" },
+      "description": "List of objectives for the domain."
+    },
+
+    "constraints_list": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/constraint" },
+      "description": "List of constraints for the domain."
+    }
+  },
+
+  "type": "object",
+  "properties": {
+    "objectives": { "$ref": "#/definitions/objectives_list" },
+    "constraints": { "$ref": "#/definitions/constraints_list" }
+  }
+}

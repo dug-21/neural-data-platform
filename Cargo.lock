@@ -2639,6 +2639,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ndp-gold-ddl"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ndp-mcp-server"
 version = "0.1.0"
 dependencies = [

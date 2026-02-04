@@ -1,0 +1,11 @@
+domain:
+  id: test-invalid-null
+  description: "Domain with invalid null handling"
+  streams:
+    - stream_id: air-quality
+      alias: indoor
+      role: primary
+      null_handling: drop
+  alignment:
+    view_name: test_aligned
+    granularity: "1 hour"

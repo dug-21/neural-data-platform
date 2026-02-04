@@ -1,0 +1,15 @@
+{
+  "stream_id": "air-quality",
+  "fields": [
+    {"name": "pm25", "type": "float"}
+  ],
+  "gold_etl": {
+    "enabled": true,
+    "aggregates": {
+      "granularities": ["1 hour"],
+      "fields": {
+        "nonexistent_field": { "metrics": ["mean"] }
+      }
+    }
+  }
+}

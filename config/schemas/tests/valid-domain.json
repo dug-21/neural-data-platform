@@ -1,0 +1,62 @@
+{
+  "domain": {
+    "id": "indoor-air-quality",
+    "description": "Maintain healthy indoor air quality through ventilation",
+    "streams": [
+      {
+        "stream_id": "air-quality",
+        "alias": "indoor",
+        "role": "primary"
+      },
+      {
+        "stream_id": "outdoor-weather",
+        "alias": "outdoor",
+        "role": "context"
+      },
+      {
+        "stream_id": "home-assistant-state",
+        "alias": "state",
+        "role": "actuator",
+        "null_handling": "carry_forward"
+      },
+      {
+        "stream_id": "outdoor-air-quality",
+        "alias": "outdoor_aqi",
+        "role": "constraint"
+      }
+    ],
+    "alignment": {
+      "view_name": "indoor_air_quality_aligned",
+      "granularity": "1 hour",
+      "join_strategy": "full_outer",
+      "null_handling": "preserve",
+      "timestamp_alignment": "bucket_start"
+    },
+    "objectives": [
+      {
+        "id": "healthy_co2",
+        "description": "Maintain CO2 below 800ppm",
+        "target": {
+          "stream": "air-quality",
+          "metric": "co2",
+          "condition": "<",
+          "threshold": 800,
+          "unit": "ppm"
+        },
+        "priority": "high"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "outdoor_air_safe",
+        "description": "Don't open window if outdoor air is bad",
+        "condition": {
+          "stream": "outdoor-air-quality",
+          "metric": "pm25",
+          "operator": "<",
+          "threshold": 35
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://neural-data-platform.local/schemas/alignment.schema.json",
+  "title": "NDP Domain Alignment Configuration",
+  "description": "Schema for cross-stream alignment in domain configurations. Defines how multiple streams are joined for correlation analysis.",
+
+  "definitions": {
+    "granularity": {
+      "type": "string",
+      "pattern": "^\\d+\\s+(minute|hour|day)s?$",
+      "description": "Time bucket granularity. Examples: '1 hour', '15 minutes', '1 day'.",
+      "examples": ["1 hour", "15 minutes", "1 day", "30 minutes"]
+    },
+
+    "stream_role": {
+      "type": "string",
+      "enum": ["primary", "context", "actuator", "constraint"],
+      "description": "Role of stream in the domain. primary=target variable being optimized, context=environmental data, actuator=potential causes/actions, constraint=limits on actions."
+    },
+
+    "join_strategy": {
+      "type": "string",
+      "enum": ["full_outer", "left", "inner"],
+      "default": "full_outer",
+      "description": "SQL join strategy. full_outer=preserve all rows from all streams, left=keep all rows from first (primary) stream, inner=only keep rows where all streams have data."
+    },
+
+    "null_handling": {
+      "type": "string",
+      "enum": ["preserve", "carry_forward", "interpolate"],
+      "default": "preserve",
+      "description": "NULL handling strategy. preserve=keep NULLs as-is, carry_forward=Last Observation Carried Forward (LOCF), interpolate=linear interpolation (numeric only)."
+    },
+
+    "timestamp_alignment": {
+      "type": "string",
+      "enum": ["bucket_start", "bucket_end"],
+      "default": "bucket_start",
+      "description": "Whether bucket timestamp represents start or end of the time period."
+    },
+
+    "stream_reference": {
+      "type": "object",
+      "description": "Reference to a stream for inclusion in the aligned view.",
+      "additionalProperties": false,
+      "required": ["stream_id", "role"],
+      "properties": {
+        "stream_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Reference to an existing stream configuration (stream_id)."
+        },
+        "alias": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 20,
+          "description": "Short alias for column naming in the aligned view. Must be unique within the domain."
+        },
+        "role": {
+          "$ref": "#/definitions/stream_role",
+          "description": "Role of this stream in the domain."
+        },
+        "null_handling": {
+          "$ref": "#/definitions/null_handling",
+          "description": "Override default NULL handling for this stream."
+        }
+      }
+    },
+
+    "alignment": {
+      "type": "object",
+      "description": "Alignment configuration for joining multiple streams.",
+      "additionalProperties": false,
+      "required": ["view_name", "granularity"],
+      "properties": {
+        "view_name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 63,
+          "description": "Name for the aligned view. Must be valid PostgreSQL identifier (max 63 chars, lowercase with underscores)."
+        },
+        "granularity": {
+          "$ref": "#/definitions/granularity",
+          "description": "Time bucket size for alignment."
+        },
+        "join_strategy": {
+          "$ref": "#/definitions/join_strategy",
+          "description": "How to join streams. Defaults to full_outer."
+        },
+        "null_handling": {
+          "$ref": "#/definitions/null_handling",
+          "description": "Default NULL handling for all streams. Can be overridden per-stream."
+        },
+        "timestamp_alignment": {
+          "$ref": "#/definitions/timestamp_alignment",
+          "description": "Whether bucket timestamp is start or end of period. Defaults to bucket_start."
+        }
+      }
+    }
+  },
+
+  "type": "object",
+  "$ref": "#/definitions/alignment"
+}

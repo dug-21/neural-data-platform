@@ -1,0 +1,38 @@
+{
+  "enabled": true,
+  "description": "Gold ETL for air quality measurements",
+  "aggregates": {
+    "granularities": ["1 hour", "1 day"],
+    "default_metrics": ["mean", "count"],
+    "fields": {
+      "pm25": {
+        "metrics": ["mean", "std", "min", "max", "p95"]
+      },
+      "co2": {
+        "metrics": ["mean", "std", "max"],
+        "exclude_from_default": false
+      }
+    }
+  },
+  "features": {
+    "lag": {
+      "enabled": true,
+      "lags_hours": [1, 6, 24],
+      "fields": ["pm25", "co2"]
+    },
+    "rolling": {
+      "enabled": true,
+      "windows": ["4 hours", "24 hours"],
+      "stats": ["mean", "std"],
+      "fields": ["pm25"]
+    },
+    "trend": {
+      "enabled": true,
+      "window": "4 hours",
+      "fields": ["pm25", "co2"]
+    }
+  },
+  "transitions": {
+    "enabled": false
+  }
+}
