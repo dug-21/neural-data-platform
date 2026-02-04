@@ -1630,13 +1630,42 @@ handle_tool() {
         target_dir="debug"
     fi
 
-    # Build the tool
+    # Build the tool - use Cargo if available, otherwise build in Docker
     log "  Building $cargo_package with profile=$profile..."
-    if ! cargo build $build_args --manifest-path "$REPO_ROOT/tools/$cargo_package/Cargo.toml" 2>&1 | while read -r line; do
-        # Show cargo output with indentation
-        echo "    $line"
-    done; then
-        error "Failed to build $tool_id"
+
+    if command -v cargo &> /dev/null; then
+        # Native Cargo build
+        log "  Using native Cargo..."
+        if ! cargo build $build_args --manifest-path "$REPO_ROOT/tools/$cargo_package/Cargo.toml" 2>&1 | while read -r line; do
+            echo "    $line"
+        done; then
+            error "Failed to build $tool_id with native Cargo"
+            return 1
+        fi
+    elif command -v docker &> /dev/null; then
+        # Docker-based build (for hosts without Cargo, e.g., Raspberry Pi)
+        log "  Cargo not found, building in Docker container..."
+
+        # Use rust:1.75-slim for smaller image size
+        local docker_image="rust:1.75-slim"
+
+        # Build command - mount repo and build in container
+        # Note: We use --target-dir to ensure output goes to expected location
+        local docker_cmd="cargo build $build_args -p $cargo_package"
+
+        if ! docker run --rm \
+            -v "$REPO_ROOT:/app" \
+            -w /app \
+            "$docker_image" \
+            $docker_cmd 2>&1 | while read -r line; do
+            echo "    $line"
+        done; then
+            error "Failed to build $tool_id in Docker container"
+            return 1
+        fi
+    else
+        error "Neither 'cargo' nor 'docker' is available. Cannot build $tool_id."
+        error "Install Rust (https://rustup.rs) or Docker to build tools."
         return 1
     fi
 
