@@ -1,7 +1,7 @@
 # FE-001: Gold Layer Foundation - Status
 
 > **Last Updated:** 2026-02-04
-> **Current Phase:** Phase B Complete
+> **Current Phase:** Phase B Deployed & Verified
 > **Overall Progress:** 55% (Phase A + B complete, Phases C-E pending)
 
 ---
@@ -11,7 +11,7 @@
 | Phase | Status | Progress | Notes |
 |-------|--------|----------|-------|
 | **A: Architecture Foundation** | ✅ Complete | 100% | JSON schemas, interpreters, DDL tool |
-| **B: First Stream** | ✅ Complete | 100% | v11-001-004 all complete, air-quality reference impl |
+| **B: First Stream** | ✅ Deployed | 100% | v1.1.1 deployed to Pi, 798 hourly + 35 daily rows |
 | **C: Cross-Stream + Alignment** | Not Started | 0% | 3 streams, aligned view |
 | **D: Validation + Dashboard** | Not Started | 0% | Fast-follower test |
 | **E: Unified Event Abstraction** | Not Started | 0% | Threshold crossings, unified view |
@@ -37,8 +37,8 @@
 |----|---------|--------|----------|-------|
 | v11-001 | Stream Type Classification | Complete | ndp-timescale-dev | StreamType enum in core, 14 tests |
 | v11-002 | Classification Propagation | Complete | ndp-timescale-dev | SQL generator, DDL migration, deploy.sh helpers |
-| v11-003 | Per-Stream Continuous Aggregates | Complete | ndp-rust-dev | air-quality hourly/daily, 22 metrics |
-| v11-004 | Aggregate Refresh Policy | Complete | ndp-timescale-dev | Granularity-aware defaults, 38 tests |
+| v11-003 | Per-Stream Continuous Aggregates | ✅ Deployed | ndp-rust-dev | air-quality hourly/daily, 22 metrics, 798+35 rows |
+| v11-004 | Aggregate Refresh Policy | ✅ Deployed | ndp-timescale-dev | 15min hourly, 1hr daily refresh active |
 | v11-005 | Cross-Stream Aligned View | Not Started | - | |
 | v11-006 | State Transition Materializer | Not Started | - | |
 | v11-007 | Objectives Storage | Not Started | - | |
@@ -80,6 +80,9 @@
 
 | Date | Activity | Outcome |
 |------|----------|---------|
+| 2026-02-04 | **v1.1.1 Deployed to Pi** | Gold layer operational: 2 CAs, 2 refresh policies, 833 total rows |
+| 2026-02-04 | **Docker build fallback added** | deploy.sh builds tools in Docker when Cargo unavailable |
+| 2026-02-04 | **ndp-gold-ddl DB connectivity** | Tool checks DB state for idempotent deployments |
 | 2026-02-04 | **v11-002 Classification Propagation Complete** | SQL generator, DDL migration, deploy.sh helpers, 17 tests |
 | 2026-02-04 | **v11-001 Stream Type Classification Complete** | StreamType enum with correlation_role(), 14 tests |
 | 2026-02-04 | **v11-004 Aggregate Refresh Policy Complete** | Granularity-aware defaults (hourly/daily), 38 new tests |
@@ -113,10 +116,14 @@
 3. [x] **Complete all SPARC planning artifacts**
 4. [x] Begin SPARC-A Implementation: v11-A01 Gold ETL JSON Schema
 5. [x] Implement ndp-gold-ddl Rust CLI tool (v11-A02)
-6. [ ] Run Phase A integration tests via deploy.sh (dry-run validated)
-7. [ ] Begin Phase B: First Stream (air-quality reference implementation)
-8. [ ] Create air-quality gold.yaml configuration
-9. [ ] Deploy continuous aggregate via ndp-gold-ddl
+6. [x] Run Phase A integration tests via deploy.sh (dry-run validated)
+7. [x] Begin Phase B: First Stream (air-quality reference implementation)
+8. [x] Create air-quality gold_etl configuration
+9. [x] Deploy continuous aggregate via ndp-gold-ddl
+10. [x] **v1.1.1 deployed and verified on Pi**
+11. [ ] Begin Phase C: Cross-Stream + Alignment (weather, outdoor-air-quality)
+12. [ ] Create domain configuration for indoor-air-quality
+13. [ ] Implement aligned view generation
 
 ## SPARC Coordination
 
@@ -125,7 +132,7 @@ See [SPARC-COORDINATION.md](./SPARC-COORDINATION.md) for complete implementation
 | SPARC Cycle | Phase | Duration | Planning | Implementation |
 |-------------|-------|----------|----------|----------------|
 | SPARC-A | Architecture Foundation | Week 1-2 | ✅ Complete | ✅ Complete |
-| SPARC-B | First Stream (air-quality) | Week 3 | ✅ Complete | Not Started |
+| SPARC-B | First Stream (air-quality) | Week 3 | ✅ Complete | ✅ Deployed (v1.1.1) |
 | SPARC-C | Cross-Stream + Alignment | Week 4 | ✅ Complete | Not Started |
 | SPARC-D | Validation + Dashboard | Week 5 | ✅ Complete | Not Started |
 | SPARC-E | Unified Event Abstraction | Week 6 | ✅ Complete | Not Started |
@@ -144,11 +151,15 @@ See [SPARC-COORDINATION.md](./SPARC-COORDINATION.md) for complete implementation
 
 ---
 
-## Metrics (when available)
+## Metrics
 
 | Metric | Current | Target |
 |--------|---------|--------|
-| Streams in Gold layer | 0 | 4 |
+| Streams in Gold layer | 1 (air-quality) | 4 |
+| Continuous Aggregates | 2 (hourly, daily) | - |
+| Gold hourly rows | 798 | - |
+| Gold daily rows | 35 | - |
+| Refresh policies active | 2 | - |
 | Query performance (30-day aligned) | N/A | < 100ms |
 | Fast-follower time | N/A | < 1 hour |
 | Resource usage (peak) | N/A | < 200 MB |
@@ -249,3 +260,55 @@ Phase A architecture foundation is complete. The following are now available for
 3. Feature registry for extensible feature type computation
 4. deploy.sh handlers for declarative Gold layer deployment
 5. Test fixtures for validation testing
+
+---
+
+## Phase B Implementation Report
+
+### Deployment Summary
+
+Phase B (First Stream) deployed via v1.1.1 manifest on 2026-02-04. The air-quality stream is now fully operational in the Gold layer with continuous aggregates actively refreshing.
+
+### Release: v1.1.1
+
+**Manifest:** `.deploy/releases/v1.1.1.manifest.json`
+
+**Changes deployed:**
+1. `tool:ndp-gold-ddl` - Built with Docker fallback for hosts without Cargo
+2. `gold-table:air-quality` (sync) - Continuous aggregates with refresh policies
+
+### Gold Layer State (Pi)
+
+```
+Continuous Aggregates:
+- gold.air_quality_hourly (internal: _materialized_hypertable_7)
+- gold.air_quality_daily (internal: _materialized_hypertable_8)
+
+Refresh Policies:
+- Job 1002: 15-minute interval, 4-hour lookback (hourly)
+- Job 1003: 1-hour interval, 3-day lookback (daily)
+
+Row Counts:
+- Hourly: 798 rows
+- Daily: 35 rows
+```
+
+### Validation Query
+
+```bash
+docker compose -f ./deploy/pi/docker-compose.yml exec -i timescaledb psql -U postgres -d ndp -c "SELECT view_schema || '.' || view_name as ca, materialization_hypertable_name as internal FROM timescaledb_information.continuous_aggregates WHERE view_schema = 'gold'; SELECT job_id, schedule_interval, config FROM timescaledb_information.jobs WHERE proc_name = 'policy_refresh_continuous_aggregate'; SELECT 'hourly' as ca, COUNT(*) as rows FROM gold.air_quality_hourly UNION ALL SELECT 'daily', COUNT(*) FROM gold.air_quality_daily;"
+```
+
+### Infrastructure Enhancements
+
+1. **Docker build fallback** - `deploy.sh handle_tool()` now builds Rust tools in Docker container when Cargo is not available on host (e.g., Raspberry Pi)
+2. **Database connectivity** - `ndp-gold-ddl` connects to TimescaleDB to check existing state for idempotent deployments
+3. **Granularity-aware refresh** - Policies automatically configured based on CA granularity (hourly: 15min/4hr, daily: 1hr/3day)
+
+### Ready for Phase C
+
+Phase B deployment is complete. The following are now ready for Phase C (Cross-Stream + Alignment):
+1. Proven deployment pipeline with Docker build support
+2. Reference implementation of single-stream Gold layer
+3. Refresh policy infrastructure validated
+4. Validation queries documented
