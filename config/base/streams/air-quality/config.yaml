@@ -2,6 +2,12 @@
 # GitOps managed - synced to etcd at /streams/air-quality/*
 
 stream_id: "air-quality"
+# FE-001 v11-001: Stream type classification for correlation analysis
+# - observation: Continuous numeric readings (PM2.5, temperature, etc.) - this is "effect" data
+# - state_event: Binary/discrete state changes - this is "cause" data
+# - forecast: Future predictions from external sources - this is "context" data
+# - dimension: Slowly changing reference data - this is "metadata"
+stream_type: "observation"
 description: "AirGradient sensor readings from MQTT"
 version: "1.0.0"
 enabled: true

@@ -1,0 +1,28 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.1",
+  "description": "Release v1.1.1: Gold Layer Foundation - Phase B (First Stream)",
+  "changes": [
+    {
+      "type": "migration",
+      "id": "004_stream_classification",
+      "action": "apply"
+    },
+    {
+      "type": "stream",
+      "id": "air-quality",
+      "action": "update",
+      "reload": "none"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "air-quality",
+      "action": "sync"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
+}

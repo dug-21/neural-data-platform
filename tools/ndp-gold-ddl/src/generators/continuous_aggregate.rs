@@ -226,6 +226,11 @@ DROP MATERIALIZED VIEW IF EXISTS {view_name} CASCADE;
     }
 
     /// Generate refresh policy SQL
+    ///
+    /// Uses granularity-aware defaults if no explicit policy is provided:
+    /// - Hourly aggregates: 15 min schedule, 4 hour lookback
+    /// - Daily aggregates: 1 hour schedule, 3 day lookback
+    /// - Other: 30 min schedule, 4 hour lookback
     fn generate_refresh_policy(
         &self,
         granularity: &str,
@@ -238,8 +243,8 @@ DROP MATERIALIZED VIEW IF EXISTS {view_name} CASCADE;
             suffix
         );
 
-        let default_policy = RefreshPolicyConfig::default();
-        let policy = policy.unwrap_or(&default_policy);
+        // Use granularity-aware defaults
+        let effective_policy = RefreshPolicyConfig::for_granularity(granularity, policy);
 
         Ok(format!(
             r#"-- Refresh policy for {view_name}
@@ -250,9 +255,9 @@ SELECT add_continuous_aggregate_policy('{view_name}',
     if_not_exists => TRUE
 );"#,
             view_name = view_name,
-            start_offset = policy.start_offset,
-            end_offset = policy.end_offset,
-            schedule_interval = policy.schedule_interval,
+            start_offset = effective_policy.start_offset,
+            end_offset = effective_policy.end_offset,
+            schedule_interval = effective_policy.schedule_interval,
         ))
     }
 }
@@ -484,5 +489,74 @@ mod tests {
 
         assert!(ddl.contains("gold.air_quality_hourly"));
         assert!(ddl.contains("gold.air_quality_daily"));
+    }
+
+    // =========================================================================
+    // v11-004: Granularity-Aware Refresh Policy Tests
+    // =========================================================================
+
+    #[test]
+    fn test_daily_aggregate_uses_daily_refresh_defaults() {
+        let config = create_test_stream_config();
+        let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
+
+        let policy_sql = generator.generate_refresh_policy("1 day", None).unwrap();
+
+        // Daily should use 3 days start_offset and 1 hour schedule
+        assert!(policy_sql.contains("3 days"));
+        assert!(policy_sql.contains("schedule_interval => INTERVAL '1 hour'"));
+        assert!(policy_sql.contains("gold.air_quality_daily"));
+    }
+
+    #[test]
+    fn test_hourly_aggregate_uses_hourly_refresh_defaults() {
+        let config = create_test_stream_config();
+        let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
+
+        let policy_sql = generator.generate_refresh_policy("1 hour", None).unwrap();
+
+        // Hourly should use 4 hours start_offset and 15 minutes schedule
+        assert!(policy_sql.contains("start_offset => INTERVAL '4 hours'"));
+        assert!(policy_sql.contains("schedule_interval => INTERVAL '15 minutes'"));
+        assert!(policy_sql.contains("gold.air_quality_hourly"));
+    }
+
+    #[test]
+    fn test_multi_granularity_generates_appropriate_policies() {
+        let mut config = create_test_stream_config();
+        let gold_etl = config.gold_etl.as_mut().unwrap();
+        let agg = gold_etl.aggregates.as_mut().unwrap();
+        agg.granularities = vec!["1 hour".to_string(), "1 day".to_string()];
+
+        let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
+        let ddl = generator.generate(config.gold_etl.as_ref().unwrap(), Action::Recreate).unwrap();
+
+        // Both policies should be in the output
+        assert!(ddl.contains("gold.air_quality_hourly"));
+        assert!(ddl.contains("gold.air_quality_daily"));
+
+        // Check that appropriate defaults are used
+        // Note: order may vary, just ensure both patterns are present
+        assert!(ddl.contains("schedule_interval => INTERVAL '15 minutes'")); // hourly
+        assert!(ddl.contains("schedule_interval => INTERVAL '1 hour'")); // daily
+    }
+
+    #[test]
+    fn test_explicit_policy_overrides_granularity_defaults() {
+        let mut config = create_test_stream_config();
+        let gold_etl = config.gold_etl.as_mut().unwrap();
+        gold_etl.refresh_policy = Some(RefreshPolicyConfig {
+            schedule_interval: "20 minutes".to_string(),
+            start_offset: "2 hours".to_string(),
+            end_offset: "10 minutes".to_string(),
+        });
+
+        let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
+        let ddl = generator.generate(config.gold_etl.as_ref().unwrap(), Action::Recreate).unwrap();
+
+        // Explicit policy should override defaults
+        assert!(ddl.contains("20 minutes"));
+        assert!(ddl.contains("2 hours"));
+        assert!(ddl.contains("10 minutes"));
     }
 }

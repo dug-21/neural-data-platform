@@ -96,6 +96,46 @@ impl StreamType {
             StreamType::Dimension => NullHandling::CarryForward,
         }
     }
+
+    /// Map stream type to correlation role for V1.2 pattern detection.
+    ///
+    /// Returns a static string representing the role this stream type
+    /// plays in correlation analysis:
+    /// - `"effect"` - Observation data (what changed)
+    /// - `"cause"` - State events (what triggered)
+    /// - `"context"` - Forecast data (predictive context)
+    /// - `"metadata"` - Dimension data (reference information)
+    pub fn correlation_role(&self) -> &'static str {
+        match self {
+            StreamType::Observation => "effect",
+            StreamType::StateEvent => "cause",
+            StreamType::Forecast => "context",
+            StreamType::Dimension => "metadata",
+        }
+    }
+
+    /// Get the null handling strategy as a string for SQL generation.
+    ///
+    /// Returns:
+    /// - `"preserve"` for Observation and Forecast (keep NULLs)
+    /// - `"carry_forward"` for StateEvent and Dimension (LOCF)
+    pub fn null_handling(&self) -> &'static str {
+        match self {
+            StreamType::Observation | StreamType::Forecast => "preserve",
+            StreamType::StateEvent | StreamType::Dimension => "carry_forward",
+        }
+    }
+}
+
+impl std::fmt::Display for StreamType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StreamType::Observation => write!(f, "observation"),
+            StreamType::StateEvent => write!(f, "state_event"),
+            StreamType::Forecast => write!(f, "forecast"),
+            StreamType::Dimension => write!(f, "dimension"),
+        }
+    }
 }
 
 /// Alignment configuration for the view
@@ -328,5 +368,59 @@ priority: high
         assert_eq!(objective.id, "healthy_co2");
         assert_eq!(objective.target.threshold, 800.0);
         assert_eq!(objective.priority, Priority::High);
+    }
+
+    // ========== v11-002: Correlation Role Mapping Tests ==========
+
+    #[test]
+    fn test_observation_type_is_effect_role() {
+        assert_eq!(StreamType::Observation.correlation_role(), "effect");
+    }
+
+    #[test]
+    fn test_state_event_type_is_cause_role() {
+        assert_eq!(StreamType::StateEvent.correlation_role(), "cause");
+    }
+
+    #[test]
+    fn test_forecast_type_is_context_role() {
+        assert_eq!(StreamType::Forecast.correlation_role(), "context");
+    }
+
+    #[test]
+    fn test_dimension_type_is_metadata_role() {
+        assert_eq!(StreamType::Dimension.correlation_role(), "metadata");
+    }
+
+    // ========== v11-002: Null Handling Mapping Tests ==========
+
+    #[test]
+    fn test_observation_has_preserve_null_handling() {
+        assert_eq!(StreamType::Observation.null_handling(), "preserve");
+    }
+
+    #[test]
+    fn test_state_event_has_carry_forward_null_handling() {
+        assert_eq!(StreamType::StateEvent.null_handling(), "carry_forward");
+    }
+
+    #[test]
+    fn test_forecast_has_preserve_null_handling() {
+        assert_eq!(StreamType::Forecast.null_handling(), "preserve");
+    }
+
+    #[test]
+    fn test_dimension_has_carry_forward_null_handling() {
+        assert_eq!(StreamType::Dimension.null_handling(), "carry_forward");
+    }
+
+    // ========== v11-002: Display Trait Tests ==========
+
+    #[test]
+    fn test_stream_type_display() {
+        assert_eq!(StreamType::Observation.to_string(), "observation");
+        assert_eq!(StreamType::StateEvent.to_string(), "state_event");
+        assert_eq!(StreamType::Forecast.to_string(), "forecast");
+        assert_eq!(StreamType::Dimension.to_string(), "dimension");
     }
 }

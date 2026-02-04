@@ -179,6 +179,72 @@ impl Default for RefreshPolicyConfig {
     }
 }
 
+impl RefreshPolicyConfig {
+    /// Get default policy for hourly aggregates
+    ///
+    /// Hourly aggregates use:
+    /// - 15 minute refresh schedule (reasonably fresh data)
+    /// - 4 hour lookback (handles late-arriving data)
+    /// - 15 minute end offset (avoids incomplete buckets)
+    pub fn default_hourly() -> Self {
+        Self {
+            schedule_interval: "15 minutes".to_string(),
+            start_offset: "4 hours".to_string(),
+            end_offset: "15 minutes".to_string(),
+        }
+    }
+
+    /// Get default policy for daily aggregates
+    ///
+    /// Daily aggregates use:
+    /// - 1 hour refresh schedule (less frequent is fine)
+    /// - 3 days lookback (handles late data arriving over days)
+    /// - 1 hour end offset (avoid incomplete day buckets)
+    pub fn default_daily() -> Self {
+        Self {
+            schedule_interval: "1 hour".to_string(),
+            start_offset: "3 days".to_string(),
+            end_offset: "1 hour".to_string(),
+        }
+    }
+
+    /// Get default policy for other granularities
+    ///
+    /// Generic default uses conservative settings
+    fn default_other() -> Self {
+        Self {
+            schedule_interval: "30 minutes".to_string(),
+            start_offset: "4 hours".to_string(),
+            end_offset: "30 minutes".to_string(),
+        }
+    }
+
+    /// Get the appropriate refresh policy for a given granularity
+    ///
+    /// If an explicit policy is provided in config, use it.
+    /// Otherwise, return sensible defaults based on the granularity:
+    /// - "1 hour" or "N hours": hourly defaults
+    /// - "1 day" or "N days": daily defaults
+    /// - Other: generic defaults
+    pub fn for_granularity(granularity: &str, config_policy: Option<&RefreshPolicyConfig>) -> Self {
+        // If config has explicit policy, use it
+        if let Some(policy) = config_policy {
+            return policy.clone();
+        }
+
+        // Parse granularity to determine appropriate defaults
+        let granularity_lower = granularity.to_lowercase();
+
+        if granularity_lower.contains("day") {
+            Self::default_daily()
+        } else if granularity_lower.contains("hour") {
+            Self::default_hourly()
+        } else {
+            Self::default_other()
+        }
+    }
+}
+
 /// Simplified stream config for Gold DDL generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {
@@ -291,6 +357,67 @@ mod tests {
         assert_eq!(policy.start_offset, "4 hours");
         assert_eq!(policy.end_offset, "15 minutes");
         assert_eq!(policy.schedule_interval, "15 minutes");
+    }
+
+    // =========================================================================
+    // v11-004: Refresh Policy TDD Tests
+    // =========================================================================
+
+    #[test]
+    fn test_default_hourly_policy() {
+        let policy = RefreshPolicyConfig::default_hourly();
+        assert_eq!(policy.schedule_interval, "15 minutes");
+        assert_eq!(policy.start_offset, "4 hours");
+        assert_eq!(policy.end_offset, "15 minutes");
+    }
+
+    #[test]
+    fn test_default_daily_policy() {
+        let policy = RefreshPolicyConfig::default_daily();
+        assert_eq!(policy.schedule_interval, "1 hour");
+        assert_eq!(policy.start_offset, "3 days");
+        assert_eq!(policy.end_offset, "1 hour");
+    }
+
+    #[test]
+    fn test_get_policy_for_granularity_hourly() {
+        let config = GoldEtlConfig::default();
+        let policy = RefreshPolicyConfig::for_granularity("1 hour", config.refresh_policy.as_ref());
+        assert_eq!(policy.schedule_interval, "15 minutes");
+        assert_eq!(policy.start_offset, "4 hours");
+        assert_eq!(policy.end_offset, "15 minutes");
+    }
+
+    #[test]
+    fn test_get_policy_for_granularity_daily() {
+        let config = GoldEtlConfig::default();
+        let policy = RefreshPolicyConfig::for_granularity("1 day", config.refresh_policy.as_ref());
+        assert_eq!(policy.schedule_interval, "1 hour");
+        assert_eq!(policy.start_offset, "3 days");
+        assert_eq!(policy.end_offset, "1 hour");
+    }
+
+    #[test]
+    fn test_get_policy_for_granularity_uses_config_if_provided() {
+        let custom_policy = RefreshPolicyConfig {
+            schedule_interval: "30 minutes".to_string(),
+            start_offset: "8 hours".to_string(),
+            end_offset: "30 minutes".to_string(),
+        };
+        let policy = RefreshPolicyConfig::for_granularity("1 hour", Some(&custom_policy));
+        assert_eq!(policy.schedule_interval, "30 minutes");
+        assert_eq!(policy.start_offset, "8 hours");
+        assert_eq!(policy.end_offset, "30 minutes");
+    }
+
+    #[test]
+    fn test_get_policy_for_granularity_custom_granularity() {
+        let config = GoldEtlConfig::default();
+        // Custom granularity falls back to generic default
+        let policy = RefreshPolicyConfig::for_granularity("15 minutes", config.refresh_policy.as_ref());
+        assert_eq!(policy.schedule_interval, "30 minutes");
+        assert_eq!(policy.start_offset, "4 hours");
+        assert_eq!(policy.end_offset, "30 minutes");
     }
 
     #[test]

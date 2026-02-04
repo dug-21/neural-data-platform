@@ -1,7 +1,8 @@
 {
   "stream_id": "air-quality",
+  "stream_type": "observation",
   "description": "AirGradient sensor readings from MQTT",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "enabled": true,
   "retention_days": 365,
   "compression_after_days": 7,
@@ -595,16 +596,18 @@
     }
   },
   "gold_etl": {
-    "enabled": false,
-    "description": "Gold layer aggregates for air quality",
+    "enabled": true,
+    "description": "Gold layer aggregates for air quality monitoring and ML features",
     "aggregates": {
       "granularities": ["1 hour", "1 day"],
-      "default_metrics": ["mean", "count"],
       "fields": {
         "pm25": { "metrics": ["mean", "std", "min", "max", "p95"] },
+        "pm10": { "metrics": ["mean", "min", "max"] },
         "co2": { "metrics": ["mean", "std", "min", "max"] },
         "temperature_c": { "metrics": ["mean", "min", "max"] },
-        "humidity_pct": { "metrics": ["mean", "min", "max"] }
+        "humidity_pct": { "metrics": ["mean", "min", "max"] },
+        "tvoc_index": { "metrics": ["mean", "max"] },
+        "nox_index": { "metrics": ["mean", "max"] }
       }
     },
     "features": {
@@ -624,6 +627,11 @@
         "window": "4 hours",
         "fields": ["pm25", "co2"]
       }
+    },
+    "refresh_policy": {
+      "start_offset": "4 hours",
+      "end_offset": "15 minutes",
+      "schedule_interval": "15 minutes"
     }
   },
   "config_version": 2

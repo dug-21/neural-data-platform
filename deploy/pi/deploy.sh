@@ -1731,6 +1731,115 @@ handle_domain() {
     fi
 }
 
+# ============================================================================
+# CLASSIFICATION SYNC HELPERS (FE-001 Phase B v11-002)
+# ============================================================================
+
+# Derive correlation role from stream type
+# Returns: effect, cause, context, metadata
+derive_correlation_role() {
+    local stream_type="$1"
+    case "$stream_type" in
+        observation) echo "effect" ;;
+        state_event) echo "cause" ;;
+        forecast)    echo "context" ;;
+        dimension)   echo "metadata" ;;
+        *)           echo "unknown" ;;
+    esac
+}
+
+# Derive NULL handling from stream type
+# Returns: preserve, carry_forward
+derive_null_handling() {
+    local stream_type="$1"
+    case "$stream_type" in
+        observation) echo "preserve" ;;
+        state_event) echo "carry_forward" ;;
+        forecast)    echo "preserve" ;;
+        dimension)   echo "carry_forward" ;;
+        *)           echo "preserve" ;;
+    esac
+}
+
+# Sync stream classification to data dictionary (v11-002)
+# Called during sync_to_data_dictionary() for streams with stream_type
+sync_stream_classification() {
+    local stream_id="$1"
+    local stream_type="$2"
+    local description="$3"
+
+    if [ -z "$stream_type" ] || [ "$stream_type" = "null" ]; then
+        # No stream_type defined, skip classification sync
+        return 0
+    fi
+
+    local correlation_role=$(derive_correlation_role "$stream_type")
+    local null_handling=$(derive_null_handling "$stream_type")
+
+    # Escape single quotes in description
+    if [ -n "$description" ] && [ "$description" != "null" ]; then
+        description=$(echo "$description" | sed "s/'/''/g")
+        local desc_sql="'$description'"
+    else
+        local desc_sql="NULL"
+    fi
+
+    log "  Classification: $stream_id -> $stream_type ($correlation_role)"
+
+    echo "-- Stream Classification: $stream_id"
+    echo "INSERT INTO data_dictionary.stream_classification"
+    echo "    (stream_id, stream_type, correlation_role, null_handling, description)"
+    echo "VALUES"
+    echo "    ('$stream_id', '$stream_type', '$correlation_role', '$null_handling', $desc_sql)"
+    echo "ON CONFLICT (stream_id) DO UPDATE SET"
+    echo "    stream_type = EXCLUDED.stream_type,"
+    echo "    correlation_role = EXCLUDED.correlation_role,"
+    echo "    null_handling = EXCLUDED.null_handling,"
+    echo "    description = COALESCE(EXCLUDED.description, data_dictionary.stream_classification.description),"
+    echo "    updated_at = NOW();"
+    echo ""
+}
+
+# Sync gold table metadata to data dictionary (v11-002)
+# Called when generating Gold DDL
+sync_gold_table_metadata() {
+    local table_name="$1"
+    local object_type="$2"
+    local source_silver_table="$3"
+    local source_stream_type="$4"
+    local granularity="$5"
+    local description="$6"
+
+    # Handle NULL values
+    local source_silver_sql="NULL"
+    local source_type_sql="NULL"
+    local granularity_sql="NULL"
+    local desc_sql="NULL"
+
+    [ -n "$source_silver_table" ] && [ "$source_silver_table" != "null" ] && source_silver_sql="'$source_silver_table'"
+    [ -n "$source_stream_type" ] && [ "$source_stream_type" != "null" ] && source_type_sql="'$source_stream_type'"
+    [ -n "$granularity" ] && [ "$granularity" != "null" ] && granularity_sql="'$granularity'"
+
+    if [ -n "$description" ] && [ "$description" != "null" ]; then
+        description=$(echo "$description" | sed "s/'/''/g")
+        desc_sql="'$description'"
+    fi
+
+    echo "-- Gold Table Metadata: $table_name"
+    echo "INSERT INTO data_dictionary.gold_tables"
+    echo "    (table_name, object_type, source_silver_table, source_stream_type, granularity, description)"
+    echo "VALUES"
+    echo "    ('$table_name', '$object_type', $source_silver_sql, $source_type_sql, $granularity_sql, $desc_sql)"
+    echo "ON CONFLICT (table_name) DO UPDATE SET"
+    echo "    object_type = EXCLUDED.object_type,"
+    echo "    source_silver_table = EXCLUDED.source_silver_table,"
+    echo "    source_stream_type = EXCLUDED.source_stream_type,"
+    echo "    granularity = EXCLUDED.granularity,"
+    echo "    description = COALESCE(EXCLUDED.description, data_dictionary.gold_tables.description),"
+    echo "    updated_at = NOW();"
+    echo ""
+}
+
 # Handle container restart declaration
 # Args: $1 = declaration JSON
 handle_container_restart() {

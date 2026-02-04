@@ -39,7 +39,9 @@ pub use config::{
 pub use error::{GoldDdlError, Result};
 
 pub use generators::{
-    AlignedViewGenerator, ContinuousAggregateGenerator, RefreshPolicyGenerator,
+    generate_classification_sql, generate_gold_table_sql, AlignedViewGenerator,
+    ClassificationSyncer, ContinuousAggregateGenerator, DefaultClassificationSyncer,
+    RefreshPolicyGenerator,
 };
 
 pub use registry::{FeatureConfig, FeatureGenerator, FeatureRegistry, SqlColumn};

@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-02-04
+
+Gold Layer Foundation - Phase B (FE-001). First Gold stream deployment with air-quality.
+
+### Added
+
+- **Stream Type Classification** (v11-001)
+  - StreamType enum: observation, state_event, forecast, dimension
+  - Correlation role derivation (effect, cause, context, metadata)
+  - NULL handling strategy (preserve, carry_forward)
+  - 14 unit tests
+
+- **Classification Propagation** (v11-002)
+  - SQL migration `004_stream_classification.sql`
+  - `data_dictionary.stream_classification` table
+  - `data_dictionary.gold_tables` catalog
+  - Helper functions: derive_correlation_role(), derive_null_handling()
+  - 17 unit tests
+
+- **Per-Stream Continuous Aggregates** (v11-003)
+  - `gold.air_quality_hourly` - Hourly aggregates
+  - `gold.air_quality_daily` - Daily aggregates
+  - 22 metrics across 7 fields (pm25, pm10, co2, temperature_c, humidity_pct, tvoc_index, nox_index)
+  - Idempotent DDL generation with IF NOT EXISTS pattern
+
+- **Aggregate Refresh Policy** (v11-004)
+  - Granularity-aware defaults (hourly: 15min, daily: 1hr)
+  - Idempotent policy creation with if_not_exists => TRUE
+  - 38 unit tests
+
+### Changed
+
+- Air quality stream config: `gold_etl.enabled: true`
+- Air quality stream config: Added `stream_type: "observation"`
+- ndp-gold-ddl: 152 total tests (up from 113)
+
+### Notes
+
+- First **active** Gold layer deployment
+- Reference implementation for future Gold stream rollouts
+- Continuous aggregates refresh automatically on configured schedule
+
 ## [1.1.0] - 2026-02-04
 
 Gold Layer Foundation - Phase A (FE-001). Tooling and schemas for Gold layer, no active deployment.
@@ -93,6 +135,7 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/dug-21/neural-data-platform/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/dug-21/neural-data-platform/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dug-21/neural-data-platform/releases/tag/v1.0.0

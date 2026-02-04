@@ -13,7 +13,7 @@ use std::process::ExitCode;
 use tracing_subscriber::EnvFilter;
 
 use ndp_gold_ddl::config::{Action, ConfigLoader, FileSystemConfigLoader};
-use ndp_gold_ddl::generators::AlignedViewGenerator;
+use ndp_gold_ddl::generators::{AlignedViewGenerator, ContinuousAggregateGenerator};
 
 /// Exit codes for the CLI
 mod exit_codes {
@@ -109,9 +109,20 @@ fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                 let generator = AlignedViewGenerator::new(loader);
                 let sql = generator.generate(&domain_config, action)?;
                 Ok(sql)
-            } else if let Some(_stream_id) = stream {
-                // TODO: Implement continuous aggregate generation
-                Err("Stream DDL generation not yet implemented. Use --domain for aligned views.".into())
+            } else if let Some(stream_id) = stream {
+                // Generate continuous aggregate for stream
+                let stream_config = loader.load_stream_config(stream_id)?;
+                let gold_etl = stream_config.gold_etl.as_ref().ok_or_else(|| {
+                    format!("Stream '{}' has no gold_etl configuration", stream_id)
+                })?;
+
+                if !gold_etl.enabled {
+                    return Err(format!("Stream '{}' has gold_etl.enabled = false", stream_id).into());
+                }
+
+                let generator = ContinuousAggregateGenerator::from_stream_config(&stream_config)?;
+                let sql = generator.generate(gold_etl, action)?;
+                Ok(sql)
             } else {
                 Err("Must specify --stream or --domain".into())
             }

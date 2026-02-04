@@ -1,8 +1,8 @@
 # FE-001: Gold Layer Foundation - Status
 
 > **Last Updated:** 2026-02-04
-> **Current Phase:** Phase A Complete - Ready for Phase B
-> **Overall Progress:** 35% (Phase A implemented, Phases B-E pending)
+> **Current Phase:** Phase B Complete
+> **Overall Progress:** 55% (Phase A + B complete, Phases C-E pending)
 
 ---
 
@@ -11,7 +11,7 @@
 | Phase | Status | Progress | Notes |
 |-------|--------|----------|-------|
 | **A: Architecture Foundation** | ✅ Complete | 100% | JSON schemas, interpreters, DDL tool |
-| **B: First Stream** | Not Started | 0% | air-quality reference impl |
+| **B: First Stream** | ✅ Complete | 100% | v11-001-004 all complete, air-quality reference impl |
 | **C: Cross-Stream + Alignment** | Not Started | 0% | 3 streams, aligned view |
 | **D: Validation + Dashboard** | Not Started | 0% | Fast-follower test |
 | **E: Unified Event Abstraction** | Not Started | 0% | Threshold crossings, unified view |
@@ -35,10 +35,10 @@
 
 | ID | Feature | Status | Assignee | Notes |
 |----|---------|--------|----------|-------|
-| v11-001 | Stream Type Classification | Not Started | - | |
-| v11-002 | Classification Propagation | Not Started | - | |
-| v11-003 | Per-Stream Continuous Aggregates | Not Started | - | |
-| v11-004 | Aggregate Refresh Policy | Not Started | - | |
+| v11-001 | Stream Type Classification | Complete | ndp-timescale-dev | StreamType enum in core, 14 tests |
+| v11-002 | Classification Propagation | Complete | ndp-timescale-dev | SQL generator, DDL migration, deploy.sh helpers |
+| v11-003 | Per-Stream Continuous Aggregates | Complete | ndp-rust-dev | air-quality hourly/daily, 22 metrics |
+| v11-004 | Aggregate Refresh Policy | Complete | ndp-timescale-dev | Granularity-aware defaults, 38 tests |
 | v11-005 | Cross-Stream Aligned View | Not Started | - | |
 | v11-006 | State Transition Materializer | Not Started | - | |
 | v11-007 | Objectives Storage | Not Started | - | |
@@ -80,6 +80,9 @@
 
 | Date | Activity | Outcome |
 |------|----------|---------|
+| 2026-02-04 | **v11-002 Classification Propagation Complete** | SQL generator, DDL migration, deploy.sh helpers, 17 tests |
+| 2026-02-04 | **v11-001 Stream Type Classification Complete** | StreamType enum with correlation_role(), 14 tests |
+| 2026-02-04 | **v11-004 Aggregate Refresh Policy Complete** | Granularity-aware defaults (hourly/daily), 38 new tests |
 | 2026-02-04 | **Phase A Implementation Complete** | 6 agents, 292 tests, all passing |
 | 2026-02-04 | ndp-gold-ddl tool implemented | 113 tests, continuous aggregate + aligned view |
 | 2026-02-04 | ndp-validate Gold extensions | 179 tests, 9 Gold error codes (400-408) |
