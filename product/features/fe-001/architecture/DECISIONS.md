@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Five architecture agents analyzed the V1 codebase to inform Gold layer design. This document synthesizes their findings into actionable decisions.
+Five architecture agents analyzed the V1 codebase to inform Gold layer design. This document synthesizes their findings into **11 architectural decisions** (including 1 ADR and 1 constraint) and **2 explicitly deferred decisions**.
 
 **Key Insight**: V1.0 has established strong, consistent patterns. Gold layer should **extend these patterns**, not invent new ones.
 
@@ -446,6 +446,211 @@ domain:
 
 ---
 
+### Decision 8: Forecast Streams Align on Issued Time, Not Valid Time
+
+**Status**: Accepted (2026-02-04)
+
+**Context**: Forecast streams (e.g., NWS weather forecasts) have two timestamps:
+- `issued_at`: When the forecast was published/available
+- `valid_time`: The future hour being predicted
+
+When joining forecasts with observations for correlation analysis, the join key matters for causality.
+
+**The Problem**:
+```
+NWS Forecast issued at 10:00 AM:
+  - valid_time=14:00: temp=75°F
+  - valid_time=15:00: temp=78°F
+
+Observation at 14:00:
+  - indoor CO2 = 850 ppm
+  - user opened window at 14:15
+```
+
+**Wrong**: Join `forecast.valid_time = observation.time`
+- Shows "what was predicted FOR 14:00"
+- But that prediction was made hours earlier
+- Cannot establish causality - user couldn't act on future information
+
+**Correct**: Join `forecast.issued_at <= observation.time` (most recent)
+- Shows "what forecast was AVAILABLE at 14:00"
+- This is the information the user could have seen when making decisions
+- Preserves causal validity for V1.2 correlation analysis
+
+**Decision**: All `forecast` type streams align on `issued_at`, not `valid_time`.
+
+**Implementation**:
+```sql
+-- In aligned view, forecast columns show "latest available forecast"
+LEFT JOIN LATERAL (
+    SELECT * FROM gold.nws_forecast_hourly f
+    WHERE f.issued_at <= bucket
+    ORDER BY f.issued_at DESC
+    LIMIT 1
+) forecast ON TRUE
+```
+
+**Applies To**: Any stream with `stream_type: forecast`
+- NWS hourly forecasts
+- Any future prediction data sources
+- Model predictions (when added in V1.3+)
+
+**Rationale**: Correlation analysis requires causal validity. You can only correlate observations with information that was *available* at the time, not information about that time that was generated earlier or later.
+
+---
+
+### Decision 10: NULL Handling in Aligned View by Stream Type
+
+**Status**: Accepted (2026-02-04)
+
+**Context**: FULL OUTER JOIN across streams produces NULLs where a stream has no data for a given hour. The handling strategy affects correlation validity.
+
+**Decision**: NULL handling depends on `stream_type`:
+
+| Stream Type | Strategy | Rationale |
+|-------------|----------|-----------|
+| `observation` | **Preserve NULL** | Missing sensor reading ≠ zero. Don't fabricate data. |
+| `state_event` | **Carry Forward (LOCF)** | State persists until changed. Last known state IS current state. |
+| `forecast` | **Preserve NULL** | If no forecast available, don't pretend there was one. |
+| `dimension` | **Carry Forward** | Dimensions are slow-changing. Last value remains valid. |
+
+**Implementation**:
+```sql
+SELECT
+    bucket,
+
+    -- Observations: preserve NULL (honest representation)
+    aq.pm25_mean AS indoor_pm25,
+    aq.co2_mean AS indoor_co2,
+    ow.temp_mean AS outdoor_temp,
+
+    -- State: carry forward (state persists until changed)
+    COALESCE(
+        se.window_state,
+        LAG(se.window_state) IGNORE NULLS OVER (ORDER BY bucket)
+    ) AS window_state
+
+FROM gold.air_quality_hourly aq
+FULL OUTER JOIN gold.outdoor_weather_hourly ow ON aq.bucket = ow.bucket
+FULL OUTER JOIN gold.state_events_hourly se ON aq.bucket = se.bucket
+```
+
+**V1.2 Implications**:
+- Correlation algorithms must be NULL-aware (skip NULL pairs, don't fail)
+- Report "coverage %" to indicate how much overlapping data existed
+- Granger causality and similar tests handle missing data natively
+
+**Why Not Interpolate?**: Linear interpolation fabricates data points. For causal analysis, it's better to know "data was missing" than to use synthetic values that could create false correlations.
+
+---
+
+### Decision 9: Gold Schema Evolution Requires DROP/RECREATE
+
+**Status**: Accepted (2026-02-04) - Constraint, not choice
+
+**Context**: TimescaleDB continuous aggregates cannot have columns added via `ALTER TABLE ADD COLUMN`. This is a platform limitation.
+
+**Constraint**: Adding a new metric to `gold_etl.aggregates.fields` requires:
+1. DROP the existing continuous aggregate
+2. CREATE new continuous aggregate with updated columns
+3. Wait for refresh to repopulate data
+
+**Implications**:
+- Config changes that add Gold metrics are **breaking changes**
+- Historical data will be recomputed on next refresh (not lost, just reprocessed)
+- Refresh policies will repopulate from Silver (source of truth)
+
+**Not a Decision**: This is a known limitation to document, not a choice between options.
+
+---
+
+### Decision 11: Idempotency via Manifest-Declared Actions
+
+**Status**: Accepted (2026-02-04)
+
+**Context**: Continuous aggregates need idempotent deployment. `CREATE MATERIALIZED VIEW` fails if view exists. Detection of "what changed" could happen at deploy time or manifest creation time.
+
+**Decision**: Manifest explicitly declares `action` for each Gold table. Detection happens at manifest creation, not deploy time.
+
+**Manifest Actions**:
+
+| Action | When to Use | What `ndp-gold-ddl` Generates |
+|--------|-------------|-------------------------------|
+| `sync` | First deploy, or no config changes | Check exists → CREATE if not |
+| `recreate` | `gold_etl` config changed (new metrics, granularities) | DROP IF EXISTS → CREATE |
+
+**Manifest Example**:
+```json
+{
+  "gold-tables": [
+    { "stream_id": "air-quality", "action": "sync" },
+    { "stream_id": "outdoor-weather", "action": "recreate" }
+  ]
+}
+```
+
+**`ndp-gold-ddl` Implementation**:
+
+```bash
+# sync mode - idempotent create
+ndp-gold-ddl generate --stream air-quality --action sync
+
+# recreate mode - DROP + CREATE
+ndp-gold-ddl generate --stream outdoor-weather --action recreate
+```
+
+**Generated SQL for `sync`**:
+```sql
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM timescaledb_information.continuous_aggregates
+        WHERE view_schema = 'gold' AND view_name = 'air_quality_hourly'
+    ) THEN
+        CREATE MATERIALIZED VIEW gold.air_quality_hourly
+        WITH (timescaledb.continuous) AS ...;
+    ELSE
+        RAISE NOTICE 'gold.air_quality_hourly already exists, skipping';
+    END IF;
+END $$;
+```
+
+**Generated SQL for `recreate`**:
+```sql
+-- Explicitly drop and recreate
+DROP MATERIALIZED VIEW IF EXISTS gold.outdoor_weather_hourly CASCADE;
+
+CREATE MATERIALIZED VIEW gold.outdoor_weather_hourly
+WITH (timescaledb.continuous) AS ...;
+
+-- Re-add policies (dropped with CASCADE)
+SELECT add_continuous_aggregate_policy(...);
+```
+
+**⚠️ PROCEDURAL REQUIREMENT**:
+
+> **ANY change to `gold_etl` config requires `action: recreate` in the manifest.**
+>
+> Unlike Silver tables (which support `ADD COLUMN`), Gold continuous aggregates cannot be altered in place. If you change metrics, granularities, or any `gold_etl` field, you MUST use `recreate`. Using `sync` with changed config will result in the old schema remaining in place.
+
+**Action Selection Guide**:
+
+| Scenario | Action | Why |
+|----------|--------|-----|
+| First deploy of Gold for stream | `sync` | Creates new aggregate |
+| Re-deploy, `gold_etl` unchanged | `sync` | Idempotent, skips if exists |
+| **ANY change to `gold_etl`** | **`recreate`** | **Required - cannot alter in place** |
+| Remove Gold from stream | `drop` (future) | Explicit removal |
+
+**Future Process** (automated):
+- Compare new config vs etcd (deployed state)
+- Auto-set action based on diff
+- Automation will enforce this rule
+
+**Rationale**: Manifest is explicit about intent. No runtime detection needed. deploy.sh executes what manifest declares. Safer and more predictable.
+
+---
+
 ### Decision 7: Aligned Views Are Domain-Scoped
 
 **Question**: One platform-wide aligned view or one per domain?
@@ -478,9 +683,15 @@ domain:
 | 2 | Schema validation | Two-layer (JSON Schema + semantic) | ADR-019-001 |
 | 3 | Data dictionary | Extend with `gold_*` tables | Follows silver pattern |
 | 4 | Module layout | `core/src/gold/` with feature gate | Follows silver pattern |
-| 5 | SQL generation | String-based, direct to TimescaleDB | Config-driven DDL |
+| 5 | Gold DDL generation | **Rust CLI tool** (`ndp-gold-ddl`) | ADR-FE001-001 |
 | 6 | Cross-stream config | **Domain-centric** in `config/domains/` | Flexibility principle |
 | 7 | Aligned views | **One per domain** (not platform-wide) | Preserves optionality |
+| 8 | Forecast alignment | Join on `issued_at`, not `valid_time` | Causal validity |
+| 9 | Gold schema evolution | DROP/RECREATE (constraint) | TimescaleDB limitation |
+| 10 | NULL handling | By stream_type (preserve/carry forward) | Causal validity |
+| 11 | Idempotency | Manifest declares `sync` vs `recreate` | Explicit intent |
+| D1 | Threshold crossing dedupe | **Deferred** - observe behavior first | Premature optimization |
+| D2 | Backfill strategy | **Deferred** - Bronze→Silver concern | Architecture layers |
 
 ### Config Location Summary
 
@@ -754,6 +965,39 @@ This is the correct implementation order based on dependencies:
 5. **A05: Create ndp-gold-ddl tool** → NEW Rust tool in `tools/ndp-gold-ddl/` (ADR-FE001-001)
 6. **A06: Deploy.sh handlers** → `handle_gold_table()`, `handle_domain()` calling Rust tool
 7. **Sync scripts** → sync-domains-to-etcd.sh (if needed)
+
+---
+
+## Deferred Decisions
+
+These questions were considered but explicitly deferred until we have more information:
+
+### Deferred: Threshold Crossing Deduplication
+
+**Question**: When a metric oscillates around a threshold, it generates many crossing events. Should we dedupe? Apply hysteresis?
+
+**Risk if Unaddressed**: Event spam, noisy unified events view
+
+**Decision**: **Deferred** - Wait until we observe the behavior in practice. Any decision now is premature guessing. If threshold crossings create noise, we'll directly observe the pattern and design an appropriate resolution.
+
+**Revisit When**: After V1.1 Phase E (Unified Events View) is deployed and generating real threshold crossing events.
+
+---
+
+### Deferred: Backfill Strategy
+
+**Question**: Pi reboots, misses 4 hours. How does Gold layer catch up?
+
+**Risk if Unaddressed**: Data gaps in aggregates after outages
+
+**Decision**: **Deferred** - This is primarily a Bronze→Silver concern, not Gold. The expected behavior:
+1. Bronze ingests data (may have gaps during outage)
+2. Silver uses upsert, should recover automatically when Bronze catches up
+3. Gold continuous aggregates refresh from Silver (materialized view catchup)
+
+**Note**: May need to validate upsert behavior with Silver subscriber model. If Silver recovery works as expected, Gold inherits that behavior automatically.
+
+**Revisit When**: If we observe Gold data gaps after Pi reboots that aren't explained by Silver gaps.
 
 ---
 
