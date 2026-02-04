@@ -1,0 +1,18 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.0",
+  "description": "Release v1.1.0: Gold Layer Foundation - tooling, schemas, deploy.sh handlers (Phase A)",
+  "changes": [
+    {
+      "type": "stream",
+      "id": "air-quality",
+      "action": "update",
+      "reload": "none"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
+}

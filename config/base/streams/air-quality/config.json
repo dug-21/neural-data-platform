@@ -595,7 +595,7 @@
     }
   },
   "gold_etl": {
-    "enabled": true,
+    "enabled": false,
     "description": "Gold layer aggregates for air quality",
     "aggregates": {
       "granularities": ["1 hour", "1 day"],
