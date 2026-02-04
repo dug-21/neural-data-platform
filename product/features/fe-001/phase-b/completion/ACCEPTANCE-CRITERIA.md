@@ -1,7 +1,8 @@
 # FE-001 Phase B: First Stream (air-quality) - Acceptance Criteria
 
 > **Phase:** B (First Stream - Reference Implementation)
-> **Version:** 1.0
+> **Version:** 1.1
+> **Release Version:** v1.1.1
 > **Created:** 2026-02-04
 > **Last Updated:** 2026-02-04
 
@@ -372,6 +373,183 @@ deploy/pi/deploy.sh apply .deploy/test/phase-b-air-quality.manifest.json
 
 ---
 
+## Tool Build Acceptance Criteria
+
+### AC-B-TOOL-01: ndp-gold-ddl Tool Builds Successfully
+
+**Given:** Phase B implementation complete
+**When:** Running the tool build process
+**Then:** `ndp-gold-ddl` binary is available on the Pi
+
+**Verification:**
+```bash
+# Build the tool
+cargo build --release -p ndp-gold-ddl
+
+# Verify binary exists
+ls -la target/release/ndp-gold-ddl
+# Expected: Executable file present
+
+# Verify it runs
+./target/release/ndp-gold-ddl --help
+# Expected: Help text displayed
+```
+
+**Acceptance Checklist:**
+- [ ] `cargo build --release -p ndp-gold-ddl` succeeds
+- [ ] Binary at `target/release/ndp-gold-ddl` is executable
+- [ ] Binary runs without library errors on Pi (ARM64)
+- [ ] deploy.sh can locate and invoke the tool
+
+**Owner:** ndp-rust-dev
+
+---
+
+### AC-B-TOOL-02: deploy.sh Has Tool Build Mechanism
+
+**Given:** deploy.sh apply command
+**When:** Gold-tables declaration is processed
+**Then:** ndp-gold-ddl tool is built or verified available before use
+
+**Verification:**
+```bash
+# Run deploy with dry-run
+deploy/pi/deploy.sh apply .deploy/releases/v1.1.1.manifest.json --dry-run
+
+# Check for tool build step in output
+# Expected: Log shows tool availability check or build step
+```
+
+**Acceptance Checklist:**
+- [ ] deploy.sh checks for ndp-gold-ddl before Phase 5
+- [ ] If missing, deploy.sh builds the tool OR fails with clear message
+- [ ] Tool declaration type implemented OR cargo build step added
+- [ ] Documentation updated for tool build mechanism
+
+**Owner:** ndp-rust-dev
+
+---
+
+## Release Preparation Acceptance Criteria
+
+### AC-B-REL-01: Manifest Created Per RELEASE-POLICY
+
+**Given:** Phase B implementation complete
+**When:** Preparing for release
+**Then:** Manifest exists and is valid
+
+**Verification:**
+```bash
+# Verify manifest exists
+ls -la .deploy/releases/v1.1.1.manifest.json
+
+# Validate manifest JSON
+cat .deploy/releases/v1.1.1.manifest.json | jq .
+# Expected: Valid JSON with release_version: "1.1.1"
+
+# Verify required fields
+cat .deploy/releases/v1.1.1.manifest.json | jq '.release_version, .description, .changes'
+# Expected: All fields present
+```
+
+**Acceptance Checklist:**
+- [ ] `.deploy/releases/v1.1.1.manifest.json` exists
+- [ ] `version` field is "1.0"
+- [ ] `release_version` field is "1.1.1"
+- [ ] `description` summarizes Phase B changes
+- [ ] `changes` array includes: tool, stream, gold-tables, dictionary
+
+**Owner:** ndp-scrum-master
+
+---
+
+### AC-B-REL-02: CHANGELOG.md Updated
+
+**Given:** Phase B release
+**When:** Reviewing CHANGELOG.md
+**Then:** v1.1.1 section documents all changes
+
+**Verification:**
+```bash
+# Check for v1.1.1 section
+grep -A 20 "## \[1.1.1\]" CHANGELOG.md
+# Expected: Section with Added, Changed sections
+```
+
+**Acceptance Checklist:**
+- [ ] `## [1.1.1] - YYYY-MM-DD` section exists
+- [ ] Added section lists Gold layer features
+- [ ] Changed section lists config changes
+- [ ] Link references updated at bottom
+
+**Owner:** ndp-scrum-master
+
+---
+
+### AC-B-REL-03: Git Tag Created
+
+**Given:** Phase B code committed
+**When:** Creating release
+**Then:** Annotated tag v1.1.1 exists
+
+**Verification:**
+```bash
+# Verify tag exists
+git tag -l "v1.1.1"
+# Expected: v1.1.1
+
+# Verify tag is annotated
+git show v1.1.1
+# Expected: Shows tag message and commit info
+```
+
+**Acceptance Checklist:**
+- [ ] Tag `v1.1.1` created with `-a` flag (annotated)
+- [ ] Tag message describes Phase B changes
+- [ ] Tag pushed to remote: `git push origin v1.1.1`
+
+**Owner:** ndp-scrum-master
+
+---
+
+### AC-B-REL-04: Pi Deployment Successful
+
+**Given:** v1.1.1 release pushed
+**When:** Deploying to Pi
+**Then:** Gold layer is operational
+
+**Verification:**
+```bash
+# On Pi:
+git pull
+git describe --tags --exact-match
+# Expected: v1.1.1
+
+./deploy.sh apply .deploy/releases/v1.1.1.manifest.json
+# Expected: Exit code 0
+
+cat /var/ndp/deployed-version
+# Expected: v1.1.1
+
+# Verify Gold tables exist
+docker exec timescaledb psql -U postgres -d ndp -c "
+SELECT view_name FROM timescaledb_information.continuous_aggregates
+WHERE view_schema = 'gold';
+"
+# Expected: air_quality_hourly, air_quality_daily
+```
+
+**Acceptance Checklist:**
+- [ ] `git pull` retrieves v1.1.1 code and tag
+- [ ] `deploy.sh apply` completes without error
+- [ ] `/var/ndp/deployed-version` shows v1.1.1
+- [ ] Gold continuous aggregates operational
+- [ ] Refresh policies running
+
+**Owner:** ndp-tester
+
+---
+
 ## Performance Acceptance Criteria
 
 ### AC-B-PERF-01: Refresh Policy Resource Usage Acceptable
@@ -446,6 +624,16 @@ Phase B is complete when ALL of the following are true:
 - [ ] AC-B-INT-01: Full pipeline works (config to operational)
 - [ ] AC-B-INT-02: Manifest idempotency verified
 
+### Tool Build
+- [ ] AC-B-TOOL-01: ndp-gold-ddl builds successfully
+- [ ] AC-B-TOOL-02: deploy.sh has tool build mechanism
+
+### Release Preparation (RELEASE-POLICY)
+- [ ] AC-B-REL-01: Manifest `.deploy/releases/v1.1.1.manifest.json` created
+- [ ] AC-B-REL-02: CHANGELOG.md updated with v1.1.1 section
+- [ ] AC-B-REL-03: Git tag v1.1.1 created (annotated)
+- [ ] AC-B-REL-04: Pi deployment successful
+
 ### Performance
 - [ ] AC-B-PERF-01: Refresh CPU < 5% sustained
 - [ ] AC-B-PERF-02: Storage < 20 MB for 30 days
@@ -456,10 +644,20 @@ Phase B is complete when ALL of the following are true:
 
 Before starting Phase C, verify:
 
-- [ ] **CRITICAL**: Adding a new metric requires ONLY config edit + manifest recreate
-- [ ] **CRITICAL**: No Rust code changes needed for metric addition
-- [ ] **CRITICAL**: deploy.sh correctly invokes ndp-gold-ddl
+### Architecture Validation (CRITICAL)
+- [ ] Adding a new metric requires ONLY config edit + manifest recreate
+- [ ] No Rust code changes needed for metric addition
+- [ ] deploy.sh correctly invokes ndp-gold-ddl
 - [ ] air-quality serves as reference implementation for other streams
+
+### Release Completion (CRITICAL)
+- [ ] v1.1.1 released and pushed to remote
+- [ ] Pi deployment verified operational
+- [ ] `/var/ndp/deployed-version` shows `v1.1.1`
+
+### Tool Infrastructure (CRITICAL)
+- [ ] ndp-gold-ddl tool builds on Pi (ARM64)
+- [ ] Tool build mechanism documented for future releases
 
 ---
 

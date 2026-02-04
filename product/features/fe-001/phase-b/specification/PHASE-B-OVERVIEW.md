@@ -4,7 +4,8 @@
 > **Phase:** B (First Stream - Reference Implementation)
 > **Target:** Week 3
 > **Status:** Specification Complete
-> **Dependencies:** Phase A complete (v11-A01, v11-A02, v11-A03, v11-A05)
+> **Release Version:** v1.1.1
+> **Dependencies:** Phase A complete (v11-A01, v11-A02, v11-A03, v11-A05, v1.1.0 released)
 
 ---
 
@@ -26,6 +27,45 @@ Phase B applies the architecture foundation established in Phase A to the `air-q
 | v11-002 | Classification Propagation | High | [SPEC-B02](./SPEC-B02-classification-propagation.md) |
 | v11-003 | Per-Stream Continuous Aggregates | Critical | [SPEC-B03](./SPEC-B03-continuous-aggregates.md) |
 | v11-004 | Aggregate Refresh Policy | High | [SPEC-B04](./SPEC-B04-refresh-policy.md) |
+
+---
+
+## Pre-Deployment Requirements
+
+### Tool Build Requirement
+
+Phase B is the first phase that **deploys** Gold layer objects to the Pi. The `ndp-gold-ddl` tool must be available on the target device.
+
+**Gap Identified in v1.1.0:** Phase A added the tool code but did not include a mechanism to build it on the Pi.
+
+**Solution Options:**
+
+1. **Add `tool` declaration type** to deploy.sh:
+   ```json
+   {"type": "tool", "id": "ndp-gold-ddl", "action": "build"}
+   ```
+
+2. **Add cargo build step** to deploy.sh pre-flight:
+   ```bash
+   # In deploy.sh apply(), before Phase 5 (Gold Tables)
+   cargo build --release -p ndp-gold-ddl
+   ```
+
+3. **Include in container build** process
+
+**Chosen Approach:** Add cargo build step for tools in deploy.sh (simplest, maintains current architecture).
+
+### Release Preparation (RELEASE-POLICY Compliance)
+
+Phase B deployment to Pi requires proper release packaging per `docs/procedures/RELEASE-POLICY.md`:
+
+| Artifact | Location | Status |
+|----------|----------|--------|
+| Manifest | `.deploy/releases/v1.1.1.manifest.json` | Create during Phase B |
+| Git Tag | `v1.1.1` (annotated) | Create after implementation |
+| Changelog | `CHANGELOG.md` | Update with v1.1.1 section |
+
+**Version:** v1.1.1 (PATCH - builds on v1.1.0 Gold foundation)
 
 ---
 
@@ -347,22 +387,48 @@ WHERE bucket >= NOW() - INTERVAL '30 days';
 
 ---
 
-## Manifest for Phase B
+## Manifest for Phase B (v1.1.1)
+
+Per `docs/procedures/RELEASE-POLICY.md`, the release manifest:
+
+**Location:** `.deploy/releases/v1.1.1.manifest.json`
 
 ```json
 {
-  "version": "1.1.0-phase-b",
-  "description": "Phase B: First Stream (air-quality Gold layer)",
-  "declarations": {
-    "etcd-config": [
-      { "stream_id": "air-quality", "path": "config/base/streams/air-quality/config.yaml" }
-    ],
-    "gold-tables": [
-      { "stream_id": "air-quality", "action": "sync" }
-    ]
-  }
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.1",
+  "description": "Release v1.1.1: Gold Layer - air-quality continuous aggregates (Phase B)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build"
+    },
+    {
+      "type": "stream",
+      "id": "air-quality",
+      "action": "update",
+      "reload": "none"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "air-quality",
+      "action": "sync"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
 }
 ```
+
+**Manifest Changelog:**
+- `tool` declaration builds `ndp-gold-ddl` (new in v1.1.1)
+- `stream` updates air-quality config with `gold_etl.enabled: true`
+- `gold-tables` creates continuous aggregates via ndp-gold-ddl
+- `dictionary` updates data dictionary with Gold table metadata
 
 ---
 
@@ -370,6 +436,7 @@ WHERE bucket >= NOW() - INTERVAL '30 days';
 
 ### Phase B Complete When:
 
+**Feature Implementation:**
 - [ ] **v11-001**: `stream_type: observation` present in air-quality config
 - [ ] **v11-002**: `data_dictionary.stream_classification` contains air-quality entry
 - [ ] **v11-003**: `gold.air_quality_hourly` continuous aggregate operational
@@ -378,12 +445,24 @@ WHERE bucket >= NOW() - INTERVAL '30 days';
 - [ ] Query performance < 100ms for 30-day range on Pi
 - [ ] **Config-only change can modify aggregate fields** (architecture validation)
 
+**Tool Build Infrastructure:**
+- [ ] deploy.sh has mechanism to build `ndp-gold-ddl` tool
+- [ ] `tool` declaration type implemented OR cargo build step added
+- [ ] Tool available at `/opt/ndp/bin/ndp-gold-ddl` OR `target/release/ndp-gold-ddl`
+
+**Release Preparation (RELEASE-POLICY):**
+- [ ] `.deploy/releases/v1.1.1.manifest.json` created and valid
+- [ ] `CHANGELOG.md` updated with v1.1.1 section
+- [ ] Git tag `v1.1.1` created (annotated)
+- [ ] Code and tag pushed to remote
+
 ### Architecture Validation Checkpoint:
 
 Before proceeding to Phase C:
 - [ ] Adding a new metric (e.g., p99) requires only config edit + manifest recreate
 - [ ] No Rust code changes needed for metric addition
 - [ ] Deploy.sh correctly calls ndp-gold-ddl
+- [ ] Pi deployment successful via `deploy.sh apply .deploy/releases/v1.1.1.manifest.json`
 
 ---
 
