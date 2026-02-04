@@ -1646,8 +1646,8 @@ handle_tool() {
         # Docker-based build (for hosts without Cargo, e.g., Raspberry Pi)
         log "  Cargo not found, building in Docker container..."
 
-        # Use rust:1.75-slim for smaller image size
-        local docker_image="rust:1.75-slim"
+        # Use rust:1.80-slim - supports Cargo.lock v4 format (introduced in Rust 1.78)
+        local docker_image="rust:1.80-slim"
 
         # Build command - mount repo and build in container
         # Note: We use --target-dir to ensure output goes to expected location
