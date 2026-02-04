@@ -6,6 +6,7 @@
 //! - 0: Generation successful
 //! - 1: Generation failed (validation error, config error)
 //! - 2: System error (file not found, etc.)
+//! - 3: Database connection error
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -13,13 +14,17 @@ use std::process::ExitCode;
 use tracing_subscriber::EnvFilter;
 
 use ndp_gold_ddl::config::{Action, ConfigLoader, FileSystemConfigLoader};
+use ndp_gold_ddl::db::{PostgresCaChecker, PostgresClient};
 use ndp_gold_ddl::generators::{AlignedViewGenerator, ContinuousAggregateGenerator};
+use ndp_gold_ddl::planner::SyncPlanner;
 
 /// Exit codes for the CLI
 mod exit_codes {
     pub const SUCCESS: u8 = 0;
     pub const GENERATION_ERROR: u8 = 1;
+    #[allow(dead_code)]
     pub const SYSTEM_ERROR: u8 = 2;
+    pub const DATABASE_ERROR: u8 = 3;
 }
 
 /// ndp-gold-ddl - Gold layer DDL generator for NDP
@@ -27,6 +32,17 @@ mod exit_codes {
 /// Generates TimescaleDB DDL for Gold layer objects including:
 /// - Continuous aggregates for individual streams
 /// - Aligned materialized views for cross-stream correlation
+///
+/// ## Sync Mode with Database
+///
+/// When --database-url is provided, the tool checks which continuous aggregates
+/// already exist and only generates DDL for missing ones. This provides true
+/// idempotency without complex Bash parsing.
+///
+/// ## Dry-Run Mode
+///
+/// When --database-url is omitted, the tool generates all DDL. Useful for
+/// previewing changes or when database connectivity isn't available.
 #[derive(Parser, Debug)]
 #[command(name = "ndp-gold-ddl")]
 #[command(author = "Neural Data Platform Team")]
@@ -39,6 +55,19 @@ struct Cli {
     /// Config directory path
     #[arg(long, env = "NDP_CONFIG_DIR", default_value = "./config")]
     config_dir: PathBuf,
+
+    /// Database URL for existence checks (enables intelligent sync)
+    ///
+    /// When provided, the tool connects to TimescaleDB to check which
+    /// continuous aggregates exist and only generates DDL for missing ones.
+    ///
+    /// Format: postgresql://user:pass@host:port/dbname
+    #[arg(long, env = "TIMESCALE_URL")]
+    database_url: Option<String>,
+
+    /// Database connection timeout in seconds
+    #[arg(long, default_value = "10")]
+    db_timeout: u64,
 
     /// Show verbose output
     #[arg(short, long)]
@@ -74,7 +103,8 @@ enum Commands {
     },
 }
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -84,19 +114,24 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
-    match run(&cli) {
+    match run(&cli).await {
         Ok(output) => {
             println!("{}", output);
             ExitCode::from(exit_codes::SUCCESS)
         }
         Err(e) => {
+            let exit_code = if e.to_string().contains("Database") || e.to_string().contains("Connection") {
+                exit_codes::DATABASE_ERROR
+            } else {
+                exit_codes::GENERATION_ERROR
+            };
             eprintln!("Error: {}", e);
-            ExitCode::from(exit_codes::GENERATION_ERROR)
+            ExitCode::from(exit_code)
         }
     }
 }
 
-fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
+async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
     let loader = FileSystemConfigLoader::new(&cli.config_dir);
 
     match &cli.command {
@@ -105,6 +140,7 @@ fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
 
             if let Some(domain_id) = domain {
                 // Generate aligned view for domain
+                // Note: Domain generation doesn't use DB checks yet (future enhancement)
                 let domain_config = loader.load_domain_config(domain_id)?;
                 let generator = AlignedViewGenerator::new(loader);
                 let sql = generator.generate(&domain_config, action)?;
@@ -120,9 +156,18 @@ fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                     return Err(format!("Stream '{}' has gold_etl.enabled = false", stream_id).into());
                 }
 
-                let generator = ContinuousAggregateGenerator::from_stream_config(&stream_config)?;
-                let sql = generator.generate(gold_etl, action)?;
-                Ok(sql)
+                // If database URL is provided and action is sync, use the planner
+                if let (Some(db_url), Action::Sync) = (&cli.database_url, action) {
+                    generate_with_db_check(cli, &stream_config, gold_etl, db_url).await
+                } else {
+                    // No DB URL or recreate mode - generate all DDL
+                    if cli.verbose {
+                        eprintln!("Note: No database URL provided, generating all DDL (dry-run mode)");
+                    }
+                    let generator = ContinuousAggregateGenerator::from_stream_config(&stream_config)?;
+                    let sql = generator.generate(gold_etl, action)?;
+                    Ok(sql)
+                }
             } else {
                 Err("Must specify --stream or --domain".into())
             }
@@ -190,4 +235,31 @@ fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
             }
         }
     }
+}
+
+/// Generate DDL with database existence checking
+async fn generate_with_db_check(
+    cli: &Cli,
+    stream_config: &ndp_gold_ddl::StreamConfig,
+    gold_etl: &ndp_gold_ddl::GoldEtlConfig,
+    db_url: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if cli.verbose {
+        eprintln!("Connecting to database for existence checks...");
+    }
+
+    // Connect to database
+    let client = PostgresClient::connect(db_url, cli.db_timeout).await?;
+    let checker = PostgresCaChecker::new(client);
+
+    // Create sync plan
+    let planner = SyncPlanner::new(&checker, stream_config);
+    let plan = planner.plan(gold_etl).await?;
+
+    if cli.verbose {
+        eprintln!("{}", plan.summary());
+    }
+
+    // Generate DDL from plan
+    Ok(plan.to_ddl())
 }

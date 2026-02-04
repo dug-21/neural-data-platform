@@ -627,11 +627,6 @@
         "window": "4 hours",
         "fields": ["pm25", "co2"]
       }
-    },
-    "refresh_policy": {
-      "start_offset": "4 hours",
-      "end_offset": "15 minutes",
-      "schedule_interval": "15 minutes"
     }
   },
   "config_version": 2

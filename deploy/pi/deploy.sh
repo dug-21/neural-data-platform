@@ -1480,11 +1480,14 @@ handle_migration() {
     local full_path="$REPO_ROOT/$migration_file"
     if [ ! -f "$full_path" ]; then
         error "Migration file not found: $full_path"
+        return 1
     fi
 
     # Apply migration to TimescaleDB
+    # Note: We pipe the file content via stdin since the file is on the host,
+    # not inside the container. Using -f - reads SQL from stdin.
     log "  Applying migration..."
-    dcx timescaledb psql -U postgres -d ndp -f "$full_path"
+    cat "$full_path" | dcx timescaledb psql -U postgres -d ndp -f -
 
     return 0
 }
@@ -1655,6 +1658,7 @@ handle_tool() {
 # Handle gold-table declaration
 # Args: $1 = declaration JSON
 # Calls ndp-gold-ddl Rust tool to generate DDL, then applies to TimescaleDB
+# The tool handles idempotency by checking database state when --database-url is provided
 handle_gold_table() {
     local declaration="$1"
     local stream_id=$(echo "$declaration" | jq -r '.stream_id')
@@ -1675,28 +1679,34 @@ handle_gold_table() {
     fi
 
     # Check if ndp-gold-ddl tool is available
-    if ! command -v ndp-gold-ddl &> /dev/null; then
-        # Try looking in common locations
-        local gold_ddl_tool=""
-        if [ -x "/opt/ndp/bin/ndp-gold-ddl" ]; then
-            gold_ddl_tool="/opt/ndp/bin/ndp-gold-ddl"
-        elif [ -x "$REPO_ROOT/target/release/ndp-gold-ddl" ]; then
-            gold_ddl_tool="$REPO_ROOT/target/release/ndp-gold-ddl"
-        elif [ -x "$REPO_ROOT/target/debug/ndp-gold-ddl" ]; then
-            gold_ddl_tool="$REPO_ROOT/target/debug/ndp-gold-ddl"
-        else
-            warn "  ndp-gold-ddl tool not found, skipping Gold DDL generation"
-            warn "  Build the tool with: cargo build --release -p ndp-gold-ddl"
-            return 0
-        fi
-    else
+    local gold_ddl_tool=""
+    if command -v ndp-gold-ddl &> /dev/null; then
         gold_ddl_tool="ndp-gold-ddl"
+    elif [ -x "/opt/ndp/bin/ndp-gold-ddl" ]; then
+        gold_ddl_tool="/opt/ndp/bin/ndp-gold-ddl"
+    elif [ -x "$REPO_ROOT/target/release/ndp-gold-ddl" ]; then
+        gold_ddl_tool="$REPO_ROOT/target/release/ndp-gold-ddl"
+    elif [ -x "$REPO_ROOT/target/debug/ndp-gold-ddl" ]; then
+        gold_ddl_tool="$REPO_ROOT/target/debug/ndp-gold-ddl"
+    else
+        warn "  ndp-gold-ddl tool not found, skipping Gold DDL generation"
+        warn "  Build the tool with: cargo build --release -p ndp-gold-ddl"
+        return 0
     fi
 
-    # Call Rust tool for DDL generation
-    log "  Generating Gold DDL using $gold_ddl_tool..."
+    # Build database URL for the tool to connect and check existence
+    # The tool handles idempotency internally when given a database URL
+    local db_password="${POSTGRES_PASSWORD:-ndp_secure_password}"
+    local db_url="postgresql://postgres:${db_password}@localhost:5432/ndp"
+
+    # Call Rust tool for DDL generation with database connectivity
+    # Tool connects to DB, checks what exists, and outputs only needed DDL
+    log "  Generating Gold DDL using $gold_ddl_tool (with DB check)..."
     local ddl
-    ddl=$("$gold_ddl_tool" generate --stream "$stream_id" --action "$action" --config-dir "$REPO_ROOT/config" 2>&1)
+    ddl=$("$gold_ddl_tool" --config-dir "$REPO_ROOT/config" \
+        --database-url "$db_url" \
+        --db-timeout 10 \
+        generate --stream "$stream_id" --action "$action" 2>&1)
     local exit_code=$?
 
     if [ $exit_code -ne 0 ]; then
@@ -1704,19 +1714,20 @@ handle_gold_table() {
         return 1
     fi
 
-    # Check if DDL is empty or just comments (no actual changes)
-    if [ -z "$ddl" ] || echo "$ddl" | grep -qE '^--.*$|^$' && ! echo "$ddl" | grep -q 'CREATE'; then
-        log "  No Gold DDL changes required for $stream_id"
-        return 0
+    # Check if DDL indicates nothing to do (all skipped)
+    if echo "$ddl" | grep -q "Skipping.*already exists" && ! echo "$ddl" | grep -q "Creating"; then
+        log "  All Gold tables for $stream_id already exist, nothing to create"
+        # Still apply the DDL - it may contain refresh policies for existing tables
     fi
 
     # Apply DDL to TimescaleDB
+    # The tool has already done the existence checks, so DDL is ready to execute
     log "  Applying Gold DDL to TimescaleDB..."
-    if echo "$ddl" | dcx timescaledb psql -U postgres -d ndp; then
+    if echo "$ddl" | dcx timescaledb psql -U postgres -d ndp 2>&1; then
         log "  Gold table(s) for $stream_id created/updated successfully"
         return 0
     else
-        error "Failed to apply Gold DDL to TimescaleDB"
+        error "  Failed to apply Gold DDL for $stream_id"
         return 1
     fi
 }
@@ -1788,9 +1799,10 @@ handle_domain() {
     fi
 
     # Generate and apply aligned view DDL
+    # Note: --config-dir is a top-level option, must come before subcommand
     log "  Generating aligned view DDL using $gold_ddl_tool..."
     local ddl
-    ddl=$("$gold_ddl_tool" generate --domain "$domain_id" --action "$action" --config-dir "$REPO_ROOT/config" 2>&1)
+    ddl=$("$gold_ddl_tool" --config-dir "$REPO_ROOT/config" generate --domain "$domain_id" --action "$action" 2>&1)
     local exit_code=$?
 
     if [ $exit_code -ne 0 ]; then

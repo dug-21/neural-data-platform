@@ -35,6 +35,9 @@ pub enum ErrorCode {
 
     /// Generation failed
     GenerationFailed = 500,
+
+    /// Database connection error
+    DatabaseError = 600,
 }
 
 /// Main error type for ndp-gold-ddl
@@ -90,6 +93,9 @@ pub enum GoldDdlError {
     #[error("DDL generation failed: {message}")]
     GenerationFailed { message: String },
 
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
@@ -113,6 +119,7 @@ impl GoldDdlError {
             GoldDdlError::UnknownFeatureType { .. } => ErrorCode::UnknownFeatureType,
             GoldDdlError::InvalidFeatureConfig { .. } => ErrorCode::InvalidFeatureConfig,
             GoldDdlError::GenerationFailed { .. } => ErrorCode::GenerationFailed,
+            GoldDdlError::DatabaseError(_) => ErrorCode::DatabaseError,
             GoldDdlError::IoError(_) => ErrorCode::ConfigNotFound,
             GoldDdlError::JsonError(_) => ErrorCode::ConfigParseError,
         }

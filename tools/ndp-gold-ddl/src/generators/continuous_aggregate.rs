@@ -124,6 +124,53 @@ GROUP BY bucket, {entity_col};"#,
         }
     }
 
+    /// Generate only the CREATE MATERIALIZED VIEW statement for a granularity
+    ///
+    /// Used by the SyncPlanner which handles idempotency externally via DB checks.
+    /// Returns raw DDL without any wrapper (no DO block, no CA-SYNC-CHECK markers).
+    pub fn generate_ca_ddl_only(
+        &self,
+        aggregates: &AggregatesConfig,
+        granularity: &str,
+    ) -> Result<String> {
+        let suffix = granularity_to_suffix(granularity);
+        let view_name = format!(
+            "gold.{}_{}",
+            self.stream_id.replace('-', "_"),
+            suffix
+        );
+
+        let columns = self.generate_aggregate_columns(aggregates)?;
+
+        Ok(format!(
+            r#"CREATE MATERIALIZED VIEW {view_name}
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('{granularity}', {timestamp_col}) AS bucket,
+    {entity_col},
+    {columns}
+FROM {source_table}
+GROUP BY bucket, {entity_col};"#,
+            view_name = view_name,
+            granularity = granularity,
+            timestamp_col = self.timestamp_column,
+            entity_col = self.entity_column,
+            columns = columns.join(",\n    "),
+            source_table = self.source_table,
+        ))
+    }
+
+    /// Generate only the refresh policy statement for a granularity
+    ///
+    /// Used by the SyncPlanner which handles policy existence checking externally.
+    pub fn generate_policy_ddl_only(
+        &self,
+        granularity: &str,
+        policy: Option<&RefreshPolicyConfig>,
+    ) -> Result<String> {
+        self.generate_refresh_policy(granularity, policy)
+    }
+
     /// Generate aggregate column expressions
     fn generate_aggregate_columns(&self, aggregates: &AggregatesConfig) -> Result<Vec<String>> {
         let mut columns = Vec::new();
@@ -185,7 +232,7 @@ GROUP BY bucket, {entity_col};"#,
 
     /// Wrap CREATE statement with sync mode (IF NOT EXISTS check)
     fn wrap_sync_mode(&self, view_name: &str, create_sql: &str) -> Result<String> {
-        // Extract schema and view name
+        // Extract schema and view name for metadata comment
         let parts: Vec<&str> = view_name.split('.').collect();
         let (schema, name) = if parts.len() == 2 {
             (parts[0], parts[1])
@@ -193,23 +240,22 @@ GROUP BY bucket, {entity_col};"#,
             ("public", view_name)
         };
 
+        // TimescaleDB continuous aggregates cannot be created inside DO blocks or functions
+        // because they require special transaction handling.
+        //
+        // Strategy for sync mode:
+        // 1. Generate plain CREATE statement with metadata comments
+        // 2. deploy.sh handles idempotency by checking if view exists before executing
+        // 3. If view exists, deploy.sh skips this DDL block
+        //
+        // The --CA-SYNC-CHECK comment enables deploy.sh to parse and check existence
         Ok(format!(
             r#"-- Sync mode: Create if not exists
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM timescaledb_information.continuous_aggregates
-        WHERE view_schema = '{schema}' AND view_name = '{name}'
-    ) THEN
-        {create_sql}
-    ELSE
-        RAISE NOTICE '{view_name} already exists, skipping';
-    END IF;
-END $$;"#,
+-- CA-SYNC-CHECK: schema={schema} name={name}
+{create_sql}"#,
             schema = schema,
             name = name,
-            view_name = view_name,
-            create_sql = create_sql.replace("'", "''"),
+            create_sql = create_sql,
         ))
     }
 
@@ -420,16 +466,23 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_sync_mode_wraps_with_if_not_exists() {
+    fn test_sync_mode_outputs_check_markers() {
+        // In the new architecture, sync mode outputs CA-SYNC-CHECK markers.
+        // Actual idempotency checking is done by the SyncPlanner via DB queries.
+        // When used without DB URL, deploy.sh can use the markers for manual checks.
         let config = create_test_stream_config();
         let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
         let gold_etl = config.gold_etl.as_ref().unwrap();
 
         let ddl = generator.generate(gold_etl, Action::Sync).unwrap();
 
-        assert!(ddl.contains("IF NOT EXISTS"));
-        assert!(ddl.contains("timescaledb_information.continuous_aggregates"));
-        assert!(ddl.contains("already exists, skipping"));
+        // Should contain sync mode marker and CA-SYNC-CHECK info
+        assert!(ddl.contains("Sync mode"));
+        assert!(ddl.contains("CA-SYNC-CHECK"));
+        assert!(ddl.contains("schema=gold"));
+        assert!(ddl.contains("name=air_quality_hourly"));
+        // Should still contain the CREATE statement
+        assert!(ddl.contains("CREATE MATERIALIZED VIEW"));
     }
 
     #[test]

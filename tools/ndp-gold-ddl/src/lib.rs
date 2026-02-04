@@ -25,8 +25,10 @@
 //! ```
 
 pub mod config;
+pub mod db;
 pub mod error;
 pub mod generators;
+pub mod planner;
 pub mod registry;
 pub mod validation;
 
@@ -47,3 +49,7 @@ pub use generators::{
 pub use registry::{FeatureConfig, FeatureGenerator, FeatureRegistry, SqlColumn};
 
 pub use validation::{validate_gold_config, ConfigValidator};
+
+pub use db::{CaChecker, CaInfo, DbClient, DbError, PostgresCaChecker, PostgresClient};
+
+pub use planner::{CaAction, SyncPlan, SyncPlanner};
