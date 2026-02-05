@@ -1,8 +1,8 @@
 # FE-001: Gold Layer Foundation - Status
 
 > **Last Updated:** 2026-02-05
-> **Current Phase:** Phase D Validation - Fast-Follower PASSED
-> **Overall Progress:** 80% (Phase A + B + C + D complete, Phase E pending)
+> **Current Phase:** Phase D Complete - v1.1.5 Deployed
+> **Overall Progress:** 85% (Phase A + B + C + D deployed to Pi, Phase E pending)
 
 ---
 
@@ -13,8 +13,8 @@
 | **A: Architecture Foundation** | ✅ Complete | 100% | JSON schemas, interpreters, DDL tool |
 | **B: First Stream** | ✅ Deployed | 100% | v1.1.1 deployed to Pi, 798 hourly + 35 daily rows |
 | **C: Cross-Stream + Alignment** | ✅ Complete | 100% | 3 streams, aligned view, 279 tests |
-| **D: Validation + Dashboard** | ✅ Complete | 100% | Fast-Follower PASSED, v1.1.3 manifest ready |
-| **E: Unified Event Abstraction** | Not Started | 0% | Threshold crossings, unified view |
+| **D: Validation + Dashboard** | ✅ Deployed | 100% | Fast-Follower PASSED, v1.1.5 deployed to Pi |
+| **E: Unified Event Abstraction** | ✅ Planning Complete | 10% | 5-agent swarm review complete, 94% spec ready |
 
 ---
 
@@ -45,9 +45,10 @@
 | v11-008 | Basic Feature Computation | Not Started | - | |
 | v11-009 | Lag Feature Computation | Not Started | - | |
 | v11-010 | Gold Layer Data Dictionary | Not Started | - | |
-| v11-011 | Correlation-Ready Dashboard | Not Started | - | |
-| v11-012 | Threshold Crossing Generator | Not Started | - | |
-| v11-013 | Unified Events View | Not Started | - | |
+| v11-011 | Correlation-Ready Dashboard | Superseded | - | Replaced by v11-014 |
+| v11-012 | Threshold Crossing Generator | Not Started | - | Phase E |
+| v11-013 | Unified Events View | Not Started | - | Phase E |
+| v11-014 | Gold Layer Dashboard | Not Started | - | Phase E (new) |
 
 ### Tier 3: Validation
 
@@ -83,6 +84,15 @@
 
 | Date | Activity | Outcome |
 |------|----------|---------|
+| 2026-02-05 | **TEST-PLAN.md Section 5 Added: Dashboard Tests** | v11-014 tests: JSON validation, variables, performance, integration (CRIT-02 resolved) |
+| 2026-02-05 | **SPEC-E01/E02 Updated: Events Hypertable** | Adopted hypertable approach per Decision 12, enables CA + context capture |
+| 2026-02-05 | **Phase E 5-Agent Review Swarm Complete** | 6 reports generated, 94% spec ready, 3 critical items identified |
+| 2026-02-05 | **Phase E Deployment Review** | Readiness score 65/100, critical gaps identified (grafana-dashboard type missing) |
+| 2026-02-05 | **v11-014 Gold Layer Dashboard added** | New feature for Phase E - Grafana visibility to Gold tables |
+| 2026-02-05 | **v1.1.5 deployed to Pi** | 4 streams in Gold, 1,353 aligned rows, all refresh policies active |
+| 2026-02-05 | Fixed PostgreSQL LOCF compatibility | Replaced IGNORE NULLS with cascading LAG pattern |
+| 2026-02-05 | Added sample_count to all CAs | Required for aligned view compatibility |
+| 2026-02-05 | Created deploy.sh refactoring issue (#15) | 2753 lines flagged for future cleanup |
 | 2026-02-05 | **Phase D Fast-Follower Test PASSED** | Zero Rust changes, ~30 min, v1.1.3 manifest ready |
 | 2026-02-05 | GAP-002 Fixed | Removed `domain:` wrapper, validation now passes |
 | 2026-02-05 | Created 4 GitHub issues (#11-#14) | Architecture gaps tracked for V1.2 |
@@ -124,6 +134,33 @@
 
 ---
 
+## Phase E Review Summary (2026-02-05)
+
+5-agent hierarchical swarm completed comprehensive review of Phase E SPARC artifacts.
+
+### Review Reports
+
+| Report | Location | Key Finding |
+|--------|----------|-------------|
+| Architecture Review | `phase-e/reports/ARCHITECTURE-REVIEW.md` | PASS - 11/11 ADRs consistent |
+| Specification Review | `phase-e/reports/SPECIFICATION-REVIEW.md` | 94% ready, approved |
+| Test Plan Review | `phase-e/reports/TEST-PLAN-REVIEW.md` | Dashboard tests missing |
+| V1.2 Handoff Review | `phase-e/reports/V12-HANDOFF-REVIEW.md` | 85% contract, 75% ready |
+| Deployment Review | `phase-e/reports/DEPLOYMENT-REVIEW.md` | 65% ready, blockers |
+| **Synthesis** | `phase-e/reports/PHASE-E-REVIEW-SYNTHESIS.md` | **APPROVED with action items** |
+
+### Critical Action Items (Before Implementation)
+
+| ID | Issue | Resolution | Status |
+|----|-------|------------|--------|
+| CRIT-01 | CA on view limitation | ~~Use regular materialized view~~ → **Events Hypertable** (Decision 12) | ✅ RESOLVED |
+| CRIT-02 | Dashboard tests missing | Added Section 5 to TEST-PLAN.md | ✅ RESOLVED |
+| CRIT-03 | Grafana deploy blocked | Create dashboard JSON, implement handler | Pending (Implementation Phase) |
+
+### Recommended Version: v1.2.0
+
+---
+
 ## Next Actions
 
 1. [x] Review SCOPE.md with stakeholders
@@ -136,9 +173,20 @@
 8. [x] Create air-quality gold_etl configuration
 9. [x] Deploy continuous aggregate via ndp-gold-ddl
 10. [x] **v1.1.1 deployed and verified on Pi**
-11. [ ] Begin Phase C: Cross-Stream + Alignment (weather, outdoor-air-quality)
-12. [ ] Create domain configuration for indoor-air-quality
-13. [ ] Implement aligned view generation
+11. [x] Phase C: Cross-Stream + Alignment (3 streams + aligned view)
+12. [x] Domain configuration for indoor-air-quality
+13. [x] Aligned view generation via ndp-gold-ddl
+14. [x] **Phase D: Fast-Follower Test PASSED**
+15. [x] **v1.1.5 deployed to Pi** (4 streams, aligned view, 1,353 rows)
+16. [x] **Phase E Planning Complete** - 5-agent swarm review approved specs
+17. [x] Fix CRIT-01: **Events Hypertable adopted** (SPEC-E01/E02 updated, Decision 12 added)
+18. [x] Fix CRIT-02: **Dashboard tests added** (Section 5 in TEST-PLAN.md)
+19. [ ] Fix H-01: Fill coverage targets in V12-HANDOFF-CHECKLIST.md
+20. [ ] Begin Phase E Implementation
+21. [ ] v11-012: Threshold Crossing Generator (Days 1-2)
+22. [ ] v11-013: Unified Events View (Days 3-4)
+23. [ ] v11-014: Gold Layer Dashboard (Day 5)
+24. [ ] Create v1.2.0 release manifest
 
 ## SPARC Coordination
 
@@ -148,7 +196,7 @@ See [SPARC-COORDINATION.md](./SPARC-COORDINATION.md) for complete implementation
 |-------------|-------|----------|----------|----------------|
 | SPARC-A | Architecture Foundation | Week 1-2 | ✅ Complete | ✅ Complete |
 | SPARC-B | First Stream (air-quality) | Week 3 | ✅ Complete | ✅ Deployed (v1.1.1) |
-| SPARC-C | Cross-Stream + Alignment | Week 4 | ✅ Complete | Not Started |
+| SPARC-C | Cross-Stream + Alignment | Week 4 | ✅ Complete | ✅ Deployed (v1.1.5) |
 | SPARC-D | Validation + Dashboard | Week 5 | ✅ Complete | ✅ Complete |
 | SPARC-E | Unified Event Abstraction | Week 6 | ✅ Complete | Not Started |
 
@@ -170,13 +218,12 @@ See [SPARC-COORDINATION.md](./SPARC-COORDINATION.md) for complete implementation
 
 | Metric | Current | Target |
 |--------|---------|--------|
-| Streams in Gold layer | 1 (air-quality) | 4 |
-| Continuous Aggregates | 2 (hourly, daily) | - |
-| Gold hourly rows | 798 | - |
-| Gold daily rows | 35 | - |
-| Refresh policies active | 2 | - |
+| Streams in Gold layer | **4** (air-quality, outdoor-weather, home-assistant-state, outdoor-air-quality) | 4 ✅ |
+| Continuous Aggregates | 8 (4 hourly, 4 daily) | - |
+| Aligned view rows | 1,353 | - |
+| Refresh policies active | 8 | - |
 | Query performance (30-day aligned) | N/A | < 100ms |
-| Fast-follower time | N/A | < 1 hour |
+| Fast-follower time | **~30 min** (Phase D validated) | < 1 hour ✅ |
 | Resource usage (peak) | N/A | < 200 MB |
 
 ---
