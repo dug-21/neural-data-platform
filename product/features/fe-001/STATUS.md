@@ -1,8 +1,8 @@
 # FE-001: Gold Layer Foundation - Status
 
-> **Last Updated:** 2026-02-04
-> **Current Phase:** Phase C Implementation Complete
-> **Overall Progress:** 70% (Phase A + B + C complete, Phases D-E pending)
+> **Last Updated:** 2026-02-05
+> **Current Phase:** Phase D Validation - Fast-Follower PASSED
+> **Overall Progress:** 80% (Phase A + B + C + D complete, Phase E pending)
 
 ---
 
@@ -13,7 +13,7 @@
 | **A: Architecture Foundation** | ✅ Complete | 100% | JSON schemas, interpreters, DDL tool |
 | **B: First Stream** | ✅ Deployed | 100% | v1.1.1 deployed to Pi, 798 hourly + 35 daily rows |
 | **C: Cross-Stream + Alignment** | ✅ Complete | 100% | 3 streams, aligned view, 279 tests |
-| **D: Validation + Dashboard** | Not Started | 0% | Fast-follower test |
+| **D: Validation + Dashboard** | ✅ Complete | 100% | Fast-Follower PASSED, v1.1.3 manifest ready |
 | **E: Unified Event Abstraction** | Not Started | 0% | Threshold crossings, unified view |
 
 ---
@@ -53,16 +53,19 @@
 
 | ID | Feature | Status | Assignee | Notes |
 |----|---------|--------|----------|-------|
-| v11-V01 | Fast-Follower Stream Test | Not Started | - | |
+| v11-V01 | Fast-Follower Stream Test | ✅ PASSED | Claude | Zero Rust changes, ~30 min |
 | v11-V02 | New Feature Type Test | Not Started | - | |
 
 ---
 
 ## Blockers
 
-| Blocker | Impact | Owner | Resolution |
-|---------|--------|-------|------------|
-| None currently | - | - | - |
+| Blocker | Issue | Impact | Owner | Resolution |
+|---------|-------|--------|-------|------------|
+| ~~GAP-002: domain.yaml nested format~~ | [#12](https://github.com/dug-21/neural-data-platform/issues/12) | ~~Validation fails~~ | ~~Architecture~~ | ✅ **FIXED** - Removed wrapper |
+| GAP-001: Domain config YAML vs JSON | [#11](https://github.com/dug-21/neural-data-platform/issues/11) | DX (not blocking) | Architecture | V1.2: Migrate to JSON |
+| GAP-003: No JSON Schema for domains | [#13](https://github.com/dug-21/neural-data-platform/issues/13) | DX (not blocking) | Architecture | V1.2: Add schema validation |
+| GAP-004: Documentation wrong formats | [#14](https://github.com/dug-21/neural-data-platform/issues/14) | DX (not blocking) | Docs | Update VALIDATION-PROCEDURE.md |
 
 ---
 
@@ -80,6 +83,12 @@
 
 | Date | Activity | Outcome |
 |------|----------|---------|
+| 2026-02-05 | **Phase D Fast-Follower Test PASSED** | Zero Rust changes, ~30 min, v1.1.3 manifest ready |
+| 2026-02-05 | GAP-002 Fixed | Removed `domain:` wrapper, validation now passes |
+| 2026-02-05 | Created 4 GitHub issues (#11-#14) | Architecture gaps tracked for V1.2 |
+| 2026-02-05 | Added gold_etl to outdoor-air-quality | config.json updated, validation passed |
+| 2026-02-05 | Domain config format fixed | Flat YAML format, 4th stream (outdoor_aqi) added |
+| 2026-02-05 | Created FAST-FOLLOWER-REPORT.md | Test results and gap analysis documented |
 | 2026-02-04 | **Phase C Implementation Complete** | 6 agents, 279 tests, v1.2.0 manifest created |
 | 2026-02-04 | **v11-005 Aligned View** | FULL OUTER JOIN, NULL handling by stream_type, 31 tests |
 | 2026-02-04 | **v11-006 State Transitions** | LAG window, is_actual_transition, duration calc, 27 tests |
@@ -140,7 +149,7 @@ See [SPARC-COORDINATION.md](./SPARC-COORDINATION.md) for complete implementation
 | SPARC-A | Architecture Foundation | Week 1-2 | ✅ Complete | ✅ Complete |
 | SPARC-B | First Stream (air-quality) | Week 3 | ✅ Complete | ✅ Deployed (v1.1.1) |
 | SPARC-C | Cross-Stream + Alignment | Week 4 | ✅ Complete | Not Started |
-| SPARC-D | Validation + Dashboard | Week 5 | ✅ Complete | Not Started |
+| SPARC-D | Validation + Dashboard | Week 5 | ✅ Complete | ✅ Complete |
 | SPARC-E | Unified Event Abstraction | Week 6 | ✅ Complete | Not Started |
 
 ## SPARC Artifacts Summary

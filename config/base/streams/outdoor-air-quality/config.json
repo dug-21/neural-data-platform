@@ -1,5 +1,6 @@
 {
   "stream_id": "outdoor-air-quality",
+  "stream_type": "observation",
   "description": "Outdoor air quality data from OpenWeatherMap Air Pollution API",
   "version": "1.0.0",
   "enabled": true,
@@ -447,6 +448,36 @@
       "enabled": true,
       "watermark_column": "observation_time",
       "lag_interval": "5 minutes"
+    }
+  },
+  "gold_etl": {
+    "enabled": true,
+    "description": "Gold layer aggregates for outdoor air quality monitoring",
+    "aggregates": {
+      "granularities": ["1 hour"],
+      "fields": {
+        "pm25": { "metrics": ["mean", "std", "min", "max", "p95"] },
+        "pm10": { "metrics": ["mean", "min", "max"] },
+        "aqi_owm": { "metrics": ["mean", "min", "max"] },
+        "aqi_epa": { "metrics": ["mean", "min", "max"] },
+        "o3_ugm3": { "metrics": ["mean", "max"] },
+        "no2_ugm3": { "metrics": ["mean", "max"] },
+        "co_ugm3": { "metrics": ["mean", "max"] },
+        "so2_ugm3": { "metrics": ["mean", "max"] }
+      }
+    },
+    "features": {
+      "lag": {
+        "enabled": true,
+        "lags_hours": [1, 6, 24],
+        "fields": ["pm25", "aqi_epa"]
+      },
+      "rolling": {
+        "enabled": true,
+        "windows": ["4 hours", "24 hours"],
+        "stats": ["mean", "std"],
+        "fields": ["pm25"]
+      }
     }
   },
   "config_version": 2

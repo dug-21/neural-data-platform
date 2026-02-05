@@ -7,70 +7,100 @@
 # Implements SPEC-C01 (v11-005) and ADR-FE001-004 (NULL handling by stream type)
 # - observation streams: NULL preserved
 # - state_event streams: NULL filled via LOCF (carry_forward)
+#
+# NOTE: Flat format (no `domain:` wrapper) per DomainConfig struct requirements
 
-domain:
-  id: indoor-air-quality
-  description: "Maintain healthy indoor air quality"
+id: indoor-air-quality
+description: "Maintain healthy indoor air quality"
 
-  streams:
-    - stream_id: air-quality
-      alias: indoor
-      role: primary
-      # NULL handling: preserve (observation stream - default)
+streams:
+  - stream_id: air-quality
+    alias: indoor
+    role: primary
+    # NULL handling: preserve (observation stream - default)
 
-    - stream_id: outdoor-weather
-      alias: outdoor
-      role: context
-      # NULL handling: preserve (observation stream - default)
+  - stream_id: outdoor-weather
+    alias: outdoor
+    role: context
+    # NULL handling: preserve (observation stream - default)
 
-    - stream_id: home-assistant-state
-      alias: state
-      role: actuator
-      null_handling: carry_forward  # State persists until changed (state_event stream)
+  - stream_id: home-assistant-state
+    alias: state
+    role: actuator
+    null_handling: carry_forward  # State persists until changed (state_event stream)
 
-  alignment:
-    view_name: indoor_air_quality_aligned
-    granularity: "1 hour"
-    join_strategy: full_outer
-    # null_handling: by_stream_type - resolved from stream configs per ADR-FE001-004
+  # Phase D Fast-Follower: Added outdoor-air-quality as 4th stream
+  - stream_id: outdoor-air-quality
+    alias: outdoor_aqi
+    role: constraint
+    # NULL handling: preserve (observation stream - default per ADR-FE001-004)
 
-  objectives:
-    - id: healthy_co2
-      description: "Keep CO2 below 800 ppm for cognitive performance"
-      target:
-        stream: air-quality
-        metric: co2
-        condition: "<"
-        threshold: 800
-        unit: ppm
-      priority: high
+alignment:
+  view_name: indoor_air_quality_aligned
+  granularity: "1 hour"
+  join_strategy: full_outer
+  # null_handling: by_stream_type - resolved from stream configs per ADR-FE001-004
 
-    - id: healthy_pm25
-      description: "Keep PM2.5 below WHO guideline of 12 ug/m3"
-      target:
-        stream: air-quality
-        metric: pm25
-        condition: "<"
-        threshold: 12
-        unit: ug/m3
-      priority: high
+objectives:
+  - id: healthy_co2
+    description: "Keep CO2 below 800 ppm for cognitive performance"
+    target:
+      stream: air-quality
+      metric: co2
+      condition: "<"
+      threshold: 800
+      unit: ppm
+    priority: high
 
-    - id: comfortable_humidity
-      description: "Maintain comfortable humidity range (40-60%)"
-      target:
-        stream: air-quality
-        metric: humidity_pct
-        condition: between
-        threshold: [40, 60]
-        unit: percent
-      priority: medium
+  - id: healthy_pm25
+    description: "Keep PM2.5 below WHO guideline of 12 ug/m3"
+    target:
+      stream: air-quality
+      metric: pm25
+      condition: "<"
+      threshold: 12
+      unit: ug/m3
+    priority: high
 
-    - id: comfortable_temperature
-      description: "Maintain comfortable indoor temperature (20-24C)"
-      target:
-        stream: air-quality
-        metric: temperature_c
-        condition: between
-        threshold: [20, 24]
-        unit: celsius
-      priority: medium
+  # NOTE: "between" conditions with array thresholds not yet supported by TargetConfig struct
+  # These objectives simplified to single threshold for Phase D validation
+  # TODO: Extend TargetConfig to support threshold ranges (V1.2)
+  - id: comfortable_humidity_min
+    description: "Maintain minimum comfortable humidity (40%)"
+    target:
+      stream: air-quality
+      metric: humidity_pct
+      condition: ">="
+      threshold: 40
+      unit: percent
+    priority: medium
+
+  - id: comfortable_humidity_max
+    description: "Maintain maximum comfortable humidity (60%)"
+    target:
+      stream: air-quality
+      metric: humidity_pct
+      condition: "<="
+      threshold: 60
+      unit: percent
+    priority: medium
+
+  - id: comfortable_temperature_min
+    description: "Maintain minimum comfortable temperature (20C)"
+    target:
+      stream: air-quality
+      metric: temperature_c
+      condition: ">="
+      threshold: 20
+      unit: celsius
+    priority: medium
+
+  - id: comfortable_temperature_max
+    description: "Maintain maximum comfortable temperature (24C)"
+    target:
+      stream: air-quality
+      metric: temperature_c
+      condition: "<="
+      threshold: 24
+      unit: celsius
+    priority: medium
