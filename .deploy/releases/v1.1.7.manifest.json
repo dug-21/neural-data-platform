@@ -1,0 +1,18 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.7",
+  "description": "Patch: Fix get_event_context column name mismatch (state_last_state → state_state_last)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build",
+      "profile": "release"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/004_detect_events_procedure.sql"
+    }
+  ]
+}

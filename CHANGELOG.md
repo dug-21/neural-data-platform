@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-02-05
+
+Patch release fixing event detection procedure column mismatch.
+
+### Fixed
+
+- **Event Detection Procedure** - Column name mismatch in `gold.get_event_context()`
+  - Fixed `state_last_state` → `state_state_last` to match aligned view schema
+  - Events now correctly capture window state context
+
+- **Dashboard Column Names** - Fixed queries using wrong column names
+  - Aligned view: `outdoor_aqi_pm25_mean`, `outdoor_temperature_c_mean`
+  - Weather context: `temperature_c_mean`, `humidity_pct_mean`, `pressure_pa_mean`
+  - State timeline: `ndp_id`, `state_last`
+
+- **ndp-gold-ddl Events Generator** - Fixed column references in generated SQL
+  - `outdoor_temperature_mean` → `outdoor_temperature_c_mean`
+  - `outdoor_aqi_mean` → `outdoor_aqi_pm25_mean`
+  - Added `window_state` with correct `state_state_last` column
+
+### Migration Notes
+
+- Re-applies `004_detect_events_procedure.sql` (idempotent via CREATE OR REPLACE)
+- Run `CALL gold.detect_events();` after deployment to detect historical events
+
 ## [1.1.6] - 2026-02-05
 
 Gold Layer Foundation - Phase E: Unified Event Abstraction (FE-001). Events hypertable, threshold crossings, and Gold Layer Dashboard.
@@ -280,7 +305,9 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.7...HEAD
+[1.1.7]: https://github.com/dug-21/neural-data-platform/compare/v1.1.6...v1.1.7
+[1.1.6]: https://github.com/dug-21/neural-data-platform/compare/v1.1.2...v1.1.6
 [1.1.2]: https://github.com/dug-21/neural-data-platform/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/dug-21/neural-data-platform/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/dug-21/neural-data-platform/compare/v1.0.0...v1.1.0
