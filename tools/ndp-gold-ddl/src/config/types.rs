@@ -316,7 +316,10 @@ impl std::str::FromStr for Action {
         match s.to_lowercase().as_str() {
             "sync" => Ok(Action::Sync),
             "recreate" => Ok(Action::Recreate),
-            _ => Err(format!("Invalid action '{}'. Expected 'sync' or 'recreate'", s)),
+            _ => Err(format!(
+                "Invalid action '{}'. Expected 'sync' or 'recreate'",
+                s
+            )),
         }
     }
 }
@@ -414,7 +417,8 @@ mod tests {
     fn test_get_policy_for_granularity_custom_granularity() {
         let config = GoldEtlConfig::default();
         // Custom granularity falls back to generic default
-        let policy = RefreshPolicyConfig::for_granularity("15 minutes", config.refresh_policy.as_ref());
+        let policy =
+            RefreshPolicyConfig::for_granularity("15 minutes", config.refresh_policy.as_ref());
         assert_eq!(policy.schedule_interval, "30 minutes");
         assert_eq!(policy.start_offset, "4 hours");
         assert_eq!(policy.end_offset, "30 minutes");

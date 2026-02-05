@@ -18,7 +18,11 @@ pub struct SqlColumn {
 
 impl SqlColumn {
     /// Create a new SQL column
-    pub fn new(expression: impl Into<String>, alias: impl Into<String>, data_type: impl Into<String>) -> Self {
+    pub fn new(
+        expression: impl Into<String>,
+        alias: impl Into<String>,
+        data_type: impl Into<String>,
+    ) -> Self {
         Self {
             expression: expression.into(),
             alias: alias.into(),

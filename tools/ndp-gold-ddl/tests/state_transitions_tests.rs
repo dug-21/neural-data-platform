@@ -76,20 +76,21 @@ impl Default for StateTransitionConfig {
 fn generate_state_transitions_sql(config: &StateTransitionConfig) -> Result<String, String> {
     let stream_id_normalized = config.stream_id.replace('-', "_");
     let view_name = format!("gold.{}_transitions", stream_id_normalized);
-    let source_table = config.source_table.clone().unwrap_or_else(|| {
-        format!("silver.{}", stream_id_normalized)
-    });
+    let source_table = config
+        .source_table
+        .clone()
+        .unwrap_or_else(|| format!("silver.{}", stream_id_normalized));
 
-    let window_clause = format!(
-        "PARTITION BY {} ORDER BY event_time",
-        config.entity_field
-    );
+    let window_clause = format!("PARTITION BY {} ORDER BY event_time", config.entity_field);
     let window_ref = format!("({})", window_clause);
 
     let mut columns = vec![
         "event_time AS transition_time".to_string(),
         format!("{} AS entity_id", config.entity_field),
-        format!("LAG({}) OVER {} AS from_state", config.state_field, window_ref),
+        format!(
+            "LAG({}) OVER {} AS from_state",
+            config.state_field, window_ref
+        ),
         format!("{} AS to_state", config.state_field),
         generate_is_actual_transition(&config.state_field, &window_ref),
     ];
@@ -290,14 +291,8 @@ fn test_from_state_and_to_state_columns() {
     let sql = generate_state_transitions_sql(&config).unwrap();
 
     // Assert: Both columns present
-    assert!(
-        sql.contains("from_state"),
-        "Should have from_state column"
-    );
-    assert!(
-        sql.contains("to_state"),
-        "Should have to_state column"
-    );
+    assert!(sql.contains("from_state"), "Should have from_state column");
+    assert!(sql.contains("to_state"), "Should have to_state column");
 
     // from_state uses LAG
     assert!(
@@ -462,8 +457,7 @@ fn test_window_clause_generation() {
 
     // Assert: Correct format
     assert_eq!(
-        clause,
-        "PARTITION BY ndp_id ORDER BY event_time",
+        clause, "PARTITION BY ndp_id ORDER BY event_time",
         "Window clause should have correct format"
     );
 }
@@ -614,12 +608,8 @@ fn test_fixture_transition_config() {
 #[test]
 fn test_fixture_custom_transition_config() {
     // Arrange: Use custom fixture helper
-    let fixture_config = create_custom_transition_config(
-        "hvac-events",
-        "hvac_mode",
-        "device_id",
-        false,
-    );
+    let fixture_config =
+        create_custom_transition_config("hvac-events", "hvac_mode", "device_id", false);
 
     let config = StateTransitionConfig {
         stream_id: fixture_config.stream_id,

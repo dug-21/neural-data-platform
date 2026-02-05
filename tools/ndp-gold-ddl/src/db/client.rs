@@ -56,22 +56,20 @@ impl PostgresClient {
         // Connect with timeout
         let connect_future = tokio_postgres::connect(database_url, NoTls);
 
-        let (client, connection) = tokio::time::timeout(
-            std::time::Duration::from_secs(timeout_secs),
-            connect_future,
-        )
-        .await
-        .map_err(|_| DbError::Timeout(timeout_secs))?
-        .map_err(|e| {
-            // Build detailed error message including source chain
-            let mut msg = e.to_string();
-            let mut source = e.source();
-            while let Some(s) = source {
-                msg.push_str(&format!(" (caused by: {})", s));
-                source = s.source();
-            }
-            DbError::ConnectionFailed(msg)
-        })?;
+        let (client, connection) =
+            tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), connect_future)
+                .await
+                .map_err(|_| DbError::Timeout(timeout_secs))?
+                .map_err(|e| {
+                    // Build detailed error message including source chain
+                    let mut msg = e.to_string();
+                    let mut source = e.source();
+                    while let Some(s) = source {
+                        msg.push_str(&format!(" (caused by: {})", s));
+                        source = s.source();
+                    }
+                    DbError::ConnectionFailed(msg)
+                })?;
 
         // Spawn connection handler
         tokio::spawn(async move {
@@ -116,7 +114,8 @@ mod tests {
         // This will fail to connect but should pass URL validation
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let result = PostgresClient::connect("postgresql://user:pass@localhost:5432/db", 1).await;
+            let result =
+                PostgresClient::connect("postgresql://user:pass@localhost:5432/db", 1).await;
             // Should be connection error or timeout, not InvalidUrl
             assert!(!matches!(result, Err(DbError::InvalidUrl(_))));
         });

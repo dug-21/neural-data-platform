@@ -1,0 +1,46 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.6",
+  "description": "Release v1.1.6: Phase E - Unified Event Abstraction (v11-012, v11-013, v11-014)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build",
+      "profile": "release"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/001_events_hypertable.sql"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/002_events_unified_view.sql"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/003_events_hourly_ca.sql"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/004_detect_events_procedure.sql"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/005_schedule_detection_job.sql"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/006_threshold_crossing_detection.sql"
+    },
+    {
+      "type": "migration",
+      "file": "product/features/fe-001/phase-e/completion/sql/007_update_detect_events.sql"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
+}

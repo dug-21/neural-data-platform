@@ -58,11 +58,10 @@ impl ConfigLoader for FileSystemConfigLoader {
         }
 
         let content = std::fs::read_to_string(&path)?;
-        let config: StreamConfig = serde_json::from_str(&content).map_err(|e| {
-            GoldDdlError::ConfigParseError {
+        let config: StreamConfig =
+            serde_json::from_str(&content).map_err(|e| GoldDdlError::ConfigParseError {
                 message: format!("Failed to parse {}: {}", path.display(), e),
-            }
-        })?;
+            })?;
 
         Ok(config)
     }
@@ -77,11 +76,10 @@ impl ConfigLoader for FileSystemConfigLoader {
         }
 
         let content = std::fs::read_to_string(&path)?;
-        let config: DomainConfig = serde_yaml::from_str(&content).map_err(|e| {
-            GoldDdlError::ConfigParseError {
+        let config: DomainConfig =
+            serde_yaml::from_str(&content).map_err(|e| GoldDdlError::ConfigParseError {
                 message: format!("Failed to parse {}: {}", path.display(), e),
-            }
-        })?;
+            })?;
 
         Ok(config)
     }
@@ -94,18 +92,16 @@ pub fn default_loader(config_dir: impl Into<PathBuf>) -> impl ConfigLoader {
 
 /// Resolve the config directory path
 pub fn resolve_config_dir(config_dir: Option<&Path>) -> PathBuf {
-    config_dir
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            // Check for Pi deployment path first
-            let pi_path = PathBuf::from("/opt/ndp/config");
-            if pi_path.exists() {
-                pi_path
-            } else {
-                // Default to local development path
-                PathBuf::from("./config")
-            }
-        })
+    config_dir.map(PathBuf::from).unwrap_or_else(|| {
+        // Check for Pi deployment path first
+        let pi_path = PathBuf::from("/opt/ndp/config");
+        if pi_path.exists() {
+            pi_path
+        } else {
+            // Default to local development path
+            PathBuf::from("./config")
+        }
+    })
 }
 
 #[cfg(test)]

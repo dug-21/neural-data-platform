@@ -1,8 +1,8 @@
 # FE-001: Gold Layer Foundation - Status
 
 > **Last Updated:** 2026-02-05
-> **Current Phase:** Phase D Complete - v1.1.5 Deployed
-> **Overall Progress:** 85% (Phase A + B + C + D deployed to Pi, Phase E pending)
+> **Current Phase:** Phase E Complete - Integration Tested
+> **Overall Progress:** 95% (Phase A-E complete, integration tests passed)
 
 ---
 
@@ -14,7 +14,7 @@
 | **B: First Stream** | ✅ Deployed | 100% | v1.1.1 deployed to Pi, 798 hourly + 35 daily rows |
 | **C: Cross-Stream + Alignment** | ✅ Complete | 100% | 3 streams, aligned view, 279 tests |
 | **D: Validation + Dashboard** | ✅ Deployed | 100% | Fast-Follower PASSED, v1.1.5 deployed to Pi |
-| **E: Unified Event Abstraction** | ✅ Planning Complete | 10% | 5-agent swarm review complete, 94% spec ready |
+| **E: Unified Event Abstraction** | ✅ Complete | 100% | Events hypertable, crossings, dashboard - integration tested |
 
 ---
 
@@ -46,9 +46,9 @@
 | v11-009 | Lag Feature Computation | Not Started | - | |
 | v11-010 | Gold Layer Data Dictionary | Not Started | - | |
 | v11-011 | Correlation-Ready Dashboard | Superseded | - | Replaced by v11-014 |
-| v11-012 | Threshold Crossing Generator | Not Started | - | Phase E |
-| v11-013 | Unified Events View | Not Started | - | Phase E |
-| v11-014 | Gold Layer Dashboard | Not Started | - | Phase E (new) |
+| v11-012 | Threshold Crossing Generator | ✅ Complete | Phase E swarm | All conditions (<,<=,>,>=,between), rising/falling detection |
+| v11-013 | Unified Events View | ✅ Complete | Phase E swarm | gold.events hypertable, unified view, hourly CA |
+| v11-014 | Gold Layer Dashboard | ✅ Complete | Phase E swarm | 20 panels, 4 rows, threshold lines |
 
 ### Tier 3: Validation
 
@@ -84,6 +84,7 @@
 
 | Date | Activity | Outcome |
 |------|----------|---------|
+| 2026-02-05 | **Phase E COMPLETE - Integration Tested** | 6-agent swarm, 7 SQL files, 20-panel dashboard, 34 new tests |
 | 2026-02-05 | **TEST-PLAN.md Section 5 Added: Dashboard Tests** | v11-014 tests: JSON validation, variables, performance, integration (CRIT-02 resolved) |
 | 2026-02-05 | **SPEC-E01/E02 Updated: Events Hypertable** | Adopted hypertable approach per Decision 12, enables CA + context capture |
 | 2026-02-05 | **Phase E 5-Agent Review Swarm Complete** | 6 reports generated, 94% spec ready, 3 critical items identified |

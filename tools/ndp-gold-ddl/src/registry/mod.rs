@@ -47,10 +47,7 @@ impl FeatureRegistry {
     }
 
     /// Generate all feature columns from config
-    pub fn generate_all(
-        &self,
-        features: &FeaturesConfig,
-    ) -> Result<Vec<SqlColumn>> {
+    pub fn generate_all(&self, features: &FeaturesConfig) -> Result<Vec<SqlColumn>> {
         let mut columns = Vec::new();
 
         // Generate lag features

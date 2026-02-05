@@ -295,11 +295,7 @@ mod tests {
     #[test]
     fn test_description_escapes_single_quotes() {
         // Arrange
-        let sql = generate_classification_sql(
-            "test",
-            StreamType::Observation,
-            Some("It's a test"),
-        );
+        let sql = generate_classification_sql("test", StreamType::Observation, Some("It's a test"));
 
         // Assert - single quote escaped
         assert!(sql.contains("It''s a test"));

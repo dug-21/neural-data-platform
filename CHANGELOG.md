@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-02-05
+
+Gold Layer Foundation - Phase E: Unified Event Abstraction (FE-001). Events hypertable, threshold crossings, and Gold Layer Dashboard.
+
+### Added
+
+- **Events Hypertable** (v11-013)
+  - `gold.events` TimescaleDB hypertable for event storage
+  - 7-day chunk interval, 1-year retention, 30-day compression
+  - All event types: state_transition, threshold_crossing
+  - Context snapshot at event time for V1.2 correlation
+  - V1.2 query pattern indexes (time, type+time, entity, objective, GIN on context/details)
+
+- **Unified Events View** (v11-013)
+  - `gold.events_unified` view for V1.2 API compatibility
+  - JSONB details with backward-compatible schema
+  - `gold.indoor_air_quality_events` domain-scoped view
+
+- **Events Continuous Aggregates** (v11-013)
+  - `gold.events_hourly` - hourly event counts by type
+  - `gold.events_hourly_by_entity` - per-entity breakdown
+  - 15-minute refresh policy
+
+- **Event Detection Procedure** (v11-013)
+  - `gold.detect_events()` procedure with idempotent detection
+  - `gold.get_event_context()` helper for context capture
+  - `gold.detect_events_for_range()` for manual backfill
+  - TimescaleDB scheduled job (15-minute interval)
+  - Management functions: pause, resume, set_interval
+
+- **Threshold Crossing Generator** (v11-012)
+  - `gold.detect_threshold_crossings()` function
+  - All condition types: <, <=, >, >=, between
+  - Crossing directions: rising, falling, entering_range, exiting_range_low, exiting_range_high
+  - Dynamic objective lookup from `data_dictionary.objectives`
+  - Monitoring views for oscillation analysis
+
+- **Gold Layer Dashboard** (v11-014)
+  - `config/grafana/dashboards/gold-layer-overview.json`
+  - 20 panels across 4 rows
+  - Row 1: Air Quality Metrics (PM2.5, CO2, Temp/Humidity)
+  - Row 2: Cross-Stream Alignment (multi-stream overlay)
+  - Row 3: Events & Objectives (timeline, gauges, tables)
+  - Row 4: Data Quality & Volume
+  - Threshold lines at 12 µg/m³ (PM2.5) and 800 ppm (CO2)
+  - Dashboard variables for filtering
+
+- **ndp-gold-ddl EventsGenerator**
+  - `generators/events.rs` with 5 generation methods
+  - `EventsConfig` struct for configuration
+  - 34 new unit tests (311 total)
+
+- **Acceptance Tests**
+  - `acceptance_events_hypertable.sql` - hypertable schema tests
+  - `acceptance_threshold_crossings.sql` - all condition type tests
+  - `acceptance_unified_events.sql` - V1.2 query pattern tests
+  - `acceptance_detection_job.sql` - job scheduling tests
+  - `run_acceptance_tests.sh` - test runner script
+
+### Changed
+
+- STATUS.md: Phase E complete (95% overall progress)
+- ndp-gold-ddl: Added events module to generators
+
+### Technical Notes
+
+- Events are stored in hypertable (not view) per Decision 12 in DECISIONS.md
+- Enables continuous aggregates on events (impossible with UNION ALL view)
+- Context captured from `gold.indoor_air_quality_aligned` at event time
+- Detection job uses `last_successful_finish` for idempotency
+- V1.2 Pattern Detection Engine can consume events via `gold.events_unified`
+
+### Migration Notes
+
+- No breaking changes from v1.1.x
+- New tables/views are additive
+- Detection job requires Silver layer tables to generate events
+- Dashboard requires Grafana datasource configuration
+
 ## [1.1.2] - 2026-02-05
 
 Gold Layer Foundation - Phase C (FE-001). Cross-stream alignment with 3 streams and objectives storage.

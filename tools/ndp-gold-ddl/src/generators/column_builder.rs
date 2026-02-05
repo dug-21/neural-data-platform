@@ -68,7 +68,11 @@ impl DefaultColumnBuilder {
     }
 
     /// Build column expressions for a single stream
-    fn build_stream_columns(&self, stream: &AlignedStream, all_streams: &[AlignedStream]) -> Vec<String> {
+    fn build_stream_columns(
+        &self,
+        stream: &AlignedStream,
+        all_streams: &[AlignedStream],
+    ) -> Vec<String> {
         let null_handler = get_null_handler(stream.null_handling);
         let bucket_expr = self.get_bucket_expression(all_streams);
 
@@ -240,7 +244,9 @@ mod tests {
         let columns = builder.build_select_columns(&streams);
         let joined = columns.join("\n");
 
-        assert!(joined.contains("COALESCE(indoor.sample_count, 0) + COALESCE(outdoor.sample_count, 0) AS total_samples"));
+        assert!(joined.contains(
+            "COALESCE(indoor.sample_count, 0) + COALESCE(outdoor.sample_count, 0) AS total_samples"
+        ));
     }
 
     #[test]

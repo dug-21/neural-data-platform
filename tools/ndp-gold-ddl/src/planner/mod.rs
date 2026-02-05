@@ -5,4 +5,4 @@
 
 pub mod sync;
 
-pub use sync::{SyncPlan, SyncPlanner, CaAction};
+pub use sync::{CaAction, SyncPlan, SyncPlanner};

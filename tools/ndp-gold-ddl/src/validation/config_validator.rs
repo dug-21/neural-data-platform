@@ -18,12 +18,14 @@ impl ConfigValidator {
     /// Validate the entire stream configuration for Gold DDL generation
     pub fn validate(&self, config: &StreamConfig) -> Result<()> {
         // Check gold_etl exists and is enabled
-        let gold_etl = config.gold_etl.as_ref().ok_or_else(|| {
-            GoldDdlError::MissingRequiredField {
-                field: "gold_etl".to_string(),
-                context: format!("stream '{}'", config.stream_id),
-            }
-        })?;
+        let gold_etl =
+            config
+                .gold_etl
+                .as_ref()
+                .ok_or_else(|| GoldDdlError::MissingRequiredField {
+                    field: "gold_etl".to_string(),
+                    context: format!("stream '{}'", config.stream_id),
+                })?;
 
         if !gold_etl.enabled {
             return Err(GoldDdlError::GoldEtlDisabled {
@@ -37,11 +39,7 @@ impl ConfigValidator {
         // Validate aggregates
         if let Some(ref aggregates) = gold_etl.aggregates {
             self.validate_granularities(&aggregates.granularities)?;
-            self.validate_aggregate_fields(
-                &aggregates.fields,
-                &stream_fields,
-                &config.stream_id,
-            )?;
+            self.validate_aggregate_fields(&aggregates.fields, &stream_fields, &config.stream_id)?;
         }
 
         // Validate features
@@ -191,9 +189,11 @@ pub fn parse_granularity(granularity: &str) -> Result<(u32, String)> {
         });
     }
 
-    let value: u32 = parts[0].parse().map_err(|_| GoldDdlError::InvalidGranularity {
-        granularity: granularity.to_string(),
-    })?;
+    let value: u32 = parts[0]
+        .parse()
+        .map_err(|_| GoldDdlError::InvalidGranularity {
+            granularity: granularity.to_string(),
+        })?;
 
     let unit = parts[1].to_lowercase();
     match unit.as_str() {
@@ -442,7 +442,11 @@ mod tests {
         let mut config = create_test_stream_config();
         let gold_etl = config.gold_etl.as_mut().unwrap();
         let agg = gold_etl.aggregates.as_mut().unwrap();
-        agg.fields.get_mut("pm25").unwrap().metrics.push("average".to_string()); // invalid
+        agg.fields
+            .get_mut("pm25")
+            .unwrap()
+            .metrics
+            .push("average".to_string()); // invalid
 
         let result = validate_gold_config(&config);
         assert!(result.is_err());
@@ -537,7 +541,10 @@ mod tests {
         let result = validate_gold_config(&config);
         assert!(result.is_err());
         match result.unwrap_err() {
-            GoldDdlError::InvalidFeatureConfig { feature_type, message } => {
+            GoldDdlError::InvalidFeatureConfig {
+                feature_type,
+                message,
+            } => {
                 assert_eq!(feature_type, "rolling");
                 assert!(message.contains("average"));
             }

@@ -69,10 +69,7 @@ impl DefaultJoinBuilder {
             JoinStrategy::FullOuter => {
                 // For full outer, coalesce all previous buckets
                 if index == 0 {
-                    format!(
-                        "{}.bucket = {}.bucket",
-                        all_streams[0].alias, stream.alias
-                    )
+                    format!("{}.bucket = {}.bucket", all_streams[0].alias, stream.alias)
                 } else {
                     let previous_buckets: Vec<String> = all_streams[..=index]
                         .iter()
@@ -87,10 +84,7 @@ impl DefaultJoinBuilder {
             }
             JoinStrategy::Left | JoinStrategy::Inner => {
                 // Simple equality with primary stream
-                format!(
-                    "{}.bucket = {}.bucket",
-                    all_streams[0].alias, stream.alias
-                )
+                format!("{}.bucket = {}.bucket", all_streams[0].alias, stream.alias)
             }
         };
 

@@ -6,11 +6,13 @@
 //! - Refresh policies for continuous aggregates
 //! - Stream classification for correlation analysis (v11-002)
 //! - State transitions for state_event streams (v11-006)
+//! - Events hypertable for unified event storage (v11-013)
 
 pub mod aligned_view;
 pub mod classification;
 pub mod column_builder;
 pub mod continuous_aggregate;
+pub mod events;
 pub mod join_builder;
 pub mod null_handler;
 pub mod refresh_policy;
@@ -23,6 +25,7 @@ pub use classification::{
 };
 pub use column_builder::ColumnBuilder;
 pub use continuous_aggregate::ContinuousAggregateGenerator;
+pub use events::{EventsConfig, EventsGenerator, IEventsGenerator};
 pub use join_builder::JoinBuilder;
 pub use null_handler::{
     CarryForwardNullHandler, InterpolateNullHandler, NullHandler, PreserveNullHandler,

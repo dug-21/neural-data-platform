@@ -10,12 +10,14 @@
 //! - v11-006: State Transition Materializer
 //! - v11-007: Objectives Storage
 
+use ndp_gold_ddl::config::types::{
+    AggregatesConfig, FieldConfig, FieldMetricsConfig, SilverEtlConfig,
+};
 use ndp_gold_ddl::{
     AlignedStream, AlignmentConfig, ConfigLoader, DomainConfig, GoldDdlError, GoldEtlConfig,
     JoinStrategy, NullHandling, ObjectiveConfig, Priority, Result, StreamConfig, StreamRef,
     StreamRole, StreamType, TargetConfig,
 };
-use ndp_gold_ddl::config::types::{AggregatesConfig, FieldConfig, FieldMetricsConfig, SilverEtlConfig};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -195,7 +197,13 @@ pub fn create_observation_stream(stream_id: &str, alias: &str, role: StreamRole)
         alias,
         role,
         StreamType::Observation,
-        vec!["bucket", "pm25_mean", "pm25_std", "co2_mean", "sample_count"],
+        vec![
+            "bucket",
+            "pm25_mean",
+            "pm25_std",
+            "co2_mean",
+            "sample_count",
+        ],
         NullHandling::Preserve,
     )
 }
@@ -219,7 +227,12 @@ pub fn create_forecast_stream(stream_id: &str, alias: &str) -> AlignedStream {
         alias,
         StreamRole::Context,
         StreamType::Forecast,
-        vec!["bucket", "temperature_c_mean", "humidity_pct_mean", "sample_count"],
+        vec![
+            "bucket",
+            "temperature_c_mean",
+            "humidity_pct_mean",
+            "sample_count",
+        ],
         NullHandling::Preserve,
     )
 }
@@ -295,12 +308,22 @@ pub fn create_custom_transition_config(
 /// * `metric` - The metric to monitor
 /// * `condition` - Comparison operator (<, >, <=, >=, ==, !=)
 /// * `threshold` - Threshold value
-pub fn create_objective(id: &str, metric: &str, condition: &str, threshold: f64) -> ObjectiveConfig {
+pub fn create_objective(
+    id: &str,
+    metric: &str,
+    condition: &str,
+    threshold: f64,
+) -> ObjectiveConfig {
     create_objective_config(id, metric, condition, threshold)
 }
 
 /// Create an ObjectiveConfig (internal helper).
-fn create_objective_config(id: &str, metric: &str, condition: &str, threshold: f64) -> ObjectiveConfig {
+fn create_objective_config(
+    id: &str,
+    metric: &str,
+    condition: &str,
+    threshold: f64,
+) -> ObjectiveConfig {
     ObjectiveConfig {
         id: id.to_string(),
         description: format!("Test objective for {}", metric),
@@ -535,7 +558,10 @@ mod tests {
         assert_eq!(domain.streams.len(), 3);
 
         // Verify primary stream
-        let primary = domain.streams.iter().find(|s| s.role == StreamRole::Primary);
+        let primary = domain
+            .streams
+            .iter()
+            .find(|s| s.role == StreamRole::Primary);
         assert!(primary.is_some());
         assert_eq!(primary.unwrap().stream_id, "air-quality");
 
@@ -567,8 +593,7 @@ mod tests {
 
     #[test]
     fn test_mock_config_loader_returns_stream() {
-        let loader = MockConfigLoader::new()
-            .with_gold_stream("air-quality");
+        let loader = MockConfigLoader::new().with_gold_stream("air-quality");
 
         let result = loader.load_stream_config("air-quality");
         assert!(result.is_ok());

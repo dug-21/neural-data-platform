@@ -126,11 +126,12 @@ async fn main() -> ExitCode {
             ExitCode::from(exit_codes::SUCCESS)
         }
         Err(e) => {
-            let exit_code = if e.to_string().contains("Database") || e.to_string().contains("Connection") {
-                exit_codes::DATABASE_ERROR
-            } else {
-                exit_codes::GENERATION_ERROR
-            };
+            let exit_code =
+                if e.to_string().contains("Database") || e.to_string().contains("Connection") {
+                    exit_codes::DATABASE_ERROR
+                } else {
+                    exit_codes::GENERATION_ERROR
+                };
             eprintln!("Error: {}", e);
             ExitCode::from(exit_code)
         }
@@ -141,7 +142,12 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
     let loader = FileSystemConfigLoader::new(&cli.config_dir);
 
     match &cli.command {
-        Commands::Generate { stream, domain, action, transitions } => {
+        Commands::Generate {
+            stream,
+            domain,
+            action,
+            transitions,
+        } => {
             let action: Action = action.parse().map_err(|e: String| e)?;
 
             if let Some(domain_id) = domain {
@@ -159,7 +165,9 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                 })?;
 
                 if !gold_etl.enabled {
-                    return Err(format!("Stream '{}' has gold_etl.enabled = false", stream_id).into());
+                    return Err(
+                        format!("Stream '{}' has gold_etl.enabled = false", stream_id).into(),
+                    );
                 }
 
                 // Check if transitions are requested
@@ -172,9 +180,12 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                 } else {
                     // No DB URL or recreate mode - generate all DDL
                     if cli.verbose {
-                        eprintln!("Note: No database URL provided, generating all DDL (dry-run mode)");
+                        eprintln!(
+                            "Note: No database URL provided, generating all DDL (dry-run mode)"
+                        );
                     }
-                    let generator = ContinuousAggregateGenerator::from_stream_config(&stream_config)?;
+                    let generator =
+                        ContinuousAggregateGenerator::from_stream_config(&stream_config)?;
                     let sql = generator.generate(gold_etl, action)?;
                     Ok(sql)
                 }
@@ -223,23 +234,22 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                 let stream_config = loader.load_stream_config(stream_id)?;
 
                 if stream_config.gold_etl.is_none() {
-                    return Err(format!(
-                        "Stream '{}' has no gold_etl configuration",
-                        stream_id
-                    )
-                    .into());
+                    return Err(
+                        format!("Stream '{}' has no gold_etl configuration", stream_id).into(),
+                    );
                 }
 
                 let gold_etl = stream_config.gold_etl.unwrap();
                 if !gold_etl.enabled {
-                    return Err(format!(
-                        "Stream '{}' has gold_etl.enabled = false",
-                        stream_id
-                    )
-                    .into());
+                    return Err(
+                        format!("Stream '{}' has gold_etl.enabled = false", stream_id).into(),
+                    );
                 }
 
-                Ok(format!("Stream '{}' Gold ETL configuration is valid", stream_id))
+                Ok(format!(
+                    "Stream '{}' Gold ETL configuration is valid",
+                    stream_id
+                ))
             } else {
                 Err("Must specify --stream or --domain".into())
             }
@@ -281,10 +291,11 @@ fn generate_transitions(
     action: Action,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Get transition config from stream's gold_etl.features.transitions section
-    let transition_config = TransitionConfig::from_stream_config(stream_config).unwrap_or_else(|| {
-        // Default config if not specified in stream config
-        TransitionConfig::new("state", "ndp_id")
-    });
+    let transition_config =
+        TransitionConfig::from_stream_config(stream_config).unwrap_or_else(|| {
+            // Default config if not specified in stream config
+            TransitionConfig::new("state", "ndp_id")
+        });
 
     if cli.verbose {
         eprintln!(

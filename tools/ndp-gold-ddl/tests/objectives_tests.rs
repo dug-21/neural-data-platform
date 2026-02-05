@@ -131,12 +131,29 @@ priority: high
 
     // Assert: Parsed correctly
     assert_eq!(objective.id, "healthy_co2", "ID should be parsed");
-    assert_eq!(objective.target.stream, "air-quality", "Stream should be parsed");
+    assert_eq!(
+        objective.target.stream, "air-quality",
+        "Stream should be parsed"
+    );
     assert_eq!(objective.target.metric, "co2", "Metric should be parsed");
-    assert_eq!(objective.target.condition, "<", "Condition should be parsed");
-    assert_eq!(objective.target.threshold, 800.0, "Threshold should be parsed");
-    assert_eq!(objective.target.unit, Some("ppm".to_string()), "Unit should be parsed");
-    assert_eq!(objective.priority, Priority::High, "Priority should be parsed");
+    assert_eq!(
+        objective.target.condition, "<",
+        "Condition should be parsed"
+    );
+    assert_eq!(
+        objective.target.threshold, 800.0,
+        "Threshold should be parsed"
+    );
+    assert_eq!(
+        objective.target.unit,
+        Some("ppm".to_string()),
+        "Unit should be parsed"
+    );
+    assert_eq!(
+        objective.priority,
+        Priority::High,
+        "Priority should be parsed"
+    );
 }
 
 /// Unit: Objective with minimal fields (no unit, default priority).
@@ -157,8 +174,15 @@ target:
 
     // Assert: Defaults applied
     assert_eq!(objective.id, "basic_objective");
-    assert_eq!(objective.target.unit, None, "Unit should be None when not specified");
-    assert_eq!(objective.priority, Priority::Medium, "Priority should default to Medium");
+    assert_eq!(
+        objective.target.unit, None,
+        "Unit should be None when not specified"
+    );
+    assert_eq!(
+        objective.priority,
+        Priority::Medium,
+        "Priority should default to Medium"
+    );
 }
 
 /// Unit: Objective with float threshold.
@@ -228,7 +252,10 @@ fn test_generates_objective_insert() {
         "Should insert into data_dictionary.objectives"
     );
     assert!(sql.contains("'healthy_co2'"), "Should include objective ID");
-    assert!(sql.contains("'indoor-air-quality'"), "Should include domain ID");
+    assert!(
+        sql.contains("'indoor-air-quality'"),
+        "Should include domain ID"
+    );
     assert!(sql.contains("'air-quality'"), "Should include stream ID");
     assert!(sql.contains("'co2'"), "Should include metric");
     assert!(sql.contains("'<'"), "Should include condition");
@@ -623,10 +650,7 @@ fn test_sql_special_characters_handled() {
     let sql = generate_objective_insert_sql(&objective, "test-domain");
 
     // Assert: SQL is syntactically valid (basic check)
-    assert!(
-        sql.contains("INSERT INTO"),
-        "SQL should still have INSERT"
-    );
+    assert!(sql.contains("INSERT INTO"), "SQL should still have INSERT");
     // Note: Real implementation should escape or use parameterized queries
 }
 

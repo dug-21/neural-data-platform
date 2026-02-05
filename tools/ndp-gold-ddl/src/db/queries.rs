@@ -54,7 +54,10 @@ impl<C: DbClient + Send + Sync> CaChecker for PostgresCaChecker<C> {
 
         let rows = self.client.query(query, &[&schema, &name]).await?;
 
-        Ok(rows.first().map(|r| r.get::<_, bool>("exists")).unwrap_or(false))
+        Ok(rows
+            .first()
+            .map(|r| r.get::<_, bool>("exists"))
+            .unwrap_or(false))
     }
 
     async fn get_ca_info(&self, schema: &str, name: &str) -> Result<Option<CaInfo>, DbError> {
@@ -115,7 +118,10 @@ impl<C: DbClient + Send + Sync> CaChecker for PostgresCaChecker<C> {
 
         let rows = self.client.query(query, &[&schema, &name]).await?;
 
-        Ok(rows.first().map(|r| r.get::<_, bool>("exists")).unwrap_or(false))
+        Ok(rows
+            .first()
+            .map(|r| r.get::<_, bool>("exists"))
+            .unwrap_or(false))
     }
 }
 

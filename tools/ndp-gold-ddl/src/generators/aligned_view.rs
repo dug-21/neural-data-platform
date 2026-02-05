@@ -49,9 +49,7 @@ impl<L: ConfigLoader> AlignedViewGenerator<L> {
         let aligned_streams = self.build_aligned_streams(domain_config)?;
 
         // Validate primary stream exists
-        if aligned_streams.is_empty()
-            || aligned_streams[0].role != StreamRole::Primary
-        {
+        if aligned_streams.is_empty() || aligned_streams[0].role != StreamRole::Primary {
             return Err(GoldDdlError::GenerationFailed {
                 message: format!(
                     "Domain '{}' requires a stream with role 'primary'",
@@ -89,7 +87,9 @@ impl<L: ConfigLoader> AlignedViewGenerator<L> {
         alignment: &AlignmentConfig,
     ) -> Result<AlignedStream> {
         // Load stream config to get type and columns
-        let stream_config = self.config_loader.load_stream_config(&stream_ref.stream_id)?;
+        let stream_config = self
+            .config_loader
+            .load_stream_config(&stream_ref.stream_id)?;
 
         // Determine stream type (default to observation if not specified)
         let stream_type = self.determine_stream_type(&stream_ref.stream_id);
@@ -197,7 +197,9 @@ impl<L: ConfigLoader> AlignedViewGenerator<L> {
         let view_name = &domain_config.alignment.view_name;
         let stream_list = self.get_stream_list(streams);
         let columns = self.column_builder.build_select_columns(streams);
-        let joins = self.join_builder.build_joins(streams, domain_config.alignment.join_strategy);
+        let joins = self
+            .join_builder
+            .build_joins(streams, domain_config.alignment.join_strategy);
         let bucket_coalesce = self.get_bucket_coalesce(streams);
 
         // Format columns - join with commas but not for comment-only lines
@@ -254,7 +256,9 @@ CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
         let view_name = &domain_config.alignment.view_name;
         let stream_list = self.get_stream_list(streams);
         let columns = self.column_builder.build_select_columns(streams);
-        let joins = self.join_builder.build_joins(streams, domain_config.alignment.join_strategy);
+        let joins = self
+            .join_builder
+            .build_joins(streams, domain_config.alignment.join_strategy);
         let bucket_coalesce = self.get_bucket_coalesce(streams);
 
         // Format columns - join with commas but not for comment-only lines
@@ -295,7 +299,11 @@ CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
 
     /// Get comma-separated list of stream aliases
     fn get_stream_list(&self, streams: &[AlignedStream]) -> String {
-        streams.iter().map(|s| s.alias.as_str()).collect::<Vec<_>>().join(", ")
+        streams
+            .iter()
+            .map(|s| s.alias.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// Get bucket COALESCE expression for WHERE clause
@@ -323,11 +331,7 @@ CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
             let trimmed = col.trim();
             let is_comment_or_empty = trimmed.is_empty()
                 || trimmed.starts_with("--")
-                || (col.contains('\n')
-                    && col
-                        .trim_start_matches('\n')
-                        .trim()
-                        .starts_with("--"));
+                || (col.contains('\n') && col.trim_start_matches('\n').trim().starts_with("--"));
 
             entries.push((col.clone(), !is_comment_or_empty));
         }
@@ -368,7 +372,9 @@ CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Action, AlignmentConfig, DomainConfig, JoinStrategy, NullHandling, StreamRef};
+    use crate::config::{
+        Action, AlignmentConfig, DomainConfig, JoinStrategy, NullHandling, StreamRef,
+    };
     use std::collections::HashMap;
 
     /// Mock config loader for testing
@@ -430,12 +436,11 @@ mod tests {
 
     impl ConfigLoader for MockConfigLoader {
         fn load_stream_config(&self, stream_id: &str) -> Result<crate::config::StreamConfig> {
-            self.stream_configs
-                .get(stream_id)
-                .cloned()
-                .ok_or_else(|| GoldDdlError::ConfigNotFound {
+            self.stream_configs.get(stream_id).cloned().ok_or_else(|| {
+                GoldDdlError::ConfigNotFound {
                     path: format!("mock:{}", stream_id),
-                })
+                }
+            })
         }
 
         fn load_domain_config(&self, _domain_id: &str) -> Result<DomainConfig> {

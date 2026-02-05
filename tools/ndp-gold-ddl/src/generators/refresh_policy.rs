@@ -92,7 +92,9 @@ mod tests {
             schedule_interval: "30 minutes".to_string(),
         };
 
-        let sql = generator.generate("air-quality", "1 hour", Some(&policy)).unwrap();
+        let sql = generator
+            .generate("air-quality", "1 hour", Some(&policy))
+            .unwrap();
 
         assert!(sql.contains("8 hours"));
         assert!(sql.contains("30 minutes"));
@@ -119,7 +121,7 @@ mod tests {
         let sql = generator.generate("air-quality", "1 day", None).unwrap();
 
         assert!(sql.contains("gold.air_quality_daily"));
-        assert!(sql.contains("3 days"));       // daily start_offset
+        assert!(sql.contains("3 days")); // daily start_offset
         assert!(sql.contains("schedule_interval => INTERVAL '1 hour'")); // daily schedule
     }
 
@@ -136,7 +138,9 @@ mod tests {
     #[test]
     fn test_generate_refresh_policy_custom_granularity_uses_other_defaults() {
         let generator = RefreshPolicyGenerator::new();
-        let sql = generator.generate("air-quality", "15 minutes", None).unwrap();
+        let sql = generator
+            .generate("air-quality", "15 minutes", None)
+            .unwrap();
 
         assert!(sql.contains("gold.air_quality_15min"));
         assert!(sql.contains("schedule_interval => INTERVAL '30 minutes'")); // other default
@@ -152,11 +156,13 @@ mod tests {
         };
 
         // Even for daily, if explicit policy provided, use it
-        let sql = generator.generate("air-quality", "1 day", Some(&custom_policy)).unwrap();
+        let sql = generator
+            .generate("air-quality", "1 day", Some(&custom_policy))
+            .unwrap();
 
-        assert!(sql.contains("2 hours"));      // explicit start_offset
-        assert!(sql.contains("5 minutes"));    // explicit end_offset
-        assert!(sql.contains("10 minutes"));   // explicit schedule
+        assert!(sql.contains("2 hours")); // explicit start_offset
+        assert!(sql.contains("5 minutes")); // explicit end_offset
+        assert!(sql.contains("10 minutes")); // explicit schedule
     }
 
     #[test]

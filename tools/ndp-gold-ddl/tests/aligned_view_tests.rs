@@ -46,9 +46,21 @@ fn test_generates_full_outer_join_for_two_streams() {
     let sql = generator.generate(&domain, Action::Sync).unwrap();
 
     // Assert
-    assert_sql_contains(&sql, "FULL OUTER JOIN", "Two streams should use FULL OUTER JOIN");
-    assert_sql_contains(&sql, "gold.air_quality_hourly", "Should reference air-quality Gold table");
-    assert_sql_contains(&sql, "gold.outdoor_weather_hourly", "Should reference outdoor-weather Gold table");
+    assert_sql_contains(
+        &sql,
+        "FULL OUTER JOIN",
+        "Two streams should use FULL OUTER JOIN",
+    );
+    assert_sql_contains(
+        &sql,
+        "gold.air_quality_hourly",
+        "Should reference air-quality Gold table",
+    );
+    assert_sql_contains(
+        &sql,
+        "gold.outdoor_weather_hourly",
+        "Should reference outdoor-weather Gold table",
+    );
 }
 
 /// Component: Three streams require 2 FULL OUTER JOINs.
@@ -95,7 +107,11 @@ fn test_left_join_strategy_when_configured() {
 
     // Assert
     assert_sql_contains(&sql, "LEFT JOIN", "Should use LEFT JOIN when configured");
-    assert_sql_not_contains(&sql, "FULL OUTER JOIN", "Should not use FULL OUTER when LEFT configured");
+    assert_sql_not_contains(
+        &sql,
+        "FULL OUTER JOIN",
+        "Should not use FULL OUTER when LEFT configured",
+    );
 }
 
 /// Component: INNER JOIN strategy when configured.
@@ -116,7 +132,11 @@ fn test_inner_join_strategy_when_configured() {
 
     // Assert
     assert_sql_contains(&sql, "INNER JOIN", "Should use INNER JOIN when configured");
-    assert_sql_not_contains(&sql, "FULL OUTER JOIN", "Should not use FULL OUTER when INNER configured");
+    assert_sql_not_contains(
+        &sql,
+        "FULL OUTER JOIN",
+        "Should not use FULL OUTER when INNER configured",
+    );
 }
 
 // ============================================================================
@@ -180,8 +200,7 @@ fn test_two_stream_bucket_coalesce_format() {
 #[test]
 fn test_single_stream_no_coalesce() {
     // Arrange
-    let loader = MockConfigLoader::new()
-        .with_gold_stream("air-quality");
+    let loader = MockConfigLoader::new().with_gold_stream("air-quality");
 
     // Create single-stream domain (will fail validation, but we test the concept)
     // Note: Per the generator, minimum 2 streams required - this tests edge case handling
@@ -275,11 +294,7 @@ fn test_state_event_null_handling_locf() {
 
     // Assert: State event columns should use PostgreSQL-compatible LOCF pattern
     // Uses cascading LAG (LAG(..., 1), LAG(..., 2), etc.) instead of IGNORE NULLS
-    assert_sql_contains(
-        &sql,
-        "LAG(",
-        "State event should use LAG for LOCF",
-    );
+    assert_sql_contains(&sql, "LAG(", "State event should use LAG for LOCF");
     assert_sql_contains(
         &sql,
         "COALESCE",
@@ -386,8 +401,7 @@ fn test_column_aliasing_convention() {
 #[test]
 fn test_descriptive_alias_not_stream_id() {
     // Arrange
-    let loader = MockConfigLoader::new()
-        .with_gold_stream("air-quality");
+    let loader = MockConfigLoader::new().with_gold_stream("air-quality");
 
     let mut domain = create_two_stream_domain();
     domain.streams = vec![
@@ -619,7 +633,11 @@ fn test_sync_mode_checks_existence() {
 
     // Assert: Should check existence
     assert_sql_contains(&sql, "IF NOT EXISTS", "Sync mode should check existence");
-    assert_sql_contains(&sql, "pg_matviews", "Should check materialized views catalog");
+    assert_sql_contains(
+        &sql,
+        "pg_matviews",
+        "Should check materialized views catalog",
+    );
 }
 
 /// Unit: Recreate mode drops existing view.
@@ -692,11 +710,7 @@ fn test_sample_count_per_stream() {
     let sql = generator.generate(&domain, Action::Sync).unwrap();
 
     // Assert: Per-stream sample counts
-    assert_sql_contains(
-        &sql,
-        "indoor_samples",
-        "Should have indoor samples column",
-    );
+    assert_sql_contains(&sql, "indoor_samples", "Should have indoor samples column");
     assert_sql_contains(
         &sql,
         "outdoor_samples",
@@ -719,11 +733,7 @@ fn test_total_samples_column() {
     let sql = generator.generate(&domain, Action::Sync).unwrap();
 
     // Assert: Total samples aggregation
-    assert_sql_contains(
-        &sql,
-        "total_samples",
-        "Should have total_samples column",
-    );
+    assert_sql_contains(&sql, "total_samples", "Should have total_samples column");
 }
 
 // ============================================================================
@@ -734,8 +744,7 @@ fn test_total_samples_column() {
 #[test]
 fn test_missing_stream_config_error() {
     // Arrange: Loader missing one stream
-    let loader = MockConfigLoader::new()
-        .with_gold_stream("air-quality");
+    let loader = MockConfigLoader::new().with_gold_stream("air-quality");
     // Note: outdoor-weather NOT loaded
 
     let domain = create_two_stream_domain();
@@ -795,9 +804,5 @@ fn test_sql_includes_comments() {
 
     // Assert: Has comments
     assert_sql_contains(&sql, "--", "Should have SQL comments");
-    assert_sql_contains(
-        &sql,
-        &domain.id,
-        "Comments should reference domain ID",
-    );
+    assert_sql_contains(&sql, &domain.id, "Comments should reference domain ID");
 }

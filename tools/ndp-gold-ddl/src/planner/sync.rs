@@ -131,9 +131,21 @@ impl SyncPlan {
 
     /// Get summary of planned actions
     pub fn summary(&self) -> String {
-        let creates = self.ca_plans.iter().filter(|p| p.action == CaAction::Create).count();
-        let skips = self.ca_plans.iter().filter(|p| p.action == CaAction::Skip).count();
-        let recreates = self.ca_plans.iter().filter(|p| p.action == CaAction::Recreate).count();
+        let creates = self
+            .ca_plans
+            .iter()
+            .filter(|p| p.action == CaAction::Create)
+            .count();
+        let skips = self
+            .ca_plans
+            .iter()
+            .filter(|p| p.action == CaAction::Skip)
+            .count();
+        let recreates = self
+            .ca_plans
+            .iter()
+            .filter(|p| p.action == CaAction::Recreate)
+            .count();
         let policies = self.ca_plans.iter().filter(|p| p.needs_policy).count();
 
         format!(
@@ -159,21 +171,27 @@ impl<'a, C: CaChecker> SyncPlanner<'a, C> {
 
     /// Create a sync plan by checking database state
     pub async fn plan(&self, gold_etl: &GoldEtlConfig) -> Result<SyncPlan> {
-        let aggregates = gold_etl.aggregates.as_ref().ok_or_else(|| {
-            GoldDdlError::MissingRequiredField {
-                field: "gold_etl.aggregates".to_string(),
-                context: format!("stream '{}'", self.stream_config.stream_id),
-            }
-        })?;
+        let aggregates =
+            gold_etl
+                .aggregates
+                .as_ref()
+                .ok_or_else(|| GoldDdlError::MissingRequiredField {
+                    field: "gold_etl.aggregates".to_string(),
+                    context: format!("stream '{}'", self.stream_config.stream_id),
+                })?;
 
-        let generator =
-            ContinuousAggregateGenerator::from_stream_config(self.stream_config)?;
+        let generator = ContinuousAggregateGenerator::from_stream_config(self.stream_config)?;
 
         let mut ca_plans = Vec::new();
 
         for granularity in &aggregates.granularities {
             let plan = self
-                .plan_for_granularity(&generator, aggregates, granularity, gold_etl.refresh_policy.as_ref())
+                .plan_for_granularity(
+                    &generator,
+                    aggregates,
+                    granularity,
+                    gold_etl.refresh_policy.as_ref(),
+                )
                 .await?;
             ca_plans.push(plan);
         }
@@ -242,10 +260,10 @@ impl<'a, C: CaChecker> SyncPlanner<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{FieldMetricsConfig, SilverEtlConfig, TimestampConfig};
+    use crate::db::DbError;
     use async_trait::async_trait;
     use std::collections::HashMap;
-    use crate::config::{SilverEtlConfig, TimestampConfig, FieldMetricsConfig};
-    use crate::db::DbError;
 
     // Mock CaChecker for testing
     struct MockCaChecker {
@@ -262,12 +280,14 @@ mod tests {
         }
 
         fn with_ca(mut self, schema: &str, name: &str) -> Self {
-            self.existing_cas.insert(format!("{}.{}", schema, name), true);
+            self.existing_cas
+                .insert(format!("{}.{}", schema, name), true);
             self
         }
 
         fn with_policy(mut self, schema: &str, name: &str) -> Self {
-            self.existing_policies.insert(format!("{}.{}", schema, name), true);
+            self.existing_policies
+                .insert(format!("{}.{}", schema, name), true);
             self
         }
     }
@@ -275,19 +295,34 @@ mod tests {
     #[async_trait]
     impl CaChecker for MockCaChecker {
         async fn ca_exists(&self, schema: &str, name: &str) -> std::result::Result<bool, DbError> {
-            Ok(self.existing_cas.contains_key(&format!("{}.{}", schema, name)))
+            Ok(self
+                .existing_cas
+                .contains_key(&format!("{}.{}", schema, name)))
         }
 
-        async fn get_ca_info(&self, _schema: &str, _name: &str) -> std::result::Result<Option<crate::db::CaInfo>, DbError> {
+        async fn get_ca_info(
+            &self,
+            _schema: &str,
+            _name: &str,
+        ) -> std::result::Result<Option<crate::db::CaInfo>, DbError> {
             Ok(None)
         }
 
-        async fn list_cas_in_schema(&self, _schema: &str) -> std::result::Result<Vec<crate::db::CaInfo>, DbError> {
+        async fn list_cas_in_schema(
+            &self,
+            _schema: &str,
+        ) -> std::result::Result<Vec<crate::db::CaInfo>, DbError> {
             Ok(vec![])
         }
 
-        async fn refresh_policy_exists(&self, schema: &str, name: &str) -> std::result::Result<bool, DbError> {
-            Ok(self.existing_policies.contains_key(&format!("{}.{}", schema, name)))
+        async fn refresh_policy_exists(
+            &self,
+            schema: &str,
+            name: &str,
+        ) -> std::result::Result<bool, DbError> {
+            Ok(self
+                .existing_policies
+                .contains_key(&format!("{}.{}", schema, name)))
         }
     }
 
@@ -362,8 +397,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_plan_adds_missing_policy() {
-        let checker = MockCaChecker::new()
-            .with_ca("gold", "air_quality_hourly");
+        let checker = MockCaChecker::new().with_ca("gold", "air_quality_hourly");
         // Note: CA exists but policy doesn't
 
         let stream_config = create_test_stream_config();

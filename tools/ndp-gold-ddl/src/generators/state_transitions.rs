@@ -121,10 +121,7 @@ impl StateTransitionGenerator {
     pub fn generate(&self, transition_config: &TransitionConfig, action: Action) -> Result<String> {
         if !transition_config.enabled {
             return Err(GoldDdlError::GenerationFailed {
-                message: format!(
-                    "Transitions not enabled for stream '{}'",
-                    self.stream_id
-                ),
+                message: format!("Transitions not enabled for stream '{}'", self.stream_id),
             });
         }
 
@@ -280,7 +277,10 @@ COMMENT ON MATERIALIZED VIEW {view_name} IS
         }
 
         // Add initial state and unknown cases
-        cases.push(format!("WHEN LAG({}) OVER w IS NULL THEN 'initial'", state_field));
+        cases.push(format!(
+            "WHEN LAG({}) OVER w IS NULL THEN 'initial'",
+            state_field
+        ));
         cases.push("ELSE 'unknown'".to_string());
 
         format!(
@@ -388,24 +388,20 @@ DROP MATERIALIZED VIEW IF EXISTS {view_name} CASCADE;
 /// Trait for generating state transition DDL
 pub trait ITransitionGenerator {
     /// Generate transition view DDL for a state_event stream
-    fn generate_transitions_ddl(
-        &self,
-        stream_config: &StreamConfig,
-    ) -> Result<String>;
+    fn generate_transitions_ddl(&self, stream_config: &StreamConfig) -> Result<String>;
 
     /// Generate filtered view for actual transitions only
-    fn generate_actual_transitions_view(
-        &self,
-        base_view: &str,
-    ) -> Result<String>;
+    fn generate_actual_transitions_view(&self, base_view: &str) -> Result<String>;
 }
 
 impl ITransitionGenerator for StateTransitionGenerator {
     fn generate_transitions_ddl(&self, stream_config: &StreamConfig) -> Result<String> {
-        let transition_config = TransitionConfig::from_stream_config(stream_config)
-            .ok_or_else(|| GoldDdlError::MissingRequiredField {
-                field: "gold_etl.features.transitions".to_string(),
-                context: format!("stream '{}'", stream_config.stream_id),
+        let transition_config =
+            TransitionConfig::from_stream_config(stream_config).ok_or_else(|| {
+                GoldDdlError::MissingRequiredField {
+                    field: "gold_etl.features.transitions".to_string(),
+                    context: format!("stream '{}'", stream_config.stream_id),
+                }
             })?;
 
         self.generate(&transition_config, Action::Sync)
@@ -424,7 +420,10 @@ WHERE is_actual_transition = TRUE;"#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{GoldEtlConfig, SilverEtlConfig, TimestampConfig, FeaturesConfig, TransitionsConfig as TypesTransitionsConfig};
+    use crate::config::{
+        FeaturesConfig, GoldEtlConfig, SilverEtlConfig, TimestampConfig,
+        TransitionsConfig as TypesTransitionsConfig,
+    };
 
     fn create_test_transition_config() -> TransitionConfig {
         TransitionConfig {

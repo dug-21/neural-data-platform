@@ -29,12 +29,14 @@ impl FeatureGenerator for TrendFeatureGenerator {
     }
 
     fn generate_columns(&self, config: &FeatureConfig, field: &str) -> Result<Vec<SqlColumn>> {
-        let window = config.trend_window.as_ref().ok_or_else(|| {
-            GoldDdlError::InvalidFeatureConfig {
-                feature_type: "trend".to_string(),
-                message: "trend_window is required".to_string(),
-            }
-        })?;
+        let window =
+            config
+                .trend_window
+                .as_ref()
+                .ok_or_else(|| GoldDdlError::InvalidFeatureConfig {
+                    feature_type: "trend".to_string(),
+                    message: "trend_window is required".to_string(),
+                })?;
 
         if window.is_empty() {
             return Err(GoldDdlError::InvalidFeatureConfig {
@@ -66,12 +68,14 @@ impl FeatureGenerator for TrendFeatureGenerator {
     }
 
     fn validate(&self, config: &FeatureConfig) -> Result<()> {
-        let window = config.trend_window.as_ref().ok_or_else(|| {
-            GoldDdlError::InvalidFeatureConfig {
-                feature_type: "trend".to_string(),
-                message: "trend_window is required".to_string(),
-            }
-        })?;
+        let window =
+            config
+                .trend_window
+                .as_ref()
+                .ok_or_else(|| GoldDdlError::InvalidFeatureConfig {
+                    feature_type: "trend".to_string(),
+                    message: "trend_window is required".to_string(),
+                })?;
 
         if window.is_empty() {
             return Err(GoldDdlError::InvalidFeatureConfig {

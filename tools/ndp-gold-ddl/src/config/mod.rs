@@ -12,7 +12,7 @@ pub use domain::{
 };
 pub use loader::{default_loader, resolve_config_dir, ConfigLoader, FileSystemConfigLoader};
 pub use types::{
-    Action, AggregatesConfig, FieldConfig, FieldMetricsConfig, FeaturesConfig, GoldEtlConfig,
+    Action, AggregatesConfig, FeaturesConfig, FieldConfig, FieldMetricsConfig, GoldEtlConfig,
     LagConfig, RefreshPolicyConfig, RollingConfig, SilverEtlConfig, StreamConfig, TimestampConfig,
-    TrendConfig, TransitionsConfig, VALID_METRICS, VALID_ROLLING_STATS,
+    TransitionsConfig, TrendConfig, VALID_METRICS, VALID_ROLLING_STATS,
 };

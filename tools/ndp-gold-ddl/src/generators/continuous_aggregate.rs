@@ -49,12 +49,14 @@ impl ContinuousAggregateGenerator {
 
     /// Generate complete DDL for all granularities
     pub fn generate(&self, gold_etl: &GoldEtlConfig, action: Action) -> Result<String> {
-        let aggregates = gold_etl.aggregates.as_ref().ok_or_else(|| {
-            GoldDdlError::MissingRequiredField {
-                field: "gold_etl.aggregates".to_string(),
-                context: format!("stream '{}'", self.stream_id),
-            }
-        })?;
+        let aggregates =
+            gold_etl
+                .aggregates
+                .as_ref()
+                .ok_or_else(|| GoldDdlError::MissingRequiredField {
+                    field: "gold_etl.aggregates".to_string(),
+                    context: format!("stream '{}'", self.stream_id),
+                })?;
 
         let mut ddl_parts = Vec::new();
 
@@ -74,7 +76,8 @@ impl ContinuousAggregateGenerator {
 
         // Generate refresh policies
         for granularity in &aggregates.granularities {
-            let policy_ddl = self.generate_refresh_policy(granularity, gold_etl.refresh_policy.as_ref())?;
+            let policy_ddl =
+                self.generate_refresh_policy(granularity, gold_etl.refresh_policy.as_ref())?;
             ddl_parts.push(policy_ddl);
             ddl_parts.push(String::new());
         }
@@ -90,11 +93,7 @@ impl ContinuousAggregateGenerator {
         action: Action,
     ) -> Result<String> {
         let suffix = granularity_to_suffix(granularity);
-        let view_name = format!(
-            "gold.{}_{}",
-            self.stream_id.replace('-', "_"),
-            suffix
-        );
+        let view_name = format!("gold.{}_{}", self.stream_id.replace('-', "_"), suffix);
 
         // Generate aggregate columns
         let columns = self.generate_aggregate_columns(aggregates)?;
@@ -134,11 +133,7 @@ GROUP BY bucket, {entity_col};"#,
         granularity: &str,
     ) -> Result<String> {
         let suffix = granularity_to_suffix(granularity);
-        let view_name = format!(
-            "gold.{}_{}",
-            self.stream_id.replace('-', "_"),
-            suffix
-        );
+        let view_name = format!("gold.{}_{}", self.stream_id.replace('-', "_"), suffix);
 
         let columns = self.generate_aggregate_columns(aggregates)?;
 
@@ -213,14 +208,8 @@ GROUP BY bucket, {entity_col};"#,
                 "PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY {}) AS {}",
                 field, alias
             ),
-            "first" => format!(
-                "FIRST({}, {}) AS {}",
-                field, self.timestamp_column, alias
-            ),
-            "last" => format!(
-                "LAST({}, {}) AS {}",
-                field, self.timestamp_column, alias
-            ),
+            "first" => format!("FIRST({}, {}) AS {}", field, self.timestamp_column, alias),
+            "last" => format!("LAST({}, {}) AS {}", field, self.timestamp_column, alias),
             _ => {
                 return Err(GoldDdlError::InvalidMetric {
                     metric: metric.to_string(),
@@ -286,11 +275,7 @@ DROP MATERIALIZED VIEW IF EXISTS {view_name} CASCADE;
         policy: Option<&RefreshPolicyConfig>,
     ) -> Result<String> {
         let suffix = granularity_to_suffix(granularity);
-        let view_name = format!(
-            "gold.{}_{}",
-            self.stream_id.replace('-', "_"),
-            suffix
-        );
+        let view_name = format!("gold.{}_{}", self.stream_id.replace('-', "_"), suffix);
 
         // Use granularity-aware defaults
         let effective_policy = RefreshPolicyConfig::for_granularity(granularity, policy);
@@ -336,7 +321,11 @@ mod tests {
                         map.insert(
                             "pm25".to_string(),
                             FieldMetricsConfig {
-                                metrics: vec!["mean".to_string(), "std".to_string(), "max".to_string()],
+                                metrics: vec![
+                                    "mean".to_string(),
+                                    "std".to_string(),
+                                    "max".to_string(),
+                                ],
                             },
                         );
                         map
@@ -525,7 +514,7 @@ mod tests {
 
         let policy_sql = generator.generate_refresh_policy("1 hour", None).unwrap();
 
-        assert!(policy_sql.contains("4 hours"));   // default start_offset
+        assert!(policy_sql.contains("4 hours")); // default start_offset
         assert!(policy_sql.contains("15 minutes")); // default end_offset
     }
 
@@ -541,7 +530,9 @@ mod tests {
         agg.granularities = vec!["1 hour".to_string(), "1 day".to_string()];
 
         let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
-        let ddl = generator.generate(config.gold_etl.as_ref().unwrap(), Action::Recreate).unwrap();
+        let ddl = generator
+            .generate(config.gold_etl.as_ref().unwrap(), Action::Recreate)
+            .unwrap();
 
         assert!(ddl.contains("gold.air_quality_hourly"));
         assert!(ddl.contains("gold.air_quality_daily"));
@@ -585,7 +576,9 @@ mod tests {
         agg.granularities = vec!["1 hour".to_string(), "1 day".to_string()];
 
         let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
-        let ddl = generator.generate(config.gold_etl.as_ref().unwrap(), Action::Recreate).unwrap();
+        let ddl = generator
+            .generate(config.gold_etl.as_ref().unwrap(), Action::Recreate)
+            .unwrap();
 
         // Both policies should be in the output
         assert!(ddl.contains("gold.air_quality_hourly"));
@@ -608,7 +601,9 @@ mod tests {
         });
 
         let generator = ContinuousAggregateGenerator::from_stream_config(&config).unwrap();
-        let ddl = generator.generate(config.gold_etl.as_ref().unwrap(), Action::Recreate).unwrap();
+        let ddl = generator
+            .generate(config.gold_etl.as_ref().unwrap(), Action::Recreate)
+            .unwrap();
 
         // Explicit policy should override defaults
         assert!(ddl.contains("20 minutes"));
