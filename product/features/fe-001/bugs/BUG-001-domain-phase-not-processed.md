@@ -1,8 +1,10 @@
 # BUG-001: Domain Phase Not Processed in Declarative Deploy
 
 **Severity**: Medium
-**Status**: Open
+**Status**: Fixed
 **Discovered**: 2026-02-05
+**Fixed**: 2026-02-05
+**Fix Commit**: d4f6206
 **Release**: v1.1.2
 **Component**: deploy/pi/deploy.sh
 
@@ -72,7 +74,7 @@ Run manually after deploy:
 
 ## Acceptance Criteria
 
-- [ ] `type: domain` declarations processed in declarative deploy
-- [ ] Phase 6 appears in deploy log between Phase 5 and Phase 7
-- [ ] Domains and objectives synced without manual intervention
+- [x] `type: domain` declarations processed in declarative deploy
+- [x] Phase 6 appears in deploy log between Phase 5 and Phase 7
+- [x] Domains and objectives synced without manual intervention
 - [ ] Unit test for domain declaration processing
