@@ -21,6 +21,7 @@ Phase E completes V1.1 by implementing the Unified Event Abstraction. Tests vali
 |----|---------|------------------|
 | **v11-012** | Threshold Crossing Generator | Critical |
 | **v11-013** | Unified Events View | Critical |
+| **v11-014** | Gold Layer Dashboard | High |
 | **v11-V02** | New Feature Type Test | Medium |
 
 ---
@@ -487,7 +488,318 @@ async fn integration_events_query_performance() {
 
 ---
 
-## 5. Test Execution Commands
+## 5. v11-014: Gold Layer Dashboard Tests
+
+> **Note**: Dashboard JSON will be created during implementation. These tests define validation requirements.
+
+### 5.1 Dashboard JSON Validation Tests
+
+```rust
+/// VALIDATION: Dashboard JSON is valid Grafana format
+#[test]
+fn test_dashboard_json_valid_format() {
+    let dashboard_path = "config/dashboards/gold-layer-dashboard.json";
+    let json: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(dashboard_path).unwrap()
+    ).expect("Dashboard JSON should be valid");
+
+    // Required Grafana fields
+    assert!(json.get("title").is_some(), "Dashboard must have title");
+    assert!(json.get("panels").is_some(), "Dashboard must have panels");
+    assert!(json.get("templating").is_some(), "Dashboard must have templating");
+    assert!(json.get("time").is_some(), "Dashboard must have time range");
+}
+
+/// VALIDATION: Dashboard references Gold layer data sources
+#[test]
+fn test_dashboard_uses_gold_layer_sources() {
+    let dashboard = load_dashboard_json("gold-layer-dashboard.json");
+    let panels = dashboard["panels"].as_array().unwrap();
+
+    for panel in panels {
+        if let Some(targets) = panel.get("targets") {
+            for target in targets.as_array().unwrap_or(&vec![]) {
+                if let Some(raw_sql) = target.get("rawSql") {
+                    let sql = raw_sql.as_str().unwrap_or("");
+                    // Should query Gold schema
+                    assert!(
+                        sql.contains("gold.") || sql.is_empty(),
+                        "Panel queries should use gold schema: {}", sql
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// VALIDATION: Dashboard includes all required panels
+#[test]
+fn test_dashboard_required_panels() {
+    let dashboard = load_dashboard_json("gold-layer-dashboard.json");
+    let panel_titles: Vec<&str> = dashboard["panels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p["title"].as_str())
+        .collect();
+
+    // AC-E-09: Dashboard displays all Gold continuous aggregates
+    let required_aggregates = [
+        "Hourly Air Quality",     // gold.air_quality_hourly
+        "Daily Air Quality",      // gold.air_quality_daily
+        "Window Transitions",     // gold.window_transitions_hourly
+    ];
+
+    for required in required_aggregates {
+        assert!(
+            panel_titles.iter().any(|t| t.contains(required) || t.to_lowercase().contains(&required.to_lowercase())),
+            "Missing required panel for: {}", required
+        );
+    }
+
+    // AC-E-10: Dashboard displays aligned view
+    assert!(
+        panel_titles.iter().any(|t| t.contains("Aligned") || t.contains("Correlation")),
+        "Missing aligned view panel"
+    );
+
+    // AC-E-11: Dashboard displays unified events
+    assert!(
+        panel_titles.iter().any(|t| t.contains("Events") || t.contains("Crossings")),
+        "Missing unified events panel"
+    );
+}
+
+/// VALIDATION: Dashboard has objective threshold annotations
+#[test]
+fn test_dashboard_threshold_annotations() {
+    let dashboard = load_dashboard_json("gold-layer-dashboard.json");
+    let panels = dashboard["panels"].as_array().unwrap();
+
+    // AC-E-12: Objective thresholds visible as annotations/lines
+    let has_thresholds = panels.iter().any(|panel| {
+        // Check for threshold lines in field config
+        if let Some(field_config) = panel.get("fieldConfig") {
+            if let Some(defaults) = field_config.get("defaults") {
+                if let Some(thresholds) = defaults.get("thresholds") {
+                    return thresholds.get("steps").map_or(false, |s| !s.as_array().unwrap_or(&vec![]).is_empty());
+                }
+            }
+        }
+        // Check for annotations
+        panel.get("options")
+            .and_then(|o| o.get("annotations"))
+            .is_some()
+    });
+
+    assert!(has_thresholds, "Dashboard should have threshold annotations for objectives");
+}
+```
+
+### 5.2 Dashboard Variables Tests
+
+```rust
+/// Variables: Time range selector works
+#[test]
+fn test_dashboard_time_range_variable() {
+    let dashboard = load_dashboard_json("gold-layer-dashboard.json");
+    let templating = dashboard["templating"]["list"].as_array().unwrap_or(&vec![]);
+
+    // Should have time bucket variable or use Grafana time range
+    let time_config = dashboard.get("time").expect("Time config required");
+    assert!(time_config.get("from").is_some(), "Time range 'from' required");
+    assert!(time_config.get("to").is_some(), "Time range 'to' required");
+}
+
+/// Variables: Entity selector populates from data
+#[test]
+fn test_dashboard_entity_variable() {
+    let dashboard = load_dashboard_json("gold-layer-dashboard.json");
+    let templating = dashboard["templating"]["list"].as_array().unwrap_or(&vec![]);
+
+    // Look for entity/sensor/ndp_id variable
+    let entity_var = templating.iter().find(|v| {
+        let name = v["name"].as_str().unwrap_or("");
+        name.contains("entity") || name.contains("sensor") || name.contains("ndp_id")
+    });
+
+    if let Some(var) = entity_var {
+        // Should query from data source
+        assert!(
+            var.get("query").is_some() || var.get("definition").is_some(),
+            "Entity variable should be data-driven"
+        );
+    }
+}
+
+/// Variables: Event type filter available
+#[test]
+fn test_dashboard_event_type_variable() {
+    let dashboard = load_dashboard_json("gold-layer-dashboard.json");
+    let templating = dashboard["templating"]["list"].as_array().unwrap_or(&vec![]);
+
+    // Look for event_type variable
+    let event_var = templating.iter().find(|v| {
+        let name = v["name"].as_str().unwrap_or("");
+        name.contains("event") || name.contains("type")
+    });
+
+    // Event type filter is recommended but not required
+    // Just log if missing
+    if event_var.is_none() {
+        println!("INFO: No event_type variable found - consider adding for filtering");
+    }
+}
+```
+
+### 5.3 Dashboard Performance Tests
+
+```rust
+/// PERFORMANCE: Dashboard loads within 3 seconds
+#[tokio::test]
+#[ignore]
+async fn test_dashboard_load_time() {
+    let start = std::time::Instant::now();
+
+    // Simulate dashboard load (all queries in parallel)
+    let queries = get_dashboard_queries("gold-layer-dashboard.json");
+    let mut handles = vec![];
+
+    for query in queries {
+        handles.push(tokio::spawn(async move {
+            execute_query(&query).await
+        }));
+    }
+
+    futures::future::join_all(handles).await;
+    let duration = start.elapsed();
+
+    // AC: Dashboard loads < 3s
+    assert!(
+        duration.as_secs() < 3,
+        "Dashboard load took {}s, expected < 3s", duration.as_secs_f32()
+    );
+}
+
+/// PERFORMANCE: 30-day queries complete within 5 seconds
+#[tokio::test]
+#[ignore]
+async fn test_dashboard_30_day_performance() {
+    // Most expensive query: 30-day unified events
+    let start = std::time::Instant::now();
+
+    let _result = execute_query(
+        "SELECT * FROM gold.events
+         WHERE event_time >= NOW() - INTERVAL '30 days'
+         ORDER BY event_time DESC
+         LIMIT 1000"
+    ).await;
+
+    let duration = start.elapsed();
+
+    // 30-day queries should complete < 5s
+    assert!(
+        duration.as_secs() < 5,
+        "30-day query took {}s, expected < 5s", duration.as_secs_f32()
+    );
+}
+
+/// PERFORMANCE: Aligned view query is responsive
+#[tokio::test]
+#[ignore]
+async fn test_aligned_view_query_performance() {
+    let start = std::time::Instant::now();
+
+    let _result = execute_query(
+        "SELECT * FROM gold.indoor_air_quality_aligned
+         WHERE bucket >= NOW() - INTERVAL '7 days'
+         ORDER BY bucket DESC"
+    ).await;
+
+    let duration = start.elapsed();
+
+    assert!(
+        duration.as_millis() < 500,
+        "Aligned view query took {}ms, expected < 500ms", duration.as_millis()
+    );
+}
+```
+
+### 5.4 Dashboard Integration Tests
+
+```rust
+/// INTEGRATION: Dashboard deploys to Grafana
+#[tokio::test]
+#[ignore]
+async fn integration_dashboard_deploy() {
+    // Deploy dashboard via API
+    let result = deploy_dashboard("gold-layer-dashboard.json").await;
+    assert!(result.is_ok(), "Dashboard deployment failed: {:?}", result.err());
+
+    // Verify dashboard exists
+    let dashboards = list_grafana_dashboards().await.unwrap();
+    assert!(
+        dashboards.iter().any(|d| d.title.contains("Gold")),
+        "Gold Layer Dashboard not found in Grafana"
+    );
+}
+
+/// INTEGRATION: Dashboard queries return data
+#[tokio::test]
+#[ignore]
+async fn integration_dashboard_has_data() {
+    // Setup: Ensure test data exists
+    setup_gold_layer_test_data().await;
+
+    // Each panel should return data (not empty)
+    let queries = get_dashboard_queries("gold-layer-dashboard.json");
+
+    for (panel_name, query) in queries {
+        let result = execute_query(&query).await;
+        // Allow empty results for event queries (may not have crossings)
+        if !panel_name.contains("Event") && !panel_name.contains("Crossing") {
+            assert!(
+                !result.is_empty(),
+                "Panel '{}' returned no data", panel_name
+            );
+        }
+    }
+}
+
+/// INTEGRATION: Dashboard uses correct data source
+#[tokio::test]
+#[ignore]
+async fn integration_dashboard_data_source() {
+    let dashboard = load_dashboard_json("gold-layer-dashboard.json");
+
+    // All panels should use TimescaleDB data source
+    let panels = dashboard["panels"].as_array().unwrap();
+    for panel in panels {
+        if let Some(datasource) = panel.get("datasource") {
+            let ds_type = datasource.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            assert!(
+                ds_type == "postgres" || ds_type == "grafana-postgresql-datasource" || ds_type.is_empty(),
+                "Panel should use PostgreSQL datasource, got: {}", ds_type
+            );
+        }
+    }
+}
+```
+
+### 5.5 Acceptance Criteria Mapping
+
+| AC ID | Criterion | Test |
+|-------|-----------|------|
+| AC-E-09 | Dashboard displays all Gold CAs | `test_dashboard_required_panels` |
+| AC-E-10 | Dashboard displays aligned view | `test_dashboard_required_panels` |
+| AC-E-11 | Dashboard displays unified events | `test_dashboard_required_panels` |
+| AC-E-12 | Objective thresholds as annotations | `test_dashboard_threshold_annotations` |
+| AC-E-13 | Dashboard loads < 3s | `test_dashboard_load_time` |
+| AC-E-14 | 30-day queries < 5s | `test_dashboard_30_day_performance` |
+
+---
+
+## 6. Test Execution Commands
 
 ```bash
 # Run Phase E unit tests
@@ -498,8 +810,15 @@ cargo test -p ndp-gold-ddl --lib events
 # Run V1.2 contract tests
 cargo test -p ndp-gold-ddl --test v12_contract
 
+# Run dashboard validation tests
+cargo test -p ndp-gold-ddl --lib dashboard_validation
+cargo test -p ndp-gold-ddl --test dashboard -- --ignored
+
 # Run Phase E integration tests
 DEPLOY_ENV=integration cargo test -p ndp-gold-ddl --test integration -- phase_e --ignored
+
+# Run dashboard performance tests (requires running Grafana)
+GRAFANA_URL=http://localhost:3000 cargo test -p ndp-gold-ddl --test dashboard_perf -- --ignored
 
 # Run all Phase E tests
 ./scripts/test-phase-e.sh
@@ -507,20 +826,23 @@ DEPLOY_ENV=integration cargo test -p ndp-gold-ddl --test integration -- phase_e 
 
 ---
 
-## 6. Test Metrics (Phase E Target)
+## 7. Test Metrics (Phase E Target)
 
 | Category | Target | Priority |
 |----------|--------|----------|
 | Threshold Crossing Tests | 12-15 | Critical |
 | Unified Events Tests | 10-12 | Critical |
 | V1.2 Contract Tests | 5-8 | Critical |
-| Integration Tests | 3-5 | Critical |
+| Dashboard Validation Tests | 8-10 | High |
+| Dashboard Performance Tests | 3-4 | High |
+| Integration Tests | 5-8 | Critical |
 | Coverage (events.rs) | 85% | High |
 | Events Query Performance | < 100ms | Critical |
+| Dashboard Load Time | < 3s | High |
 
 ---
 
-## 7. Exit Criteria
+## 8. Exit Criteria
 
 Phase E testing complete when:
 
@@ -530,6 +852,13 @@ Phase E testing complete when:
 - [ ] All condition types supported
 - [ ] JSONB details structure validated
 - [ ] Events hourly aggregate tests pass
+- [ ] Dashboard JSON validation tests pass
+- [ ] Dashboard displays all Gold CAs (AC-E-09)
+- [ ] Dashboard displays aligned view (AC-E-10)
+- [ ] Dashboard displays unified events (AC-E-11)
+- [ ] Dashboard threshold annotations present (AC-E-12)
+- [ ] Dashboard loads < 3s (AC-E-13)
+- [ ] 30-day queries < 5s (AC-E-14)
 - [ ] Integration tests pass
 - [ ] Performance requirements met
 - [ ] V1.2 handoff checklist complete
@@ -545,3 +874,4 @@ Phase E testing complete when:
 ---
 
 *Phase E Test Plan created: 2026-02-04*
+*Updated: 2026-02-05 - Added v11-014 Dashboard tests (Section 5)*
