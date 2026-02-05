@@ -1,8 +1,8 @@
 # FE-001: Gold Layer Foundation - Status
 
 > **Last Updated:** 2026-02-05
-> **Current Phase:** Phase E Complete - Integration Tested
-> **Overall Progress:** 95% (Phase A-E complete, integration tests passed)
+> **Current Phase:** Phase E Complete - Deployed to Pi (v1.1.7)
+> **Overall Progress:** 100% (Phase A-E complete, deployed, operational)
 
 ---
 
@@ -14,7 +14,7 @@
 | **B: First Stream** | ✅ Deployed | 100% | v1.1.1 deployed to Pi, 798 hourly + 35 daily rows |
 | **C: Cross-Stream + Alignment** | ✅ Complete | 100% | 3 streams, aligned view, 279 tests |
 | **D: Validation + Dashboard** | ✅ Deployed | 100% | Fast-Follower PASSED, v1.1.5 deployed to Pi |
-| **E: Unified Event Abstraction** | ✅ Complete | 100% | Events hypertable, crossings, dashboard - integration tested |
+| **E: Unified Event Abstraction** | ✅ Deployed | 100% | v1.1.6→v1.1.7 deployed, events detecting, dashboard operational |
 
 ---
 
@@ -84,7 +84,11 @@
 
 | Date | Activity | Outcome |
 |------|----------|---------|
-| 2026-02-05 | **Phase E COMPLETE - Integration Tested** | 6-agent swarm, 7 SQL files, 20-panel dashboard, 34 new tests |
+| 2026-02-05 | **v1.1.7 Deployed to Pi** | Patch: Fixed get_event_context column mismatch, dashboard queries |
+| 2026-02-05 | **v1.1.6 Deployed to Pi** | Events hypertable, threshold crossings, Gold Layer Dashboard |
+| 2026-02-05 | **Event Detection Operational** | State transitions and threshold crossings detecting, 15-min job running |
+| 2026-02-05 | **Dashboard Column Fixes** | 10+ query fixes for aligned view, weather, state columns |
+| 2026-02-05 | **Phase E COMPLETE - Deployed** | 6-agent swarm, 7 SQL files, 20-panel dashboard, 34 new tests |
 | 2026-02-05 | **TEST-PLAN.md Section 5 Added: Dashboard Tests** | v11-014 tests: JSON validation, variables, performance, integration (CRIT-02 resolved) |
 | 2026-02-05 | **SPEC-E01/E02 Updated: Events Hypertable** | Adopted hypertable approach per Decision 12, enables CA + context capture |
 | 2026-02-05 | **Phase E 5-Agent Review Swarm Complete** | 6 reports generated, 94% spec ready, 3 critical items identified |
@@ -183,11 +187,13 @@
 17. [x] Fix CRIT-01: **Events Hypertable adopted** (SPEC-E01/E02 updated, Decision 12 added)
 18. [x] Fix CRIT-02: **Dashboard tests added** (Section 5 in TEST-PLAN.md)
 19. [ ] Fix H-01: Fill coverage targets in V12-HANDOFF-CHECKLIST.md
-20. [ ] Begin Phase E Implementation
-21. [ ] v11-012: Threshold Crossing Generator (Days 1-2)
-22. [ ] v11-013: Unified Events View (Days 3-4)
-23. [ ] v11-014: Gold Layer Dashboard (Day 5)
-24. [ ] Create v1.2.0 release manifest
+20. [x] **Phase E Implementation Complete**
+21. [x] v11-012: Threshold Crossing Generator - all conditions, rising/falling detection
+22. [x] v11-013: Unified Events View - hypertable, unified view, hourly CA, detection job
+23. [x] v11-014: Gold Layer Dashboard - 20 panels, 4 rows, threshold lines
+24. [x] **v1.1.6 deployed to Pi** - Events infrastructure operational
+25. [x] **v1.1.7 deployed to Pi** - Column mismatch fixes, dashboard queries corrected
+26. [ ] V1.2 Pattern Detection Engine planning
 
 ## SPARC Coordination
 
@@ -199,7 +205,7 @@ See [SPARC-COORDINATION.md](./SPARC-COORDINATION.md) for complete implementation
 | SPARC-B | First Stream (air-quality) | Week 3 | ✅ Complete | ✅ Deployed (v1.1.1) |
 | SPARC-C | Cross-Stream + Alignment | Week 4 | ✅ Complete | ✅ Deployed (v1.1.5) |
 | SPARC-D | Validation + Dashboard | Week 5 | ✅ Complete | ✅ Complete |
-| SPARC-E | Unified Event Abstraction | Week 6 | ✅ Complete | Not Started |
+| SPARC-E | Unified Event Abstraction | Week 6 | ✅ Complete | ✅ Deployed (v1.1.7) |
 
 ## SPARC Artifacts Summary
 
@@ -220,9 +226,12 @@ See [SPARC-COORDINATION.md](./SPARC-COORDINATION.md) for complete implementation
 | Metric | Current | Target |
 |--------|---------|--------|
 | Streams in Gold layer | **4** (air-quality, outdoor-weather, home-assistant-state, outdoor-air-quality) | 4 ✅ |
-| Continuous Aggregates | 8 (4 hourly, 4 daily) | - |
-| Aligned view rows | 1,353 | - |
-| Refresh policies active | 8 | - |
+| Continuous Aggregates | 10 (4 hourly, 4 daily, events_hourly, events_hourly_by_entity) | - |
+| Events hypertable | **gold.events** - state transitions + threshold crossings | - |
+| Event detection job | **15-min interval** - actively detecting | - |
+| Aligned view rows | 1,353+ | - |
+| Refresh policies active | 10 | - |
+| Dashboard panels | **20** across 4 rows | - |
 | Query performance (30-day aligned) | N/A | < 100ms |
 | Fast-follower time | **~30 min** (Phase D validated) | < 1 hour ✅ |
 | Resource usage (peak) | N/A | < 200 MB |
