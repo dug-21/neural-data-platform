@@ -495,6 +495,7 @@ fn test_serialization_skips_none_optional_fields() {
     // Arrange - Create config with minimal fields
     let config = platform_core::StreamConfig {
         stream_id: "test-stream".to_string(),
+        stream_type: None,  // FE-001: Optional for backward compatibility
         description: "Test".to_string(),
         version: "1.0.0".to_string(),
         enabled: true,
@@ -551,6 +552,7 @@ fn test_json_roundtrip_preserves_all_data() {
     // Arrange
     let original = platform_core::StreamConfig {
         stream_id: "roundtrip-test".to_string(),
+        stream_type: None,  // FE-001: Optional for backward compatibility
         description: "Roundtrip test config".to_string(),
         version: "1.1.0".to_string(),
         enabled: true,

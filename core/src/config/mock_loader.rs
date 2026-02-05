@@ -409,6 +409,7 @@ mod tests {
     fn create_test_stream_config(stream_id: &str) -> StreamConfig {
         StreamConfig {
             stream_id: stream_id.to_string(),
+            stream_type: None, // FE-001: Optional for backward compatibility
             description: format!("{} test stream", stream_id),
             version: "1.0.0".to_string(),
             enabled: true,

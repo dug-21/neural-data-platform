@@ -5,6 +5,9 @@ use thiserror::Error;
 // DP-018: Import SilverEtlConfig for unified stream configuration
 use crate::config::SilverEtlConfig;
 
+// FE-001: Import StreamType for stream classification
+use crate::types::stream::StreamType;
+
 // BUG-001-fix: Import types from ndp-types (single source of truth)
 pub use ndp_types::{FieldType, SourceType};
 
@@ -402,6 +405,18 @@ pub struct EntitySchema {
 pub struct StreamConfig {
     /// Unique stream identifier (kebab-case)
     pub stream_id: String,
+
+    /// Stream type classification for correlation analysis (FE-001 v11-001)
+    ///
+    /// Categorizes this stream for intelligent correlation detection:
+    /// - `observation`: Continuous numeric readings (default for most streams)
+    /// - `state_event`: Binary/discrete state changes
+    /// - `forecast`: Future predictions from external sources
+    /// - `dimension`: Slowly changing reference data
+    ///
+    /// Optional for backward compatibility with existing configs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream_type: Option<StreamType>,
 
     /// Human-readable description
     pub description: String,
@@ -1068,6 +1083,7 @@ mod tests {
     fn create_test_stream_config() -> StreamConfig {
         StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None, // FE-001: Optional for backward compatibility
             description: "Test stream".to_string(),
             version: "1.0.0".to_string(),
             enabled: true,
@@ -1149,6 +1165,7 @@ mod tests {
         // RED: Verify silver_etl is omitted from JSON when None (skip_serializing_if)
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test stream".to_string(),
             version: "1.0.0".to_string(),
             enabled: true,
@@ -1179,6 +1196,7 @@ mod tests {
 
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test stream".to_string(),
             version: "1.0.0".to_string(),
             enabled: true,
@@ -1210,6 +1228,7 @@ mod tests {
 
         let original = StreamConfig {
             stream_id: "round-trip".to_string(),
+            stream_type: None,
             description: "Round-trip test".to_string(),
             version: "1.0.0".to_string(),
             enabled: true,
@@ -1256,6 +1275,7 @@ mod tests {
         // v1.1 pattern: description is on the field directly
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test".to_string(),
             version: "1.1.0".to_string(),
             enabled: true,
@@ -1292,6 +1312,7 @@ mod tests {
         // v1.0 pattern: description is in entity_schemas, not on field
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test".to_string(),
             version: "1.0.0".to_string(),
             enabled: true,
@@ -1339,6 +1360,7 @@ mod tests {
         // Field description should take precedence
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test".to_string(),
             version: "1.1.0".to_string(),
             enabled: true,
@@ -1384,6 +1406,7 @@ mod tests {
         // No description in either location
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test".to_string(),
             version: "1.1.0".to_string(),
             enabled: true,
@@ -1418,6 +1441,7 @@ mod tests {
         // Empty descriptions should be treated as None
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test".to_string(),
             version: "1.1.0".to_string(),
             enabled: true,
@@ -1461,6 +1485,7 @@ mod tests {
         // Test that get_field_metadata combines v1.1 and v1.0 sources
         let config = StreamConfig {
             stream_id: "test-stream".to_string(),
+            stream_type: None,
             description: "Test".to_string(),
             version: "1.1.0".to_string(),
             enabled: true,
@@ -1565,5 +1590,141 @@ mod tests {
             !json.contains("entity_schemas"),
             "entity_schemas should not appear in JSON when None"
         );
+    }
+
+    // ========== FE-001 v11-001: STREAM TYPE CLASSIFICATION TESTS ==========
+    //
+    // These tests verify StreamConfig supports the optional stream_type field
+    // for correlation analysis (TDD Cycle 2).
+
+    #[test]
+    fn test_stream_config_parses_stream_type() {
+        // Arrange
+        let config_json = serde_json::json!({
+            "stream_id": "air-quality",
+            "stream_type": "observation",
+            "description": "Air quality measurements",
+            "version": "1.0.0",
+            "enabled": true,
+            "retention_days": 365,
+            "compression_after_days": 7,
+            "partitioning_strategy": "daily",
+            "fields": [{"name": "pm25", "type": "float", "nullable": false}],
+            "sources": [{"type": "mqtt", "enabled": true}]
+        });
+
+        // Act
+        let config: StreamConfig = serde_json::from_value(config_json).unwrap();
+
+        // Assert
+        assert_eq!(config.stream_type, Some(StreamType::Observation));
+    }
+
+    #[test]
+    fn test_stream_config_parses_state_event_type() {
+        let config_json = serde_json::json!({
+            "stream_id": "home-events",
+            "stream_type": "state_event",
+            "description": "Home automation events",
+            "fields": [{"name": "state", "type": "string"}],
+            "sources": [{"type": "mqtt", "enabled": true}]
+        });
+
+        let config: StreamConfig = serde_json::from_value(config_json).unwrap();
+        assert_eq!(config.stream_type, Some(StreamType::StateEvent));
+    }
+
+    #[test]
+    fn test_stream_config_parses_forecast_type() {
+        let config_json = serde_json::json!({
+            "stream_id": "weather-forecast",
+            "stream_type": "forecast",
+            "description": "NWS weather forecasts",
+            "fields": [{"name": "temperature", "type": "float"}],
+            "sources": [{"type": "http_poll", "enabled": true}]
+        });
+
+        let config: StreamConfig = serde_json::from_value(config_json).unwrap();
+        assert_eq!(config.stream_type, Some(StreamType::Forecast));
+    }
+
+    #[test]
+    fn test_stream_config_parses_dimension_type() {
+        let config_json = serde_json::json!({
+            "stream_id": "sensor-metadata",
+            "stream_type": "dimension",
+            "description": "Sensor metadata",
+            "fields": [{"name": "sensor_id", "type": "string"}],
+            "sources": [{"type": "csv", "enabled": true}]
+        });
+
+        let config: StreamConfig = serde_json::from_value(config_json).unwrap();
+        assert_eq!(config.stream_type, Some(StreamType::Dimension));
+    }
+
+    #[test]
+    fn test_stream_config_without_stream_type_is_backward_compatible() {
+        // Configs without stream_type should still parse (backward compatibility)
+        let config_json = serde_json::json!({
+            "stream_id": "legacy-stream",
+            "description": "Legacy config without stream_type",
+            "fields": [{"name": "value", "type": "float"}],
+            "sources": [{"type": "mqtt", "enabled": true}]
+        });
+
+        let config: StreamConfig = serde_json::from_value(config_json).unwrap();
+        assert!(config.stream_type.is_none());
+    }
+
+    #[test]
+    fn test_stream_config_stream_type_omitted_from_json_when_none() {
+        // stream_type should not appear in serialized JSON when None
+        let config = create_test_stream_config();
+        assert!(config.stream_type.is_none());
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(
+            !json.contains("stream_type"),
+            "stream_type should not appear in JSON when None"
+        );
+    }
+
+    #[test]
+    fn test_stream_config_stream_type_included_in_json_when_present() {
+        // stream_type should appear in serialized JSON when Some
+        let mut config = create_test_stream_config();
+        config.stream_type = Some(StreamType::Observation);
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(
+            json.contains("stream_type"),
+            "stream_type should appear in JSON when Some"
+        );
+        assert!(
+            json.contains("observation"),
+            "stream_type value should be serialized"
+        );
+    }
+
+    #[test]
+    fn test_stream_config_stream_type_roundtrip() {
+        // Verify stream_type survives serialization round-trip
+        let mut original = create_test_stream_config();
+        original.stream_type = Some(StreamType::StateEvent);
+
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: StreamConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.stream_type, Some(StreamType::StateEvent));
+    }
+
+    #[test]
+    fn test_stream_config_correlation_role_access() {
+        // Verify we can get correlation_role through StreamConfig
+        let mut config = create_test_stream_config();
+        config.stream_type = Some(StreamType::Observation);
+
+        let role = config.stream_type.as_ref().map(|st| st.correlation_role());
+        assert_eq!(role, Some("effect"));
     }
 }

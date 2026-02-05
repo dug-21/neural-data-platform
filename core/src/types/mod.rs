@@ -6,6 +6,7 @@
 pub mod air_quality;
 pub mod dimension_config;
 pub mod raw_data_point;
+pub mod stream;
 pub mod stream_config;
 pub mod stream_record;
 
@@ -17,6 +18,9 @@ pub use ndp_types::{DqAction, DqRuleType, ErrorCode, FieldType, MonotonicDirecti
 
 // Re-export existing types for backward compatibility
 pub use air_quality::{AirQualityReading, GenericTimeSeriesPoint};
+
+// FE-001: Stream type classification for correlation analysis
+pub use stream::StreamType;
 
 // DP-004: Bronze layer raw data types
 pub use raw_data_point::RawDataPoint;
