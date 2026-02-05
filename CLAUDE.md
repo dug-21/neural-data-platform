@@ -158,36 +158,27 @@ They're working in parallel. I'll synthesize their results when they complete.
 - Synthesize results when they return
 
 ## 🧠 AUTO-LEARNING PROTOCOL
+Your #1 job is to help human advance the system capabilities.
+Your #2 job is to help future team members how to operate on this platform successfully.
 
 ### Before Starting Any Task
 ```bash
-# 1. Search AgentDB patterns (use /get-pattern skill)
-# This searches semantic patterns stored by previous agents
-
-# 3. Check if similar task was done before
-
-# 4. Load learned optimizations
+# 1. Use get-pattern skill relevant architectural and procedural guidance
+# 2. Load learned optimizations
 ```
 
 ### After Completing Any Task Successfully
 ```bash
-# 1. Record pattern feedback via /reflexion skill (REQUIRED)
-# This helps the system learn which patterns work
-
+# 1. Record pattern feedback via reflexion skill (REQUIRED)
 # 2. Store successful pattern for future reference
-
-# 3. Train neural patterns on the successful approach
-
-# 4. Record task completion with metrics
-
-# 5. If you discovered something NEW, use /save-pattern skill
+# 3. If you discovered something NEW, use /save-pattern skill
 ```
 
 ### Two Memory Systems
 
 | System | Purpose | Persistence | Use For |
 |--------|---------|-------------|---------|
-| **AgentDB Skills** | Application knowledge | Permanent | Patterns, procedures, architecture |
+| **get-pattern/save-pattern/reflexion Skills** | Application knowledge | Permanent | Patterns, procedures, architecture |
 | **Claude-Flow Memory** | Swarm/session state | Transient | Coordination, task progress, working memory |
 
 ### AgentDB Skills (Persistent Patterns)
@@ -271,7 +262,7 @@ AFTER work:   /reflexion    → Rate if get-pattern results helped (required)
 | Code | Task | Agents |
 |------|------|--------|
 | 1 | Bug Fix | coordinator, researcher, coder, tester |
-| 3 | Feature | coordinator, ndp-architect, ndp-coder, ndp-tester, reviewer |
+| 3 | Feature | ndp-scrum-master, ndp-architect, ndp-coder, ndp-tester, reviewer |
 | 5 | Refactor | coordinator, ndp-architect, ndp-coder, reviewer |
 | 7 | Performance | coordinator, perf-engineer, coder |
 | 9 | Security | coordinator, security-architect, auditor |
@@ -396,10 +387,12 @@ product/features/{phase}-{NNN}/
 This CLAUDE.md is for the **Neural Data Platform** - a time-series data platform for Raspberry Pi.
 
 ### Architecture Overview
+- **Product Vision**: Configuration driven generic data platform that leverages declarative deployment and neural capabilities to self learn causal relationships enabling predictive actions to be triggered that can operate on the edge.  (In development phase).  
+
 - **Data Lake**: Bronze → Silver → Gold architecture
 - **Bronze Layer**: Parquet files with WAL (Write-Ahead Log)
 - **Silver Layer**: TimescaleDB with hypertables and continuous aggregates
-- **Gold Layer**: Feature aggregations for ML
+- **Gold Layer**: /*In development*/
 - **Hexagonal Architecture**: Domain adapters with Source/Sink traits
 
 ### NDP-Specific Agents (USE THESE)
@@ -445,19 +438,6 @@ This CLAUDE.md is for the **Neural Data Platform** - a time-series data platform
 /.claude/skills          - Project skills
 ```
 
-### Feature Naming Convention
-
-Features follow `{phase}-{NNN}` pattern:
-
-| Phase | Prefix | Focus |
-|-------|--------|-------|
-| Air Quality | `air` | Foundation, sensors, external data |
-| Data Platform | `dp` | Silver layer, TimescaleDB, ETL |
-| Feature Engineering | `fe` | ML features, aggregations |
-| Dashboards | `db` | Grafana, visualization |
-| Predictions | `ml` | ruv-FANN, forecasting |
-| Alerts | `al` | Triggers, notifications |
-
 ---
 
 ## 📦 Release Methodology (REQUIRED)
@@ -488,62 +468,7 @@ Every release consists of:
 
 ### Quick Release Workflow
 
-```bash
-# 1. Create release manifest
-cat > .deploy/releases/v1.1.0.manifest.json << 'EOF'
-{
-  "$schema": "../../schemas/manifest.schema.json",
-  "version": "1.0",
-  "release_version": "1.1.0",
-  "description": "Release v1.1.0: Add new-sensor stream",
-  "changes": [
-    {"type": "stream", "id": "new-sensor", "action": "create"},
-    {"type": "silver-table", "stream_id": "new-sensor", "action": "sync"},
-    {"type": "dictionary", "action": "sync"}
-  ]
-}
-EOF
-
-# 2. Update CHANGELOG.md
-
-# 3. Commit and tag
-git add .deploy/releases/v1.1.0.manifest.json CHANGELOG.md
-git commit -m "release: v1.1.0 - Add new-sensor stream"
-git tag -a v1.1.0 -m "Release v1.1.0: Add new-sensor stream"
-git push && git push origin v1.1.0
-
-# 4. Deploy on Pi
-ssh pi@your-pi
-cd /path/to/neural-data-platform
-git pull
-./deploy/pi/deploy.sh apply .deploy/releases/v1.1.0.manifest.json
-```
-
-### Declaration Types
-
-| Type | Purpose | Required Fields |
-|------|---------|-----------------|
-| `stream` | Sync config to etcd | `id` |
-| `silver-table` | Generate DDL from config | `stream_id` |
-| `migration` | Run SQL file | `file` |
-| `dimensions` | Sync dimension CSVs | - |
-| `dictionary` | Sync data dictionary | - |
-| `container` | Build/restart container | `target`, `action` |
-
-### Deployment Verification
-
-```bash
-# Check deployed version on Pi
-cat /var/ndp/deployed-version      # Shows vX.Y.Z
-cat /var/ndp/deployed-manifest     # Shows manifest path
-cat /var/ndp/deployed-timestamp    # Shows deploy time
-
-# Verify services
-./deploy/pi/deploy.sh status
-
-# Check logs
-./deploy/pi/deploy.sh logs
-```
+NDP has created custom deployment approach, declarative in nature.  **YOU MUST FOLLOW [RELEASE POLICY](docs/procedures/RELEASE-POLICY.md)**
 
 ### Key Documentation
 
@@ -567,47 +492,6 @@ cat /var/ndp/deployed-timestamp    # Shows deploy time
 ### Current Version
 
 **v1.0.0** - Initial stable release with declarative deployment (2026-02-02)
-
----
-
-## 🎯 Skills System (REQUIRED)
-
-### Pattern Workflow
-
-**ALL agents MUST follow this workflow:**
-
-```
-BEFORE work:  /get-pattern  → Search existing patterns and approaches
-DURING work:  Apply patterns, note gaps or new discoveries
-AFTER work:   /reflexion    → Record if patterns helped (REQUIRED)
-              /save-pattern → Store NEW discoveries (if any)
-              /learner      → Auto-discover patterns (periodic)
-```
-
-### Available Skills
-
-| Skill | When | Purpose |
-|-------|------|---------|
-| `/get-pattern` | BEFORE implementation | Search for "How do I" questions |
-| `/save-pattern` | AFTER discoveries | Store answers to "How agents should do X" |
-| `/reflexion` | AFTER using patterns | Evaluate if retrieved patterns helped |
-| `/learner` | Post-feature | Auto-discover patterns from episodes |
-
-### Why Skills Matter
-
-1. **Consistency** - Patterns ensure all agents follow established project conventions
-2. **Learning** - Feedback via reflexion improves future pattern recommendations
-3. **Knowledge Capture** - New discoveries become available to future sessions
-4. **Project Memory** - The codebase evolves; patterns document the "why" and "how"
-
-### Skills vs Claude-Flow Memory
-
-| System | Purpose | Persistence | Use For |
-|--------|---------|-------------|---------|
-| **AgentDB (Skills)** | Application knowledge | Permanent | Patterns, procedures, architecture |
-| **Claude-Flow Memory** | Swarm/session state | Transient | Coordination, task progress, working memory |
-
-**See `.claude/skills/` for full skill documentation.**
 
 ---
 
@@ -815,22 +699,6 @@ claude-flow hooks coverage-route --task "[task]"
 # Statusline (for Claude Code integration)
 claude-flow hooks statusline
 claude-flow hooks statusline --json
-```
-
-## 🔄 Migration (V2 to V3)
-
-```bash
-# Check migration status
-claude-flow migrate status
-
-# Run migration with backup
-claude-flow migrate run --backup
-
-# Rollback if needed
-claude-flow migrate rollback
-
-# Validate migration
-claude-flow migrate validate
 ```
 
 ## 🧠 Intelligence System (RuVector)
