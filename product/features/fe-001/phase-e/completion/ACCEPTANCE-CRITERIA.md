@@ -574,6 +574,177 @@ GROUP BY event_type;
 
 ---
 
+## Dashboard Acceptance Criteria
+
+### AC-E-09: Gold Layer Dashboard Deployed (v11-014)
+
+**Given:** Grafana running in Docker stack
+**When:** Dashboard provisioned
+**Then:** Dashboard displays all Gold layer data
+
+**Verification:**
+```bash
+# Verify dashboard exists in Grafana
+curl -s http://localhost:3000/api/search?query=Gold%20Layer \
+  -H "Authorization: Bearer ${GRAFANA_API_KEY}" | jq '.'
+# Expected: Dashboard in search results
+
+# Verify dashboard loads
+curl -s http://localhost:3000/api/dashboards/uid/gold-layer-overview \
+  -H "Authorization: Bearer ${GRAFANA_API_KEY}" | jq '.meta.slug'
+# Expected: "gold-layer-overview"
+```
+
+**Acceptance Checklist:**
+- [ ] Dashboard imports without errors
+- [ ] All panels render without "No Data" errors
+- [ ] Time range selector works
+- [ ] Variables (stream, entity, event_type) populate
+
+**Owner:** ndp-grafana-dev
+
+---
+
+### AC-E-10: Gold Aggregates Visible in Dashboard
+
+**Given:** Dashboard deployed
+**When:** Viewing dashboard
+**Then:** All Gold layer continuous aggregates visible
+
+**Verification:**
+```bash
+# Check that panels query Gold layer tables
+# Visual verification in Grafana UI:
+# 1. Open Gold Layer Overview dashboard
+# 2. Verify PM2.5 panel shows data from gold.air_quality_hourly
+# 3. Verify CO2 panel shows data from gold.air_quality_hourly
+# 4. Verify Weather panel shows data from gold.outdoor_weather_hourly
+# 5. Verify State panel shows data from gold.home_assistant_state_hourly
+```
+
+**Acceptance Checklist:**
+- [ ] Indoor air quality metrics visible (PM2.5, CO2, temp, humidity)
+- [ ] Outdoor weather metrics visible (temp, humidity, pressure)
+- [ ] State events timeline visible (window/door states)
+- [ ] Outdoor air quality visible (if data exists)
+- [ ] Data appears current (within last refresh window)
+
+**Owner:** ndp-grafana-dev
+
+---
+
+### AC-E-11: Aligned View Panel Works
+
+**Given:** Dashboard with aligned view panel
+**When:** Viewing multi-stream alignment
+**Then:** All streams overlaid on same time axis
+
+**Verification:**
+```bash
+# Visual verification:
+# 1. Open Gold Layer Overview dashboard
+# 2. Navigate to Aligned Streams panel
+# 3. Verify indoor PM2.5, outdoor PM2.5, outdoor temp visible
+# 4. Verify time alignment (same x-axis)
+# 5. Verify NULLs render as gaps (not zeros)
+```
+
+**Acceptance Checklist:**
+- [ ] Aligned view panel displays multiple streams
+- [ ] All streams use same time bucket (hourly)
+- [ ] NULL values shown as gaps, not zeros
+- [ ] Legend identifies each stream clearly
+- [ ] Dual-axis working for different scales
+
+**Owner:** ndp-grafana-dev
+
+---
+
+### AC-E-12: Unified Events Visible in Dashboard
+
+**Given:** Dashboard with events panels
+**When:** Viewing events section
+**Then:** State transitions and threshold crossings displayed
+
+**Verification:**
+```bash
+# Visual verification:
+# 1. Open Gold Layer Overview dashboard
+# 2. Find Events Timeline panel
+# 3. Verify state transitions appear as annotations
+# 4. Verify threshold crossings appear as annotations
+# 5. Verify Events Table shows recent crossings with details
+```
+
+**Acceptance Checklist:**
+- [ ] State transitions visible on timeline
+- [ ] Threshold crossings visible on timeline
+- [ ] Events table shows crossing details (metric, threshold, direction)
+- [ ] Event type filter works
+- [ ] Events colored by type
+
+**Owner:** ndp-grafana-dev
+
+---
+
+### AC-E-13: Objective Thresholds Visible
+
+**Given:** Dashboard with threshold annotations
+**When:** Viewing air quality panels
+**Then:** Objective thresholds shown as reference lines
+
+**Verification:**
+```bash
+# Visual verification:
+# 1. Open Gold Layer Overview dashboard
+# 2. View CO2 panel
+# 3. Verify 800 ppm threshold line visible (red)
+# 4. View PM2.5 panel
+# 5. Verify 12 µg/m³ threshold line visible (red)
+# 6. View objective gauges
+# 7. Verify green/yellow/red zones based on thresholds
+```
+
+**Acceptance Checklist:**
+- [ ] CO2 panel shows 800 ppm threshold line
+- [ ] PM2.5 panel shows 12 µg/m³ threshold line
+- [ ] Gauge panels show current value vs threshold
+- [ ] Color coding: green (good), red (exceeded threshold)
+
+**Owner:** ndp-grafana-dev
+
+---
+
+### AC-E-14: Dashboard Performance
+
+**Given:** Dashboard on Pi 5
+**When:** Loading dashboard with 30-day range
+**Then:** Loads within acceptable time
+
+**Verification:**
+```bash
+# Measure dashboard load time
+# 1. Open browser dev tools (Network tab)
+# 2. Navigate to Gold Layer Overview dashboard
+# 3. Set time range to 30 days
+# 4. Measure total load time
+
+# Or use Grafana API timing
+time curl -s "http://localhost:3000/api/dashboards/uid/gold-layer-overview" \
+  -H "Authorization: Bearer ${GRAFANA_API_KEY}" > /dev/null
+# Expected: < 3 seconds
+```
+
+**Acceptance Checklist:**
+- [ ] Dashboard loads in < 3 seconds (initial)
+- [ ] 30-day range completes in < 5 seconds
+- [ ] No timeout errors on Pi 5
+- [ ] Panel queries use indexes (no seq scans)
+
+**Owner:** ndp-tester
+
+---
+
 ## V1.2 Handoff Acceptance Criteria
 
 ### AC-E-V12-01: V1.2 Interface Contract Met
@@ -657,6 +828,14 @@ Phase E is complete when ALL of the following are true:
 ### Observability
 - [ ] AC-E-07: Crossing frequency observable
 - [ ] AC-E-08: Event volume monitoring possible
+
+### Dashboard (v11-014)
+- [ ] AC-E-09: Gold Layer Dashboard deployed
+- [ ] AC-E-10: Gold aggregates visible
+- [ ] AC-E-11: Aligned view panel works
+- [ ] AC-E-12: Unified events visible
+- [ ] AC-E-13: Objective thresholds visible
+- [ ] AC-E-14: Dashboard performance acceptable
 
 ### Performance
 - [ ] AC-E-PERF-01: Unified events query < 100ms
