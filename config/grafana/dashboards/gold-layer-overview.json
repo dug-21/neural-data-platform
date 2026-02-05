@@ -1078,7 +1078,7 @@
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Continuous aggregate refresh job status\nSELECT\n    COALESCE(\n        (SELECT ht.hypertable_name\n         FROM timescaledb_information.continuous_aggregates ca\n         JOIN timescaledb_information.hypertables ht\n           ON ht.hypertable_schema = ca.materialization_hypertable_schema\n          AND ht.hypertable_name = ca.materialization_hypertable_name\n         WHERE ht.hypertable_id::text = j.config->>'hypertable_id'),\n        j.config->>'hypertable_id'\n    ) AS \"Table\",\n    j.schedule_interval AS \"Interval\",\n    js.last_run_status AS \"Last Status\",\n    js.last_successful_finish AS \"Last Success\",\n    js.total_runs AS \"Total Runs\"\nFROM timescaledb_information.job_stats js\nJOIN timescaledb_information.jobs j ON js.job_id = j.job_id\nWHERE j.proc_name = 'policy_refresh_continuous_aggregate'\nORDER BY \"Table\"",
+          "rawSql": "-- Continuous aggregate refresh job status\nSELECT\n    j.hypertable_schema || '.' || j.hypertable_name AS \"Table\",\n    j.schedule_interval AS \"Interval\",\n    js.last_run_status AS \"Last Status\",\n    js.last_successful_finish AS \"Last Success\",\n    js.total_runs AS \"Total Runs\"\nFROM timescaledb_information.job_stats js\nJOIN timescaledb_information.jobs j ON js.job_id = j.job_id\nWHERE j.proc_name = 'policy_refresh_continuous_aggregate'\nORDER BY 1",
           "refId": "A",
           "format": "table"
         }
