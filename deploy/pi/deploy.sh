@@ -2085,11 +2085,14 @@ handle_domain() {
     log "  Applying Domain DDL to TimescaleDB..."
     if echo "$ddl" | dcx timescaledb psql -U postgres -d ndp; then
         log "  Aligned view(s) for domain $domain_id created/updated successfully"
-        return 0
     else
         error "Failed to apply Domain DDL to TimescaleDB"
         return 1
     fi
+
+    # Sync domain objectives to data dictionary
+    log "  Syncing domain objectives to data dictionary..."
+    sync_domains_to_data_dictionary
 }
 
 # ============================================================================
@@ -2346,8 +2349,11 @@ apply() {
     fi
 
     # Phase 6: Domains (fe-001)
-    # Parse domains from declarations array (new manifest format)
-    local domains=$(jq -c '.declarations["domains"] // []' "$manifest_file" 2>/dev/null || echo "[]")
+    # Parse domains from both .changes array and .declarations format (for backwards compat)
+    local domains_changes=$(jq -c '[(.changes // [])[] | select(.type == "domain")]' "$manifest_file" 2>/dev/null || echo "[]")
+    local domains_decl=$(jq -c '.declarations["domains"] // []' "$manifest_file" 2>/dev/null || echo "[]")
+    # Merge both sources
+    local domains=$(echo "[$domains_changes, $domains_decl]" | jq -c 'flatten')
     local domain_count=$(echo "$domains" | jq 'length' 2>/dev/null || echo "0")
     domain_count=${domain_count:-0}
     if [ "$domain_count" -gt 0 ] && [ "$domains" != "[]" ] && [ "$domains" != "null" ]; then
