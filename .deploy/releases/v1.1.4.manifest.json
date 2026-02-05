@@ -1,0 +1,21 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.4",
+  "description": "Release v1.1.4: PostgreSQL-compatible LOCF fix for aligned views",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build",
+      "profile": "release",
+      "note": "PostgreSQL-compatible LOCF using cascading LAG (fixes IGNORE NULLS syntax error)"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "recreate",
+      "note": "Recreate aligned view with PostgreSQL-compatible DDL"
+    }
+  ]
+}
