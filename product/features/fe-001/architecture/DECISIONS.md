@@ -675,6 +675,105 @@ SELECT add_continuous_aggregate_policy(...);
 
 ---
 
+### Decision 12: Events Hypertable (ADR-FE001-012)
+
+**Status**: Accepted (2026-02-05)
+
+**Context**: Phase E requires a unified events view combining state transitions and threshold crossings. The original approach (SPEC-E02 v1) proposed a UNION ALL view with a continuous aggregate for hourly counts. However, **TimescaleDB continuous aggregates can only be created on hypertables, not on views**.
+
+**The Problem**:
+```sql
+-- FAILS: Cannot create CA on a UNION ALL view
+CREATE MATERIALIZED VIEW gold.events_hourly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', event_time), COUNT(*)
+FROM gold.events_unified  -- This is a VIEW, not a hypertable
+GROUP BY 1;
+-- ERROR: relation "gold.events_unified" is not a hypertable
+```
+
+**Additionally**, V1.2 Pattern Detection needs **environmental context** at event time for correlation analysis (e.g., "what was CO2 when the window opened?"). The original approach would require expensive JOINs.
+
+**Decision**: Create `gold.events` as a **dedicated TimescaleDB hypertable** that stores all events with environmental context captured at event time.
+
+**Architecture**:
+```
+gold.events (HYPERTABLE)
+    ↑
+    │ INSERT events via TimescaleDB scheduled job
+    │
+    ├── State transition detector
+    └── Threshold crossing detector
+
+gold.events_unified (VIEW) → Simple SELECT * FROM gold.events
+
+gold.events_hourly (CONTINUOUS AGGREGATE) → Aggregates from gold.events ✓
+```
+
+**Schema (Key Columns)**:
+```sql
+CREATE TABLE gold.events (
+    event_id UUID PRIMARY KEY,
+    event_time TIMESTAMPTZ NOT NULL,
+    stream_id TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,  -- 'state_transition', 'threshold_crossing'
+
+    -- State transition fields (NULL for crossings)
+    from_state TEXT,
+    to_state TEXT,
+    duration_in_state_ms BIGINT,
+
+    -- Threshold crossing fields (NULL for transitions)
+    metric TEXT,
+    threshold_value DOUBLE PRECISION,
+    crossing_direction TEXT,
+    metric_value DOUBLE PRECISION,
+    previous_metric_value DOUBLE PRECISION,
+    objective_id TEXT,
+
+    -- CONTEXT SNAPSHOT (for V1.2 correlation!)
+    context JSONB NOT NULL DEFAULT '{}',
+    details JSONB NOT NULL DEFAULT '{}'
+);
+
+SELECT create_hypertable('gold.events', 'event_time', chunk_time_interval => INTERVAL '7 days');
+```
+
+**Context Snapshot**:
+```json
+{
+  "indoor_co2": 823,
+  "indoor_pm25": 8.2,
+  "outdoor_temp": 65.2,
+  "window_state": "off",
+  "time_since_last_window_change_ms": 7200000
+}
+```
+
+**Event Detection Job** (TimescaleDB scheduled job, every 15 minutes):
+```sql
+SELECT add_job('gold.detect_events', '15 minutes');
+```
+
+**Benefits**:
+1. **CA works**: `gold.events_hourly` can be a proper continuous aggregate
+2. **Context for correlation**: V1.2 queries context without JOINs
+3. **Explicit columns**: Efficient queries for common filters (event_type, objective_id)
+4. **Event sourcing**: Events are first-class citizens, not derived data
+5. **Proper indexing**: Hypertable enables all standard index types
+
+**Tradeoffs**:
+- Requires scheduled job for event detection (vs. real-time view)
+- Events have ~15 min latency from source data
+- Slightly more storage (~500 bytes per event with context)
+
+**Supersedes**: SPEC-E02 v1 (UNION ALL view approach)
+
+**See Also**: [SPEC-E02-unified-events-view.md](../phase-e/specification/SPEC-E02-unified-events-view.md) (updated 2026-02-05)
+
+---
+
 ## Decisions Summary Table
 
 | # | Decision | Choice | Pattern Source |
@@ -690,6 +789,7 @@ SELECT add_continuous_aggregate_policy(...);
 | 9 | Gold schema evolution | DROP/RECREATE (constraint) | TimescaleDB limitation |
 | 10 | NULL handling | By stream_type (preserve/carry forward) | Causal validity |
 | 11 | Idempotency | Manifest declares `sync` vs `recreate` | Explicit intent |
+| 12 | Events storage | **Hypertable** (not UNION ALL view) | CA limitation, correlation needs |
 | D1 | Threshold crossing dedupe | **Deferred** - observe behavior first | Premature optimization |
 | D2 | Backfill strategy | **Deferred** - Bronze→Silver concern | Architecture layers |
 
