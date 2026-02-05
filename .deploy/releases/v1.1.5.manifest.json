@@ -1,0 +1,49 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.5",
+  "description": "Release v1.1.5: Add sample_count to all Gold tables + PostgreSQL-compatible aligned view",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build",
+      "profile": "release",
+      "note": "Adds COUNT(*) AS sample_count to all continuous aggregates"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "air-quality",
+      "action": "recreate",
+      "note": "Recreate with sample_count column"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "outdoor-weather",
+      "action": "recreate",
+      "note": "Recreate with sample_count column"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "home-assistant-state",
+      "action": "recreate",
+      "note": "Recreate with sample_count column"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "outdoor-air-quality",
+      "action": "recreate",
+      "note": "Recreate with sample_count column"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "recreate",
+      "note": "Recreate aligned view with all 4 streams"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
+}

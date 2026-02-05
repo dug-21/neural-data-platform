@@ -189,6 +189,9 @@ GROUP BY bucket, {entity_col};"#,
             });
         }
 
+        // Always add sample_count for aligned view compatibility
+        columns.push("COUNT(*) AS sample_count".to_string());
+
         Ok(columns)
     }
 
