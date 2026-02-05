@@ -1,0 +1,152 @@
+-- Aligned view for domain: indoor-air-quality
+-- Streams: indoor, outdoor, state, outdoor_aqi
+-- Mode: SYNC (create if not exists)
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_matviews
+        WHERE schemaname = 'gold'
+          AND matviewname = 'indoor_air_quality_aligned'
+    ) THEN
+        CREATE MATERIALIZED VIEW gold.indoor_air_quality_aligned AS
+        SELECT
+            COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket) AS bucket,
+
+    -- indoor (Observation)
+            indoor.pm25_mean AS indoor_pm25_mean,
+            indoor.pm25_std AS indoor_pm25_std,
+            indoor.pm25_min AS indoor_pm25_min,
+            indoor.pm25_max AS indoor_pm25_max,
+            indoor.pm25_p95 AS indoor_pm25_p95,
+            indoor.co2_mean AS indoor_co2_mean,
+            indoor.co2_std AS indoor_co2_std,
+            indoor.co2_min AS indoor_co2_min,
+            indoor.co2_max AS indoor_co2_max,
+            indoor.temperature_c_mean AS indoor_temperature_c_mean,
+            indoor.temperature_c_min AS indoor_temperature_c_min,
+            indoor.temperature_c_max AS indoor_temperature_c_max,
+            indoor.tvoc_index_mean AS indoor_tvoc_index_mean,
+            indoor.tvoc_index_max AS indoor_tvoc_index_max,
+            indoor.nox_index_mean AS indoor_nox_index_mean,
+            indoor.nox_index_max AS indoor_nox_index_max,
+            indoor.humidity_pct_mean AS indoor_humidity_pct_mean,
+            indoor.humidity_pct_min AS indoor_humidity_pct_min,
+            indoor.humidity_pct_max AS indoor_humidity_pct_max,
+            indoor.pm10_mean AS indoor_pm10_mean,
+            indoor.pm10_min AS indoor_pm10_min,
+            indoor.pm10_max AS indoor_pm10_max,
+            indoor.sample_count AS indoor_sample_count,
+            COALESCE(indoor.sample_count, 0) AS indoor_samples,
+
+    -- outdoor (Observation)
+            outdoor.precipitation_mm_mean AS outdoor_precipitation_mm_mean,
+            outdoor.precipitation_mm_max AS outdoor_precipitation_mm_max,
+            outdoor.precipitation_mm_count AS outdoor_precipitation_mm_count,
+            outdoor.cloud_cover_pct_mean AS outdoor_cloud_cover_pct_mean,
+            outdoor.feels_like_c_mean AS outdoor_feels_like_c_mean,
+            outdoor.feels_like_c_min AS outdoor_feels_like_c_min,
+            outdoor.feels_like_c_max AS outdoor_feels_like_c_max,
+            outdoor.temperature_c_mean AS outdoor_temperature_c_mean,
+            outdoor.temperature_c_min AS outdoor_temperature_c_min,
+            outdoor.temperature_c_max AS outdoor_temperature_c_max,
+            outdoor.visibility_m_mean AS outdoor_visibility_m_mean,
+            outdoor.visibility_m_min AS outdoor_visibility_m_min,
+            outdoor.humidity_pct_mean AS outdoor_humidity_pct_mean,
+            outdoor.humidity_pct_min AS outdoor_humidity_pct_min,
+            outdoor.humidity_pct_max AS outdoor_humidity_pct_max,
+            outdoor.wind_speed_kmh_mean AS outdoor_wind_speed_kmh_mean,
+            outdoor.wind_speed_kmh_max AS outdoor_wind_speed_kmh_max,
+            outdoor.pressure_pa_mean AS outdoor_pressure_pa_mean,
+            outdoor.sample_count AS outdoor_sample_count,
+            COALESCE(outdoor.sample_count, 0) AS outdoor_samples,
+
+    -- state (StateEvent)
+            COALESCE(
+        state.state_count,
+        LAG(state.state_count, 1) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_count, 2) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_count, 3) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_count, 4) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_count, 5) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_count, 6) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket))
+    ) AS state_state_count,
+            COALESCE(
+        state.state_first,
+        LAG(state.state_first, 1) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_first, 2) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_first, 3) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_first, 4) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_first, 5) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_first, 6) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket))
+    ) AS state_state_first,
+            COALESCE(
+        state.state_last,
+        LAG(state.state_last, 1) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_last, 2) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_last, 3) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_last, 4) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_last, 5) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.state_last, 6) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket))
+    ) AS state_state_last,
+            COALESCE(
+        state.sample_count,
+        LAG(state.sample_count, 1) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.sample_count, 2) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.sample_count, 3) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.sample_count, 4) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.sample_count, 5) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket)),
+        LAG(state.sample_count, 6) OVER (ORDER BY COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket))
+    ) AS state_sample_count,
+            COALESCE(state.sample_count, 0) AS state_samples,
+
+    -- outdoor_aqi (Observation)
+            outdoor_aqi.so2_ugm3_mean AS outdoor_aqi_so2_ugm3_mean,
+            outdoor_aqi.so2_ugm3_max AS outdoor_aqi_so2_ugm3_max,
+            outdoor_aqi.o3_ugm3_mean AS outdoor_aqi_o3_ugm3_mean,
+            outdoor_aqi.o3_ugm3_max AS outdoor_aqi_o3_ugm3_max,
+            outdoor_aqi.co_ugm3_mean AS outdoor_aqi_co_ugm3_mean,
+            outdoor_aqi.co_ugm3_max AS outdoor_aqi_co_ugm3_max,
+            outdoor_aqi.pm10_mean AS outdoor_aqi_pm10_mean,
+            outdoor_aqi.pm10_min AS outdoor_aqi_pm10_min,
+            outdoor_aqi.pm10_max AS outdoor_aqi_pm10_max,
+            outdoor_aqi.pm25_mean AS outdoor_aqi_pm25_mean,
+            outdoor_aqi.pm25_std AS outdoor_aqi_pm25_std,
+            outdoor_aqi.pm25_min AS outdoor_aqi_pm25_min,
+            outdoor_aqi.pm25_max AS outdoor_aqi_pm25_max,
+            outdoor_aqi.pm25_p95 AS outdoor_aqi_pm25_p95,
+            outdoor_aqi.aqi_epa_mean AS outdoor_aqi_aqi_epa_mean,
+            outdoor_aqi.aqi_epa_min AS outdoor_aqi_aqi_epa_min,
+            outdoor_aqi.aqi_epa_max AS outdoor_aqi_aqi_epa_max,
+            outdoor_aqi.no2_ugm3_mean AS outdoor_aqi_no2_ugm3_mean,
+            outdoor_aqi.no2_ugm3_max AS outdoor_aqi_no2_ugm3_max,
+            outdoor_aqi.aqi_owm_mean AS outdoor_aqi_aqi_owm_mean,
+            outdoor_aqi.aqi_owm_min AS outdoor_aqi_aqi_owm_min,
+            outdoor_aqi.aqi_owm_max AS outdoor_aqi_aqi_owm_max,
+            outdoor_aqi.sample_count AS outdoor_aqi_sample_count,
+            COALESCE(outdoor_aqi.sample_count, 0) AS outdoor_aqi_samples,
+
+    -- Total samples
+            COALESCE(indoor.sample_count, 0) + COALESCE(outdoor.sample_count, 0) + COALESCE(state.sample_count, 0) + COALESCE(outdoor_aqi.sample_count, 0) AS total_samples
+        FROM gold.air_quality_hourly indoor
+FULL OUTER JOIN gold.outdoor_weather_hourly outdoor
+    ON indoor.bucket = outdoor.bucket
+FULL OUTER JOIN gold.home_assistant_state_hourly state
+    ON COALESCE(indoor.bucket, outdoor.bucket) = state.bucket
+FULL OUTER JOIN gold.outdoor_air_quality_hourly outdoor_aqi
+    ON COALESCE(indoor.bucket, outdoor.bucket, state.bucket) = outdoor_aqi.bucket
+        WHERE COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket) >= NOW() - INTERVAL '90 days';
+
+        RAISE NOTICE 'Created aligned view: gold.indoor_air_quality_aligned';
+    ELSE
+        RAISE NOTICE 'gold.indoor_air_quality_aligned already exists, skipping';
+    END IF;
+END $$;
+
+-- Index for efficient bucket queries
+CREATE INDEX IF NOT EXISTS idx_indoor_air_quality_aligned_bucket
+    ON gold.indoor_air_quality_aligned (bucket);
+
+-- Refresh command (run manually or via scheduler)
+-- REFRESH MATERIALIZED VIEW gold.indoor_air_quality_aligned;
+
