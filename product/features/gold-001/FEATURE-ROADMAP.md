@@ -922,9 +922,10 @@ If this test passes, V1.1 architecture is proven extensible.
 | **v11-008** | Basic Feature Computation | Rolling mean, std, min, max per metric | v11-A06 registry | V1.2 enhanced correlations |
 | **v11-009** | Lag Feature Computation | Metric values at t-1h, t-6h, t-24h | v11-A06 registry | V1.2 lag analysis |
 | **v11-010** | Gold Layer Data Dictionary | Metadata for Gold tables and views | v11-003, v11-005 | Discoverability |
-| **v11-011** | Correlation-Ready Dashboard | Grafana showing aligned streams + objectives | v11-005, v11-007 | V1.1 proof point |
+| **v11-011** | Correlation-Ready Dashboard | *(Superseded by v11-014)* | - | - |
 | **v11-012** | Threshold Crossing Generator | Generate events when metrics cross objective thresholds | v11-007 objectives | V1.2 unified events |
 | **v11-013** | Unified Events View | Combine state transitions + threshold crossings | v11-006, v11-012 | V1.2 correlation engine |
+| **v11-014** | Gold Layer Dashboard | Grafana dashboard for all Gold tables + unified events | v11-003, v11-005, v11-013 | V1.1 visibility, V1.2 foundation |
 
 **Tier 3: Validation (Proves Architecture)**
 
