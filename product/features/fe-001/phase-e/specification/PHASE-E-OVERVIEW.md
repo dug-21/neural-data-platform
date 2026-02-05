@@ -1,19 +1,25 @@
 # FE-001 Phase E: Unified Event Abstraction - Overview
 
 > **Created:** 2026-02-04
+> **Updated:** 2026-02-05
 > **Phase:** E (Unified Event Abstraction)
 > **Target:** Week 6
-> **Status:** Specification Complete
+> **Status:** Specification Complete (Events Hypertable Approach)
 
 ---
 
 ## Executive Summary
 
-Phase E completes the V1.1 Gold Layer Foundation by implementing the **Unified Event Abstraction**. This phase combines state transition events (from Phase C) with threshold crossing events (new in Phase E) into a single queryable view that V1.2 Pattern Detection Engine will consume.
+Phase E completes the V1.1 Gold Layer Foundation by implementing the **Unified Event Abstraction**. This phase creates a dedicated **events hypertable** that stores state transitions (from Phase C) and threshold crossings (new in Phase E) with **environmental context captured at event time** for V1.2 correlation analysis.
 
-**Primary Deliverable**: `gold.events_unified` - a single view combining all event types with a consistent schema.
+**Primary Deliverable**: `gold.events` - a TimescaleDB hypertable storing all events with context snapshots.
 
-**V1.2 Handoff**: This phase is the bridge to V1.2. The unified event view IS the interface contract that V1.2 consumes.
+**Key Architecture Decision (2026-02-05)**: Events are stored in a hypertable (not a UNION ALL view) to:
+1. Enable continuous aggregates on events
+2. Capture environmental context at event time
+3. Support efficient V1.2 correlation queries
+
+**V1.2 Handoff**: This phase is the bridge to V1.2. The events hypertable IS the interface contract that V1.2 consumes.
 
 ---
 
@@ -23,6 +29,7 @@ Phase E completes the V1.1 Gold Layer Foundation by implementing the **Unified E
 |----|---------|----------|---------------|
 | v11-012 | Threshold Crossing Generator | Critical | [SPEC-E01](./SPEC-E01-threshold-crossings.md) |
 | v11-013 | Unified Events View | Critical | [SPEC-E02](./SPEC-E02-unified-events-view.md) |
+| v11-014 | Gold Layer Dashboard | High | [SPEC-E03](./SPEC-E03-gold-layer-dashboard.md) |
 | v11-V02 | New Feature Type Test | Medium | See Phase D exit criteria |
 
 ---
@@ -72,7 +79,8 @@ Phase E completes the V1.1 Gold Layer Foundation by implementing the **Unified E
 | Feature | Depends On | Blocking For |
 |---------|------------|--------------|
 | v11-012 (Threshold Crossings) | v11-007 (Objectives Storage) | v11-013 (Unified Events) |
-| v11-013 (Unified Events) | v11-006 (State Transitions), v11-012 | V1.2 Pattern Detection |
+| v11-013 (Unified Events) | v11-006 (State Transitions), v11-012 | v11-014 (Dashboard), V1.2 Pattern Detection |
+| v11-014 (Gold Layer Dashboard) | All Gold CAs, v11-013 | V1.1 Completion |
 
 ---
 
@@ -257,6 +265,10 @@ ndp-gold-ddl generate --domain indoor-air-quality --phase events
 - [ ] **v11-013**: View combines state transitions + threshold crossings
 - [ ] **v11-013**: Consistent event schema across all event types
 - [ ] **v11-013**: `gold.events_hourly` aggregate available
+- [ ] **v11-014**: Gold Layer Dashboard deployed to Grafana
+- [ ] **v11-014**: Dashboard displays all Gold continuous aggregates
+- [ ] **v11-014**: Dashboard displays aligned view and unified events
+- [ ] **v11-014**: Objective thresholds visible as annotations/lines
 
 ### Performance
 

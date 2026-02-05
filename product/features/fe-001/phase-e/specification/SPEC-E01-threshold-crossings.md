@@ -2,25 +2,40 @@
 
 > **Feature ID:** v11-012
 > **Priority:** Critical
-> **Status:** Specification
-> **Dependencies:** v11-007 (Objectives Storage)
-> **Blocks:** v11-013 (Unified Events View), V1.2 Pattern Detection
+> **Status:** Specification (Updated 2026-02-05)
+> **Dependencies:** v11-007 (Objectives Storage), v11-013 (Events Hypertable)
+> **Blocks:** V1.2 Pattern Detection
+
+---
+
+## Revision History
+
+| Date | Change | Rationale |
+|------|--------|-----------|
+| 2026-02-05 | **Updated for Events Hypertable** | Crossings INSERT into gold.events, not standalone view |
+| 2026-02-04 | Initial specification | Threshold crossing view approach |
 
 ---
 
 ## User Story
 
 **As a** pattern detection system (V1.2),
-**I want** events generated when observation metrics cross objective thresholds,
-**So that** I can detect potential cause-effect relationships between state changes and metric violations.
+**I want** threshold crossing events inserted into the events hypertable with environmental context,
+**So that** I can correlate metric violations with surrounding conditions and state changes.
 
 ---
 
 ## Goal
 
-Generate threshold crossing events when observation metrics cross declarative objective thresholds. These events become inputs to V1.2 pattern detection, enabling correlation between "what happened" (state transitions) and "what changed" (threshold crossings).
+Detect threshold crossing events when observation metrics cross declarative objective thresholds, and **INSERT them into the `gold.events` hypertable** with environmental context captured at the moment of crossing.
 
-**Key Insight**: Objectives define what matters. Threshold crossings are the moments when those things change from "ok" to "not ok" (or vice versa). These are semantically meaningful events for pattern detection.
+**Key Changes from v1:**
+- Crossings are **inserted** into `gold.events` hypertable (not a standalone view)
+- Environmental **context snapshot** is captured at crossing time
+- Detection runs via **TimescaleDB scheduled job** (every 15 minutes)
+- Explicit columns for crossing data enable efficient queries
+
+**Key Insight**: Objectives define what matters. Threshold crossings are the moments when those things change from "ok" to "not ok" (or vice versa). Combined with context, V1.2 can answer "what was happening when the violation occurred?"
 
 ---
 
@@ -75,31 +90,64 @@ Direction encoding:
 }
 ```
 
-### FR-E01-004: Event Schema
+### FR-E01-004: Event Schema (Events Hypertable)
 
-Each threshold crossing event SHALL include:
+Threshold crossing events are inserted into `gold.events` with these fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `event_id` | UUID | Generated via `gen_random_uuid()` |
 | `event_time` | TIMESTAMPTZ | Time when crossing was detected |
 | `stream_id` | TEXT | Source observation stream |
 | `entity_id` | TEXT | Entity identifier (ndp_id) |
 | `event_type` | TEXT | Always `'threshold_crossing'` |
-| `details` | JSONB | Crossing details (see below) |
+| `metric` | TEXT | Metric name (e.g., 'co2', 'pm25') |
+| `threshold_value` | DOUBLE PRECISION | Threshold that was crossed |
+| `crossing_direction` | TEXT | 'rising', 'falling', etc. |
+| `metric_value` | DOUBLE PRECISION | Value at crossing |
+| `previous_metric_value` | DOUBLE PRECISION | Previous value |
+| `objective_id` | TEXT | Reference to objective |
+| `context` | JSONB | Environmental snapshot (see FR-E01-011) |
+| `details` | JSONB | Additional details |
 
-**Details Schema**:
+**Example INSERT**:
+```sql
+INSERT INTO gold.events (
+    event_time, stream_id, entity_id, event_type,
+    metric, threshold_value, crossing_direction,
+    metric_value, previous_metric_value, objective_id,
+    context, details
+) VALUES (
+    '2026-02-05 10:00:00+00',
+    'air-quality',
+    'sensor_living_room',
+    'threshold_crossing',
+    'co2', 800, 'rising',
+    812, 795, 'healthy_co2',
+    '{"indoor_pm25": 8.2, "window_state": "off", ...}'::JSONB,
+    '{"condition": "<", "unit": "ppm"}'::JSONB
+);
+```
+
+### FR-E01-011: Context Capture
+
+Each threshold crossing SHALL include environmental context at event time:
+
 ```json
 {
-  "metric": "co2",
-  "threshold": 800,
-  "direction": "rising",
-  "value": 812,
-  "previous_value": 795,
-  "objective_id": "healthy_co2",
-  "condition": "<",
-  "unit": "ppm"
+  "indoor_co2": 812,
+  "indoor_pm25": 8.2,
+  "indoor_temp": 72.1,
+  "indoor_humidity": 45,
+  "outdoor_temp": 65.2,
+  "outdoor_pm25": 12.1,
+  "outdoor_aqi": 42,
+  "window_state": "off",
+  "time_since_last_window_change_ms": 7200000
 }
 ```
+
+Context is sourced from `gold.indoor_air_quality_aligned` at the crossing's hourly bucket.
 
 ### FR-E01-005: Objective Source
 
@@ -129,12 +177,22 @@ For threshold crossing detection, use the **mean** aggregate:
 - `{metric}_mean` column from continuous aggregate
 - This aligns with typical objective definitions ("average CO2 should be < 800")
 
-### FR-E01-009: Idempotent Generation
+### FR-E01-009: Idempotent Detection
 
-The crossing detection view SHALL be:
-- Idempotent (re-running produces same results)
-- Based on SQL view (not materialized - derives from source data)
-- Automatically updated when source data changes
+The crossing detection job SHALL be:
+- Idempotent (only inserts NEW crossings since last run)
+- Uses `last_successful_finish` from job stats to determine lookback
+- Prevents duplicate events via time-based filtering
+
+```sql
+-- Detection job tracks its last run
+SELECT last_successful_finish INTO last_run
+FROM timescaledb_information.job_stats
+WHERE job_id = detect_crossings.job_id;
+
+-- Only process data since last run
+WHERE bucket > last_run
+```
 
 ### FR-E01-010: Time-Window Objectives
 
@@ -150,19 +208,37 @@ For objectives with `time_window`:
 
 Query for threshold crossings in 30-day range SHALL complete in < 50ms on Pi.
 
-### NFR-E01-002: Storage Efficiency
+Events are stored in `gold.events` hypertable with appropriate indexes.
 
-Threshold crossings view is NOT materialized (SQL view):
-- Zero additional storage for crossing events
-- Computed on demand from continuous aggregates
-- Tradeoff: Query cost vs storage cost (Pi optimized for storage)
+### NFR-E01-002: Detection Job Performance
 
-### NFR-E01-003: Index Support
+| Metric | Target |
+|--------|--------|
+| Detection job runtime | < 5 seconds |
+| Job schedule | Every 15 minutes |
+| Event latency | < 15 minutes from source data |
 
-Create indexes to support V1.2 query patterns:
+### NFR-E01-003: Storage Efficiency
+
+Events are stored in `gold.events` hypertable:
+- ~500 bytes per event (with context)
+- 7-day chunk interval
+- 1-year retention policy
+- Expected: < 100 crossings per day
+
+### NFR-E01-004: Index Support
+
+Indexes on `gold.events` support crossing queries:
 ```sql
-CREATE INDEX idx_threshold_crossings_time ON gold.{domain}_threshold_crossings(event_time);
-CREATE INDEX idx_threshold_crossings_objective ON gold.{domain}_threshold_crossings((details->>'objective_id'));
+-- Filter by event type + time (most common pattern)
+CREATE INDEX idx_events_type_time ON gold.events (event_type, event_time DESC);
+
+-- Filter by objective
+CREATE INDEX idx_events_objective ON gold.events (objective_id, event_time DESC)
+    WHERE event_type = 'threshold_crossing';
+
+-- Context queries (for correlation)
+CREATE INDEX idx_events_context ON gold.events USING GIN (context);
 ```
 
 ---
