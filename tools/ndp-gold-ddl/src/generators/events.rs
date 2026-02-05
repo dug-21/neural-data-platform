@@ -408,8 +408,9 @@ BEGIN
                 'indoor_co2', a.indoor_co2_mean,
                 'indoor_pm25', a.indoor_pm25_mean,
                 'indoor_temp', a.indoor_temperature_c_mean,
-                'outdoor_temp', a.outdoor_temperature_mean,
-                'outdoor_aqi', a.outdoor_aqi_mean
+                'outdoor_temp', a.outdoor_temperature_c_mean,
+                'outdoor_pm25', a.outdoor_aqi_pm25_mean,
+                'window_state', a.state_state_last
             ) FROM gold.{domain_id_snake}_aligned a
             WHERE a.bucket = time_bucket('1 hour', t.event_time)),
             '{{}}'::JSONB
@@ -513,8 +514,9 @@ BEGIN
                 'indoor_co2', a.indoor_co2_mean,
                 'indoor_pm25', a.indoor_pm25_mean,
                 'indoor_temp', a.indoor_temperature_c_mean,
-                'outdoor_temp', a.outdoor_temperature_mean,
-                'outdoor_aqi', a.outdoor_aqi_mean
+                'outdoor_temp', a.outdoor_temperature_c_mean,
+                'outdoor_pm25', a.outdoor_aqi_pm25_mean,
+                'window_state', a.state_state_last
             ) FROM gold.{domain_id_snake}_aligned a
             WHERE a.bucket = c.event_time),
             '{{}}'::JSONB

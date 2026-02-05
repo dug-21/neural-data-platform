@@ -40,7 +40,7 @@ BEGIN
         'indoor_humidity', a.indoor_humidity_pct_mean,
         'outdoor_temp', a.outdoor_temperature_c_mean,
         'outdoor_humidity', a.outdoor_humidity_pct_mean,
-        'window_state', a.state_last_state,
+        'window_state', a.state_state_last,
         'bucket', v_bucket
     ) INTO v_context
     FROM gold.indoor_air_quality_aligned a
