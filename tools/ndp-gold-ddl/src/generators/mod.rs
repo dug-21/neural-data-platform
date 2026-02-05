@@ -5,6 +5,7 @@
 //! - Aligned views for cross-stream correlation
 //! - Refresh policies for continuous aggregates
 //! - Stream classification for correlation analysis (v11-002)
+//! - State transitions for state_event streams (v11-006)
 
 pub mod aligned_view;
 pub mod classification;
@@ -13,6 +14,7 @@ pub mod continuous_aggregate;
 pub mod join_builder;
 pub mod null_handler;
 pub mod refresh_policy;
+pub mod state_transitions;
 
 pub use aligned_view::AlignedViewGenerator;
 pub use classification::{
@@ -26,3 +28,4 @@ pub use null_handler::{
     CarryForwardNullHandler, InterpolateNullHandler, NullHandler, PreserveNullHandler,
 };
 pub use refresh_policy::RefreshPolicyGenerator;
+pub use state_transitions::{ITransitionGenerator, StateTransitionGenerator, TransitionConfig};

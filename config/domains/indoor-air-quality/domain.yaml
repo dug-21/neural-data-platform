@@ -3,49 +3,74 @@
 #
 # This domain combines indoor air quality sensor data with outdoor weather
 # and home automation state for pattern detection.
+#
+# Implements SPEC-C01 (v11-005) and ADR-FE001-004 (NULL handling by stream type)
+# - observation streams: NULL preserved
+# - state_event streams: NULL filled via LOCF (carry_forward)
 
-id: indoor-air-quality
-description: Indoor air quality monitoring with environmental context
+domain:
+  id: indoor-air-quality
+  description: "Maintain healthy indoor air quality"
 
-streams:
-  - stream_id: air-quality
-    alias: indoor
-    role: primary
-    # null_handling: preserve  # Default for observation
+  streams:
+    - stream_id: air-quality
+      alias: indoor
+      role: primary
+      # NULL handling: preserve (observation stream - default)
 
-  - stream_id: outdoor-weather
-    alias: outdoor
-    role: context
-    # null_handling: preserve  # Default for observation
+    - stream_id: outdoor-weather
+      alias: outdoor
+      role: context
+      # NULL handling: preserve (observation stream - default)
 
-  - stream_id: home-assistant-state
-    alias: state
-    role: actuator
-    null_handling: carry_forward  # State persists until changed
+    - stream_id: home-assistant-state
+      alias: state
+      role: actuator
+      null_handling: carry_forward  # State persists until changed (state_event stream)
 
-alignment:
-  view_name: indoor_air_quality_aligned
-  granularity: "1 hour"
-  join_strategy: full_outer
-  null_handling: preserve
+  alignment:
+    view_name: indoor_air_quality_aligned
+    granularity: "1 hour"
+    join_strategy: full_outer
+    # null_handling: by_stream_type - resolved from stream configs per ADR-FE001-004
 
-objectives:
-  - id: healthy_co2
-    description: Keep CO2 below healthy threshold
-    target:
-      stream: air-quality
-      metric: co2
-      condition: "<"
-      threshold: 800
-      unit: ppm
-    priority: high
+  objectives:
+    - id: healthy_co2
+      description: "Keep CO2 below 800 ppm for cognitive performance"
+      target:
+        stream: air-quality
+        metric: co2
+        condition: "<"
+        threshold: 800
+        unit: ppm
+      priority: high
 
-  - id: comfortable_humidity
-    description: Maintain comfortable humidity range
-    target:
-      stream: air-quality
-      metric: humidity_pct
-      condition: between
-      threshold: 45
-      unit: percent
-    priority: medium
+    - id: healthy_pm25
+      description: "Keep PM2.5 below WHO guideline of 12 ug/m3"
+      target:
+        stream: air-quality
+        metric: pm25
+        condition: "<"
+        threshold: 12
+        unit: ug/m3
+      priority: high
+
+    - id: comfortable_humidity
+      description: "Maintain comfortable humidity range (40-60%)"
+      target:
+        stream: air-quality
+        metric: humidity_pct
+        condition: between
+        threshold: [40, 60]
+        unit: percent
+      priority: medium
+
+    - id: comfortable_temperature
+      description: "Maintain comfortable indoor temperature (20-24C)"
+      target:
+        stream: air-quality
+        metric: temperature_c
+        condition: between
+        threshold: [20, 24]
+        unit: celsius
+      priority: medium

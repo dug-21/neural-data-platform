@@ -15,7 +15,9 @@ use tracing_subscriber::EnvFilter;
 
 use ndp_gold_ddl::config::{Action, ConfigLoader, FileSystemConfigLoader};
 use ndp_gold_ddl::db::{PostgresCaChecker, PostgresClient};
-use ndp_gold_ddl::generators::{AlignedViewGenerator, ContinuousAggregateGenerator};
+use ndp_gold_ddl::generators::{
+    AlignedViewGenerator, ContinuousAggregateGenerator, StateTransitionGenerator, TransitionConfig,
+};
 use ndp_gold_ddl::planner::SyncPlanner;
 
 /// Exit codes for the CLI
@@ -89,6 +91,10 @@ enum Commands {
         /// Action: sync (idempotent) or recreate (drop and create)
         #[arg(long, default_value = "sync")]
         action: String,
+
+        /// Generate state transitions view instead of continuous aggregate
+        #[arg(long)]
+        transitions: bool,
     },
 
     /// Validate configuration without generating DDL
@@ -135,7 +141,7 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
     let loader = FileSystemConfigLoader::new(&cli.config_dir);
 
     match &cli.command {
-        Commands::Generate { stream, domain, action } => {
+        Commands::Generate { stream, domain, action, transitions } => {
             let action: Action = action.parse().map_err(|e: String| e)?;
 
             if let Some(domain_id) = domain {
@@ -146,7 +152,7 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                 let sql = generator.generate(&domain_config, action)?;
                 Ok(sql)
             } else if let Some(stream_id) = stream {
-                // Generate continuous aggregate for stream
+                // Generate DDL for stream
                 let stream_config = loader.load_stream_config(stream_id)?;
                 let gold_etl = stream_config.gold_etl.as_ref().ok_or_else(|| {
                     format!("Stream '{}' has no gold_etl configuration", stream_id)
@@ -156,8 +162,12 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                     return Err(format!("Stream '{}' has gold_etl.enabled = false", stream_id).into());
                 }
 
-                // If database URL is provided and action is sync, use the planner
-                if let (Some(db_url), Action::Sync) = (&cli.database_url, action) {
+                // Check if transitions are requested
+                if *transitions {
+                    // Generate state transitions view
+                    generate_transitions(cli, &stream_config, action)
+                } else if let (Some(db_url), Action::Sync) = (&cli.database_url, action) {
+                    // If database URL is provided and action is sync, use the planner
                     generate_with_db_check(cli, &stream_config, gold_etl, db_url).await
                 } else {
                     // No DB URL or recreate mode - generate all DDL
@@ -262,4 +272,28 @@ async fn generate_with_db_check(
 
     // Generate DDL from plan
     Ok(plan.to_ddl())
+}
+
+/// Generate state transitions DDL for a stream
+fn generate_transitions(
+    cli: &Cli,
+    stream_config: &ndp_gold_ddl::StreamConfig,
+    action: Action,
+) -> Result<String, Box<dyn std::error::Error>> {
+    // Get transition config from stream's gold_etl.features.transitions section
+    let transition_config = TransitionConfig::from_stream_config(stream_config).unwrap_or_else(|| {
+        // Default config if not specified in stream config
+        TransitionConfig::new("state", "ndp_id")
+    });
+
+    if cli.verbose {
+        eprintln!(
+            "Generating state transitions for stream '{}' (state_field: {}, entity_field: {})",
+            stream_config.stream_id, transition_config.state_field, transition_config.entity_field
+        );
+    }
+
+    let generator = StateTransitionGenerator::from_stream_config(stream_config)?;
+    let sql = generator.generate(&transition_config, action)?;
+    Ok(sql)
 }

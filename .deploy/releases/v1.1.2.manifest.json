@@ -1,0 +1,56 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.2",
+  "description": "Release v1.1.2: Gold Layer Foundation - Phase C (Cross-Stream + Alignment)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build",
+      "profile": "release",
+      "note": "Added state_transitions generator and aligned view extensions"
+    },
+    {
+      "type": "migration",
+      "file": "deploy/pi/init-scripts/005_domain_objectives.sql",
+      "note": "Creates data_dictionary.domains, domain_streams, objectives, constraints tables"
+    },
+    {
+      "type": "stream",
+      "id": "outdoor-weather",
+      "action": "update",
+      "reload": "none",
+      "note": "Added gold_etl section with stream_type: observation"
+    },
+    {
+      "type": "stream",
+      "id": "home-assistant-state",
+      "action": "update",
+      "reload": "none",
+      "note": "Added gold_etl section with stream_type: state_event and transitions config"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "outdoor-weather",
+      "action": "sync",
+      "note": "Creates gold.outdoor_weather_hourly and gold.outdoor_weather_daily continuous aggregates"
+    },
+    {
+      "type": "gold-tables",
+      "stream_id": "home-assistant-state",
+      "action": "sync",
+      "note": "Creates gold.state_events_hourly continuous aggregate and gold.state_events_transitions view"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "sync",
+      "note": "Creates gold.indoor_air_quality_aligned view joining 3 streams with FULL OUTER JOIN"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
+}

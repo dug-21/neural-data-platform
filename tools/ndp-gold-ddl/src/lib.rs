@@ -35,7 +35,8 @@ pub mod validation;
 // Re-exports for convenient access
 pub use config::{
     Action, AlignedStream, AlignmentConfig, ConfigLoader, DomainConfig, FileSystemConfigLoader,
-    GoldEtlConfig, JoinStrategy, NullHandling, StreamConfig, StreamRef, StreamRole, StreamType,
+    GoldEtlConfig, JoinStrategy, NullHandling, ObjectiveConfig, Priority, StreamConfig, StreamRef,
+    StreamRole, StreamType, TargetConfig,
 };
 
 pub use error::{GoldDdlError, Result};
@@ -43,7 +44,7 @@ pub use error::{GoldDdlError, Result};
 pub use generators::{
     generate_classification_sql, generate_gold_table_sql, AlignedViewGenerator,
     ClassificationSyncer, ContinuousAggregateGenerator, DefaultClassificationSyncer,
-    RefreshPolicyGenerator,
+    ITransitionGenerator, RefreshPolicyGenerator, StateTransitionGenerator, TransitionConfig,
 };
 
 pub use registry::{FeatureConfig, FeatureGenerator, FeatureRegistry, SqlColumn};

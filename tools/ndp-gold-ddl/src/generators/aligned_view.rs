@@ -672,4 +672,205 @@ mod tests {
         // Despite reversed input order, primary should be first in FROM
         assert!(sql.contains("FROM gold.air_quality_hourly indoor"));
     }
+
+    // ========== v11-005: London TDD Tests per SPEC-C01 ==========
+
+    /// Test: FULL OUTER JOIN generates correctly for two streams
+    /// Per SPEC-C01 FR-C01-002: All streams joined using FULL OUTER JOIN
+    #[test]
+    fn test_generates_full_outer_join_for_two_streams() {
+        let loader = MockConfigLoader::new()
+            .with_stream("air-quality", true)
+            .with_stream("outdoor-weather", true);
+
+        let generator = AlignedViewGenerator::new(loader);
+        let domain = create_test_domain();
+
+        let sql = generator.generate(&domain, Action::Sync).unwrap();
+
+        // Should contain FULL OUTER JOIN keyword
+        assert!(
+            sql.contains("FULL OUTER JOIN"),
+            "Expected FULL OUTER JOIN in SQL:\n{}",
+            sql
+        );
+
+        // Both streams should be present
+        assert!(
+            sql.contains("gold.air_quality_hourly"),
+            "Missing air_quality_hourly table"
+        );
+        assert!(
+            sql.contains("gold.outdoor_weather_hourly"),
+            "Missing outdoor_weather_hourly table"
+        );
+
+        // Join condition should reference buckets
+        assert!(
+            sql.contains(".bucket"),
+            "Join should reference bucket columns"
+        );
+    }
+
+    /// Test: Bucket COALESCE includes all streams per SPEC-C01 FR-C01-003
+    /// The aligned view must use COALESCE(aq.bucket, ow.bucket, se.bucket) AS bucket
+    #[test]
+    fn test_bucket_coalesces_from_all_streams() {
+        let loader = MockConfigLoader::new()
+            .with_stream("air-quality", true)
+            .with_stream("outdoor-weather", true)
+            .with_stream("home-assistant-state", true);
+
+        let generator = AlignedViewGenerator::new(loader);
+        let mut domain = create_test_domain();
+        domain.streams.push(StreamRef {
+            stream_id: "home-assistant-state".to_string(),
+            alias: "state".to_string(),
+            role: StreamRole::Actuator,
+            null_handling: Some(NullHandling::CarryForward),
+        });
+
+        let sql = generator.generate(&domain, Action::Sync).unwrap();
+
+        // Check for COALESCE with bucket references
+        assert!(
+            sql.contains("COALESCE("),
+            "Expected COALESCE in bucket expression:\n{}",
+            sql
+        );
+
+        // Should have bucket references from all streams
+        assert!(
+            sql.contains("indoor.bucket") || sql.contains("AS bucket"),
+            "Expected bucket column from indoor stream"
+        );
+        assert!(
+            sql.contains("outdoor.bucket") || sql.contains("AS bucket"),
+            "Expected bucket column from outdoor stream"
+        );
+    }
+
+    /// Test: Observation streams preserve NULL per ADR-FE001-004
+    /// Observation columns should NOT use LOCF - NULL means "no data"
+    #[test]
+    fn test_observation_preserves_null() {
+        // Set up loader with both streams
+        let loader = MockConfigLoader::new()
+            .with_stream("air-quality", true)
+            .with_stream("outdoor-weather", true);
+
+        let generator = AlignedViewGenerator::new(loader);
+        let mut domain = create_test_domain();
+        // Configure with observation streams
+        domain.streams = vec![
+            StreamRef {
+                stream_id: "air-quality".to_string(),
+                alias: "indoor".to_string(),
+                role: StreamRole::Primary,
+                null_handling: None, // Default for observation is Preserve
+            },
+            StreamRef {
+                stream_id: "outdoor-weather".to_string(),
+                alias: "outdoor".to_string(),
+                role: StreamRole::Context,
+                null_handling: None,
+            },
+        ];
+
+        let sql = generator.generate(&domain, Action::Sync).unwrap();
+
+        // Observation columns should be simple passthrough (no LAG IGNORE NULLS)
+        // They should appear as: indoor.pm25_mean AS indoor_pm25_mean
+        assert!(
+            sql.contains("indoor.pm25_mean AS indoor_pm25_mean")
+                || sql.contains("indoor.pm25_std AS indoor_pm25_std"),
+            "Observation columns should use simple passthrough, not LOCF:\n{}",
+            sql
+        );
+
+        // Verify the column doesn't have LAG in same line (not LOCF)
+        let lines: Vec<&str> = sql.lines().collect();
+        for line in lines {
+            if line.contains("indoor.pm25_mean AS") {
+                assert!(
+                    !line.contains("LAG("),
+                    "Observation column should NOT use LAG (LOCF):\n{}",
+                    line
+                );
+            }
+        }
+    }
+
+    /// Test: State event streams use LOCF (carry forward) per ADR-FE001-004
+    /// State columns should use COALESCE(current, LAG(...) IGNORE NULLS)
+    #[test]
+    fn test_state_event_carries_forward() {
+        let loader = MockConfigLoader::new()
+            .with_stream("air-quality", true)
+            .with_stream("home-assistant-state", true);
+
+        let generator = AlignedViewGenerator::new(loader);
+        let mut domain = create_test_domain();
+        domain.streams[1] = StreamRef {
+            stream_id: "home-assistant-state".to_string(),
+            alias: "state".to_string(),
+            role: StreamRole::Actuator,
+            null_handling: Some(NullHandling::CarryForward), // Explicit LOCF
+        };
+
+        let sql = generator.generate(&domain, Action::Sync).unwrap();
+
+        // State event columns should use LOCF pattern:
+        // COALESCE(state.column, LAG(state.column) IGNORE NULLS OVER ...)
+        assert!(
+            sql.contains("LAG(state.") && sql.contains("IGNORE NULLS"),
+            "State event columns should use LAG IGNORE NULLS (LOCF):\n{}",
+            sql
+        );
+
+        // Should have COALESCE wrapper
+        assert!(
+            sql.contains("COALESCE"),
+            "State event columns should be wrapped in COALESCE:\n{}",
+            sql
+        );
+    }
+
+    /// Test: Column aliasing follows {alias}_{metric} convention per SPEC-C01 FR-C01-005
+    #[test]
+    fn test_column_aliasing_convention() {
+        let loader = MockConfigLoader::new()
+            .with_stream("air-quality", true)
+            .with_stream("outdoor-weather", true);
+
+        let generator = AlignedViewGenerator::new(loader);
+        let domain = create_test_domain();
+
+        let sql = generator.generate(&domain, Action::Sync).unwrap();
+
+        // Columns should follow {alias}_{metric} pattern
+        // indoor stream uses alias "indoor"
+        assert!(
+            sql.contains("indoor_pm25_mean") || sql.contains("AS indoor_pm25_mean"),
+            "Expected indoor_pm25_mean column alias:\n{}",
+            sql
+        );
+
+        // outdoor stream uses alias "outdoor"
+        assert!(
+            sql.contains("outdoor_pm25_mean") || sql.contains("AS outdoor_pm25_mean"),
+            "Expected outdoor_pm25_mean column alias:\n{}",
+            sql
+        );
+
+        // Should NOT have duplicate prefixing (not indoor_indoor_pm25)
+        assert!(
+            !sql.contains("indoor_indoor_"),
+            "Should not have duplicate alias prefixing"
+        );
+        assert!(
+            !sql.contains("outdoor_outdoor_"),
+            "Should not have duplicate alias prefixing"
+        );
+    }
 }

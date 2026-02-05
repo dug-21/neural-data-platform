@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-02-05
+
+Gold Layer Foundation - Phase C (FE-001). Cross-stream alignment with 3 streams and objectives storage.
+
+### Added
+
+- **Cross-Stream Aligned View** (v11-005)
+  - `gold.indoor_air_quality_aligned` materialized view
+  - FULL OUTER JOIN across air-quality, outdoor-weather, home-assistant-state
+  - NULL handling by stream type (ADR-FE001-004)
+    - observation streams: preserve NULL
+    - state_event streams: LOCF (Last Observation Carried Forward)
+  - Column aliasing by stream alias (indoor_, outdoor_, state_)
+  - COALESCE bucket across all streams
+
+- **State Transition Materializer** (v11-006)
+  - `gold.state_events_transitions` view
+  - LAG window function for state change detection
+  - `is_actual_transition` boolean for noise filtering
+  - Duration in previous state calculation
+  - Partitioned by entity (ndp_id)
+  - Transition direction mapping (opening/closing)
+  - 22 unit tests
+
+- **Objectives Storage** (v11-007)
+  - `data_dictionary.domains` table
+  - `data_dictionary.domain_streams` mapping table
+  - `data_dictionary.objectives` table with all condition types (<, >, <=, >=, ==, !=, between)
+  - `data_dictionary.constraints` table for V1.3+ action framework
+  - MCP queryable views: v_domain_overview, v_high_priority_objectives
+  - `check_objective_violation()` function
+  - deploy.sh commands: `sync-domains`, `list-domains`
+
+- **Additional Stream Aggregates** (v11-003 extended)
+  - `gold.outdoor_weather_hourly` - temperature, humidity, wind, pressure
+  - `gold.outdoor_weather_daily` - daily aggregates
+  - `gold.state_events_hourly` - state counts and changes
+  - gold_etl configurations for outdoor-weather and home-assistant-state
+
+- **Domain Configuration**
+  - `config/domains/indoor-air-quality/domain.yaml`
+  - 3 streams: air-quality (primary), outdoor-weather (context), home-assistant-state (actuator)
+  - 4 objectives: healthy_co2, healthy_pm25, comfortable_humidity, comfortable_temperature
+
+- **Unit Tests**
+  - 87 new Phase C tests (279 total in ndp-gold-ddl)
+  - aligned_view_tests.rs (31 tests)
+  - state_transitions_tests.rs (27 tests)
+  - objectives_tests.rs (29 tests)
+  - Test fixtures with MockConfigLoader
+
+### Changed
+
+- outdoor-weather stream config: Added `stream_type: "observation"`, `gold_etl` section
+- home-assistant-state stream config: Added `stream_type: "state_event"`, `gold_etl` section with transitions
+- ndp-gold-ddl: Added `--transitions` CLI flag
+- ndp-gold-ddl: State transitions generator module
+- deploy.sh: Added sync-domains and list-domains commands
+
+### Notes
+
+- outdoor-air-quality stream deliberately **excluded** (reserved for Phase D fast-follower test)
+- 3 streams in Gold layer aligned view
+- Reference implementation for domain-centric configuration pattern
+- V1.1.2 pattern detection ready with queryable aligned view
+
 ## [1.1.1] - 2026-02-04
 
 Gold Layer Foundation - Phase B (FE-001). First Gold stream deployment with air-quality.
@@ -135,7 +201,8 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/dug-21/neural-data-platform/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/dug-21/neural-data-platform/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/dug-21/neural-data-platform/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dug-21/neural-data-platform/releases/tag/v1.0.0

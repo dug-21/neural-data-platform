@@ -1,0 +1,40 @@
+{
+  "version": "1.1.0-beta.1",
+  "description": "FE-001 Phase B: Classification Propagation (v11-002)",
+  "created": "2026-02-04",
+  "author": "ndp-timescale-dev",
+  "feature_id": "fe-001",
+  "phase": "B",
+  "ticket": "v11-002",
+  "changes": [
+    {
+      "type": "migration",
+      "file": "deploy/pi/init-scripts/004_stream_classification.sql",
+      "description": "Create stream_classification table and gold_tables for data dictionary"
+    },
+    {
+      "type": "stream",
+      "stream_id": "air-quality",
+      "action": "update",
+      "reason": "Add stream_type=observation for classification propagation"
+    }
+  ],
+  "declarations": [
+    {
+      "type": "dictionary",
+      "action": "sync",
+      "description": "Sync stream classifications to data dictionary"
+    }
+  ],
+  "dependencies": {
+    "fe-001-phase-a": "complete",
+    "v11-001": "complete"
+  },
+  "acceptance_criteria": [
+    "AC-B02-001: Air-quality classification synced to data_dictionary.stream_classification",
+    "AC-B02-002: Correlation role correctly derived from stream type",
+    "AC-B02-003: MCP query can return stream classifications",
+    "AC-B02-004: Gold table metadata includes source stream type",
+    "AC-B02-005: Sync is idempotent (safe to run multiple times)"
+  ]
+}

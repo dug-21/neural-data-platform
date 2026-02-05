@@ -1,8 +1,8 @@
 # FE-001: Gold Layer Foundation - Status
 
 > **Last Updated:** 2026-02-04
-> **Current Phase:** Phase B Deployed & Verified
-> **Overall Progress:** 55% (Phase A + B complete, Phases C-E pending)
+> **Current Phase:** Phase C Implementation Complete
+> **Overall Progress:** 70% (Phase A + B + C complete, Phases D-E pending)
 
 ---
 
@@ -12,7 +12,7 @@
 |-------|--------|----------|-------|
 | **A: Architecture Foundation** | ✅ Complete | 100% | JSON schemas, interpreters, DDL tool |
 | **B: First Stream** | ✅ Deployed | 100% | v1.1.1 deployed to Pi, 798 hourly + 35 daily rows |
-| **C: Cross-Stream + Alignment** | Not Started | 0% | 3 streams, aligned view |
+| **C: Cross-Stream + Alignment** | ✅ Complete | 100% | 3 streams, aligned view, 279 tests |
 | **D: Validation + Dashboard** | Not Started | 0% | Fast-follower test |
 | **E: Unified Event Abstraction** | Not Started | 0% | Threshold crossings, unified view |
 
@@ -39,9 +39,9 @@
 | v11-002 | Classification Propagation | Complete | ndp-timescale-dev | SQL generator, DDL migration, deploy.sh helpers |
 | v11-003 | Per-Stream Continuous Aggregates | ✅ Deployed | ndp-rust-dev | air-quality hourly/daily, 22 metrics, 798+35 rows |
 | v11-004 | Aggregate Refresh Policy | ✅ Deployed | ndp-timescale-dev | 15min hourly, 1hr daily refresh active |
-| v11-005 | Cross-Stream Aligned View | Not Started | - | |
-| v11-006 | State Transition Materializer | Not Started | - | |
-| v11-007 | Objectives Storage | Not Started | - | |
+| v11-005 | Cross-Stream Aligned View | ✅ Complete | swarm-a3e884d | FULL OUTER JOIN, NULL handling, 31 tests |
+| v11-006 | State Transition Materializer | ✅ Complete | swarm-a2d0a08 | LAG window, is_actual_transition, 27 tests |
+| v11-007 | Objectives Storage | ✅ Complete | swarm-a518c3b | domains, objectives, constraints tables |
 | v11-008 | Basic Feature Computation | Not Started | - | |
 | v11-009 | Lag Feature Computation | Not Started | - | |
 | v11-010 | Gold Layer Data Dictionary | Not Started | - | |
@@ -80,6 +80,12 @@
 
 | Date | Activity | Outcome |
 |------|----------|---------|
+| 2026-02-04 | **Phase C Implementation Complete** | 6 agents, 279 tests, v1.2.0 manifest created |
+| 2026-02-04 | **v11-005 Aligned View** | FULL OUTER JOIN, NULL handling by stream_type, 31 tests |
+| 2026-02-04 | **v11-006 State Transitions** | LAG window, is_actual_transition, duration calc, 27 tests |
+| 2026-02-04 | **v11-007 Objectives Storage** | domains, objectives, constraints tables, sync commands |
+| 2026-02-04 | **Stream configs extended** | outdoor-weather, home-assistant-state with gold_etl |
+| 2026-02-04 | **Domain config created** | indoor-air-quality with 3 streams, 4 objectives |
 | 2026-02-04 | **v1.1.1 Deployed to Pi** | Gold layer operational: 2 CAs, 2 refresh policies, 833 total rows |
 | 2026-02-04 | **Docker build fallback added** | deploy.sh builds tools in Docker when Cargo unavailable |
 | 2026-02-04 | **ndp-gold-ddl DB connectivity** | Tool checks DB state for idempotent deployments |

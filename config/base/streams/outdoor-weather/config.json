@@ -1,5 +1,6 @@
 {
   "stream_id": "outdoor-weather",
+  "stream_type": "observation",
   "description": "Outdoor weather data from OpenWeatherMap Current Weather API",
   "version": "1.0.0",
   "enabled": true,
@@ -511,6 +512,41 @@
       "enabled": true,
       "watermark_column": "observation_time",
       "lag_interval": "5 minutes"
+    }
+  },
+  "gold_etl": {
+    "enabled": true,
+    "description": "Gold layer aggregates for outdoor weather monitoring and ML features",
+    "aggregates": {
+      "granularities": ["1 hour", "1 day"],
+      "fields": {
+        "temperature_c": { "metrics": ["mean", "min", "max"] },
+        "humidity_pct": { "metrics": ["mean", "min", "max"] },
+        "wind_speed_kmh": { "metrics": ["mean", "max"] },
+        "pressure_pa": { "metrics": ["mean"] },
+        "feels_like_c": { "metrics": ["mean", "min", "max"] },
+        "cloud_cover_pct": { "metrics": ["mean"] },
+        "visibility_m": { "metrics": ["mean", "min"] },
+        "precipitation_mm": { "metrics": ["mean", "max", "count"] }
+      }
+    },
+    "features": {
+      "lag": {
+        "enabled": true,
+        "lags_hours": [1, 6, 24],
+        "fields": ["temperature_c", "pressure_pa"]
+      },
+      "rolling": {
+        "enabled": true,
+        "windows": ["6 hours", "24 hours"],
+        "stats": ["mean", "std"],
+        "fields": ["temperature_c", "humidity_pct"]
+      },
+      "trend": {
+        "enabled": true,
+        "window": "6 hours",
+        "fields": ["temperature_c", "pressure_pa"]
+      }
     }
   },
   "config_version": 2

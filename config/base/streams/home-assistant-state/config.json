@@ -1,5 +1,6 @@
 {
   "stream_id": "home-assistant-state",
+  "stream_type": "state_event",
   "description": "Window/door state events from Home Assistant via MQTT",
   "version": "1.0.0",
   "enabled": true,
@@ -145,6 +146,23 @@
       "fresh": "18 hours",
       "stale": "36 hours",
       "critical": "72 hours"
+    }
+  },
+  "gold_etl": {
+    "enabled": true,
+    "description": "Gold layer aggregates and state transitions for home automation events",
+    "aggregates": {
+      "granularities": ["1 hour"],
+      "fields": {
+        "state": { "metrics": ["count", "first", "last"] }
+      }
+    },
+    "transitions": {
+      "enabled": true,
+      "state_field": "state",
+      "entity_field": "ndp_id",
+      "track_duration": true,
+      "include_in_alignment": true
     }
   },
   "config_version": 2

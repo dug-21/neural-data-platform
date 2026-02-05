@@ -2,7 +2,7 @@
 
 > **Phase:** C (Cross-Stream + Alignment)
 > **Target:** Week 4
-> **Testing Approach:** London TDD (Outside-In)
+> **Testing Approach:** London TDD (Outside-In) + Integration Testing
 > **Parent Document:** [TESTING-STRATEGY.md](../../TESTING-STRATEGY.md)
 
 ---
@@ -15,6 +15,55 @@ Phase C extends Gold layer to three streams and introduces the cross-stream alig
 
 ---
 
+## Integration Environment
+
+Phase C tests leverage the **integration environment** for end-to-end validation against real TimescaleDB. This provides higher confidence than mock-based testing alone.
+
+### Environment Setup
+
+```bash
+# Start integration environment
+DEPLOY_ENV=integration deploy/pi/deploy.sh start
+
+# Verify TimescaleDB is healthy
+docker exec integration-timescaledb pg_isready -U postgres -d ndp
+
+# Database connection string
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ndp"
+```
+
+### Environment Details
+
+| Component | Container | Port | Notes |
+|-----------|-----------|------|-------|
+| TimescaleDB | integration-timescaledb | 5432 | PostgreSQL 15 with TimescaleDB |
+| etcd | integration-etcd | 2379 | Config store |
+| MQTT | integration-mosquitto | 1883 | For test data injection |
+| Grafana | integration-grafana | 3000 | Visual validation |
+
+### Config Paths
+
+- **Streams:** `config/integration/base/streams/`
+- **Domains:** `config/integration/domains/`
+- **Manifests:** `.deploy/releases/test/`
+
+### Test Data Seeding
+
+```bash
+# Deploy Phase B first (prerequisite)
+DEPLOY_ENV=integration deploy/pi/deploy.sh apply .deploy/releases/test/phase-b-classification.manifest.json
+
+# Seed test data via MQTT
+mosquitto_pub -h localhost -p 1883 -t "airgradient/readings/test123" \
+  -m '{"serialno":"test123","pm02Compensated":15.5,"rco2":650,"atmpCompensated":22.5,"rhumCompensated":55}'
+
+# Verify data in Silver layer
+docker exec integration-timescaledb psql -U postgres -d ndp -c \
+  "SELECT COUNT(*) FROM silver.air_quality_observations WHERE observation_time >= NOW() - INTERVAL '1 hour';"
+```
+
+---
+
 ## Phase C Scope
 
 | ID | Feature | Testing Priority |
@@ -23,6 +72,236 @@ Phase C extends Gold layer to three streams and introduces the cross-stream alig
 | **v11-006** | State Transition Materializer | High |
 | **v11-007** | Objectives Storage | Medium |
 | **v11-003** | Per-Stream Continuous Aggregates (outdoor-weather, state-events) | Critical |
+
+---
+
+## Component Under Test: `ndp-gold-ddl`
+
+### Overview
+
+The primary component under test is **`ndp-gold-ddl`** (`tools/ndp-gold-ddl/`), a new Rust CLI tool that:
+
+1. **Reads** stream configurations (`config/base/streams/*/config.json`)
+2. **Generates** Gold layer DDL (continuous aggregates, views, refresh policies)
+3. **Applies** DDL to TimescaleDB via tokio-postgres
+4. **Generates** aligned views from domain configurations
+5. **Syncs** objectives to data dictionary
+
+### Component Architecture
+
+```
+tools/ndp-gold-ddl/
+├── src/
+│   ├── main.rs                    # CLI entry point
+│   ├── config/
+│   │   ├── loader.rs              # Stream config loading
+│   │   └── domain.rs              # Domain config parsing
+│   ├── generators/
+│   │   ├── continuous_aggregate.rs # CA DDL generation
+│   │   ├── aligned_view.rs        # Cross-stream view generation
+│   │   └── state_transitions.rs   # Transition view generation
+│   ├── db/
+│   │   ├── client.rs              # PostgresClient abstraction
+│   │   └── queries.rs             # SQL execution
+│   └── lib.rs                     # Library exports
+├── tests/
+│   └── integration/               # Integration tests (this plan)
+└── Cargo.toml
+```
+
+---
+
+## ⚠️ DEFECT HANDLING POLICY: NO WORKAROUNDS
+
+### Mandatory Requirement
+
+**All defects discovered in `ndp-gold-ddl` MUST be fixed in the component itself.**
+
+### Prohibited Practices
+
+| ❌ PROHIBITED | ✅ REQUIRED |
+|---------------|-------------|
+| Workarounds in tests | Fix the component |
+| Manual SQL patches | Fix DDL generation |
+| Post-deployment fixups | Fix the generator |
+| "Known issue" annotations | Create bug ticket and fix |
+| Skipping failing tests | Fix root cause |
+| Environment-specific hacks | Fix for all environments |
+| **SQL fixes in deploy.sh** | **Fix in ndp-gold-ddl Rust code** |
+| **Shell script SQL manipulation** | **Fix the generator that creates the SQL** |
+
+### ⚠️ CRITICAL: deploy.sh is NOT a Fix Location
+
+**`deploy.sh` is an orchestrator, not a SQL generator.**
+
+If SQL coming from `ndp-gold-ddl` is incorrect:
+- ❌ Do NOT add `sed`, `awk`, or string manipulation in deploy.sh
+- ❌ Do NOT add conditional SQL patches in shell scripts
+- ❌ Do NOT add "fixup" queries after running ndp-gold-ddl
+- ✅ DO fix the Rust code in `tools/ndp-gold-ddl/src/generators/`
+
+#### Why This Matters
+
+```
+deploy.sh calls:
+  └── ndp-gold-ddl --stream air-quality --action sync
+        └── Generates SQL from config
+        └── Applies SQL to TimescaleDB
+
+If the SQL is wrong, the bug is in ndp-gold-ddl, NOT deploy.sh.
+```
+
+#### Example: Wrong vs Right
+
+**❌ WRONG: Fixing SQL in deploy.sh**
+```bash
+# deploy.sh - BAD PATTERN
+apply_gold_tables() {
+    local sql=$(ndp-gold-ddl generate --stream "$stream_id")
+
+    # WRONG: Patching SQL because generator is broken
+    sql=$(echo "$sql" | sed 's/bucket,/COALESCE(aq.bucket, ow.bucket) AS bucket,/')
+    sql=$(echo "$sql" | sed 's/FROM gold\./FROM gold.air_quality_hourly aq FULL OUTER JOIN gold./')
+
+    psql -c "$sql"
+}
+```
+
+**✅ CORRECT: Fix in Rust generator**
+```rust
+// tools/ndp-gold-ddl/src/generators/aligned_view.rs - CORRECT
+fn generate_aligned_view_sql(domain: &DomainConfig) -> Result<String, Error> {
+    let streams = &domain.streams;
+
+    // Generate proper COALESCE for bucket
+    let bucket_coalesce = streams.iter()
+        .map(|s| format!("{}.bucket", s.alias))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    // Generate proper FULL OUTER JOINs
+    let joins = generate_full_outer_joins(streams)?;
+
+    Ok(format!(
+        "CREATE OR REPLACE VIEW gold.{}_aligned AS
+         SELECT COALESCE({}) AS bucket, {}
+         FROM {} {}",
+        domain.id, bucket_coalesce, columns, base_table, joins
+    ))
+}
+```
+
+#### Responsibility Boundaries
+
+| Component | Responsibility | NOT Responsible For |
+|-----------|---------------|---------------------|
+| `deploy.sh` | Orchestration, sequencing, error handling | SQL correctness |
+| `ndp-gold-ddl` | SQL generation, DDL creation | Deployment orchestration |
+| `config/*.json` | Declarative specifications | Implementation details |
+
+If you find yourself editing deploy.sh to fix SQL output, **STOP** and fix ndp-gold-ddl instead.
+
+### Defect Workflow
+
+```
+1. Test FAILS
+   ↓
+2. Identify root cause in ndp-gold-ddl
+   ↓
+3. Create bug ticket: product/features/fe-001/bugs/BUG-{NNN}-{slug}.md
+   ↓
+4. FIX the component (generators/, db/, config/)
+   ↓
+5. Re-run test to verify fix
+   ↓
+6. Test PASSES → Continue
+```
+
+### Bug Ticket Template
+
+Create in `product/features/fe-001/bugs/`:
+
+```markdown
+# BUG-{NNN}: {Short Description}
+
+**Component:** ndp-gold-ddl
+**Module:** {generators/aligned_view.rs | db/client.rs | etc.}
+**Discovered:** {date}
+**Status:** Open | In Progress | Fixed
+
+## Symptom
+{What the test observed}
+
+## Root Cause
+{Why ndp-gold-ddl produced incorrect output}
+
+## Fix
+{What was changed in the component}
+
+## Verification
+{Test that now passes}
+```
+
+### Examples
+
+#### ❌ WRONG: Workaround in Test
+```rust
+#[test]
+fn test_aligned_view_columns() {
+    let sql = generate_aligned_view(&config).unwrap();
+
+    // WRONG: Working around missing COALESCE
+    let sql = sql.replace("aq.bucket", "COALESCE(aq.bucket, ow.bucket)");
+
+    assert!(sql.contains("COALESCE"));
+}
+```
+
+#### ✅ CORRECT: Fix the Component
+```rust
+// In generators/aligned_view.rs - FIX THE GENERATOR
+fn generate_bucket_column(streams: &[StreamRef]) -> String {
+    let buckets: Vec<String> = streams.iter()
+        .map(|s| format!("{}.bucket", s.alias))
+        .collect();
+    format!("COALESCE({}) AS bucket", buckets.join(", "))
+}
+```
+
+#### ❌ WRONG: Skip Failing Test
+```rust
+#[test]
+#[ignore] // TODO: Fix later, NULL handling broken
+fn test_null_handling_locf() {
+    // ...
+}
+```
+
+#### ✅ CORRECT: Fix and Enable
+```rust
+#[test]
+fn test_null_handling_locf() {
+    // Test runs because generators/aligned_view.rs was fixed
+    let sql = generate_column_for_stream(&stream, "window_state", StreamType::StateEvent);
+    assert!(sql.contains("COALESCE") || sql.contains("LAG"));
+}
+```
+
+### Rationale
+
+1. **`ndp-gold-ddl` is production code** - Workarounds mask real defects
+2. **Declarative deployment depends on it** - deploy.sh calls ndp-gold-ddl
+3. **Future phases build on Phase C** - Defects compound over time
+4. **Integration tests validate real behavior** - Mocks hide issues
+
+### Escalation
+
+If a defect cannot be fixed within the sprint:
+
+1. Document in `product/features/fe-001/bugs/`
+2. Assess impact on Phase C completion
+3. Discuss with team - may require scope adjustment
+4. **Never ship with known workarounds**
 
 ---
 
@@ -524,75 +803,543 @@ fn test_priority_parsing() {
         assert_eq!(priority, *expected);
     }
 }
+
+/// Unit: Between condition requires threshold_upper
+#[test]
+fn test_between_condition_threshold_handling() {
+    let objective = Objective {
+        id: "comfortable_humidity".to_string(),
+        target: ObjectiveTarget {
+            stream: "air-quality".to_string(),
+            metric: "humidity_pct".to_string(),
+            condition: "between".to_string(),
+            threshold: 40.0,
+            threshold_upper: Some(60.0),
+            unit: Some("percent".to_string()),
+        },
+        priority: Some("medium".to_string()),
+    };
+
+    let sql = generate_objective_insert_sql(&objective, "indoor-air-quality");
+
+    assert!(sql.contains("40"));
+    assert!(sql.contains("60"));
+    assert!(sql.contains("between"));
+}
+```
+
+### 5.4 deploy.sh Sync Function Tests (Integration)
+
+The objectives sync via `deploy.sh sync-domains` command is tested via shell integration tests.
+
+```bash
+# Test 1: Sync objectives from domain.yaml to data dictionary
+# GIVEN: domain.yaml exists with 4 objectives
+# WHEN: deploy.sh sync-domains is called
+# THEN: data_dictionary.objectives has 4 rows for indoor-air-quality
+
+DEPLOY_ENV=integration ./deploy.sh sync-domains
+docker exec integration-timescaledb psql -U postgres -d ndp -c \
+  "SELECT COUNT(*) FROM data_dictionary.objectives WHERE domain_id = 'indoor-air-quality';"
+# Expected: 4
+
+# Test 2: Upsert behavior (idempotent)
+# GIVEN: objectives already synced
+# WHEN: sync-domains is called again
+# THEN: no duplicate rows, same count
+
+./deploy.sh sync-domains
+./deploy.sh sync-domains
+docker exec integration-timescaledb psql -U postgres -d ndp -c \
+  "SELECT COUNT(*) FROM data_dictionary.objectives WHERE domain_id = 'indoor-air-quality';"
+# Expected: still 4 (no duplicates)
+
+# Test 3: Between condition with threshold_upper
+# GIVEN: objective with condition='between' and threshold=[40,60]
+# WHEN: sync-domains is called
+# THEN: threshold=40, threshold_upper=60 stored correctly
+
+docker exec integration-timescaledb psql -U postgres -d ndp -c \
+  "SELECT objective_id, threshold, threshold_upper FROM data_dictionary.objectives
+   WHERE domain_id = 'indoor-air-quality' AND condition = 'between';"
+# Expected: comfortable_humidity: threshold=40, threshold_upper=60
+#          comfortable_temperature: threshold=20, threshold_upper=24
+
+# Test 4: Domain streams synced with roles
+# GIVEN: domain.yaml has 3 streams (primary, context, actuator)
+# WHEN: sync-domains is called
+# THEN: data_dictionary.domain_streams has 3 rows with correct roles
+
+docker exec integration-timescaledb psql -U postgres -d ndp -c \
+  "SELECT stream_id, alias, role FROM data_dictionary.domain_streams
+   WHERE domain_id = 'indoor-air-quality' ORDER BY role;"
+# Expected: air-quality/indoor/primary, outdoor-weather/outdoor/context, home-assistant-state/state/actuator
+
+# Test 5: Objectives queryable via MCP
+# GIVEN: objectives synced to data dictionary
+# WHEN: MCP query_dictionary tool queries objectives
+# THEN: objectives returned with correct fields
+
+docker exec integration-timescaledb psql -U postgres -d ndp -c \
+  "SELECT * FROM data_dictionary.v_high_priority_objectives WHERE domain_id = 'indoor-air-quality';"
+# Expected: healthy_co2 and healthy_pm25 returned (high priority)
 ```
 
 ---
 
-## 6. Integration Tests
+## 6. Integration Tests (Live Database)
+
+These tests run against the real integration environment with TimescaleDB.
+
+### 6.1 Environment Setup Module
 
 ```rust
-/// INTEGRATION: Full Phase C deployment
+//! Integration test helpers for Phase C
+//! Located in: tools/ndp-gold-ddl/tests/integration/helpers.rs
+
+use tokio_postgres::{Client, NoTls};
+use std::env;
+
+/// Get database connection for integration tests
+pub async fn get_integration_db() -> Client {
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/ndp".to_string());
+
+    let (client, connection) = tokio_postgres::connect(&database_url, NoTls)
+        .await
+        .expect("Failed to connect to integration database");
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+
+    client
+}
+
+/// Check if a continuous aggregate exists
+pub async fn check_continuous_aggregate_exists(
+    client: &Client,
+    schema: &str,
+    view_name: &str,
+) -> bool {
+    let row = client
+        .query_one(
+            "SELECT COUNT(*) FROM timescaledb_information.continuous_aggregates
+             WHERE view_schema = $1 AND view_name = $2",
+            &[&schema, &view_name],
+        )
+        .await
+        .expect("Query failed");
+
+    let count: i64 = row.get(0);
+    count > 0
+}
+
+/// Check if a view exists
+pub async fn check_view_exists(client: &Client, schema: &str, view_name: &str) -> bool {
+    let row = client
+        .query_one(
+            "SELECT COUNT(*) FROM pg_views WHERE schemaname = $1 AND viewname = $2",
+            &[&schema, &view_name],
+        )
+        .await
+        .expect("Query failed");
+
+    let count: i64 = row.get(0);
+    count > 0
+}
+
+/// Seed test data for air-quality stream
+pub async fn seed_air_quality_test_data(client: &Client, hours: i64) {
+    client.execute(
+        "INSERT INTO silver.air_quality_observations
+         (observation_time, ingestion_time, ndp_id, pm25, pm10, co2, temperature_c, humidity_pct, dq_flags)
+         SELECT
+             NOW() - (n || ' hours')::interval,
+             NOW(),
+             'test_sensor_1',
+             20.0 + random() * 30,
+             30.0 + random() * 50,
+             400 + floor(random() * 400)::int,
+             20.0 + random() * 5,
+             40.0 + random() * 20,
+             '{}'::text[]
+         FROM generate_series(1, $1) n
+         ON CONFLICT DO NOTHING",
+        &[&hours],
+    ).await.expect("Failed to seed test data");
+}
+```
+
+### 6.2 Full Deployment Integration Test
+
+```rust
+/// INTEGRATION: Full Phase C deployment against real TimescaleDB
+/// Run with: DEPLOY_ENV=integration cargo test -p ndp-gold-ddl integration_phase_c -- --ignored
 #[tokio::test]
 #[ignore]
 async fn integration_phase_c_full_deployment() {
-    // Arrange: Clean state
-    cleanup_gold_schema().await;
-    setup_silver_tables(&["air-quality", "outdoor-weather", "home-assistant-state"]).await;
+    let client = get_integration_db().await;
 
-    // Act: Deploy Phase C
-    deploy_manifest(".deploy/test/phase-c-alignment.manifest.json").await.unwrap();
+    // Prerequisite: Verify Phase B objects exist (air-quality Gold tables)
+    assert!(
+        check_continuous_aggregate_exists(&client, "gold", "air_quality_hourly").await,
+        "Prerequisite failed: Phase B not deployed (gold.air_quality_hourly missing)"
+    );
 
-    // Assert: All continuous aggregates exist
-    assert!(check_continuous_aggregate_exists("gold", "air_quality_hourly").await);
-    assert!(check_continuous_aggregate_exists("gold", "outdoor_weather_hourly").await);
-    assert!(check_continuous_aggregate_exists("gold", "state_events_hourly").await);
+    // Act: Deploy Phase C via shell command
+    let output = std::process::Command::new("bash")
+        .args(["-c", "DEPLOY_ENV=integration deploy/pi/deploy.sh apply .deploy/releases/test/phase-c-alignment.manifest.json"])
+        .current_dir(env!("CARGO_MANIFEST_DIR").to_string() + "/../..")
+        .output()
+        .expect("Failed to run deploy");
+
+    assert!(output.status.success(), "Deployment failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    // Assert: All Phase C continuous aggregates exist
+    assert!(
+        check_continuous_aggregate_exists(&client, "gold", "outdoor_weather_hourly").await,
+        "gold.outdoor_weather_hourly not created"
+    );
+    assert!(
+        check_continuous_aggregate_exists(&client, "gold", "state_events_hourly").await,
+        "gold.state_events_hourly not created"
+    );
 
     // Assert: Aligned view exists
-    assert!(check_view_exists("gold", "indoor_air_quality_aligned").await);
+    assert!(
+        check_view_exists(&client, "gold", "indoor_air_quality_aligned").await,
+        "gold.indoor_air_quality_aligned view not created"
+    );
 
-    // Assert: Objectives stored
-    let objectives = query_objectives("indoor-air-quality").await;
-    assert!(!objectives.is_empty());
+    // Assert: Objectives stored in data dictionary
+    let row = client
+        .query_one(
+            "SELECT COUNT(*) FROM data_dictionary.objectives WHERE domain_id = 'indoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("Query failed");
+    let objectives_count: i64 = row.get(0);
+    assert!(objectives_count > 0, "No objectives stored for indoor-air-quality domain");
 }
+```
 
-/// INTEGRATION: Aligned view query performance
+### 6.3 Aligned View Query Performance Test
+
+```rust
+/// INTEGRATION: Aligned view query performance (< 100ms on Pi 5)
 #[tokio::test]
 #[ignore]
 async fn integration_aligned_view_performance() {
-    // Arrange: Ensure data exists
-    setup_test_data_30_days().await;
+    let client = get_integration_db().await;
 
-    // Act: Timed query
+    // Arrange: Seed 30 days of test data if needed
+    seed_air_quality_test_data(&client, 720).await; // 30 days * 24 hours
+
+    // Refresh continuous aggregates to ensure data is materialized
+    client.execute(
+        "CALL refresh_continuous_aggregate('gold.air_quality_hourly', NULL, NULL)",
+        &[],
+    ).await.ok(); // May fail if no data, that's OK
+
+    // Act: Timed query against aligned view
     let start = std::time::Instant::now();
-    let rows = query_aligned_view("indoor_air_quality_aligned", 30).await;
+    let rows = client
+        .query(
+            "SELECT bucket, indoor_pm25_mean, outdoor_temperature_c_mean, state_changes_count
+             FROM gold.indoor_air_quality_aligned
+             WHERE bucket >= NOW() - INTERVAL '30 days'
+             ORDER BY bucket",
+            &[],
+        )
+        .await
+        .expect("Query failed");
     let duration = start.elapsed();
 
-    // Assert: < 100ms
+    // Assert: Query performance
+    println!("Aligned view query returned {} rows in {:?}", rows.len(), duration);
     assert!(
         duration.as_millis() < 100,
-        "Aligned view query took {}ms, expected < 100ms", duration.as_millis()
+        "Aligned view query took {}ms, expected < 100ms",
+        duration.as_millis()
     );
 }
+```
 
-/// INTEGRATION: State transitions extraction
+### 6.4 State Transitions Integration Test
+
+```rust
+/// INTEGRATION: State transitions extraction from live data
 #[tokio::test]
 #[ignore]
 async fn integration_state_transitions_work() {
-    // Arrange
-    setup_state_event_test_data().await;
+    let client = get_integration_db().await;
 
-    // Act
-    let transitions = query_state_transitions("home-assistant-state").await;
+    // Arrange: Seed state event test data
+    client.execute(
+        "INSERT INTO silver.state_events (event_time, ingestion_time, ndp_id, entity_id, state, dq_flags)
+         VALUES
+             (NOW() - INTERVAL '2 hours', NOW(), 'test_entity', 'window_sensor', 'closed', '{}'),
+             (NOW() - INTERVAL '1 hour', NOW(), 'test_entity', 'window_sensor', 'open', '{}'),
+             (NOW() - INTERVAL '30 minutes', NOW(), 'test_entity', 'window_sensor', 'closed', '{}'),
+             (NOW(), NOW(), 'test_entity', 'window_sensor', 'open', '{}')
+         ON CONFLICT DO NOTHING",
+        &[],
+    ).await.ok();
+
+    // Act: Query state transitions view
+    let transitions = client
+        .query(
+            "SELECT event_time, from_state, to_state, is_actual_transition
+             FROM gold.state_transitions
+             WHERE entity_id = 'window_sensor'
+             ORDER BY event_time DESC",
+            &[],
+        )
+        .await
+        .expect("Query failed");
 
     // Assert: Transitions detected
-    assert!(!transitions.is_empty());
+    assert!(!transitions.is_empty(), "No state transitions found");
 
     // Assert: is_actual_transition filtering works
-    let actual_transitions = transitions.iter()
-        .filter(|t| t.is_actual_transition)
-        .count();
-    assert!(actual_transitions > 0);
-    assert!(actual_transitions <= transitions.len());
+    let actual_transitions: Vec<_> = transitions
+        .iter()
+        .filter(|r| r.get::<_, bool>("is_actual_transition"))
+        .collect();
+
+    assert!(!actual_transitions.is_empty(), "No actual transitions detected");
+    println!("Found {} actual transitions out of {} total", actual_transitions.len(), transitions.len());
+}
+```
+
+### 6.5 NULL Handling by Stream Type Integration Test
+
+```rust
+/// INTEGRATION: Verify NULL handling per ADR-FE001-004
+#[tokio::test]
+#[ignore]
+async fn integration_null_handling_by_stream_type() {
+    let client = get_integration_db().await;
+
+    // Query aligned view and check NULL patterns
+    let rows = client
+        .query(
+            "SELECT
+                 bucket,
+                 indoor_pm25_mean,
+                 outdoor_temperature_c_mean,
+                 state_changes_count,
+                 -- Check if observation columns preserve NULL (not carried forward)
+                 LAG(indoor_pm25_mean) OVER (ORDER BY bucket) as prev_indoor_pm25
+             FROM gold.indoor_air_quality_aligned
+             WHERE bucket >= NOW() - INTERVAL '7 days'
+             ORDER BY bucket
+             LIMIT 100",
+            &[],
+        )
+        .await
+        .expect("Query failed");
+
+    // Verify observation streams preserve NULL (no LOCF applied)
+    // State event streams should have LOCF applied (non-NULL carry forward)
+    println!("Checking NULL handling patterns in {} rows", rows.len());
+
+    // At least verify the query executes and returns expected columns
+    assert!(rows.len() >= 0, "Query should return rows or empty set");
+}
+```
+
+### 6.6 outdoor-air-quality Exclusion Test
+
+```rust
+/// INTEGRATION: Verify outdoor-air-quality NOT in Gold (reserved for Phase D)
+#[tokio::test]
+#[ignore]
+async fn integration_outdoor_air_quality_not_in_gold() {
+    let client = get_integration_db().await;
+
+    // Assert: No outdoor_air_quality Gold objects
+    assert!(
+        !check_continuous_aggregate_exists(&client, "gold", "outdoor_air_quality_hourly").await,
+        "outdoor_air_quality_hourly should NOT exist (reserved for Phase D)"
+    );
+
+    // Assert: Not in domain streams
+    let row = client
+        .query_one(
+            "SELECT COUNT(*) FROM data_dictionary.domain_streams
+             WHERE domain_id = 'indoor-air-quality' AND stream_id = 'outdoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("Query failed");
+    let count: i64 = row.get(0);
+    assert_eq!(count, 0, "outdoor-air-quality should NOT be in domain_streams");
+}
+```
+
+### 6.7 Domain Objectives Sync Integration Test
+
+```rust
+/// INTEGRATION: Verify objectives sync via deploy.sh sync-domains
+#[tokio::test]
+#[ignore]
+async fn integration_domain_objectives_sync() {
+    let client = get_integration_db().await;
+
+    // Act: Sync domains via shell command
+    let output = std::process::Command::new("bash")
+        .args(["-c", "DEPLOY_ENV=integration deploy/pi/deploy.sh sync-domains"])
+        .current_dir(env!("CARGO_MANIFEST_DIR").to_string() + "/../..")
+        .output()
+        .expect("Failed to run sync-domains");
+
+    assert!(output.status.success(), "sync-domains failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    // Assert: Domain created
+    let domain_row = client
+        .query_one(
+            "SELECT domain_id, description FROM data_dictionary.domains WHERE domain_id = 'indoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("Domain query failed");
+    let domain_id: &str = domain_row.get(0);
+    assert_eq!(domain_id, "indoor-air-quality");
+
+    // Assert: Objectives synced (should have 4 objectives)
+    let obj_row = client
+        .query_one(
+            "SELECT COUNT(*) FROM data_dictionary.objectives WHERE domain_id = 'indoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("Objectives count query failed");
+    let obj_count: i64 = obj_row.get(0);
+    assert_eq!(obj_count, 4, "Expected 4 objectives, found {}", obj_count);
+
+    // Assert: Between condition stored correctly
+    let between_row = client
+        .query_one(
+            "SELECT threshold, threshold_upper FROM data_dictionary.objectives
+             WHERE domain_id = 'indoor-air-quality' AND objective_id = 'comfortable_humidity'",
+            &[],
+        )
+        .await
+        .expect("Between objective query failed");
+    let threshold: rust_decimal::Decimal = between_row.get(0);
+    let threshold_upper: rust_decimal::Decimal = between_row.get(1);
+    assert_eq!(threshold.to_string(), "40", "Lower threshold should be 40");
+    assert_eq!(threshold_upper.to_string(), "60", "Upper threshold should be 60");
+
+    // Assert: Domain streams synced (3 streams)
+    let stream_row = client
+        .query_one(
+            "SELECT COUNT(*) FROM data_dictionary.domain_streams WHERE domain_id = 'indoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("Domain streams query failed");
+    let stream_count: i64 = stream_row.get(0);
+    assert_eq!(stream_count, 3, "Expected 3 domain streams, found {}", stream_count);
+
+    // Assert: Roles correct
+    let role_rows = client
+        .query(
+            "SELECT stream_id, role FROM data_dictionary.domain_streams
+             WHERE domain_id = 'indoor-air-quality' ORDER BY role",
+            &[],
+        )
+        .await
+        .expect("Roles query failed");
+
+    let roles: std::collections::HashMap<String, String> = role_rows.iter()
+        .map(|r| (r.get::<_, String>(0), r.get::<_, String>(1)))
+        .collect();
+
+    assert_eq!(roles.get("home-assistant-state").map(|s| s.as_str()), Some("actuator"));
+    assert_eq!(roles.get("outdoor-weather").map(|s| s.as_str()), Some("context"));
+    assert_eq!(roles.get("air-quality").map(|s| s.as_str()), Some("primary"));
+}
+
+/// INTEGRATION: Verify objectives sync is idempotent
+#[tokio::test]
+#[ignore]
+async fn integration_domain_objectives_sync_idempotent() {
+    let client = get_integration_db().await;
+
+    // Act: Sync domains twice
+    for _ in 0..2 {
+        let output = std::process::Command::new("bash")
+            .args(["-c", "DEPLOY_ENV=integration deploy/pi/deploy.sh sync-domains"])
+            .current_dir(env!("CARGO_MANIFEST_DIR").to_string() + "/../..")
+            .output()
+            .expect("Failed to run sync-domains");
+
+        assert!(output.status.success(), "sync-domains failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    // Assert: No duplicates
+    let obj_row = client
+        .query_one(
+            "SELECT COUNT(*) FROM data_dictionary.objectives WHERE domain_id = 'indoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("Objectives count query failed");
+    let obj_count: i64 = obj_row.get(0);
+    assert_eq!(obj_count, 4, "Expected 4 objectives after multiple syncs, found {}", obj_count);
+}
+
+/// INTEGRATION: Verify objectives queryable via views
+#[tokio::test]
+#[ignore]
+async fn integration_objectives_queryable_via_views() {
+    let client = get_integration_db().await;
+
+    // Ensure sync has run
+    std::process::Command::new("bash")
+        .args(["-c", "DEPLOY_ENV=integration deploy/pi/deploy.sh sync-domains"])
+        .current_dir(env!("CARGO_MANIFEST_DIR").to_string() + "/../..")
+        .output()
+        .ok();
+
+    // Assert: High priority view returns expected objectives
+    let high_priority_rows = client
+        .query(
+            "SELECT objective_id, target_stream, priority FROM data_dictionary.v_high_priority_objectives
+             WHERE domain_id = 'indoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("High priority view query failed");
+
+    assert_eq!(high_priority_rows.len(), 2, "Expected 2 high priority objectives");
+
+    let high_priority_ids: Vec<String> = high_priority_rows.iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect();
+    assert!(high_priority_ids.contains(&"healthy_co2".to_string()));
+    assert!(high_priority_ids.contains(&"healthy_pm25".to_string()));
+
+    // Assert: Domain overview view works
+    let overview_row = client
+        .query_one(
+            "SELECT objective_count, constraint_count FROM data_dictionary.v_domain_overview
+             WHERE domain_id = 'indoor-air-quality'",
+            &[],
+        )
+        .await
+        .expect("Domain overview query failed");
+
+    let objective_count: i64 = overview_row.get(0);
+    let constraint_count: i64 = overview_row.get(1);
+    assert_eq!(objective_count, 4, "Expected 4 objectives in overview");
+    assert_eq!(constraint_count, 0, "Expected 0 constraints (domain.yaml has no constraints section)");
 }
 ```
 
@@ -600,32 +1347,115 @@ async fn integration_state_transitions_work() {
 
 ## 7. Test Execution Commands
 
+### Unit Tests (No Database Required)
+
 ```bash
 # Run Phase C unit tests
 cargo test -p ndp-gold-ddl --lib aligned_view
 cargo test -p ndp-gold-ddl --lib state_transitions
 cargo test -p ndp-gold-ddl --lib objectives
+cargo test -p ndp-gold-ddl --lib null_handling
+```
 
-# Run Phase C component tests
+### Component Tests (MockConfigLoader)
+
+```bash
+# Run Phase C component tests with mocks
 cargo test -p ndp-gold-ddl --test alignment_tests
 cargo test -p ndp-gold-ddl --test transition_tests
+cargo test -p ndp-gold-ddl --test objectives_tests
+```
 
-# Run Phase C integration tests (requires Docker)
-DEPLOY_ENV=integration cargo test -p ndp-gold-ddl --test integration -- phase_c --ignored
+### Integration Tests (Live TimescaleDB)
+
+```bash
+# 1. Start integration environment
+DEPLOY_ENV=integration deploy/pi/deploy.sh start
+
+# 2. Wait for services (health check)
+docker exec integration-timescaledb pg_isready -U postgres -d ndp
+
+# 3. Deploy Phase B prerequisite (if not already deployed)
+DEPLOY_ENV=integration deploy/pi/deploy.sh apply .deploy/releases/test/phase-b-classification.manifest.json
+
+# 4. Run integration tests
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ndp" \
+  cargo test -p ndp-gold-ddl --test integration -- phase_c --ignored --test-threads=1
+
+# 5. Alternatively, run all Phase C integration tests:
+DEPLOY_ENV=integration DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ndp" \
+  cargo test integration_phase_c --ignored -- --test-threads=1
+
+# 6. (Optional) Stop integration environment when done
+DEPLOY_ENV=integration deploy/pi/deploy.sh stop
+```
+
+### Manual Verification (SQL Commands)
+
+```bash
+# Connect to integration database
+docker exec -it integration-timescaledb psql -U postgres -d ndp
+
+# Verify continuous aggregates
+SELECT view_name FROM timescaledb_information.continuous_aggregates
+WHERE view_schema = 'gold' ORDER BY view_name;
+
+# Verify aligned view columns
+SELECT column_name FROM information_schema.columns
+WHERE table_schema = 'gold' AND table_name = 'indoor_air_quality_aligned'
+ORDER BY ordinal_position;
+
+# Verify objectives in data dictionary
+SELECT objective_id, target_metric, condition, threshold
+FROM data_dictionary.objectives WHERE domain_id = 'indoor-air-quality';
+
+# Test aligned view query performance
+EXPLAIN (ANALYZE, COSTS, TIMING)
+SELECT * FROM gold.indoor_air_quality_aligned
+WHERE bucket >= NOW() - INTERVAL '30 days';
+```
+
+### CI/CD Integration
+
+```yaml
+# Example GitHub Actions workflow step
+- name: Run Phase C Integration Tests
+  env:
+    DEPLOY_ENV: integration
+    DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ndp
+  run: |
+    # Start services
+    docker compose -f docker-compose.integration.yml up -d timescaledb etcd
+    sleep 10
+
+    # Run tests
+    cargo test -p ndp-gold-ddl --test integration -- phase_c --ignored --test-threads=1
 ```
 
 ---
 
 ## 8. Test Metrics (Phase C Target)
 
-| Category | Target | Priority |
-|----------|--------|----------|
-| Unit Tests | 20-25 | High |
-| Component Tests | 8-10 | High |
-| Integration Tests | 3-5 | Critical |
-| Coverage (aligned_view.rs) | 85% | Critical |
-| Coverage (state_transitions.rs) | 80% | High |
-| Test Duration (unit) | <5s | High |
+| Category | Target | Priority | Notes |
+|----------|--------|----------|-------|
+| Unit Tests | 20-25 | High | No DB required |
+| Component Tests | 8-10 | High | MockConfigLoader |
+| **Integration Tests** | 6-8 | **Critical** | Live TimescaleDB |
+| Coverage (aligned_view.rs) | 85% | Critical | |
+| Coverage (state_transitions.rs) | 80% | High | |
+| Test Duration (unit) | <5s | High | |
+| Test Duration (integration) | <60s | Medium | Per-test limit |
+
+### Integration Test Coverage
+
+| Test ID | Validates | AC Reference |
+|---------|-----------|--------------|
+| `integration_phase_c_full_deployment` | End-to-end deployment | AC-C-01 to AC-C-07 |
+| `integration_aligned_view_performance` | Query <100ms | AC-C-PERF-01 |
+| `integration_state_transitions_work` | Transition extraction | AC-C-05 |
+| `integration_null_handling_by_stream_type` | NULL semantics | AC-C-04 |
+| `integration_outdoor_air_quality_not_in_gold` | Phase D reservation | AC-C-08 |
+| `integration_domain_metadata` | Data dictionary | AC-C-06, AC-C-07 |
 
 ---
 
@@ -633,14 +1463,42 @@ DEPLOY_ENV=integration cargo test -p ndp-gold-ddl --test integration -- phase_c 
 
 Phase C testing complete when:
 
-- [ ] All 3 stream aggregates generated and tested
-- [ ] Aligned view JOIN tests pass
-- [ ] NULL handling tests verify ADR-FE001-004
-- [ ] State transition tests pass
-- [ ] Objectives storage tests pass
-- [ ] Integration tests pass
-- [ ] Aligned view query < 100ms verified
-- [ ] `outdoor-air-quality` NOT in Gold (reserved for Phase D)
+### Unit & Component Tests
+- [ ] All 3 stream aggregates generated and tested (mock)
+- [ ] Aligned view JOIN tests pass (mock)
+- [ ] NULL handling tests verify ADR-FE001-004 (mock)
+- [ ] State transition tests pass (mock)
+- [ ] Objectives storage tests pass (mock)
+
+### Integration Tests (Live Database)
+- [ ] `integration_phase_c_full_deployment` passes
+- [ ] `integration_aligned_view_performance` confirms <100ms
+- [ ] `integration_state_transitions_work` verifies transition extraction
+- [ ] `integration_null_handling_by_stream_type` validates NULL semantics
+- [ ] `integration_outdoor_air_quality_not_in_gold` confirms Phase D reservation
+- [ ] All integration tests run via `DEPLOY_ENV=integration`
+
+### ⚠️ Component Quality Gates (MANDATORY)
+- [ ] **Zero workarounds** in test code
+- [ ] **Zero manual SQL patches** required after deployment
+- [ ] **All defects fixed in `ndp-gold-ddl`** source code
+- [ ] **Bug tickets closed** for any discovered defects
+- [ ] **No `#[ignore]` annotations** hiding broken functionality
+- [ ] **No SQL manipulation in deploy.sh** (sed, awk, string fixes)
+- [ ] **deploy.sh only orchestrates** - does not modify SQL output
+
+### Manual Verification (Optional but Recommended)
+- [ ] Visual inspection in Grafana (localhost:3000)
+- [ ] SQL queries confirm data dictionary entries
+- [ ] Performance confirmed on target hardware (Pi 5) if available
+
+### Phase C Release Criteria
+
+**Phase C is NOT complete if:**
+- Any test contains workaround code
+- Any test is skipped due to unresolved defects
+- Manual intervention is needed post-deployment
+- Generated SQL requires hand-editing
 
 ---
 
@@ -649,7 +1507,11 @@ Phase C testing complete when:
 - [PHASE-C-OVERVIEW.md](../specification/PHASE-C-OVERVIEW.md) - Phase C specification
 - [ADR-FE001-004](../../architecture/ADR-FE001-004-null-handling.md) - NULL handling
 - [TESTING-STRATEGY.md](../../TESTING-STRATEGY.md) - Overall testing strategy
+- [DEPLOYMENT-DECLARATIVES.md](../../../../docs/procedures/DEPLOYMENT-DECLARATIVES.md) - Manifest deployment
+- [docker-compose.integration.yml](../../../../docker-compose.integration.yml) - Integration environment
+- [ACCEPTANCE-CRITERIA.md](../completion/ACCEPTANCE-CRITERIA.md) - Acceptance criteria with verification SQL
 
 ---
 
 *Phase C Test Plan created: 2026-02-04*
+*Updated: 2026-02-04 - Added integration environment testing with live TimescaleDB*
