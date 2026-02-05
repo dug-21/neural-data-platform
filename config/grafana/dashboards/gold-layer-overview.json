@@ -263,7 +263,7 @@
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Temperature and Humidity from Gold layer\n-- Dual-axis visualization\nSELECT\n    bucket AS time,\n    temp_mean AS \"Temperature\",\n    humidity_mean AS \"Humidity\"\nFROM gold.air_quality_hourly\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "-- Temperature and Humidity from Gold layer\n-- Dual-axis visualization\nSELECT\n    bucket AS time,\n    temperature_c_mean AS \"Temperature\",\n    humidity_pct_mean AS \"Humidity\"\nFROM gold.air_quality_hourly\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
           "refId": "A",
           "format": "time_series"
         }
@@ -411,7 +411,7 @@
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Multi-stream aligned view from Gold layer\n-- Shows indoor, outdoor PM2.5 and temperature on aligned time axis\nSELECT\n    bucket AS time,\n    indoor_pm25_mean AS \"Indoor PM2.5\",\n    outdoor_pm25_mean AS \"Outdoor PM2.5\",\n    outdoor_temp_mean AS \"Outdoor Temp\",\n    indoor_co2_mean / 100 AS \"CO2 (div 100)\"  -- Scaled for overlay\nFROM gold.indoor_air_quality_aligned\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "-- Multi-stream aligned view from Gold layer\n-- Shows indoor, outdoor PM2.5 and temperature on aligned time axis\nSELECT\n    bucket AS time,\n    indoor_pm25_mean AS \"Indoor PM2.5\",\n    outdoor_aqi_pm25_mean AS \"Outdoor PM2.5\",\n    outdoor_temperature_c_mean AS \"Outdoor Temp\",\n    indoor_co2_mean / 100 AS \"CO2 (div 100)\"  -- Scaled for overlay\nFROM gold.indoor_air_quality_aligned\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
           "refId": "A",
           "format": "time_series"
         }
@@ -483,7 +483,7 @@
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Indoor vs Outdoor PM2.5 comparison from Gold aligned view\nSELECT\n    bucket AS time,\n    indoor_pm25_mean AS \"Indoor PM2.5\",\n    outdoor_pm25_mean AS \"Outdoor PM2.5\",\n    CASE\n        WHEN outdoor_pm25_mean > 0 THEN\n            ROUND((indoor_pm25_mean / outdoor_pm25_mean)::numeric, 2)\n        ELSE NULL\n    END AS \"I/O Ratio\"\nFROM gold.indoor_air_quality_aligned\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "-- Indoor vs Outdoor PM2.5 comparison from Gold aligned view\nSELECT\n    bucket AS time,\n    indoor_pm25_mean AS \"Indoor PM2.5\",\n    outdoor_aqi_pm25_mean AS \"Outdoor PM2.5\",\n    CASE\n        WHEN outdoor_aqi_pm25_mean > 0 THEN\n            ROUND((indoor_pm25_mean / outdoor_aqi_pm25_mean)::numeric, 2)\n        ELSE NULL\n    END AS \"I/O Ratio\"\nFROM gold.indoor_air_quality_aligned\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
           "refId": "A",
           "format": "time_series"
         }
@@ -559,7 +559,7 @@
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- Weather context from Gold layer outdoor weather aggregate\nSELECT\n    bucket AS time,\n    temp_mean AS \"Temperature\",\n    humidity_mean AS \"Humidity\",\n    pressure_mean / 10 AS \"Pressure (div 10)\"  -- Scaled for overlay\nFROM gold.outdoor_weather_hourly\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "-- Weather context from Gold layer outdoor weather aggregate\nSELECT\n    bucket AS time,\n    temperature_c_mean AS \"Temperature\",\n    humidity_pct_mean AS \"Humidity\",\n    pressure_pa_mean / 10 AS \"Pressure (div 10)\"  -- Scaled for overlay\nFROM gold.outdoor_weather_hourly\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
           "refId": "A",
           "format": "time_series"
         }
@@ -623,7 +623,7 @@
       "datasource": {"type": "postgres", "uid": "timescaledb-silver"},
       "targets": [
         {
-          "rawSql": "-- State timeline from Gold layer Home Assistant aggregate\n-- Shows last known state per hour\nSELECT\n    bucket AS time,\n    entity_id,\n    CASE last_state\n        WHEN 'on' THEN 1\n        WHEN 'off' THEN 0\n        ELSE NULL\n    END AS state\nFROM gold.home_assistant_state_hourly\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
+          "rawSql": "-- State timeline from Gold layer Home Assistant aggregate\n-- Shows last known state per hour\nSELECT\n    bucket AS time,\n    ndp_id,\n    CASE state_last\n        WHEN 'on' THEN 1\n        WHEN 'off' THEN 0\n        ELSE NULL\n    END AS state\nFROM gold.home_assistant_state_hourly\nWHERE bucket >= $__timeFrom() AND bucket <= $__timeTo()\nORDER BY bucket",
           "refId": "A",
           "format": "time_series"
         }
