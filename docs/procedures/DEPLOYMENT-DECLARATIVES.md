@@ -12,6 +12,7 @@ This document describes the declarative deployment system for the Neural Data Pl
   - [tool](#tool)
   - [migration](#migration)
   - [gold-tables](#gold-tables)
+  - [domain](#domain)
   - [dimensions](#dimensions)
   - [dictionary](#dictionary)
   - [container](#container)
@@ -241,6 +242,40 @@ Generates and applies Gold layer DDL from stream configuration (fe-001).
 **Prerequisites:**
 - `ndp-gold-ddl` tool must be built (use `tool` declaration)
 - Stream config must have `gold_etl.enabled: true`
+
+---
+
+### domain
+
+Generates cross-stream aligned views from domain configuration (fe-001 Phase C).
+
+```json
+{
+  "type": "domain",
+  "domain_id": "indoor-air-quality",
+  "action": "sync"
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `type` | string | **Yes** | - | Must be `"domain"` |
+| `domain_id` | string | **Yes** | - | Domain identifier from `config/domains/` |
+| `action` | enum | No | `"sync"` | Only `"sync"` is supported |
+
+**Actions:**
+- `sync` - Sync domain config to etcd and generate aligned view DDL
+
+**Generated DDL includes:**
+- `CREATE VIEW` with FULL OUTER JOIN across domain streams
+- Time-aligned columns from each stream
+- Unified timestamp column
+
+**Config file location:** `config/domains/{domain_id}/config.yaml`
+
+**Prerequisites:**
+- Domain config must exist with `streams` array defined
+- Referenced streams must have Silver tables created
 
 ---
 
