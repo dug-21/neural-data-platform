@@ -1,0 +1,10 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.8",
+  "description": "Release v1.1.8: FE-002 Domain Configuration Standardization (GAP-001, GAP-003, GAP-004)",
+  "changes": [
+    {"type": "tool", "id": "ndp-gold-ddl", "action": "build"},
+    {"type": "tool", "id": "ndp-validate", "action": "build"}
+  ]
+}

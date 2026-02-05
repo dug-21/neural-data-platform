@@ -1,0 +1,12 @@
+{
+  "id": "test-domain",
+  "streams": [
+    {"stream_id": "stream-one", "alias": "s1", "role": "primary"},
+    {"stream_id": "stream-two", "alias": "s2", "role": "context"}
+  ],
+  "alignment": {
+    "view_name": "test_aligned",
+    "granularity": "1 hour",
+    "join_strategy": "full_outer"
+  }
+}

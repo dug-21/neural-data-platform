@@ -1,0 +1,13 @@
+{
+  "id": "no-primary-domain",
+  "description": "Domain with no stream having role=primary",
+  "streams": [
+    {"stream_id": "s1", "alias": "a", "role": "context"},
+    {"stream_id": "s2", "alias": "b", "role": "context"}
+  ],
+  "alignment": {
+    "view_name": "no_primary_aligned",
+    "granularity": "1 hour",
+    "join_strategy": "full_outer"
+  }
+}

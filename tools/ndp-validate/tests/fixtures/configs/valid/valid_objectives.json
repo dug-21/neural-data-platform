@@ -1,0 +1,59 @@
+{
+  "id": "objectives-domain",
+  "description": "Domain with multiple objectives",
+  "streams": [
+    {"stream_id": "air-quality", "alias": "indoor", "role": "primary"},
+    {"stream_id": "outdoor-weather", "alias": "outdoor", "role": "context"}
+  ],
+  "alignment": {
+    "view_name": "objectives_aligned",
+    "granularity": "1 hour",
+    "join_strategy": "full_outer"
+  },
+  "objectives": [
+    {
+      "id": "healthy_co2",
+      "description": "Keep CO2 below 800 ppm",
+      "target": {
+        "stream": "air-quality",
+        "metric": "co2",
+        "condition": "<",
+        "threshold": 800,
+        "unit": "ppm"
+      },
+      "priority": "high"
+    },
+    {
+      "id": "healthy_pm25",
+      "description": "Keep PM2.5 below WHO guideline",
+      "target": {
+        "stream": "air-quality",
+        "metric": "pm25",
+        "condition": "<",
+        "threshold": 12,
+        "unit": "ug/m3"
+      },
+      "priority": "high"
+    },
+    {
+      "id": "temp_min",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature_c",
+        "condition": ">=",
+        "threshold": 20
+      },
+      "priority": "medium"
+    },
+    {
+      "id": "temp_max",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature_c",
+        "condition": "<=",
+        "threshold": 24
+      },
+      "priority": "medium"
+    }
+  ]
+}

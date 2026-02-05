@@ -1,0 +1,12 @@
+{
+  "id": "bad-granularity-domain",
+  "streams": [
+    {"stream_id": "s1", "alias": "a", "role": "primary"},
+    {"stream_id": "s2", "alias": "b", "role": "context"}
+  ],
+  "alignment": {
+    "view_name": "bad_granularity_aligned",
+    "granularity": "hourly",
+    "join_strategy": "full_outer"
+  }
+}

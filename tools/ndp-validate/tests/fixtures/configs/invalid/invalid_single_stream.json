@@ -1,0 +1,12 @@
+{
+  "id": "single-stream-domain",
+  "description": "Domain with only one stream (semantic error - needs at least 2)",
+  "streams": [
+    {"stream_id": "only-stream", "alias": "only", "role": "primary"}
+  ],
+  "alignment": {
+    "view_name": "single_stream_aligned",
+    "granularity": "1 hour",
+    "join_strategy": "full_outer"
+  }
+}

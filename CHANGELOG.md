@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.8] - 2026-02-05
+
+Domain Configuration Standardization (FE-002). Migrates domain configs from YAML to JSON, fixes schema format, and adds CLI validation.
+
+### Changed
+
+- **Domain Config Format** (GAP-001)
+  - Migrated `domain.yaml` → `domain.json` with FLAT format
+  - Updated `ndp-gold-ddl` loader to use `serde_json`
+  - Removed `serde_yaml` dependency from ndp-gold-ddl
+
+- **Schema Format Standardization** (GAP-004)
+  - Fixed `domain.schema.json` to use FLAT format (no wrapper object)
+  - Updated semantic validator to expect FLAT format
+  - All NDP configs now consistently use flat format
+
+### Added
+
+- **Domain Validation CLI** (GAP-003)
+  - `ndp-validate --domain <path>` - Validate single domain config
+  - `ndp-validate --domain-all` - Validate all domain configs
+  - Layer 1 (JSON Schema) + Layer 2 (Semantic) validation
+  - 38+ new validation tests (217 total in ndp-validate)
+
+- **Golden Master Tests**
+  - 13 golden master tests for DDL output verification
+  - 12 SQL baseline fixtures with SHA256 checksums
+  - Normalized SQL comparison for non-deterministic ordering
+
+- **Deploy.sh Integration**
+  - `validate_domain_configs()` function in Phase 1
+  - Domain config validation before deployment
+
+### Fixed
+
+- Non-deterministic column ordering in aligned view generator
+  - Fields now sorted alphabetically before DDL generation
+
+### Removed
+
+- `config/domains/indoor-air-quality/domain.yaml` (replaced by domain.json)
+
+### Technical Notes
+
+- Resolves GitHub issues #11 (GAP-001) and #13 (GAP-003)
+- 556 total tests passing (339 ndp-gold-ddl + 217 ndp-validate)
+- Implements FE-002 SPARC specification
+
 ## [1.1.7] - 2026-02-05
 
 Patch release fixing event detection procedure column mismatch.
@@ -305,7 +353,8 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.7...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.8...HEAD
+[1.1.8]: https://github.com/dug-21/neural-data-platform/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/dug-21/neural-data-platform/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/dug-21/neural-data-platform/compare/v1.1.2...v1.1.6
 [1.1.2]: https://github.com/dug-21/neural-data-platform/compare/v1.1.1...v1.1.2

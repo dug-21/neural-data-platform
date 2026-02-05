@@ -54,7 +54,10 @@ pub use cli::{
 pub use error::{ErrorCode, Severity, ValidationError, ValidationLayer};
 
 // Re-export schema types
-pub use schema::SchemaValidator;
+pub use schema::{DomainSchemaValidator, SchemaValidator};
 
 // Re-export schema generation
 pub use schema_gen::{compare_schemas, generate_schema, verify_schema, SchemaGenError};
+
+// Re-export semantic domain validation
+pub use semantic::domain::validate_domain_semantic;

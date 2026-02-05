@@ -150,6 +150,9 @@ impl<L: ConfigLoader> AlignedViewGenerator<L> {
     }
 
     /// Derive Gold columns from stream config
+    ///
+    /// Column order is deterministic (sorted by field name) to ensure
+    /// consistent DDL output across runs.
     fn derive_gold_columns(
         &self,
         stream_config: &crate::config::StreamConfig,
@@ -159,9 +162,15 @@ impl<L: ConfigLoader> AlignedViewGenerator<L> {
         // Get gold_etl config to determine which fields are aggregated
         if let Some(ref gold_etl) = stream_config.gold_etl {
             if let Some(ref aggregates) = gold_etl.aggregates {
-                for (field_name, field_config) in &aggregates.fields {
-                    for metric in &field_config.metrics {
-                        columns.push(format!("{}_{}", field_name, metric));
+                // Sort field names for deterministic output (HashMap iteration is unordered)
+                let mut field_names: Vec<_> = aggregates.fields.keys().collect();
+                field_names.sort();
+
+                for field_name in field_names {
+                    if let Some(field_config) = aggregates.fields.get(field_name) {
+                        for metric in &field_config.metrics {
+                            columns.push(format!("{}_{}", field_name, metric));
+                        }
                     }
                 }
             }

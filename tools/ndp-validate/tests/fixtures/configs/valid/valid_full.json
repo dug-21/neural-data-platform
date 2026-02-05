@@ -1,0 +1,59 @@
+{
+  "id": "complete-domain",
+  "description": "A complete domain configuration with all fields populated",
+  "streams": [
+    {
+      "stream_id": "primary-stream",
+      "alias": "primary",
+      "role": "primary",
+      "null_handling": "preserve"
+    },
+    {
+      "stream_id": "context-stream",
+      "alias": "context",
+      "role": "context",
+      "null_handling": "carry_forward"
+    },
+    {
+      "stream_id": "actuator-stream",
+      "alias": "actuator",
+      "role": "actuator"
+    },
+    {
+      "stream_id": "constraint-stream",
+      "alias": "constraint",
+      "role": "constraint"
+    }
+  ],
+  "alignment": {
+    "view_name": "complete_domain_aligned",
+    "granularity": "15 minutes",
+    "join_strategy": "left",
+    "null_handling": "preserve"
+  },
+  "objectives": [
+    {
+      "id": "objective_one",
+      "description": "Test objective",
+      "target": {
+        "stream": "primary-stream",
+        "metric": "value",
+        "condition": "<",
+        "threshold": 100,
+        "unit": "units"
+      },
+      "priority": "high"
+    },
+    {
+      "id": "objective_two",
+      "description": "Second objective",
+      "target": {
+        "stream": "context-stream",
+        "metric": "count",
+        "condition": ">=",
+        "threshold": 10
+      },
+      "priority": "medium"
+    }
+  ]
+}

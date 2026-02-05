@@ -308,27 +308,35 @@ mod tests {
 
     #[test]
     fn test_domain_config_deserialize() {
-        let yaml = r#"
-id: indoor-air-quality
-description: Indoor air quality monitoring domain
-streams:
-  - stream_id: air-quality
-    alias: indoor
-    role: primary
-  - stream_id: outdoor-weather
-    alias: outdoor
-    role: context
-  - stream_id: home-assistant-state
-    alias: state
-    role: actuator
-alignment:
-  view_name: indoor_air_quality_aligned
-  granularity: "1 hour"
-  join_strategy: full_outer
-  null_handling: preserve
-"#;
+        let json = r#"{
+            "id": "indoor-air-quality",
+            "description": "Indoor air quality monitoring domain",
+            "streams": [
+                {
+                    "stream_id": "air-quality",
+                    "alias": "indoor",
+                    "role": "primary"
+                },
+                {
+                    "stream_id": "outdoor-weather",
+                    "alias": "outdoor",
+                    "role": "context"
+                },
+                {
+                    "stream_id": "home-assistant-state",
+                    "alias": "state",
+                    "role": "actuator"
+                }
+            ],
+            "alignment": {
+                "view_name": "indoor_air_quality_aligned",
+                "granularity": "1 hour",
+                "join_strategy": "full_outer",
+                "null_handling": "preserve"
+            }
+        }"#;
 
-        let config: DomainConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: DomainConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.id, "indoor-air-quality");
         assert_eq!(config.streams.len(), 3);
         assert_eq!(config.streams[0].alias, "indoor");
@@ -339,32 +347,33 @@ alignment:
 
     #[test]
     fn test_stream_ref_with_null_handling_override() {
-        let yaml = r#"
-stream_id: home-assistant-state
-alias: state
-role: actuator
-null_handling: carry_forward
-"#;
+        let json = r#"{
+            "stream_id": "home-assistant-state",
+            "alias": "state",
+            "role": "actuator",
+            "null_handling": "carry_forward"
+        }"#;
 
-        let stream_ref: StreamRef = serde_yaml::from_str(yaml).unwrap();
+        let stream_ref: StreamRef = serde_json::from_str(json).unwrap();
         assert_eq!(stream_ref.null_handling, Some(NullHandling::CarryForward));
     }
 
     #[test]
     fn test_objective_config_deserialize() {
-        let yaml = r#"
-id: healthy_co2
-description: Keep CO2 below healthy threshold
-target:
-  stream: air-quality
-  metric: co2
-  condition: "<"
-  threshold: 800
-  unit: ppm
-priority: high
-"#;
+        let json = r#"{
+            "id": "healthy_co2",
+            "description": "Keep CO2 below healthy threshold",
+            "target": {
+                "stream": "air-quality",
+                "metric": "co2",
+                "condition": "<",
+                "threshold": 800,
+                "unit": "ppm"
+            },
+            "priority": "high"
+        }"#;
 
-        let objective: ObjectiveConfig = serde_yaml::from_str(yaml).unwrap();
+        let objective: ObjectiveConfig = serde_json::from_str(json).unwrap();
         assert_eq!(objective.id, "healthy_co2");
         assert_eq!(objective.target.threshold, 800.0);
         assert_eq!(objective.priority, Priority::High);

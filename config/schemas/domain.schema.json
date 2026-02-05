@@ -305,11 +305,36 @@
 
   "type": "object",
   "additionalProperties": false,
-  "required": ["domain"],
+  "required": ["id", "streams", "alignment"],
   "properties": {
-    "domain": {
-      "$ref": "#/definitions/domain_content",
-      "description": "Domain configuration."
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique domain identifier (kebab-case)."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable domain description."
+    },
+    "streams": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/stream_reference" },
+      "minItems": 1,
+      "description": "Streams included in this domain. At least one stream with role 'primary' is required (semantic validation)."
+    },
+    "alignment": {
+      "$ref": "#/definitions/alignment",
+      "description": "Alignment configuration for joining streams."
+    },
+    "objectives": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/objective" },
+      "description": "List of objectives for optimization."
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/constraint" },
+      "description": "List of constraints limiting actions."
     }
   }
 }

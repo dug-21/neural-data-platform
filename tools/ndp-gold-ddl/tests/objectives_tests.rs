@@ -4,7 +4,7 @@
 //!
 //! # Test Categories
 //!
-//! 1. **YAML Parsing**: ObjectiveConfig from domain YAML
+//! 1. **JSON Parsing**: ObjectiveConfig from domain JSON (per ADR-016-001)
 //! 2. **SQL Generation**: INSERT statements for data dictionary
 //! 3. **Condition Validation**: All condition types supported
 //! 4. **Priority Parsing**: Priority enum deserialization
@@ -105,29 +105,31 @@ fn validate_objective(objective: &ObjectiveConfig) -> Result<(), String> {
 }
 
 // ============================================================================
-// v11-007-01: YAML Parsing Tests
+// v11-007-01: JSON Parsing Tests (per ADR-016-001)
 // ============================================================================
 
-/// ACCEPTANCE: Objective parsed from YAML configuration.
+/// ACCEPTANCE: Objective parsed from JSON configuration.
 ///
 /// Per TEST-PLAN.md: "Objectives loaded from domain config"
+/// Per ADR-016-001: JSON is the source of truth for configuration
 #[test]
-fn test_parse_objective_from_yaml() {
+fn test_parse_objective_from_json() {
     // Arrange
-    let yaml = r#"
-id: healthy_co2
-description: Keep CO2 below healthy threshold
-target:
-  stream: air-quality
-  metric: co2
-  condition: "<"
-  threshold: 800
-  unit: ppm
-priority: high
-"#;
+    let json = r#"{
+        "id": "healthy_co2",
+        "description": "Keep CO2 below healthy threshold",
+        "target": {
+            "stream": "air-quality",
+            "metric": "co2",
+            "condition": "<",
+            "threshold": 800,
+            "unit": "ppm"
+        },
+        "priority": "high"
+    }"#;
 
     // Act
-    let objective: ObjectiveConfig = serde_yaml::from_str(yaml).unwrap();
+    let objective: ObjectiveConfig = serde_json::from_str(json).unwrap();
 
     // Assert: Parsed correctly
     assert_eq!(objective.id, "healthy_co2", "ID should be parsed");
@@ -160,17 +162,18 @@ priority: high
 #[test]
 fn test_parse_objective_minimal() {
     // Arrange
-    let yaml = r#"
-id: basic_objective
-target:
-  stream: test-stream
-  metric: temperature
-  condition: "<="
-  threshold: 30
-"#;
+    let json = r#"{
+        "id": "basic_objective",
+        "target": {
+            "stream": "test-stream",
+            "metric": "temperature",
+            "condition": "<=",
+            "threshold": 30
+        }
+    }"#;
 
     // Act
-    let objective: ObjectiveConfig = serde_yaml::from_str(yaml).unwrap();
+    let objective: ObjectiveConfig = serde_json::from_str(json).unwrap();
 
     // Assert: Defaults applied
     assert_eq!(objective.id, "basic_objective");
@@ -189,17 +192,18 @@ target:
 #[test]
 fn test_parse_objective_float_threshold() {
     // Arrange
-    let yaml = r#"
-id: pm25_threshold
-target:
-  stream: air-quality
-  metric: pm25
-  condition: "<"
-  threshold: 12.5
-"#;
+    let json = r#"{
+        "id": "pm25_threshold",
+        "target": {
+            "stream": "air-quality",
+            "metric": "pm25",
+            "condition": "<",
+            "threshold": 12.5
+        }
+    }"#;
 
     // Act
-    let objective: ObjectiveConfig = serde_yaml::from_str(yaml).unwrap();
+    let objective: ObjectiveConfig = serde_json::from_str(json).unwrap();
 
     // Assert: Float threshold parsed correctly
     assert_eq!(objective.target.threshold, 12.5);
@@ -404,9 +408,10 @@ fn test_condition_validation_function() {
 // v11-007-04: Priority Parsing Tests
 // ============================================================================
 
-/// ACCEPTANCE: Priority enum parsed from YAML.
+/// ACCEPTANCE: Priority enum parsed from JSON.
 ///
 /// Per TEST-PLAN.md: "Priority enum parsing"
+/// Per ADR-016-001: JSON is the source of truth for configuration
 #[test]
 fn test_priority_parsing() {
     // Arrange & Act & Assert for each priority level
@@ -417,25 +422,26 @@ fn test_priority_parsing() {
         ("critical", Priority::Critical),
     ];
 
-    for (yaml_value, expected) in test_cases {
-        let yaml = format!(
-            r#"
-id: test
-target:
-  stream: test
-  metric: value
-  condition: "<"
-  threshold: 100
-priority: {}
-"#,
-            yaml_value
+    for (json_value, expected) in test_cases {
+        let json = format!(
+            r#"{{
+                "id": "test",
+                "target": {{
+                    "stream": "test",
+                    "metric": "value",
+                    "condition": "<",
+                    "threshold": 100
+                }},
+                "priority": "{}"
+            }}"#,
+            json_value
         );
 
-        let objective: ObjectiveConfig = serde_yaml::from_str(&yaml).unwrap();
+        let objective: ObjectiveConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(
             objective.priority, expected,
             "Priority '{}' should parse to {:?}",
-            yaml_value, expected
+            json_value, expected
         );
     }
 }
@@ -444,17 +450,18 @@ priority: {}
 #[test]
 fn test_priority_default() {
     // Arrange: No priority specified
-    let yaml = r#"
-id: no_priority
-target:
-  stream: test
-  metric: value
-  condition: "<"
-  threshold: 100
-"#;
+    let json = r#"{
+        "id": "no_priority",
+        "target": {
+            "stream": "test",
+            "metric": "value",
+            "condition": "<",
+            "threshold": 100
+        }
+    }"#;
 
     // Act
-    let objective: ObjectiveConfig = serde_yaml::from_str(yaml).unwrap();
+    let objective: ObjectiveConfig = serde_json::from_str(json).unwrap();
 
     // Assert: Default to Medium
     assert_eq!(

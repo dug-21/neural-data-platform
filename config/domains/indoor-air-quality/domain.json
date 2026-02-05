@@ -1,0 +1,106 @@
+{
+  "id": "indoor-air-quality",
+  "description": "Maintain healthy indoor air quality",
+  "streams": [
+    {
+      "stream_id": "air-quality",
+      "alias": "indoor",
+      "role": "primary"
+    },
+    {
+      "stream_id": "outdoor-weather",
+      "alias": "outdoor",
+      "role": "context"
+    },
+    {
+      "stream_id": "home-assistant-state",
+      "alias": "state",
+      "role": "actuator",
+      "null_handling": "carry_forward"
+    },
+    {
+      "stream_id": "outdoor-air-quality",
+      "alias": "outdoor_aqi",
+      "role": "constraint"
+    }
+  ],
+  "alignment": {
+    "view_name": "indoor_air_quality_aligned",
+    "granularity": "1 hour",
+    "join_strategy": "full_outer"
+  },
+  "objectives": [
+    {
+      "id": "healthy_co2",
+      "description": "Keep CO2 below 800 ppm for cognitive performance",
+      "target": {
+        "stream": "air-quality",
+        "metric": "co2",
+        "condition": "<",
+        "threshold": 800,
+        "unit": "ppm"
+      },
+      "priority": "high"
+    },
+    {
+      "id": "healthy_pm25",
+      "description": "Keep PM2.5 below WHO guideline of 12 ug/m3",
+      "target": {
+        "stream": "air-quality",
+        "metric": "pm25",
+        "condition": "<",
+        "threshold": 12,
+        "unit": "ug/m3"
+      },
+      "priority": "high"
+    },
+    {
+      "id": "comfortable_humidity_min",
+      "description": "Maintain minimum comfortable humidity (40%)",
+      "target": {
+        "stream": "air-quality",
+        "metric": "humidity_pct",
+        "condition": ">=",
+        "threshold": 40,
+        "unit": "percent"
+      },
+      "priority": "medium"
+    },
+    {
+      "id": "comfortable_humidity_max",
+      "description": "Maintain maximum comfortable humidity (60%)",
+      "target": {
+        "stream": "air-quality",
+        "metric": "humidity_pct",
+        "condition": "<=",
+        "threshold": 60,
+        "unit": "percent"
+      },
+      "priority": "medium"
+    },
+    {
+      "id": "comfortable_temperature_min",
+      "description": "Maintain minimum comfortable temperature (20C)",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature_c",
+        "condition": ">=",
+        "threshold": 20,
+        "unit": "celsius"
+      },
+      "priority": "medium"
+    },
+    {
+      "id": "comfortable_temperature_max",
+      "description": "Maintain maximum comfortable temperature (24C)",
+      "target": {
+        "stream": "air-quality",
+        "metric": "temperature_c",
+        "condition": "<=",
+        "threshold": 24,
+        "unit": "celsius"
+      },
+      "priority": "medium"
+    }
+  ]
+}

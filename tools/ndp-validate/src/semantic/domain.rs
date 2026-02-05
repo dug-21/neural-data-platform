@@ -9,10 +9,24 @@
 //! - `CircularDomainDependency` (407): domain references itself
 //! - `InvalidObjectiveCondition` (408): objective condition not supported
 //! - `DuplicateName`: duplicate alias in domain
+//!
+//! # Usage
+//!
+//! ```ignore
+//! use ndp_validate::semantic::domain::{validate_domain, validate_domain_semantic};
+//!
+//! // With known streams
+//! let available_streams: HashSet<String> = /* ... */;
+//! let errors = validate_domain(&domain_config, &available_streams);
+//!
+//! // Standalone validation (discovers streams from config dir)
+//! let errors = validate_domain_semantic(&domain_config, Some(Path::new("config/base/streams")));
+//! ```
 
 use crate::error::{ErrorCode, Severity, ValidationError, ValidationLayer};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 /// Valid objective conditions per DECISIONS.md
 const VALID_CONDITIONS: &[&str] = &["<", ">", "<=", ">=", "==", "!="];
@@ -27,7 +41,7 @@ const VALID_JOIN_STRATEGIES: &[&str] = &["full_outer", "left", "inner"];
 ///
 /// # Arguments
 ///
-/// * `domain_config` - The domain configuration JSON
+/// * `domain_config` - The domain configuration JSON (FLAT format, no wrapper)
 /// * `available_streams` - Set of available stream IDs in the system
 ///
 /// # Returns
@@ -39,14 +53,11 @@ pub fn validate_domain(
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
 
-    // Extract domain section
-    let domain = match domain_config.get("domain") {
-        Some(d) => d,
-        None => return errors,
-    };
+    // FE-002 B0: FLAT format - process config directly, no wrapper extraction
+    // The domain config should have id, streams, alignment at root level
 
     // Validate stream references
-    if let Some(streams) = domain.get("streams").and_then(|v| v.as_array()) {
+    if let Some(streams) = domain_config.get("streams").and_then(|v| v.as_array()) {
         errors.extend(validate_domain_stream_references(
             streams,
             available_streams,
@@ -56,14 +67,14 @@ pub fn validate_domain(
     }
 
     // Validate alignment configuration
-    if let Some(alignment) = domain.get("alignment") {
+    if let Some(alignment) = domain_config.get("alignment") {
         errors.extend(validate_alignment(alignment));
     }
 
     // Validate objectives
-    if let Some(objectives) = domain.get("objectives").and_then(|v| v.as_array()) {
+    if let Some(objectives) = domain_config.get("objectives").and_then(|v| v.as_array()) {
         // Build stream_id -> alias map for objective validation
-        let stream_map: HashMap<String, String> = domain
+        let stream_map: HashMap<String, String> = domain_config
             .get("streams")
             .and_then(|v| v.as_array())
             .map(|streams| {
@@ -82,8 +93,8 @@ pub fn validate_domain(
     }
 
     // Validate constraints
-    if let Some(constraints) = domain.get("constraints").and_then(|v| v.as_array()) {
-        let stream_ids: HashSet<String> = domain
+    if let Some(constraints) = domain_config.get("constraints").and_then(|v| v.as_array()) {
+        let stream_ids: HashSet<String> = domain_config
             .get("streams")
             .and_then(|v| v.as_array())
             .map(|streams| {
@@ -114,7 +125,7 @@ fn validate_domain_stream_references(
                 errors.push(ValidationError {
                     layer: ValidationLayer::Semantic,
                     code: ErrorCode::InvalidDomainStream,
-                    path: format!("$.domain.streams[{}].stream_id", idx),
+                    path: format!("$.streams[{}].stream_id", idx),
                     message: format!(
                         "Stream '{}' not found. Available streams: {}",
                         stream_id,
@@ -132,7 +143,7 @@ fn validate_domain_stream_references(
                     errors.push(ValidationError {
                         layer: ValidationLayer::Semantic,
                         code: ErrorCode::InvalidDomainStream,
-                        path: format!("$.domain.streams[{}].role", idx),
+                        path: format!("$.streams[{}].role", idx),
                         message: format!(
                             "Invalid role '{}'. Valid roles: {}",
                             role,
@@ -167,7 +178,7 @@ fn validate_unique_aliases(streams: &[Value]) -> Vec<ValidationError> {
                 errors.push(ValidationError {
                     layer: ValidationLayer::Semantic,
                     code: ErrorCode::DuplicateName,
-                    path: format!("$.domain.streams[{}].alias", idx),
+                    path: format!("$.streams[{}].alias", idx),
                     message: format!("Duplicate alias '{}' in domain streams", alias),
                     severity: Severity::Error,
                     suggestion: Some("Each stream must have a unique alias".to_string()),
@@ -197,7 +208,7 @@ fn validate_has_primary(streams: &[Value]) -> Vec<ValidationError> {
         errors.push(ValidationError {
             layer: ValidationLayer::Semantic,
             code: ErrorCode::InvalidDomainStream,
-            path: "$.domain.streams".to_string(),
+            path: "$.streams".to_string(),
             message: "Domain must have at least one stream with role: primary".to_string(),
             severity: Severity::Warning,
             suggestion: Some("Add role: primary to the main stream being optimized".to_string()),
@@ -218,7 +229,7 @@ fn validate_alignment(alignment: &Value) -> Vec<ValidationError> {
             errors.push(ValidationError {
                 layer: ValidationLayer::Semantic,
                 code: ErrorCode::InvalidDomainStream,
-                path: "$.domain.alignment.join_strategy".to_string(),
+                path: "$.alignment.join_strategy".to_string(),
                 message: format!(
                     "Invalid join_strategy '{}'. Valid strategies: {}",
                     strategy,
@@ -237,7 +248,7 @@ fn validate_alignment(alignment: &Value) -> Vec<ValidationError> {
             errors.push(ValidationError {
                 layer: ValidationLayer::Semantic,
                 code: ErrorCode::InvalidGranularity,
-                path: "$.domain.alignment.granularity".to_string(),
+                path: "$.alignment.granularity".to_string(),
                 message: format!(
                     "Invalid granularity format '{}'. Expected format: '<number> <unit>'",
                     granularity
@@ -267,7 +278,7 @@ fn validate_objectives(
                 errors.push(ValidationError {
                     layer: ValidationLayer::Semantic,
                     code: ErrorCode::DuplicateName,
-                    path: format!("$.domain.objectives[{}].id", idx),
+                    path: format!("$.objectives[{}].id", idx),
                     message: format!("Duplicate objective ID '{}'", id),
                     severity: Severity::Error,
                     suggestion: None,
@@ -285,7 +296,7 @@ fn validate_objectives(
                     errors.push(ValidationError {
                         layer: ValidationLayer::Semantic,
                         code: ErrorCode::InvalidDomainStream,
-                        path: format!("$.domain.objectives[{}].target.stream", idx),
+                        path: format!("$.objectives[{}].target.stream", idx),
                         message: format!(
                             "Objective references stream '{}' which is not in this domain",
                             stream
@@ -303,7 +314,7 @@ fn validate_objectives(
                     errors.push(ValidationError {
                         layer: ValidationLayer::Semantic,
                         code: ErrorCode::InvalidObjectiveCondition,
-                        path: format!("$.domain.objectives[{}].target.condition", idx),
+                        path: format!("$.objectives[{}].target.condition", idx),
                         message: format!(
                             "Invalid condition '{}'. Valid conditions: {}",
                             condition,
@@ -336,7 +347,7 @@ fn validate_constraints(
                 errors.push(ValidationError {
                     layer: ValidationLayer::Semantic,
                     code: ErrorCode::DuplicateName,
-                    path: format!("$.domain.constraints[{}].id", idx),
+                    path: format!("$.constraints[{}].id", idx),
                     message: format!("Duplicate constraint ID '{}'", id),
                     severity: Severity::Error,
                     suggestion: None,
@@ -353,7 +364,7 @@ fn validate_constraints(
                 errors.push(ValidationError {
                     layer: ValidationLayer::Semantic,
                     code: ErrorCode::InvalidDomainStream,
-                    path: format!("$.domain.constraints[{}].stream", idx),
+                    path: format!("$.constraints[{}].stream", idx),
                     message: format!(
                         "Constraint references stream '{}' which is not in this domain",
                         stream
@@ -371,7 +382,7 @@ fn validate_constraints(
                 errors.push(ValidationError {
                     layer: ValidationLayer::Semantic,
                     code: ErrorCode::InvalidObjectiveCondition,
-                    path: format!("$.domain.constraints[{}].condition", idx),
+                    path: format!("$.constraints[{}].condition", idx),
                     message: format!(
                         "Invalid condition '{}'. Valid conditions: {}",
                         condition,
@@ -434,6 +445,134 @@ fn format_stream_list(streams: &HashSet<String>) -> String {
 }
 
 // =============================================================================
+// Standalone Semantic Validation (FE-002 Phase B)
+// =============================================================================
+
+/// Validate domain configuration semantics (standalone version)
+///
+/// This function discovers available streams from the config directory
+/// and validates the domain configuration against them.
+///
+/// # Arguments
+///
+/// * `domain_config` - The domain configuration JSON (FLAT format)
+/// * `streams_dir` - Optional path to streams config directory
+///
+/// # Returns
+///
+/// Vector of validation errors (empty if valid)
+///
+/// # Example
+///
+/// ```ignore
+/// let config: Value = serde_json::from_str(&content)?;
+/// let errors = validate_domain_semantic(&config, Some(Path::new("config/base/streams")));
+/// ```
+pub fn validate_domain_semantic(
+    domain_config: &Value,
+    streams_dir: Option<&Path>,
+) -> Vec<ValidationError> {
+    // Discover available streams from config directory
+    let available_streams = match streams_dir {
+        Some(dir) => discover_streams(dir),
+        None => {
+            // Try default locations
+            let default_paths = [
+                Path::new("config/base/streams"),
+                Path::new("config/integration/base/streams"),
+            ];
+
+            default_paths
+                .iter()
+                .find(|p| p.exists())
+                .map(|p| discover_streams(p))
+                .unwrap_or_default()
+        }
+    };
+
+    // Validate the domain
+    validate_domain(domain_config, &available_streams)
+}
+
+/// Discover available stream IDs from the config directory
+///
+/// Searches for directories containing config.yaml or config.json files
+/// and extracts stream_id from the info section or uses directory name.
+fn discover_streams(streams_dir: &Path) -> HashSet<String> {
+    let mut streams = HashSet::new();
+
+    if !streams_dir.exists() || !streams_dir.is_dir() {
+        return streams;
+    }
+
+    // Read directory entries
+    if let Ok(entries) = std::fs::read_dir(streams_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+
+            // Only process directories
+            if !path.is_dir() {
+                continue;
+            }
+
+            // Try to find config file
+            let config_paths = [
+                path.join("config.yaml"),
+                path.join("config.yml"),
+                path.join("config.json"),
+            ];
+
+            for config_path in &config_paths {
+                if config_path.exists() {
+                    // Try to extract stream_id from config
+                    if let Some(stream_id) = extract_stream_id(config_path) {
+                        streams.insert(stream_id);
+                    } else {
+                        // Fall back to directory name
+                        if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+                            streams.insert(dir_name.to_string());
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    streams
+}
+
+/// Extract stream_id from a config file
+fn extract_stream_id(config_path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(config_path).ok()?;
+
+    // Try JSON first
+    if config_path
+        .extension()
+        .map(|e| e == "json")
+        .unwrap_or(false)
+    {
+        let value: Value = serde_json::from_str(&content).ok()?;
+        // Try info.stream_id (wrapped) or stream_id (flat)
+        value
+            .get("info")
+            .and_then(|i| i.get("stream_id"))
+            .or_else(|| value.get("stream_id"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    } else {
+        // Try YAML
+        let value: Value = serde_yaml::from_str(&content).ok()?;
+        value
+            .get("info")
+            .and_then(|i| i.get("stream_id"))
+            .or_else(|| value.get("stream_id"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    }
+}
+
+// =============================================================================
 // Tests - London School TDD
 // =============================================================================
 
@@ -447,34 +586,33 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 1: Valid domain configuration passes
+    // Test 1: Valid domain configuration passes (FLAT format)
     // =========================================================================
     #[test]
     fn test_valid_domain_passes() {
         let available = make_streams(&["air-quality", "outdoor-weather", "home-assistant-state"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "indoor-air-quality",
-                "streams": [
-                    { "stream_id": "air-quality", "alias": "indoor", "role": "primary" },
-                    { "stream_id": "outdoor-weather", "alias": "outdoor", "role": "context" }
-                ],
-                "alignment": {
-                    "granularity": "1 hour",
-                    "join_strategy": "full_outer"
-                },
-                "objectives": [
-                    {
-                        "id": "healthy_co2",
-                        "target": {
-                            "stream": "air-quality",
-                            "metric": "co2",
-                            "condition": "<",
-                            "threshold": 800
-                        }
+            "id": "indoor-air-quality",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "indoor", "role": "primary" },
+                { "stream_id": "outdoor-weather", "alias": "outdoor", "role": "context" }
+            ],
+            "alignment": {
+                "granularity": "1 hour",
+                "join_strategy": "full_outer"
+            },
+            "objectives": [
+                {
+                    "id": "healthy_co2",
+                    "target": {
+                        "stream": "air-quality",
+                        "metric": "co2",
+                        "condition": "<",
+                        "threshold": 800
                     }
-                ]
-            }
+                }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -482,18 +620,17 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 2: Unknown stream fails
+    // Test 2: Unknown stream fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_domain_unknown_stream_fails() {
         let available = make_streams(&["air-quality", "outdoor-weather"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "nonexistent-stream", "role": "primary" }
-                ]
-            }
+            "id": "test",
+            "streams": [
+                { "stream_id": "nonexistent-stream", "role": "primary" }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -503,19 +640,18 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 3: Duplicate alias fails
+    // Test 3: Duplicate alias fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_duplicate_alias_fails() {
         let available = make_streams(&["air-quality", "outdoor-weather"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "alias": "data", "role": "primary" },
-                    { "stream_id": "outdoor-weather", "alias": "data", "role": "context" }
-                ]
-            }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "data", "role": "primary" },
+                { "stream_id": "outdoor-weather", "alias": "data", "role": "context" }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -524,19 +660,18 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 4: Missing primary stream warns
+    // Test 4: Missing primary stream warns (FLAT format)
     // =========================================================================
     #[test]
     fn test_missing_primary_warns() {
         let available = make_streams(&["air-quality", "outdoor-weather"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "context" },
-                    { "stream_id": "outdoor-weather", "role": "context" }
-                ]
-            }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "context" },
+                { "stream_id": "outdoor-weather", "role": "context" }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -546,27 +681,26 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 5: Invalid objective condition fails
+    // Test 5: Invalid objective condition fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_invalid_objective_condition_fails() {
         let available = make_streams(&["air-quality"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "primary" }
-                ],
-                "objectives": [
-                    {
-                        "id": "test",
-                        "target": {
-                            "stream": "air-quality",
-                            "condition": "approx"
-                        }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "primary" }
+            ],
+            "objectives": [
+                {
+                    "id": "test",
+                    "target": {
+                        "stream": "air-quality",
+                        "condition": "approx"
                     }
-                ]
-            }
+                }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -576,27 +710,26 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 6: Objective referencing non-domain stream fails
+    // Test 6: Objective referencing non-domain stream fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_objective_unknown_stream_fails() {
         let available = make_streams(&["air-quality", "outdoor-weather"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "primary" }
-                ],
-                "objectives": [
-                    {
-                        "id": "test",
-                        "target": {
-                            "stream": "outdoor-weather",
-                            "condition": "<"
-                        }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "primary" }
+            ],
+            "objectives": [
+                {
+                    "id": "test",
+                    "target": {
+                        "stream": "outdoor-weather",
+                        "condition": "<"
                     }
-                ]
-            }
+                }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -607,20 +740,19 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 7: Invalid join strategy fails
+    // Test 7: Invalid join strategy fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_invalid_join_strategy_fails() {
         let available = make_streams(&["air-quality"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "primary" }
-                ],
-                "alignment": {
-                    "join_strategy": "cross_join"
-                }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "primary" }
+            ],
+            "alignment": {
+                "join_strategy": "cross_join"
             }
         });
 
@@ -629,20 +761,19 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 8: Invalid alignment granularity fails
+    // Test 8: Invalid alignment granularity fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_invalid_alignment_granularity_fails() {
         let available = make_streams(&["air-quality"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "primary" }
-                ],
-                "alignment": {
-                    "granularity": "hourly"
-                }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "primary" }
+            ],
+            "alignment": {
+                "granularity": "hourly"
             }
         });
 
@@ -653,18 +784,17 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 9: Invalid stream role fails
+    // Test 9: Invalid stream role fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_invalid_stream_role_fails() {
         let available = make_streams(&["air-quality"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "unknown_role" }
-                ]
-            }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "unknown_role" }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -674,22 +804,21 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 10: Duplicate objective ID fails
+    // Test 10: Duplicate objective ID fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_duplicate_objective_id_fails() {
         let available = make_streams(&["air-quality"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "primary" }
-                ],
-                "objectives": [
-                    { "id": "same_id", "target": { "stream": "air-quality", "condition": "<" } },
-                    { "id": "same_id", "target": { "stream": "air-quality", "condition": ">" } }
-                ]
-            }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "primary" }
+            ],
+            "objectives": [
+                { "id": "same_id", "target": { "stream": "air-quality", "condition": "<" } },
+                { "id": "same_id", "target": { "stream": "air-quality", "condition": ">" } }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -699,11 +828,13 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 11: Missing domain section returns no errors
+    // Test 11: Empty config with no streams returns no errors (FLAT format)
     // =========================================================================
     #[test]
-    fn test_missing_domain_returns_no_errors() {
+    fn test_empty_config_returns_no_errors() {
         let available = make_streams(&["air-quality"]);
+        // FE-002 B0: FLAT format - config with unrelated fields
+        // The validator gracefully handles configs without streams
         let config = json!({
             "some_other_field": true
         });
@@ -713,25 +844,24 @@ mod tests {
     }
 
     // =========================================================================
-    // Test 12: Constraint with invalid stream fails
+    // Test 12: Constraint with invalid stream fails (FLAT format)
     // =========================================================================
     #[test]
     fn test_constraint_invalid_stream_fails() {
         let available = make_streams(&["air-quality", "outdoor-air-quality"]);
+        // FE-002 B0: FLAT format - no "domain" wrapper
         let config = json!({
-            "domain": {
-                "id": "test",
-                "streams": [
-                    { "stream_id": "air-quality", "role": "primary" }
-                ],
-                "constraints": [
-                    {
-                        "id": "outdoor_safe",
-                        "stream": "outdoor-air-quality",
-                        "condition": "<"
-                    }
-                ]
-            }
+            "id": "test",
+            "streams": [
+                { "stream_id": "air-quality", "role": "primary" }
+            ],
+            "constraints": [
+                {
+                    "id": "outdoor_safe",
+                    "stream": "outdoor-air-quality",
+                    "condition": "<"
+                }
+            ]
         });
 
         let errors = validate_domain(&config, &available);
@@ -739,5 +869,58 @@ mod tests {
             .iter()
             .any(|e| e.code == ErrorCode::InvalidDomainStream
                 && e.message.contains("outdoor-air-quality")));
+    }
+
+    // =========================================================================
+    // Test 13: FLAT format matches actual domain.json structure (FE-002 B0)
+    // =========================================================================
+    #[test]
+    fn test_flat_format_matches_domain_json() {
+        // This test validates against the exact structure in
+        // config/domains/indoor-air-quality/domain.json
+        let available = make_streams(&[
+            "air-quality",
+            "outdoor-weather",
+            "home-assistant-state",
+            "outdoor-air-quality",
+        ]);
+
+        // Real domain.json structure (FLAT format)
+        let config = json!({
+            "id": "indoor-air-quality",
+            "description": "Maintain healthy indoor air quality",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "indoor", "role": "primary" },
+                { "stream_id": "outdoor-weather", "alias": "outdoor", "role": "context" },
+                { "stream_id": "home-assistant-state", "alias": "state", "role": "actuator", "null_handling": "carry_forward" },
+                { "stream_id": "outdoor-air-quality", "alias": "outdoor_aqi", "role": "constraint" }
+            ],
+            "alignment": {
+                "view_name": "indoor_air_quality_aligned",
+                "granularity": "1 hour",
+                "join_strategy": "full_outer"
+            },
+            "objectives": [
+                {
+                    "id": "healthy_co2",
+                    "description": "Keep CO2 below 800 ppm for cognitive performance",
+                    "target": {
+                        "stream": "air-quality",
+                        "metric": "co2",
+                        "condition": "<",
+                        "threshold": 800,
+                        "unit": "ppm"
+                    },
+                    "priority": "high"
+                }
+            ]
+        });
+
+        let errors = validate_domain(&config, &available);
+        assert!(
+            errors.is_empty(),
+            "FLAT format validation failed: {:?}",
+            errors
+        );
     }
 }

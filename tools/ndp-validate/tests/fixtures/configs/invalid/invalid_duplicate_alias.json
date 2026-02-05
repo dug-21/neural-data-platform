@@ -1,0 +1,13 @@
+{
+  "id": "duplicate-alias-domain",
+  "description": "Domain with two streams having the same alias",
+  "streams": [
+    {"stream_id": "stream-one", "alias": "same_alias", "role": "primary"},
+    {"stream_id": "stream-two", "alias": "same_alias", "role": "context"}
+  ],
+  "alignment": {
+    "view_name": "duplicate_alias_aligned",
+    "granularity": "1 hour",
+    "join_strategy": "full_outer"
+  }
+}

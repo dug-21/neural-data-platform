@@ -1,0 +1,12 @@
+{
+  "description": "Domain config missing required 'id' field",
+  "streams": [
+    {"stream_id": "s1", "alias": "a", "role": "primary"},
+    {"stream_id": "s2", "alias": "b", "role": "context"}
+  ],
+  "alignment": {
+    "view_name": "test_aligned",
+    "granularity": "1 hour",
+    "join_strategy": "full_outer"
+  }
+}

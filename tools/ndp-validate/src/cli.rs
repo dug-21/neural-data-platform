@@ -51,6 +51,16 @@ pub enum OutputFormat {
     Human,
 }
 
+/// Configuration type being validated
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConfigType {
+    /// Stream configuration (default)
+    #[default]
+    Stream,
+    /// Domain configuration
+    Domain,
+}
+
 /// ndp-validate - Two-layer config validation for NDP stream configurations
 ///
 /// Validates JSON configuration files against the NDP stream config schema (Layer 1)
@@ -65,19 +75,31 @@ pub enum OutputFormat {
 ///   --generate-schema          Generate JSON Schema from ndp-types to stdout
 ///   --generate-schema --output Generate to file
 ///   --verify-schema PATH       Check committed schema matches generated (for CI)
+///
+/// Domain Validation:
+///   --domain FILE              Validate a domain configuration file
+///   --domain-all               Validate all domain configs in config/domains/
 #[derive(Parser, Debug)]
 #[command(name = "ndp-validate")]
 #[command(author = "Neural Data Platform Team")]
 #[command(version)]
-#[command(about = "Validate NDP stream configurations", long_about = None)]
+#[command(about = "Validate NDP stream and domain configurations", long_about = None)]
 pub struct Cli {
-    /// Config file path to validate (mutually exclusive with --all, --generate-schema, --verify-schema)
+    /// Config file path to validate (mutually exclusive with --all, --generate-schema, --verify-schema, --domain)
     #[arg(value_name = "CONFIG_PATH")]
     pub config_path: Option<PathBuf>,
 
     /// Validate all configs in the base config directory
-    #[arg(short, long, conflicts_with_all = ["config_path", "generate_schema", "verify_schema"])]
+    #[arg(short, long, conflicts_with_all = ["config_path", "generate_schema", "verify_schema", "domain"])]
     pub all: bool,
+
+    /// Validate a domain configuration file
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["config_path", "all", "generate_schema", "verify_schema"])]
+    pub domain: Option<PathBuf>,
+
+    /// Validate all domain configs in config/domains/
+    #[arg(long, conflicts_with_all = ["config_path", "all", "generate_schema", "verify_schema", "domain"])]
+    pub domain_all: bool,
 
     /// Generate JSON Schema from ndp-types to stdout
     ///
@@ -125,9 +147,17 @@ pub struct Cli {
     #[arg(long, env = "TIMESCALE_URL")]
     pub timescale_url: Option<String>,
 
-    /// JSON Schema file path
+    /// JSON Schema file path for stream configs
     #[arg(long, default_value = "schemas/stream-config.v1.1.schema.json")]
     pub schema_path: PathBuf,
+
+    /// JSON Schema file path for domain configs
+    #[arg(long, default_value = "config/schemas/domain.schema.json")]
+    pub domain_schema_path: PathBuf,
+
+    /// Directory containing domain configs (for --domain-all)
+    #[arg(long, env = "NDP_DOMAINS_DIR", default_value = "config/domains")]
+    pub domains_dir: PathBuf,
 }
 
 impl Cli {
@@ -146,9 +176,14 @@ impl Cli {
             return Ok(());
         }
 
+        // Domain validation mode
+        if self.domain.is_some() || self.domain_all {
+            return Ok(());
+        }
+
         // Must specify either config_path or --all
         if self.config_path.is_none() && !self.all {
-            return Err("Must specify a config path or use --all".to_string());
+            return Err("Must specify a config path, --all, --domain, or --domain-all".to_string());
         }
 
         // --check-tables requires --timescale-url
@@ -162,6 +197,20 @@ impl Cli {
     /// Check if running in schema generation mode
     pub fn is_schema_mode(&self) -> bool {
         self.generate_schema || self.verify_schema.is_some()
+    }
+
+    /// Check if running in domain validation mode
+    pub fn is_domain_mode(&self) -> bool {
+        self.domain.is_some() || self.domain_all
+    }
+
+    /// Get the config type being validated
+    pub fn config_type(&self) -> ConfigType {
+        if self.is_domain_mode() {
+            ConfigType::Domain
+        } else {
+            ConfigType::Stream
+        }
     }
 }
 
@@ -403,9 +452,7 @@ fn format_warning_human(warning: &ValidationError, indent: &str) -> String {
 
 /// Determine exit code based on validation results and strict mode
 pub fn determine_exit_code(result: &ValidationResult, strict: bool) -> i32 {
-    if !result.valid {
-        exit_codes::VALIDATION_ERROR
-    } else if strict && !result.warnings.is_empty() {
+    if !result.valid || (strict && !result.warnings.is_empty()) {
         exit_codes::VALIDATION_ERROR
     } else {
         exit_codes::SUCCESS
@@ -414,9 +461,7 @@ pub fn determine_exit_code(result: &ValidationResult, strict: bool) -> i32 {
 
 /// Determine exit code for batch results
 pub fn determine_batch_exit_code(results: &BatchValidationResult, strict: bool) -> i32 {
-    if !results.all_valid() {
-        exit_codes::VALIDATION_ERROR
-    } else if strict && results.has_warnings() {
+    if !results.all_valid() || (strict && results.has_warnings()) {
         exit_codes::VALIDATION_ERROR
     } else {
         exit_codes::SUCCESS
@@ -634,6 +679,8 @@ mod tests {
         let cli = Cli {
             config_path: None,
             all: false,
+            domain: None,
+            domain_all: false,
             schema_only: false,
             check_tables: false,
             format: OutputFormat::Json,
@@ -642,6 +689,8 @@ mod tests {
             config_dir: PathBuf::from("config/base/streams"),
             timescale_url: None,
             schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
             generate_schema: false,
             output: None,
             verify_schema: None,
@@ -649,9 +698,7 @@ mod tests {
 
         let result = cli.validate_args();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Must specify a config path or use --all"));
+        assert!(result.unwrap_err().contains("Must specify a config path"));
     }
 
     #[test]
@@ -659,6 +706,8 @@ mod tests {
         let cli = Cli {
             config_path: Some(PathBuf::from("config.json")),
             all: false,
+            domain: None,
+            domain_all: false,
             schema_only: false,
             check_tables: true,
             format: OutputFormat::Json,
@@ -667,6 +716,8 @@ mod tests {
             config_dir: PathBuf::from("config/base/streams"),
             timescale_url: None, // Missing!
             schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
             generate_schema: false,
             output: None,
             verify_schema: None,
@@ -684,6 +735,8 @@ mod tests {
         let cli = Cli {
             config_path: Some(PathBuf::from("config.json")),
             all: false,
+            domain: None,
+            domain_all: false,
             schema_only: false,
             check_tables: false,
             format: OutputFormat::Json,
@@ -692,6 +745,8 @@ mod tests {
             config_dir: PathBuf::from("config/base/streams"),
             timescale_url: None,
             schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
             generate_schema: false,
             output: None,
             verify_schema: None,
@@ -977,6 +1032,8 @@ mod tests {
         let cli = Cli {
             config_path: Some(PathBuf::from("config.json")),
             all: false,
+            domain: None,
+            domain_all: false,
             schema_only: false,
             check_tables: false,
             format: OutputFormat::Json,
@@ -985,6 +1042,8 @@ mod tests {
             config_dir: PathBuf::from("config/base/streams"),
             timescale_url: None,
             schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
             generate_schema: false,
             output: Some(PathBuf::from("output.json")), // output without generate_schema
             verify_schema: None,
@@ -1042,6 +1101,8 @@ mod tests {
         let cli = Cli {
             config_path: None,
             all: false,
+            domain: None,
+            domain_all: false,
             generate_schema: true,
             output: None,
             verify_schema: None,
@@ -1053,6 +1114,8 @@ mod tests {
             config_dir: PathBuf::from("config/base/streams"),
             timescale_url: None,
             schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
         };
 
         assert!(cli.validate_args().is_ok());
@@ -1064,6 +1127,8 @@ mod tests {
         let cli = Cli {
             config_path: None,
             all: false,
+            domain: None,
+            domain_all: false,
             generate_schema: false,
             output: None,
             verify_schema: Some(PathBuf::from("schema.json")),
@@ -1075,6 +1140,8 @@ mod tests {
             config_dir: PathBuf::from("config/base/streams"),
             timescale_url: None,
             schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
         };
 
         assert!(cli.validate_args().is_ok());
@@ -1094,5 +1161,210 @@ mod tests {
         // Verify schema mode
         let cli = Cli::parse_from(["ndp-validate", "--verify-schema", "schema.json"]);
         assert!(cli.is_schema_mode());
+    }
+
+    // =========================================================================
+    // Domain Validation CLI Tests (FE-002 Phase B)
+    // =========================================================================
+
+    #[test]
+    fn test_cli_accepts_domain_flag() {
+        let cli = Cli::parse_from([
+            "ndp-validate",
+            "--domain",
+            "config/domains/test/domain.json",
+        ]);
+
+        assert_eq!(
+            cli.domain,
+            Some(PathBuf::from("config/domains/test/domain.json"))
+        );
+        assert!(!cli.all);
+        assert!(cli.config_path.is_none());
+    }
+
+    #[test]
+    fn test_cli_accepts_domain_all_flag() {
+        let cli = Cli::parse_from(["ndp-validate", "--domain-all"]);
+
+        assert!(cli.domain_all);
+        assert!(cli.domain.is_none());
+        assert!(cli.config_path.is_none());
+        assert!(!cli.all);
+    }
+
+    #[test]
+    fn test_cli_domain_conflicts_with_all() {
+        let result = Cli::try_parse_from(["ndp-validate", "--domain", "domain.json", "--all"]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_domain_conflicts_with_config_path() {
+        let result =
+            Cli::try_parse_from(["ndp-validate", "--domain", "domain.json", "config.json"]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_domain_all_conflicts_with_all() {
+        let result = Cli::try_parse_from(["ndp-validate", "--domain-all", "--all"]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_domain_all_conflicts_with_domain() {
+        let result =
+            Cli::try_parse_from(["ndp-validate", "--domain-all", "--domain", "domain.json"]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_domain_with_schema_only() {
+        let cli = Cli::parse_from(["ndp-validate", "--domain", "domain.json", "--schema-only"]);
+
+        assert!(cli.schema_only);
+        assert!(cli.domain.is_some());
+    }
+
+    #[test]
+    fn test_cli_domain_with_format_human() {
+        let cli = Cli::parse_from([
+            "ndp-validate",
+            "--domain",
+            "domain.json",
+            "--format",
+            "human",
+        ]);
+
+        assert_eq!(cli.format, OutputFormat::Human);
+        assert!(cli.domain.is_some());
+    }
+
+    #[test]
+    fn test_cli_domain_with_verbose() {
+        let cli = Cli::parse_from(["ndp-validate", "--domain", "domain.json", "--verbose"]);
+
+        assert!(cli.verbose);
+        assert!(cli.domain.is_some());
+    }
+
+    #[test]
+    fn test_cli_domain_with_strict() {
+        let cli = Cli::parse_from(["ndp-validate", "--domain", "domain.json", "--strict"]);
+
+        assert!(cli.strict);
+        assert!(cli.domain.is_some());
+    }
+
+    #[test]
+    fn test_is_domain_mode() {
+        // Not domain mode
+        let cli = Cli::parse_from(["ndp-validate", "config.json"]);
+        assert!(!cli.is_domain_mode());
+
+        // Domain file mode
+        let cli = Cli::parse_from(["ndp-validate", "--domain", "domain.json"]);
+        assert!(cli.is_domain_mode());
+
+        // Domain all mode
+        let cli = Cli::parse_from(["ndp-validate", "--domain-all"]);
+        assert!(cli.is_domain_mode());
+    }
+
+    #[test]
+    fn test_config_type_stream() {
+        let cli = Cli::parse_from(["ndp-validate", "config.json"]);
+        assert_eq!(cli.config_type(), ConfigType::Stream);
+    }
+
+    #[test]
+    fn test_config_type_domain() {
+        let cli = Cli::parse_from(["ndp-validate", "--domain", "domain.json"]);
+        assert_eq!(cli.config_type(), ConfigType::Domain);
+
+        let cli = Cli::parse_from(["ndp-validate", "--domain-all"]);
+        assert_eq!(cli.config_type(), ConfigType::Domain);
+    }
+
+    #[test]
+    fn test_validate_args_passes_for_domain() {
+        let cli = Cli {
+            config_path: None,
+            all: false,
+            domain: Some(PathBuf::from("domain.json")),
+            domain_all: false,
+            generate_schema: false,
+            output: None,
+            verify_schema: None,
+            schema_only: false,
+            check_tables: false,
+            format: OutputFormat::Json,
+            strict: false,
+            verbose: false,
+            config_dir: PathBuf::from("config/base/streams"),
+            timescale_url: None,
+            schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
+        };
+
+        assert!(cli.validate_args().is_ok());
+        assert!(cli.is_domain_mode());
+    }
+
+    #[test]
+    fn test_validate_args_passes_for_domain_all() {
+        let cli = Cli {
+            config_path: None,
+            all: false,
+            domain: None,
+            domain_all: true,
+            generate_schema: false,
+            output: None,
+            verify_schema: None,
+            schema_only: false,
+            check_tables: false,
+            format: OutputFormat::Json,
+            strict: false,
+            verbose: false,
+            config_dir: PathBuf::from("config/base/streams"),
+            timescale_url: None,
+            schema_path: PathBuf::from("schemas/stream-config.v1.1.schema.json"),
+            domain_schema_path: PathBuf::from("config/schemas/domain.schema.json"),
+            domains_dir: PathBuf::from("config/domains"),
+        };
+
+        assert!(cli.validate_args().is_ok());
+        assert!(cli.is_domain_mode());
+    }
+
+    #[test]
+    fn test_cli_custom_domains_dir() {
+        let cli = Cli::parse_from([
+            "ndp-validate",
+            "--domain-all",
+            "--domains-dir",
+            "/custom/domains",
+        ]);
+
+        assert_eq!(cli.domains_dir, PathBuf::from("/custom/domains"));
+    }
+
+    #[test]
+    fn test_cli_custom_domain_schema_path() {
+        let cli = Cli::parse_from([
+            "ndp-validate",
+            "--domain",
+            "domain.json",
+            "--domain-schema-path",
+            "/custom/schema.json",
+        ]);
+
+        assert_eq!(cli.domain_schema_path, PathBuf::from("/custom/schema.json"));
     }
 }

@@ -25,9 +25,17 @@ use std::path::Path;
 // Schema Validator
 // =============================================================================
 
-/// JSON Schema validator for NDP stream configurations
+/// JSON Schema validator for NDP configurations
+///
+/// Supports both stream and domain configuration validation.
 pub struct SchemaValidator {
     /// Compiled JSON Schema
+    schema: JSONSchema,
+}
+
+/// Domain schema validator
+pub struct DomainSchemaValidator {
+    /// Compiled JSON Schema for domain configs
     schema: JSONSchema,
 }
 
@@ -423,6 +431,283 @@ pub fn default_stream_schema() -> Value {
                     "retention_days": {
                         "type": "integer",
                         "minimum": 1
+                    }
+                }
+            }
+        }
+    })
+}
+
+// =============================================================================
+// Domain Schema Validator
+// =============================================================================
+
+impl DomainSchemaValidator {
+    /// Create a new domain validator from a JSON Schema value
+    pub fn new(schema_value: Value) -> Result<Self, SchemaValidatorError> {
+        let schema = JSONSchema::options()
+            .with_draft(Draft::Draft7)
+            .compile(&schema_value)
+            .map_err(|e| SchemaValidatorError::SchemaCompileError(e.to_string()))?;
+
+        Ok(Self { schema })
+    }
+
+    /// Create a new domain validator from a schema file path
+    pub fn from_file(path: &Path) -> Result<Self, SchemaValidatorError> {
+        let content = std::fs::read_to_string(path)?;
+        let schema_value: Value = serde_json::from_str(&content)
+            .map_err(|e| SchemaValidatorError::SchemaLoadError(e.to_string()))?;
+        Self::new(schema_value)
+    }
+
+    /// Create a validator using the embedded default domain schema
+    pub fn default_schema() -> Result<Self, SchemaValidatorError> {
+        let schema_value = default_domain_schema();
+        Self::new(schema_value)
+    }
+
+    /// Validate a domain JSON value against the schema
+    ///
+    /// # Arguments
+    /// * `instance` - Parsed JSON value to validate
+    ///
+    /// # Returns
+    /// Vector of validation errors (empty if valid)
+    pub fn validate_schema(&self, instance: &Value) -> Vec<ValidationError> {
+        let result = self.schema.validate(instance);
+
+        match result {
+            Ok(_) => Vec::new(),
+            Err(errors) => errors.map(|e| self.convert_error(&e)).collect(),
+        }
+    }
+
+    /// Validate both syntax and schema in one call
+    pub fn validate(&self, content: &str) -> Vec<ValidationError> {
+        // First check syntax
+        let value = match SchemaValidator::validate_json_syntax(content) {
+            Ok(v) => v,
+            Err(e) => return vec![e],
+        };
+
+        // Then validate schema
+        self.validate_schema(&value)
+    }
+
+    /// Convert a jsonschema error to our ValidationError format
+    fn convert_error(&self, error: &jsonschema::ValidationError) -> ValidationError {
+        let path = format_json_path(&error.instance_path);
+        let message = error.to_string();
+
+        // Map error kind to our error codes
+        let code = match error.kind {
+            jsonschema::error::ValidationErrorKind::Required { .. } => ErrorCode::MissingRequired,
+            jsonschema::error::ValidationErrorKind::Type { .. } => ErrorCode::InvalidType,
+            jsonschema::error::ValidationErrorKind::Enum { .. } => ErrorCode::EnumViolation,
+            jsonschema::error::ValidationErrorKind::Pattern { .. } => ErrorCode::PatternMismatch,
+            jsonschema::error::ValidationErrorKind::AdditionalProperties { .. } => {
+                ErrorCode::UnknownField
+            }
+            jsonschema::error::ValidationErrorKind::MinItems { .. }
+            | jsonschema::error::ValidationErrorKind::MaxItems { .. } => ErrorCode::ArrayBounds,
+            _ => ErrorCode::InvalidType,
+        };
+
+        // Try to generate a helpful suggestion for unknown fields
+        let suggestion = if code == ErrorCode::UnknownField {
+            self.suggest_field_correction(error)
+        } else {
+            None
+        };
+
+        ValidationError {
+            layer: ValidationLayer::Schema,
+            code,
+            path,
+            message,
+            severity: Severity::Error,
+            suggestion,
+            context: None,
+        }
+    }
+
+    /// Suggest a correction for an unknown field based on common typos
+    fn suggest_field_correction(&self, error: &jsonschema::ValidationError) -> Option<String> {
+        let error_str = error.to_string();
+
+        // Common domain config typos
+        let corrections = [
+            ("objective", "objectives"),
+            ("stream", "streams"),
+            ("allignment", "alignment"),
+            ("alignement", "alignment"),
+            ("contraint", "constraint"),
+            ("constraints", "constraints"),
+            ("granulatiry", "granularity"),
+            ("join_stratgy", "join_strategy"),
+            ("null_handeling", "null_handling"),
+            ("view_nam", "view_name"),
+        ];
+
+        for (typo, correct) in corrections.iter() {
+            if error_str.contains(typo) && !error_str.contains(correct) {
+                return Some(format!("Did you mean '{}'?", correct));
+            }
+        }
+
+        None
+    }
+}
+
+/// Returns the default JSON Schema for NDP domain configurations
+///
+/// This is a simplified embedded schema for basic validation.
+/// For full validation, use the schema file at config/schemas/domain.schema.json
+pub fn default_domain_schema() -> Value {
+    serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "https://neural-data-platform.local/schemas/domain.schema.json",
+        "title": "NDP Domain Configuration",
+        "description": "Schema for domain configurations combining streams, alignment, and objectives.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "streams", "alignment"],
+        "properties": {
+            "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "description": "Unique domain identifier (kebab-case)"
+            },
+            "description": {
+                "type": "string",
+                "description": "Human-readable domain description"
+            },
+            "streams": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["stream_id", "role"],
+                    "properties": {
+                        "stream_id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9-]*$"
+                        },
+                        "alias": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "maxLength": 20
+                        },
+                        "role": {
+                            "type": "string",
+                            "enum": ["primary", "context", "actuator", "constraint"]
+                        },
+                        "null_handling": {
+                            "type": "string",
+                            "enum": ["preserve", "carry_forward", "interpolate"]
+                        }
+                    }
+                },
+                "minItems": 1
+            },
+            "alignment": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["view_name", "granularity"],
+                "properties": {
+                    "view_name": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$",
+                        "maxLength": 63
+                    },
+                    "granularity": {
+                        "type": "string",
+                        "pattern": "^\\d+\\s+(minute|hour|day)s?$"
+                    },
+                    "join_strategy": {
+                        "type": "string",
+                        "enum": ["full_outer", "left", "inner"],
+                        "default": "full_outer"
+                    },
+                    "null_handling": {
+                        "type": "string",
+                        "enum": ["preserve", "carry_forward", "interpolate"]
+                    },
+                    "timestamp_alignment": {
+                        "type": "string",
+                        "enum": ["bucket_start", "bucket_end"]
+                    }
+                }
+            },
+            "objectives": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "target"],
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "maxLength": 50
+                        },
+                        "description": { "type": "string" },
+                        "target": {
+                            "type": "object",
+                            "required": ["stream", "metric", "condition", "threshold"],
+                            "properties": {
+                                "stream": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                                "metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+                                "condition": {
+                                    "type": "string",
+                                    "enum": ["<", "<=", ">", ">=", "==", "!=", "between"]
+                                },
+                                "threshold": {},
+                                "unit": { "type": "string" }
+                            }
+                        },
+                        "priority": {
+                            "type": "string",
+                            "enum": ["critical", "high", "medium", "low"]
+                        },
+                        "time_window": { "type": "object" },
+                        "tags": { "type": "array", "items": { "type": "string" } },
+                        "depends_on": { "type": "array", "items": { "type": "string" } },
+                        "aggregation": {
+                            "type": "string",
+                            "enum": ["all", "any"]
+                        }
+                    }
+                }
+            },
+            "constraints": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "condition"],
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "maxLength": 50
+                        },
+                        "description": { "type": "string" },
+                        "condition": {
+                            "type": "object",
+                            "required": ["stream", "metric", "operator", "threshold"],
+                            "properties": {
+                                "stream": { "type": "string" },
+                                "metric": { "type": "string" },
+                                "operator": {
+                                    "type": "string",
+                                    "enum": ["<", "<=", ">", ">=", "==", "!=", "between"]
+                                },
+                                "threshold": {}
+                            }
+                        },
+                        "applies_to": { "type": "array", "items": { "type": "string" } }
                     }
                 }
             }
@@ -987,5 +1272,374 @@ mod tests {
         let errors = validator.validate_schema(&config);
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.code == ErrorCode::EnumViolation));
+    }
+
+    // =========================================================================
+    // Domain Schema Validator Tests
+    // =========================================================================
+
+    fn create_domain_validator() -> DomainSchemaValidator {
+        DomainSchemaValidator::default_schema().expect("Failed to create domain schema validator")
+    }
+
+    fn valid_domain_config() -> Value {
+        serde_json::json!({
+            "id": "indoor-air-quality",
+            "description": "Indoor air quality optimization",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "indoor", "role": "primary" },
+                { "stream_id": "outdoor-weather", "alias": "outdoor", "role": "context" }
+            ],
+            "alignment": {
+                "view_name": "indoor_air_quality_aligned",
+                "granularity": "1 hour",
+                "join_strategy": "full_outer"
+            }
+        })
+    }
+
+    // TC-DSV-001: Valid domain config passes schema validation
+    #[test]
+    fn test_valid_domain_passes_schema() {
+        let validator = create_domain_validator();
+        let errors = validator.validate_schema(&valid_domain_config());
+        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+    }
+
+    // TC-DSV-002: Missing id fails schema validation
+    #[test]
+    fn test_missing_id_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::MissingRequired));
+        assert!(errors.iter().any(|e| e.path == "$"));
+    }
+
+    // TC-DSV-003: Missing streams fails schema validation
+    #[test]
+    fn test_missing_streams_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::MissingRequired));
+    }
+
+    // TC-DSV-004: Missing alignment fails schema validation
+    #[test]
+    fn test_missing_alignment_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }]
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::MissingRequired));
+    }
+
+    // TC-DSV-005: Invalid role enum fails
+    #[test]
+    fn test_invalid_role_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "unknown_role" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::EnumViolation));
+        assert!(errors.iter().any(|e| e.path.contains("role")));
+    }
+
+    // TC-DSV-006: Invalid join strategy enum fails
+    #[test]
+    fn test_invalid_join_strategy_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": {
+                "view_name": "test_view",
+                "granularity": "1 hour",
+                "join_strategy": "cross_join"
+            }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::EnumViolation));
+    }
+
+    // TC-DSV-007: Invalid granularity pattern fails
+    #[test]
+    fn test_invalid_granularity_pattern_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": {
+                "view_name": "test_view",
+                "granularity": "hourly"
+            }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::PatternMismatch));
+    }
+
+    // TC-DSV-008: Invalid domain id pattern fails
+    #[test]
+    fn test_invalid_domain_id_pattern_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "Invalid_Domain_ID",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::PatternMismatch));
+    }
+
+    // TC-DSV-009: Unknown field fails schema validation
+    #[test]
+    fn test_domain_unknown_field_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" },
+            "unknown_top_level_field": true
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::UnknownField));
+    }
+
+    // TC-DSV-010: Schema error includes JSONPath
+    #[test]
+    fn test_domain_schema_error_includes_json_path() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [
+                { "stream_id": "air-quality", "role": "primary" },
+                { "stream_id": "invalid", "role": "bad_role" }
+            ],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        let role_error = errors.iter().find(|e| e.path.contains("streams[1]"));
+        assert!(
+            role_error.is_some(),
+            "Error should include path with array index"
+        );
+    }
+
+    // TC-DSV-011: Empty streams array fails
+    #[test]
+    fn test_empty_streams_array_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::ArrayBounds));
+    }
+
+    // TC-DSV-012: Valid domain with objectives passes
+    #[test]
+    fn test_valid_domain_with_objectives_passes_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" },
+            "objectives": [
+                {
+                    "id": "healthy_co2",
+                    "description": "Keep CO2 below 800 ppm",
+                    "target": {
+                        "stream": "air-quality",
+                        "metric": "co2",
+                        "condition": "<",
+                        "threshold": 800,
+                        "unit": "ppm"
+                    },
+                    "priority": "high"
+                }
+            ]
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+    }
+
+    // TC-DSV-013: Invalid objective condition fails
+    #[test]
+    fn test_invalid_objective_condition_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" },
+            "objectives": [{
+                "id": "test_obj",
+                "target": {
+                    "stream": "air-quality",
+                    "metric": "co2",
+                    "condition": "approximately",
+                    "threshold": 800
+                }
+            }]
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::EnumViolation));
+    }
+
+    // TC-DSV-014: Valid domain with constraints passes
+    #[test]
+    fn test_valid_domain_with_constraints_passes_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" },
+            "constraints": [{
+                "id": "outdoor_safe",
+                "condition": {
+                    "stream": "outdoor-air-quality",
+                    "metric": "aqi",
+                    "operator": "<",
+                    "threshold": 100
+                }
+            }]
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+    }
+
+    // TC-DSV-015: View name with invalid characters fails
+    #[test]
+    fn test_invalid_view_name_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "role": "primary" }],
+            "alignment": {
+                "view_name": "Invalid-View-Name",
+                "granularity": "1 hour"
+            }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::PatternMismatch));
+    }
+
+    // TC-DSV-016: Stream with missing stream_id fails
+    #[test]
+    fn test_stream_missing_stream_id_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "alias": "indoor", "role": "primary" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::MissingRequired));
+    }
+
+    // TC-DSV-017: Stream with missing role fails
+    #[test]
+    fn test_stream_missing_role_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{ "stream_id": "air-quality", "alias": "indoor" }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::MissingRequired));
+    }
+
+    // TC-DSV-018: All valid null_handling values pass
+    #[test]
+    fn test_valid_null_handling_values_pass_schema() {
+        let validator = create_domain_validator();
+        for null_handling in &["preserve", "carry_forward", "interpolate"] {
+            let config = serde_json::json!({
+                "id": "test-domain",
+                "streams": [{
+                    "stream_id": "air-quality",
+                    "role": "primary",
+                    "null_handling": null_handling
+                }],
+                "alignment": {
+                    "view_name": "test_view",
+                    "granularity": "1 hour",
+                    "null_handling": null_handling
+                }
+            });
+            let errors = validator.validate_schema(&config);
+            assert!(
+                errors.is_empty(),
+                "null_handling '{}' should be valid, got: {:?}",
+                null_handling,
+                errors
+            );
+        }
+    }
+
+    // TC-DSV-019: Invalid null_handling fails
+    #[test]
+    fn test_invalid_null_handling_fails_schema() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "test-domain",
+            "streams": [{
+                "stream_id": "air-quality",
+                "role": "primary",
+                "null_handling": "drop"
+            }],
+            "alignment": { "view_name": "test_view", "granularity": "1 hour" }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| e.code == ErrorCode::EnumViolation));
+    }
+
+    // TC-DSV-020: Multiple schema errors reported
+    #[test]
+    fn test_multiple_domain_schema_errors_reported() {
+        let validator = create_domain_validator();
+        let config = serde_json::json!({
+            "id": "Invalid_ID",
+            "streams": [{ "stream_id": "air-quality", "role": "bad_role" }],
+            "alignment": {
+                "view_name": "Invalid-Name",
+                "granularity": "hourly"
+            }
+        });
+        let errors = validator.validate_schema(&config);
+        assert!(
+            errors.len() >= 3,
+            "Expected at least 3 errors, got: {:?}",
+            errors
+        );
     }
 }

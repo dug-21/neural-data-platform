@@ -1606,6 +1606,90 @@ validate_manifest() {
         warn "Unknown declaration types will be ignored: $unknown_types"
     fi
 
+    # Phase B (FE-002): Validate domain configs if any are declared
+    local domain_count=$(jq -r '[(.changes // [])[] | select(.type == "domain")] | length' "$manifest_file" 2>/dev/null || echo "0")
+    local domain_decl_count=$(jq -r '.declarations.domains // [] | length' "$manifest_file" 2>/dev/null || echo "0")
+    local total_domains=$((domain_count + domain_decl_count))
+
+    if [ "$total_domains" -gt 0 ]; then
+        log "Validating $total_domains domain config(s)..."
+        if ! validate_domain_configs "$manifest_file"; then
+            error "Domain config validation failed"
+            return 1
+        fi
+        log "Domain configs validated successfully"
+    fi
+
+    return 0
+}
+
+# Validate domain configs declared in manifest (FE-002 Phase B)
+# Args: $1 = manifest file path
+validate_domain_configs() {
+    local manifest_file="$1"
+
+    # Find ndp-validate tool
+    local validate_tool=""
+    if command -v ndp-validate &> /dev/null; then
+        validate_tool="ndp-validate"
+    elif [ -x "/opt/ndp/bin/ndp-validate" ]; then
+        validate_tool="/opt/ndp/bin/ndp-validate"
+    elif [ -x "$REPO_ROOT/target/release/ndp-validate" ]; then
+        validate_tool="$REPO_ROOT/target/release/ndp-validate"
+    elif [ -x "$REPO_ROOT/target/debug/ndp-validate" ]; then
+        validate_tool="$REPO_ROOT/target/debug/ndp-validate"
+    fi
+
+    if [ -z "$validate_tool" ]; then
+        warn "ndp-validate not available, skipping domain validation"
+        warn "Build with: cargo build -p ndp-validate --release"
+        return 0
+    fi
+
+    # Extract domain IDs from manifest (both old .changes and new .declarations format)
+    local domain_ids=$(jq -r '
+        [
+            (.changes // [])[] | select(.type == "domain") | .domain_id,
+            (.declarations.domains // [])[] | .domain_id
+        ] | unique | .[]
+    ' "$manifest_file" 2>/dev/null)
+
+    local validation_failed=false
+
+    for domain_id in $domain_ids; do
+        if [ -z "$domain_id" ] || [ "$domain_id" = "null" ]; then
+            continue
+        fi
+
+        # Find domain config file
+        local config_file=""
+        if [ -f "$CONFIG_DOMAINS_DIR/$domain_id/domain.json" ]; then
+            config_file="$CONFIG_DOMAINS_DIR/$domain_id/domain.json"
+        elif [ -f "$REPO_ROOT/config/domains/$domain_id/domain.json" ]; then
+            config_file="$REPO_ROOT/config/domains/$domain_id/domain.json"
+        elif [ -f "$CONFIG_DOMAINS_DIR/$domain_id/domain.yaml" ]; then
+            config_file="$CONFIG_DOMAINS_DIR/$domain_id/domain.yaml"
+        elif [ -f "$REPO_ROOT/config/domains/$domain_id/domain.yaml" ]; then
+            config_file="$REPO_ROOT/config/domains/$domain_id/domain.yaml"
+        fi
+
+        if [ -z "$config_file" ]; then
+            warn "  Domain config not found for: $domain_id"
+            continue
+        fi
+
+        log "  Validating: $domain_id"
+        if ! "$validate_tool" --domain "$config_file" --format human 2>&1 | grep -v '^\[PASS\]'; then
+            : # Validation passed (PASS output suppressed for cleaner logs)
+        else
+            validation_failed=true
+        fi
+    done
+
+    if [ "$validation_failed" = true ]; then
+        return 1
+    fi
+
     return 0
 }
 
@@ -2020,17 +2104,48 @@ handle_domain() {
     fi
 
     # Check if domain config exists (env-specific or fallback to production)
-    local config_file="$CONFIG_DOMAINS_DIR/$domain_id/domain.yaml"
-    local config_file_fallback="$REPO_ROOT/config/domains/$domain_id/domain.yaml"
+    # Support both JSON and YAML formats
+    local config_file="$CONFIG_DOMAINS_DIR/$domain_id/domain.json"
+    local config_yaml="$CONFIG_DOMAINS_DIR/$domain_id/domain.yaml"
+    local config_file_fallback="$REPO_ROOT/config/domains/$domain_id/domain.json"
+    local config_yaml_fallback="$REPO_ROOT/config/domains/$domain_id/domain.yaml"
 
     if [ -f "$config_file" ]; then
-        : # Use env-specific config_file
+        : # Use env-specific JSON config_file
+    elif [ -f "$config_yaml" ]; then
+        config_file="$config_yaml"
     elif [ -f "$config_file_fallback" ]; then
         config_file="$config_file_fallback"
+    elif [ -f "$config_yaml_fallback" ]; then
+        config_file="$config_yaml_fallback"
     else
-        warn "  Domain config not found: $config_file"
-        warn "  Create config/domains/$domain_id/domain.yaml to configure this domain"
+        warn "  Domain config not found: $domain_id"
+        warn "  Create config/domains/$domain_id/domain.json to configure this domain"
         return 0
+    fi
+
+    # Phase B (FE-002): Validate domain config using ndp-validate
+    local validate_tool=""
+    if command -v ndp-validate &> /dev/null; then
+        validate_tool="ndp-validate"
+    elif [ -x "/opt/ndp/bin/ndp-validate" ]; then
+        validate_tool="/opt/ndp/bin/ndp-validate"
+    elif [ -x "$REPO_ROOT/target/release/ndp-validate" ]; then
+        validate_tool="$REPO_ROOT/target/release/ndp-validate"
+    elif [ -x "$REPO_ROOT/target/debug/ndp-validate" ]; then
+        validate_tool="$REPO_ROOT/target/debug/ndp-validate"
+    fi
+
+    if [ -n "$validate_tool" ]; then
+        log "  Validating domain config..."
+        if ! "$validate_tool" --domain "$config_file" --format human; then
+            error "Domain config validation failed: $config_file"
+            return 1
+        fi
+        log "  Domain config validation passed"
+    else
+        warn "  ndp-validate not available, skipping domain validation"
+        warn "  Build with: cargo build -p ndp-validate --release"
     fi
 
     # Sync domain config to etcd if available

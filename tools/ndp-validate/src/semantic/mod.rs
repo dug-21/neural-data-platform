@@ -39,7 +39,7 @@ pub mod source_path;
 pub mod sources;
 pub mod table_exists;
 
-pub use domain::validate_domain;
+pub use domain::{validate_domain, validate_domain_semantic};
 pub use dq_rules::validate_dq_rules;
 pub use gold::validate_gold_etl;
 pub use source_path::validate_source_paths;
