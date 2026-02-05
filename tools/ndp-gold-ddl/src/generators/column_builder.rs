@@ -196,7 +196,9 @@ mod tests {
         let joined = columns.join("\n");
 
         assert!(joined.contains("COALESCE"));
-        assert!(joined.contains("LAG(state.window_state) IGNORE NULLS"));
+        // PostgreSQL-compatible: cascading LAG instead of IGNORE NULLS
+        assert!(joined.contains("LAG(state.window_state, 1)"));
+        assert!(!joined.contains("IGNORE NULLS")); // Not PostgreSQL compatible
         assert!(joined.contains("state_window_state"));
     }
 

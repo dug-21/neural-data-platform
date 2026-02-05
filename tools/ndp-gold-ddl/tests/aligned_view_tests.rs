@@ -252,6 +252,7 @@ fn test_observation_null_handling_preserve() {
 /// ACCEPTANCE: State event streams use LOCF (carry forward).
 ///
 /// Per ADR-FE001-004: StateEvent type uses CarryForward NULL handling.
+/// Uses PostgreSQL-compatible cascading LAG pattern (not IGNORE NULLS).
 #[test]
 fn test_state_event_null_handling_locf() {
     // Arrange
@@ -272,7 +273,8 @@ fn test_state_event_null_handling_locf() {
     // Act
     let sql = generator.generate(&domain, Action::Sync).unwrap();
 
-    // Assert: State event columns should use LAG IGNORE NULLS pattern
+    // Assert: State event columns should use PostgreSQL-compatible LOCF pattern
+    // Uses cascading LAG (LAG(..., 1), LAG(..., 2), etc.) instead of IGNORE NULLS
     assert_sql_contains(
         &sql,
         "LAG(",
@@ -280,8 +282,13 @@ fn test_state_event_null_handling_locf() {
     );
     assert_sql_contains(
         &sql,
-        "IGNORE NULLS",
-        "State event should use IGNORE NULLS for LOCF",
+        "COALESCE",
+        "State event should use COALESCE with cascading LAG",
+    );
+    // Should NOT use IGNORE NULLS (not PostgreSQL compatible)
+    assert!(
+        !sql.contains("IGNORE NULLS"),
+        "Should use PostgreSQL-compatible pattern, not IGNORE NULLS"
     );
 }
 

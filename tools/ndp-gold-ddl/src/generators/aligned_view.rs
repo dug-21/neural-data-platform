@@ -535,8 +535,12 @@ mod tests {
 
         let sql = generator.generate(&domain, Action::Sync).unwrap();
 
-        // State event columns should use LAG IGNORE NULLS
-        assert!(sql.contains("LAG(state.pm25_mean) IGNORE NULLS"));
+        // State event columns should use PostgreSQL-compatible cascading LAG (LOCF)
+        assert!(
+            sql.contains("LAG(state.") && sql.contains("COALESCE"),
+            "State event columns should use COALESCE with cascading LAG:\n{}",
+            sql
+        );
     }
 
     #[test]
@@ -802,7 +806,7 @@ mod tests {
     }
 
     /// Test: State event streams use LOCF (carry forward) per ADR-FE001-004
-    /// State columns should use COALESCE(current, LAG(...) IGNORE NULLS)
+    /// State columns should use PostgreSQL-compatible cascading LAG pattern
     #[test]
     fn test_state_event_carries_forward() {
         let loader = MockConfigLoader::new()
@@ -820,11 +824,18 @@ mod tests {
 
         let sql = generator.generate(&domain, Action::Sync).unwrap();
 
-        // State event columns should use LOCF pattern:
-        // COALESCE(state.column, LAG(state.column) IGNORE NULLS OVER ...)
+        // State event columns should use PostgreSQL-compatible LOCF pattern:
+        // COALESCE(state.column, LAG(state.column, 1) OVER ..., LAG(..., 2), ...)
         assert!(
-            sql.contains("LAG(state.") && sql.contains("IGNORE NULLS"),
-            "State event columns should use LAG IGNORE NULLS (LOCF):\n{}",
+            sql.contains("LAG(state.") && sql.contains("COALESCE"),
+            "State event columns should use cascading LAG (PostgreSQL LOCF):\n{}",
+            sql
+        );
+
+        // Should NOT contain IGNORE NULLS (not PostgreSQL compatible)
+        assert!(
+            !sql.contains("IGNORE NULLS"),
+            "Should use PostgreSQL-compatible pattern, not IGNORE NULLS:\n{}",
             sql
         );
 
