@@ -25,6 +25,7 @@ pub mod convert;
 pub mod db;
 pub mod dictionary;
 pub mod dimension;
+pub mod domain;
 pub mod error;
 pub mod types;
 

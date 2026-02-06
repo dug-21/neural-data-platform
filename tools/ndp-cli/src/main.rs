@@ -46,6 +46,9 @@ enum Commands {
 
     /// Dimension table operations.
     Dimension(commands::dimension::DimensionArgs),
+
+    /// Domain configuration operations.
+    Domain(commands::domain::DomainArgs),
 }
 
 impl Cli {
@@ -96,6 +99,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Dimension(args) => {
             commands::dimension::run(args, &config_dir, &db_url).await?;
+        }
+        Commands::Domain(args) => {
+            commands::domain::run(args, &config_dir, &db_url).await?;
         }
     }
 

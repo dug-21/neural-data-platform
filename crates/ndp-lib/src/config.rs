@@ -21,6 +21,11 @@ pub trait ConfigLoader: Send + Sync {
 
     /// Load a dimension config by dimension ID.
     fn load_dimension_config(&self, dimension_id: &str) -> Result<DimensionConfig>;
+
+    /// Load all domain configs. Default returns empty vec (backwards-compatible).
+    fn load_domain_configs(&self) -> Result<Vec<DomainConfig>> {
+        Ok(vec![])
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +286,84 @@ fn default_batch_size() -> usize {
 }
 
 // ---------------------------------------------------------------------------
+// DomainConfig -- parsed from config/domains/*/domain.json
+// ---------------------------------------------------------------------------
+
+/// Domain configuration parsed from domain.json.
+/// Used by `load_domain_configs()` and converted to `DomainSyncEntry` for sync.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DomainConfig {
+    pub id: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub streams: Vec<DomainStreamConfig>,
+    /// Pass-through: consumed by ndp-gold-ddl, not by domain sync.
+    #[serde(default)]
+    pub alignment: Option<serde_json::Value>,
+    /// Pass-through: consumed by ndp-gold-ddl, not by domain sync.
+    #[serde(default)]
+    pub events: Option<serde_json::Value>,
+    #[serde(default)]
+    pub objectives: Vec<DomainObjectiveConfig>,
+    #[serde(default)]
+    pub constraints: Vec<DomainConstraintConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DomainStreamConfig {
+    pub stream_id: String,
+    pub alias: String,
+    #[serde(default = "default_primary")]
+    pub role: String,
+    #[serde(default)]
+    pub null_handling: Option<String>,
+}
+
+fn default_primary() -> String {
+    "primary".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DomainObjectiveConfig {
+    pub id: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub target: ObjectiveTargetConfig,
+    #[serde(default = "default_medium")]
+    pub priority: String,
+}
+
+fn default_medium() -> String {
+    "medium".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ObjectiveTargetConfig {
+    pub stream: String,
+    pub metric: String,
+    pub condition: String,
+    pub threshold: f64,
+    #[serde(default)]
+    pub threshold_upper: Option<f64>,
+    #[serde(default)]
+    pub unit: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DomainConstraintConfig {
+    pub id: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub stream: String,
+    pub metric: String,
+    pub condition: String,
+    pub threshold: f64,
+    #[serde(default)]
+    pub unit: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
 // FileSystemConfigLoader
 // ---------------------------------------------------------------------------
 
@@ -291,6 +374,7 @@ fn default_batch_size() -> usize {
 pub struct FileSystemConfigLoader {
     streams_dir: PathBuf,
     dimensions_dir: PathBuf,
+    domains_dir: Option<PathBuf>,
 }
 
 impl FileSystemConfigLoader {
@@ -302,18 +386,28 @@ impl FileSystemConfigLoader {
         Self {
             streams_dir: streams_dir.into(),
             dimensions_dir: dimensions_dir.into(),
+            domains_dir: None,
         }
     }
 
     /// Create a loader from a base config directory.
     ///
     /// Assumes `<base>/streams/` and `<base>/dimensions/` subdirectories.
+    /// The domains directory is NOT set here (it lives at a different path level).
+    /// Use `with_domains_dir()` to set it.
     pub fn from_base_dir(base_dir: impl Into<PathBuf>) -> Self {
         let base: PathBuf = base_dir.into();
         Self {
             streams_dir: base.join("streams"),
             dimensions_dir: base.join("dimensions"),
+            domains_dir: None,
         }
+    }
+
+    /// Set the domains directory for domain config loading.
+    pub fn with_domains_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.domains_dir = Some(dir.into());
+        self
     }
 
     /// Discover stream IDs by listing subdirectories of the streams dir.
@@ -358,6 +452,67 @@ impl FileSystemConfigLoader {
 
         Ok(config)
     }
+
+    /// Discover domain IDs by listing subdirectories of the domains dir.
+    fn discover_domain_ids(&self) -> Result<Vec<String>> {
+        let domains_dir = match &self.domains_dir {
+            Some(d) => d,
+            None => {
+                return Err(NdpLibError::ConfigNotFound {
+                    path: "<domains_dir not configured>".to_string(),
+                });
+            }
+        };
+
+        if !domains_dir.exists() {
+            return Err(NdpLibError::ConfigNotFound {
+                path: domains_dir.display().to_string(),
+            });
+        }
+
+        let mut ids = Vec::new();
+        for entry in std::fs::read_dir(domains_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                let config_path = path.join("domain.json");
+                if config_path.exists() {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        ids.push(name.to_string());
+                    }
+                }
+            }
+        }
+        ids.sort();
+        Ok(ids)
+    }
+
+    /// Load a single domain config by ID.
+    fn load_domain_config(&self, domain_id: &str) -> Result<DomainConfig> {
+        let domains_dir = match &self.domains_dir {
+            Some(d) => d,
+            None => {
+                return Err(NdpLibError::ConfigNotFound {
+                    path: "<domains_dir not configured>".to_string(),
+                });
+            }
+        };
+
+        let config_path = domains_dir.join(domain_id).join("domain.json");
+        if !config_path.exists() {
+            return Err(NdpLibError::ConfigNotFound {
+                path: config_path.display().to_string(),
+            });
+        }
+
+        let content = std::fs::read_to_string(&config_path)?;
+        let config: DomainConfig =
+            serde_json::from_str(&content).map_err(|e| NdpLibError::ConfigParse {
+                message: format!("Failed to parse {}: {}", config_path.display(), e),
+            })?;
+
+        Ok(config)
+    }
 }
 
 impl ConfigLoader for FileSystemConfigLoader {
@@ -394,6 +549,26 @@ impl ConfigLoader for FileSystemConfigLoader {
             })?;
 
         Ok(config)
+    }
+
+    fn load_domain_configs(&self) -> Result<Vec<DomainConfig>> {
+        if self.domains_dir.is_none() {
+            return Ok(vec![]);
+        }
+
+        let ids = self.discover_domain_ids()?;
+        let mut configs = Vec::with_capacity(ids.len());
+
+        for id in &ids {
+            match self.load_domain_config(id) {
+                Ok(config) => configs.push(config),
+                Err(e) => {
+                    tracing::warn!(domain_id = %id, error = %e, "Skipping domain config");
+                }
+            }
+        }
+
+        Ok(configs)
     }
 }
 
@@ -534,5 +709,84 @@ mod tests {
             etl.target_table.as_deref(),
             Some("silver.air_quality_observations")
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // DomainConfig tests
+    // -----------------------------------------------------------------------
+
+    fn write_domain_config(domains_dir: &Path, domain_id: &str, content: &str) {
+        let domain_dir = domains_dir.join(domain_id);
+        std::fs::create_dir_all(&domain_dir).unwrap();
+        let mut f = std::fs::File::create(domain_dir.join("domain.json")).unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+    }
+
+    #[test]
+    fn test_parse_real_domain_config() {
+        let content =
+            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: DomainConfig = serde_json::from_str(content).unwrap();
+
+        assert_eq!(config.id, "indoor-air-quality");
+        assert_eq!(
+            config.description.as_deref(),
+            Some("Maintain healthy indoor air quality")
+        );
+        assert_eq!(config.streams.len(), 4);
+        assert_eq!(config.objectives.len(), 6);
+        assert!(config.alignment.is_some());
+        assert!(config.events.is_some());
+    }
+
+    #[test]
+    fn test_domain_config_no_constraints() {
+        let content =
+            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: DomainConfig = serde_json::from_str(content).unwrap();
+
+        // The real indoor-air-quality domain has no constraints
+        assert!(config.constraints.is_empty());
+    }
+
+    #[test]
+    fn test_discover_domain_ids() {
+        let tmp = TempDir::new().unwrap();
+        let domains_dir = tmp.path().join("domains");
+
+        write_domain_config(&domains_dir, "alpha-domain", r#"{"id":"alpha-domain"}"#);
+        write_domain_config(&domains_dir, "beta-domain", r#"{"id":"beta-domain"}"#);
+
+        let loader = FileSystemConfigLoader::new(
+            tmp.path().join("streams"),
+            tmp.path().join("dimensions"),
+        )
+        .with_domains_dir(&domains_dir);
+
+        let ids = loader.discover_domain_ids().unwrap();
+        assert_eq!(ids, vec!["alpha-domain", "beta-domain"]);
+    }
+
+    #[test]
+    fn test_load_domain_configs() {
+        let tmp = TempDir::new().unwrap();
+        let domains_dir = tmp.path().join("domains");
+
+        // Copy real indoor-air-quality config into the tempdir
+        let real_content =
+            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        write_domain_config(&domains_dir, "indoor-air-quality", real_content);
+
+        let loader = FileSystemConfigLoader::new(
+            tmp.path().join("streams"),
+            tmp.path().join("dimensions"),
+        )
+        .with_domains_dir(&domains_dir);
+
+        let configs = loader.load_domain_configs().unwrap();
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].id, "indoor-air-quality");
+        assert_eq!(configs[0].streams.len(), 4);
+        assert_eq!(configs[0].objectives.len(), 6);
     }
 }

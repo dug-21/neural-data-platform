@@ -3,8 +3,11 @@
 //! Bridges `config::StreamConfig` (deserialized from JSON) to
 //! `dictionary::types::StreamDictionaryEntry` (consumed by `sync_dictionary`).
 
-use crate::config::{BronzeField, SilverEtlConfig, SilverFieldMapping, SourceConfig, StreamConfig};
+use crate::config::{
+    BronzeField, DomainConfig, SilverEtlConfig, SilverFieldMapping, SourceConfig, StreamConfig,
+};
 use crate::dictionary::types::*;
+use crate::domain::types::*;
 
 /// Convert a `StreamConfig` to a `StreamDictionaryEntry`.
 ///
@@ -54,10 +57,7 @@ fn extract_range(range: &Option<Vec<serde_json::Value>>) -> (Option<f64>, Option
 
 fn convert_source(s: &SourceConfig) -> SourceEntry {
     // Build a source_id: prefer ndp_id, fall back to source_type
-    let source_id = s
-        .ndp_id
-        .clone()
-        .unwrap_or_else(|| s.source_type.clone());
+    let source_id = s.ndp_id.clone().unwrap_or_else(|| s.source_type.clone());
 
     // Parser type from the nested parser object
     let parser_type = s
@@ -154,17 +154,23 @@ fn parse_attribute(v: &serde_json::Value) -> Option<EntitySchemaAttribute> {
     Some(EntitySchemaAttribute {
         name,
         attribute_type,
-        unit: v.get("unit").and_then(|u| u.as_str()).map(|s| s.to_string()),
+        unit: v
+            .get("unit")
+            .and_then(|u| u.as_str())
+            .map(|s| s.to_string()),
         description: v
             .get("description")
             .and_then(|d| d.as_str())
             .map(|s| s.to_string()),
-        nullable: v
-            .get("nullable")
-            .and_then(|n| n.as_bool())
-            .unwrap_or(true),
-        range_min: v.get("range").and_then(|r| r.get(0)).and_then(|v| v.as_f64()),
-        range_max: v.get("range").and_then(|r| r.get(1)).and_then(|v| v.as_f64()),
+        nullable: v.get("nullable").and_then(|n| n.as_bool()).unwrap_or(true),
+        range_min: v
+            .get("range")
+            .and_then(|r| r.get(0))
+            .and_then(|v| v.as_f64()),
+        range_max: v
+            .get("range")
+            .and_then(|r| r.get(1))
+            .and_then(|v| v.as_f64()),
     })
 }
 
@@ -215,7 +221,9 @@ fn convert_silver_field_mapping(
         if let Some(s) = t.as_str() {
             Some(s.to_string())
         } else {
-            t.get("type").and_then(|v| v.as_str()).map(|s| s.to_string())
+            t.get("type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
         }
     });
 
@@ -280,10 +288,7 @@ fn convert_table_dq_rule(v: &serde_json::Value) -> Option<SilverTableDqRule> {
         .and_then(|n| n.as_str())
         .map(|s| s.to_string())
         .unwrap_or_else(|| {
-            let field = v
-                .get("field")
-                .and_then(|f| f.as_str())
-                .unwrap_or("table");
+            let field = v.get("field").and_then(|f| f.as_str()).unwrap_or("table");
             format!("{}_{}", rule_type, field)
         });
 
@@ -309,6 +314,65 @@ fn convert_table_dq_rule(v: &serde_json::Value) -> Option<SilverTableDqRule> {
         params: serde_json::Value::Object(params),
         action,
     })
+}
+
+// ---------------------------------------------------------------------------
+// DomainConfig -> DomainSyncEntry conversion
+// ---------------------------------------------------------------------------
+
+/// Convert a `DomainConfig` (parsed from domain.json) to a `DomainSyncEntry` (DB-ready).
+pub fn domain_config_to_sync_entry(config: &DomainConfig) -> DomainSyncEntry {
+    let config_path = format!("config/domains/{}/domain.json", config.id);
+
+    let streams: Vec<StreamMappingEntry> = config
+        .streams
+        .iter()
+        .map(|s| StreamMappingEntry {
+            stream_id: s.stream_id.clone(),
+            alias: s.alias.clone(),
+            role: s.role.clone(),
+        })
+        .collect();
+
+    let objectives: Vec<ObjectiveSyncEntry> = config
+        .objectives
+        .iter()
+        .map(|o| ObjectiveSyncEntry {
+            objective_id: o.id.clone(),
+            description: o.description.clone(),
+            target_stream: o.target.stream.clone(),
+            target_metric: o.target.metric.clone(),
+            condition: o.target.condition.clone(),
+            threshold: o.target.threshold,
+            threshold_upper: o.target.threshold_upper,
+            unit: o.target.unit.clone(),
+            priority: o.priority.clone(),
+        })
+        .collect();
+
+    let constraints: Vec<ConstraintSyncEntry> = config
+        .constraints
+        .iter()
+        .map(|c| ConstraintSyncEntry {
+            constraint_id: c.id.clone(),
+            description: c.description.clone(),
+            constraint_stream: c.stream.clone(),
+            constraint_metric: c.metric.clone(),
+            condition: c.condition.clone(),
+            threshold: c.threshold,
+            unit: c.unit.clone(),
+        })
+        .collect();
+
+    DomainSyncEntry {
+        domain_id: config.id.clone(),
+        description: config.description.clone(),
+        stream_count: config.streams.len() as i32,
+        config_path,
+        streams,
+        objectives,
+        constraints,
+    }
 }
 
 #[cfg(test)]
@@ -461,5 +525,79 @@ mod tests {
         assert!(entry.silver_etl.is_none());
         assert_eq!(entry.retention_days, 90); // default
         assert!(entry.description.is_none()); // empty string -> None
+    }
+
+    // -----------------------------------------------------------------------
+    // DomainConfig -> DomainSyncEntry conversion tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_convert_real_domain_config() {
+        let content =
+            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: crate::config::DomainConfig =
+            serde_json::from_str(content).unwrap();
+        let entry = domain_config_to_sync_entry(&config);
+
+        assert_eq!(entry.domain_id, "indoor-air-quality");
+        assert_eq!(
+            entry.description.as_deref(),
+            Some("Maintain healthy indoor air quality")
+        );
+        assert_eq!(entry.stream_count, 4);
+        assert_eq!(
+            entry.config_path,
+            "config/domains/indoor-air-quality/domain.json"
+        );
+        assert_eq!(entry.objectives.len(), 6);
+        assert!(entry.constraints.is_empty());
+    }
+
+    #[test]
+    fn test_convert_objective_fields_flattened() {
+        let content =
+            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: crate::config::DomainConfig =
+            serde_json::from_str(content).unwrap();
+        let entry = domain_config_to_sync_entry(&config);
+
+        // First objective: healthy_co2
+        let obj = &entry.objectives[0];
+        assert_eq!(obj.objective_id, "healthy_co2");
+        assert_eq!(obj.target_stream, "air-quality");
+        assert_eq!(obj.target_metric, "co2");
+        assert_eq!(obj.condition, "<");
+        assert_eq!(obj.threshold, 800.0);
+        assert_eq!(obj.unit.as_deref(), Some("ppm"));
+        assert_eq!(obj.priority, "high");
+        assert!(obj.threshold_upper.is_none());
+    }
+
+    #[test]
+    fn test_convert_stream_mappings() {
+        let content =
+            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: crate::config::DomainConfig =
+            serde_json::from_str(content).unwrap();
+        let entry = domain_config_to_sync_entry(&config);
+
+        assert_eq!(entry.streams.len(), 4);
+
+        // Verify each stream mapping
+        assert_eq!(entry.streams[0].stream_id, "air-quality");
+        assert_eq!(entry.streams[0].alias, "indoor");
+        assert_eq!(entry.streams[0].role, "primary");
+
+        assert_eq!(entry.streams[1].stream_id, "outdoor-weather");
+        assert_eq!(entry.streams[1].alias, "outdoor");
+        assert_eq!(entry.streams[1].role, "context");
+
+        assert_eq!(entry.streams[2].stream_id, "home-assistant-state");
+        assert_eq!(entry.streams[2].alias, "state");
+        assert_eq!(entry.streams[2].role, "actuator");
+
+        assert_eq!(entry.streams[3].stream_id, "outdoor-air-quality");
+        assert_eq!(entry.streams[3].alias, "outdoor_aqi");
+        assert_eq!(entry.streams[3].role, "constraint");
     }
 }

@@ -18,10 +18,13 @@ release
 - [x] Bugfix: Duplicate CTE names in detection procedure — DONE
 - [x] All tests passing (616 total: 399 ndp-gold-ddl + 217 ndp-validate)
 - [x] Release artifacts created (v1.1.11 manifest, CHANGELOG)
-- [ ] Deployed to production
+- [x] Deployed to production
+- [x] BUG-002: Domain objectives sync migrated to Rust CLI — DONE
+- [x] Release v1.1.12 artifacts created (manifest, CHANGELOG, tag)
+- [x] E2E verified in integration environment
 
 ## Active Work
-Release v1.1.11 ready. Awaiting production deployment.
+Feature complete. v1.1.12 released.
 
 ## Scope Summary
 Eliminate 50+ hardcoded domain-specific values from Gold DDL generators (`events.rs`, `state_transitions.rs`, `aligned_view.rs`). Replace with config-driven reads from `DomainConfig`, `StreamConfig`, and `TransitionConfig`.
@@ -55,6 +58,7 @@ Eliminate 50+ hardcoded domain-specific values from Gold DDL generators (`events
 | ID | Status | Summary |
 |----|--------|---------|
 | BUG-001 | FIXED | Duplicate CTE names in detection procedure when objectives share metric (humidity_pct, temperature_c) |
+| BUG-002 | FIXED | Domain objectives sync migrated from dead Bash to `ndp domain sync` Rust CLI (v1.1.12). 18 London TDD tests, E2E verified. |
 
 ## Release Target
 - **Version:** v1.1.11 (PATCH -- refactoring, no new features)
@@ -78,4 +82,4 @@ Eliminate 50+ hardcoded domain-specific values from Gold DDL generators (`events
 - Workspace clippy cannot run (missing protoc for etcd-client build)
 
 ## Last Updated
-2026-02-06 by ndp-rust-dev (Phase 5 verification)
+2026-02-06 by ndp-rust-dev (v1.1.12 BUG-002 fix released)

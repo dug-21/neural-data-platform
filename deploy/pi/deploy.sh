@@ -883,205 +883,48 @@ _sync_to_data_dictionary_bash() {
 sync_domains_to_data_dictionary() {
     log "Syncing Domain Objectives to Data Dictionary..."
 
-    # Check if TimescaleDB is running
+    # Wait for TimescaleDB
     until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
         warn "Waiting for TimescaleDB to be ready..."
         sleep 2
     done
 
-    local CONFIG_DIR="$CONFIG_DOMAINS_DIR"
-    local SQL_FILE="/tmp/domain_objectives_sync_$$.sql"
+    # Use Rust CLI if available (BUG-002 fix: replaces ~200 lines of dead YAML-based Bash)
+    local ndp_tool=""
+    if command -v ndp &> /dev/null; then
+        ndp_tool="ndp"
+    elif [ -x "/opt/ndp/bin/ndp" ]; then
+        ndp_tool="/opt/ndp/bin/ndp"
+    elif [ -x "$REPO_ROOT/target/release/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/release/ndp"
+    elif [ -x "$REPO_ROOT/target/debug/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/debug/ndp"
+    fi
 
-    # Check if domains directory exists, fallback to production config
-    if [ ! -d "$CONFIG_DIR" ]; then
-        CONFIG_DIR="$REPO_ROOT/config/domains"
-        if [ ! -d "$CONFIG_DIR" ]; then
-            warn "Domains directory not found: $CONFIG_DOMAINS_DIR or $CONFIG_DIR"
-            warn "Skipping domain objectives sync."
-            return 0
+    if [ -n "$ndp_tool" ]; then
+        log "Using Rust CLI for domain sync: $ndp_tool"
+
+        # Build host-accessible DB URL (same pattern as handle_gold_table)
+        local db_password="${POSTGRES_PASSWORD:-ndp_secure_password}"
+        local db_url="postgresql://postgres:${db_password}@localhost:5432/ndp"
+
+        local ndp_args="domain sync --domains-dir $CONFIG_DOMAINS_DIR --db-url $db_url"
+
+        if [ "${DRY_RUN:-false}" = "true" ]; then
+            ndp_args="$ndp_args --dry-run"
         fi
-        log "Falling back to production domains config: $CONFIG_DIR"
-    fi
 
-    # Count domain configs
-    local domain_count=0
-    for config_file in "$CONFIG_DIR"/*/domain.yaml; do
-        [ -f "$config_file" ] && domain_count=$((domain_count + 1))
-    done
-
-    if [ "$domain_count" -eq 0 ]; then
-        warn "No domain.yaml files found in $CONFIG_DIR"
-        return 0
-    fi
-
-    log "Found $domain_count domain configuration(s)"
-
-    # Generate SQL
-    {
-        echo "-- Domain Objectives Sync (v11-007 SPEC-C03)"
-        echo "-- Generated: $(date -Iseconds)"
-        echo ""
-        echo "BEGIN;"
-        echo ""
-
-        local objectives_count=0
-        local constraints_count=0
-        local streams_count=0
-
-        # Process each domain config
-        for config_file in "$CONFIG_DIR"/*/domain.yaml; do
-            [ -f "$config_file" ] || continue
-
-            local domain_id=$(yaml_get "$config_file" "domain.id" "")
-            if [ -z "$domain_id" ] || [ "$domain_id" = "null" ]; then
-                warn "No domain.id found in $config_file, skipping"
-                continue
-            fi
-
-            local description=$(yaml_get "$config_file" "domain.description" "" | sed "s/'/''/g")
-            local stream_count=$(yaml_array_len "$config_file" "domain.streams")
-            local config_path="config/domains/$domain_id/domain.yaml"
-
-            echo "-- ============================================"
-            echo "-- Domain: $domain_id"
-            echo "-- ============================================"
-            echo ""
-
-            # Upsert domain
-            echo "INSERT INTO data_dictionary.domains (domain_id, description, stream_count, config_path, updated_at)"
-            echo "VALUES ('$domain_id', '$description', $stream_count, '$config_path', NOW())"
-            echo "ON CONFLICT (domain_id) DO UPDATE SET"
-            echo "    description = EXCLUDED.description,"
-            echo "    stream_count = EXCLUDED.stream_count,"
-            echo "    config_path = EXCLUDED.config_path,"
-            echo "    updated_at = NOW();"
-            echo ""
-
-            # Delete existing domain_streams (full sync)
-            echo "DELETE FROM data_dictionary.domain_streams WHERE domain_id = '$domain_id';"
-            echo ""
-
-            # Insert domain_streams
-            if [ "$stream_count" -gt 0 ]; then
-                echo "-- Domain streams"
-                for i in $(seq 0 $((stream_count - 1))); do
-                    local stream_id=$(yaml_array_get "$config_file" ".domain.streams[$i].stream_id" "")
-                    local alias=$(yaml_array_get "$config_file" ".domain.streams[$i].alias" "")
-                    local role=$(yaml_array_get "$config_file" ".domain.streams[$i].role" "primary")
-
-                    [ -z "$stream_id" ] || [ "$stream_id" = "null" ] && continue
-
-                    echo "INSERT INTO data_dictionary.domain_streams (domain_id, stream_id, alias, role)"
-                    echo "VALUES ('$domain_id', '$stream_id', '$alias', '$role');"
-
-                    streams_count=$((streams_count + 1))
-                done
-                echo ""
-            fi
-
-            # Delete existing objectives for this domain (full sync)
-            echo "DELETE FROM data_dictionary.objectives WHERE domain_id = '$domain_id';"
-            echo ""
-
-            # Insert objectives
-            local obj_count=$(yaml_array_len "$config_file" "domain.objectives")
-            if [ "$obj_count" -gt 0 ]; then
-                echo "-- Objectives"
-                for i in $(seq 0 $((obj_count - 1))); do
-                    local obj_id=$(yaml_array_get "$config_file" ".domain.objectives[$i].id" "")
-                    local obj_desc=$(yaml_array_get "$config_file" ".domain.objectives[$i].description" "" | sed "s/'/''/g")
-                    local target_stream=$(yaml_array_get "$config_file" ".domain.objectives[$i].target.stream" "")
-                    local target_metric=$(yaml_array_get "$config_file" ".domain.objectives[$i].target.metric" "")
-                    local condition=$(yaml_array_get "$config_file" ".domain.objectives[$i].target.condition" "<")
-                    local unit=$(yaml_array_get "$config_file" ".domain.objectives[$i].target.unit" "")
-                    local priority=$(yaml_array_get "$config_file" ".domain.objectives[$i].priority" "medium")
-
-                    [ -z "$obj_id" ] || [ "$obj_id" = "null" ] && continue
-                    [ -z "$target_stream" ] || [ "$target_stream" = "null" ] && continue
-
-                    # Handle threshold - could be single value or array for 'between'
-                    local threshold=""
-                    local threshold_upper="NULL"
-
-                    if [ "$condition" = "between" ]; then
-                        # For between, threshold is an array [min, max]
-                        threshold=$(yaml_array_get "$config_file" ".domain.objectives[$i].target.threshold[0]" "0")
-                        threshold_upper=$(yaml_array_get "$config_file" ".domain.objectives[$i].target.threshold[1]" "0")
-                    else
-                        threshold=$(yaml_array_get "$config_file" ".domain.objectives[$i].target.threshold" "0")
-                    fi
-
-                    # Handle NULL for optional fields
-                    local unit_sql="NULL"
-                    [ -n "$unit" ] && [ "$unit" != "null" ] && unit_sql="'$unit'"
-
-                    local desc_sql="NULL"
-                    [ -n "$obj_desc" ] && [ "$obj_desc" != "null" ] && desc_sql="'$obj_desc'"
-
-                    echo "INSERT INTO data_dictionary.objectives (objective_id, domain_id, description, target_stream, target_metric, condition, threshold, threshold_upper, unit, priority)"
-                    echo "VALUES ('$obj_id', '$domain_id', $desc_sql, '$target_stream', '$target_metric', '$condition', $threshold, $threshold_upper, $unit_sql, '$priority');"
-
-                    objectives_count=$((objectives_count + 1))
-                done
-                echo ""
-            fi
-
-            # Delete existing constraints for this domain (full sync)
-            echo "DELETE FROM data_dictionary.constraints WHERE domain_id = '$domain_id';"
-            echo ""
-
-            # Insert constraints (optional section)
-            local const_count=$(yaml_array_len "$config_file" "domain.constraints")
-            if [ "$const_count" -gt 0 ]; then
-                echo "-- Constraints"
-                for i in $(seq 0 $((const_count - 1))); do
-                    local const_id=$(yaml_array_get "$config_file" ".domain.constraints[$i].id" "")
-                    local const_desc=$(yaml_array_get "$config_file" ".domain.constraints[$i].description" "" | sed "s/'/''/g")
-                    local const_stream=$(yaml_array_get "$config_file" ".domain.constraints[$i].stream" "")
-                    local const_metric=$(yaml_array_get "$config_file" ".domain.constraints[$i].metric" "")
-                    local const_condition=$(yaml_array_get "$config_file" ".domain.constraints[$i].condition" "<")
-                    local const_threshold=$(yaml_array_get "$config_file" ".domain.constraints[$i].threshold" "0")
-                    local const_unit=$(yaml_array_get "$config_file" ".domain.constraints[$i].unit" "")
-
-                    [ -z "$const_id" ] || [ "$const_id" = "null" ] && continue
-                    [ -z "$const_stream" ] || [ "$const_stream" = "null" ] && continue
-
-                    # Handle NULL for optional fields
-                    local const_unit_sql="NULL"
-                    [ -n "$const_unit" ] && [ "$const_unit" != "null" ] && const_unit_sql="'$const_unit'"
-
-                    local const_desc_sql="NULL"
-                    [ -n "$const_desc" ] && [ "$const_desc" != "null" ] && const_desc_sql="'$const_desc'"
-
-                    echo "INSERT INTO data_dictionary.constraints (constraint_id, domain_id, description, constraint_stream, constraint_metric, condition, threshold, unit)"
-                    echo "VALUES ('$const_id', '$domain_id', $const_desc_sql, '$const_stream', '$const_metric', '$const_condition', $const_threshold, $const_unit_sql);"
-
-                    constraints_count=$((constraints_count + 1))
-                done
-                echo ""
-            fi
-        done
-
-        echo "COMMIT;"
-        echo ""
-        echo "-- Sync summary: domains=$domain_count, streams=$streams_count, objectives=$objectives_count, constraints=$constraints_count"
-
-    } > "$SQL_FILE"
-
-    # Execute sync
-    log "Executing domain objectives sync..."
-    if dcx timescaledb psql -U postgres -d ndp < "$SQL_FILE" > /dev/null 2>&1; then
-        log "Domain objectives sync successful"
-        rm -f "$SQL_FILE"
-
-        # Show summary
-        dcx timescaledb psql -U postgres -d ndp -c \
-            "SELECT domain_id, description, stream_count, (SELECT COUNT(*) FROM data_dictionary.objectives o WHERE o.domain_id = d.domain_id) AS objective_count, (SELECT COUNT(*) FROM data_dictionary.constraints c WHERE c.domain_id = d.domain_id) AS constraint_count FROM data_dictionary.domains d;"
+        if $ndp_tool $ndp_args; then
+            log "Domain objectives sync successful (Rust CLI)"
+            return 0
+        else
+            error "Domain objectives sync failed (Rust CLI)"
+            return 1
+        fi
     else
-        error "Domain objectives sync failed. Check SQL:"
-        cat "$SQL_FILE"
-        rm -f "$SQL_FILE"
-        return 1
+        warn "ndp CLI not found. Build with: cargo build --release -p ndp-cli"
+        warn "Skipping domain objectives sync."
+        return 0
     fi
 }
 

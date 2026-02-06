@@ -122,10 +122,8 @@ pub async fn sync_dimension(
                 }
             }
 
-            let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = boxed_params
-                .iter()
-                .map(|b| b.as_ref())
-                .collect();
+            let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+                boxed_params.iter().map(|b| b.as_ref()).collect();
 
             let affected = db.execute(&insert_sql, &param_refs).await.map_err(|e| {
                 NdpLibError::SyncFailed {

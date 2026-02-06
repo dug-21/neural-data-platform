@@ -279,10 +279,7 @@ mod tests {
 
     #[test]
     fn test_parse_pg_array_with_spaces() {
-        assert_eq!(
-            parse_pg_array("{ a , b , c }"),
-            vec!["a", "b", "c"]
-        );
+        assert_eq!(parse_pg_array("{ a , b , c }"), vec!["a", "b", "c"]);
     }
 
     /// Helper: wrap a string into `Some(String)`.

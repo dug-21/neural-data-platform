@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.12] - 2026-02-06
+
+Fix domain objectives sync: migrate ~200 lines of dead Bash (YAML-based, never worked with JSON configs) to Rust CLI command `ndp domain sync` (BUG-002, ops-002).
+
+### Fixed
+
+- **Domain objectives sync not migrated** (BUG-002) — `sync_domains_to_data_dictionary()` in deploy.sh contained ~200 lines of dead Bash code that parsed `domain.yaml` (eliminated in v1.1.8). Domains, objectives, constraints, and stream mappings were never synced to the data dictionary after the YAML→JSON migration.
+
+### Added
+
+- **`ndp domain sync` CLI command** — syncs domain configs from `config/domains/` to `data_dictionary` schema
+  - Parameterized SQL (zero string concatenation) for domains, domain_streams, objectives, constraints
+  - UPSERT for domains, DELETE+INSERT for children (idempotent)
+  - Transaction-wrapped (BEGIN/COMMIT)
+  - `--dry-run` support, `--domains-dir` override
+  - Per-domain error collection (non-fatal, continues to next domain)
+- **`crates/ndp-lib/src/domain/` module** — sync engine with 18 London TDD tests
+  - `types.rs` — DomainSyncEntry, StreamMappingEntry, ObjectiveSyncEntry, ConstraintSyncEntry
+  - `sql.rs` — 7 parameterized SQL constants with float8→numeric casts
+  - `mod.rs` — `sync_domains()` function with MockDbClient tests
+- **ConfigLoader extension** — `load_domain_configs()` with `FileSystemConfigLoader.with_domains_dir()` builder
+- **Convert function** — `domain_config_to_sync_entry()` flattens nested ObjectiveTargetConfig
+
+### Changed
+
+- **deploy.sh** — replaced `sync_domains_to_data_dictionary()` body with `command -v ndp` fallback pattern (~200 lines → ~47 lines)
+
+### Technical Notes
+
+- 710+ tests passing (94 ndp-lib, 399 ndp-gold-ddl, 217 ndp-validate)
+- 23 new tests in ndp-lib (18 domain sync + 4 config + 3 convert - offset by test module reorganization)
+- E2E verified against integration TimescaleDB: 1 domain, 4 streams, 6 objectives, 0 constraints
+- Idempotent: second sync produces identical results
+
 ## [1.1.11] - 2026-02-06
 
 Fix duplicate CTE names in events detection procedure. Config-driven event generators (ops-002).
@@ -438,7 +472,10 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.9...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.12...HEAD
+[1.1.12]: https://github.com/dug-21/neural-data-platform/compare/v1.1.11...v1.1.12
+[1.1.11]: https://github.com/dug-21/neural-data-platform/compare/v1.1.10...v1.1.11
+[1.1.10]: https://github.com/dug-21/neural-data-platform/compare/v1.1.9...v1.1.10
 [1.1.9]: https://github.com/dug-21/neural-data-platform/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/dug-21/neural-data-platform/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/dug-21/neural-data-platform/compare/v1.1.6...v1.1.7

@@ -1,0 +1,22 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.12",
+  "description": "Fix domain objectives sync: migrate dead Bash to Rust CLI (BUG-002, ops-002)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-cli",
+      "action": "build"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "sync"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
+}
