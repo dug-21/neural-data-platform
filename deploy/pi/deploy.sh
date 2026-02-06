@@ -395,12 +395,12 @@ sync_to_data_dictionary() {
 
     if [ -n "$ndp_tool" ]; then
         log "Using ndp CLI for dictionary sync ($ndp_tool)..."
-        local ndp_args="dictionary sync --config-dir $CONFIG_STREAMS_DIR"
 
-        # Add db-url based on environment
-        if [ -n "${TIMESCALE_URL:-}" ]; then
-            ndp_args="$ndp_args --db-url $TIMESCALE_URL"
-        fi
+        # Build host-accessible DB URL (same pattern as handle_gold_table)
+        local db_password="${POSTGRES_PASSWORD:-ndp_secure_password}"
+        local db_url="postgresql://postgres:${db_password}@localhost:5432/ndp"
+
+        local ndp_args="dictionary sync --config-dir $CONFIG_STREAMS_DIR --db-url $db_url"
 
         if [ "${DRY_RUN:-false}" = "true" ]; then
             ndp_args="$ndp_args --dry-run"
@@ -1228,7 +1228,11 @@ sync_dimension() {
     fi
 
     if [ -n "$ndp_tool" ]; then
-        if $ndp_tool dimension sync "$dimension_id" --config "$config_file" --source "$source_file"; then
+        # Build host-accessible DB URL (same pattern as handle_gold_table)
+        local db_password="${POSTGRES_PASSWORD:-ndp_secure_password}"
+        local db_url="postgresql://postgres:${db_password}@localhost:5432/ndp"
+
+        if $ndp_tool dimension sync "$dimension_id" --config "$config_file" --source "$source_file" --db-url "$db_url"; then
             update_dimension_state "$dimension_id" "success"
             return 0
         else

@@ -61,13 +61,17 @@ impl Cli {
             })
     }
 
-    /// Resolve the database URL based on --db-url or --env.
+    /// Resolve the database URL based on --db-url or TIMESCALE_URL env.
+    ///
+    /// The CLI runs on the host (not inside Docker), so deploy.sh must pass
+    /// --db-url with the host-accessible URL. No hardcoded passwords.
     fn resolve_db_url(&self) -> String {
         self.db_url
             .clone()
-            .unwrap_or_else(|| match self.env.as_str() {
-                "integration" => "postgresql://postgres:postgres@localhost:5432/ndp".into(),
-                _ => "postgresql://postgres:postgres@timescaledb:5432/ndp".into(),
+            .unwrap_or_else(|| {
+                eprintln!("Error: No database URL provided.");
+                eprintln!("Pass --db-url or set TIMESCALE_URL environment variable.");
+                std::process::exit(1);
             })
     }
 }
