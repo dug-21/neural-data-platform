@@ -923,8 +923,12 @@ This includes:
 Remember: **Claude Flow CLI coordinates, Claude Code Task tool creates!**
 
 # important-instruction-reminders
+Be concise. Prefer short answers. Skip preamble, summaries, and repetition unless asked.
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
 ALWAYS prefer editing an existing file to creating a new one.
 NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 Never save working files, text/mds and tests to the root folder.
+
+## Anti-Stub Rule
+NEVER leave stubs, TODO comments, `unimplemented!()` macros, `todo!()` macros, or placeholder functions in the codebase. Every function written must have a complete, working implementation. If you cannot implement something fully due to missing context or ambiguity, STOP and ask the user rather than stubbing it out. This applies to all agents spawned via the Task tool as well.
