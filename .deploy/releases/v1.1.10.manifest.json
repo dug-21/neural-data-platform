@@ -1,0 +1,23 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.10",
+  "description": "Wire events generator into ndp-gold-ddl CLI and deployment pipeline",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build"
+    },
+    {
+      "type": "tool",
+      "id": "ndp-validate",
+      "action": "build"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "sync"
+    }
+  ]
+}

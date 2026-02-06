@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::generators::events::EventsConfig;
+
 /// Domain configuration for cross-stream alignment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainConfig {
@@ -24,6 +26,10 @@ pub struct DomainConfig {
     /// Optional objectives for pattern detection
     #[serde(default)]
     pub objectives: Vec<ObjectiveConfig>,
+
+    /// Optional events infrastructure configuration
+    #[serde(default)]
+    pub events: Option<EventsConfig>,
 }
 
 /// Reference to a stream within a domain
@@ -377,6 +383,57 @@ mod tests {
         assert_eq!(objective.id, "healthy_co2");
         assert_eq!(objective.target.threshold, 800.0);
         assert_eq!(objective.priority, Priority::High);
+    }
+
+    // ========== v11-014: Events Config Deserialization Tests ==========
+
+    #[test]
+    fn test_domain_config_with_events_deserialize() {
+        let json = r#"{
+            "id": "indoor-air-quality",
+            "description": "Test domain",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "indoor", "role": "primary" },
+                { "stream_id": "outdoor-weather", "alias": "outdoor", "role": "context" }
+            ],
+            "alignment": {
+                "view_name": "indoor_air_quality_aligned",
+                "granularity": "1 hour"
+            },
+            "events": {
+                "enabled": true,
+                "chunk_interval": "14 days",
+                "retention": "2 years",
+                "detection_schedule": "30 minutes"
+            }
+        }"#;
+
+        let config: DomainConfig = serde_json::from_str(json).unwrap();
+        assert!(config.events.is_some());
+        let events = config.events.unwrap();
+        assert!(events.enabled);
+        assert_eq!(events.chunk_interval, "14 days");
+        assert_eq!(events.retention, Some("2 years".to_string()));
+        assert_eq!(events.detection_schedule, "30 minutes");
+    }
+
+    #[test]
+    fn test_domain_config_without_events_defaults_to_none() {
+        let json = r#"{
+            "id": "indoor-air-quality",
+            "description": "Test domain",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "indoor", "role": "primary" },
+                { "stream_id": "outdoor-weather", "alias": "outdoor", "role": "context" }
+            ],
+            "alignment": {
+                "view_name": "indoor_air_quality_aligned",
+                "granularity": "1 hour"
+            }
+        }"#;
+
+        let config: DomainConfig = serde_json::from_str(json).unwrap();
+        assert!(config.events.is_none());
     }
 
     // ========== v11-002: Correlation Role Mapping Tests ==========

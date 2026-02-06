@@ -2201,7 +2201,7 @@ handle_domain() {
 
     if [ -n "$validate_tool" ]; then
         log "  Validating domain config..."
-        if ! "$validate_tool" --domain "$config_file" --format human; then
+        if ! "$validate_tool" --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human; then
             error "Domain config validation failed: $config_file"
             return 1
         fi
@@ -2264,8 +2264,25 @@ handle_domain() {
     if echo "$ddl" | dcx timescaledb psql -U postgres -d ndp; then
         log "  Aligned view(s) for domain $domain_id created/updated successfully"
     else
-        error "Failed to apply Domain DDL to TimescaleDB"
-        return 1
+        warn "  Failed to apply aligned view DDL (non-fatal, may need per-stream CAs first)"
+    fi
+
+    # Generate and apply events DDL (if configured in domain.json)
+    log "  Generating events DDL using $gold_ddl_tool..."
+    local events_ddl
+    events_ddl=$("$gold_ddl_tool" --config-dir "$REPO_ROOT/config" generate --domain "$domain_id" --events --action "$action" 2>&1)
+    local events_exit_code=$?
+
+    if [ $events_exit_code -eq 0 ] && [ -n "$events_ddl" ]; then
+        log "  Applying events DDL to TimescaleDB..."
+        if echo "$events_ddl" | dcx timescaledb psql -U postgres -d ndp -v ON_ERROR_STOP=1; then
+            log "  Events infrastructure for domain $domain_id created/updated successfully"
+        else
+            error "Failed to apply events DDL to TimescaleDB"
+            return 1
+        fi
+    else
+        log "  Events not configured for domain $domain_id, skipping"
     fi
 
     # Sync domain objectives to data dictionary

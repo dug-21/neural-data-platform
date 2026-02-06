@@ -568,6 +568,54 @@ fn golden_master_transitions_recreate() {
 }
 
 // =============================================================================
+// Golden Master Tests - Events
+// =============================================================================
+
+/// GM-013: Domain events DDL generation in SYNC mode
+///
+/// Tests that `--domain indoor-air-quality --events --action sync` produces
+/// identical DDL, ensuring events infrastructure generation is stable.
+#[test]
+fn golden_master_events_sync() {
+    let expected = load_baseline("domain_indoor-air-quality_events_sync.sql");
+    let actual = execute_gold_ddl(&[
+        "--config-dir",
+        "./config",
+        "generate",
+        "--domain",
+        "indoor-air-quality",
+        "--events",
+        "--action",
+        "sync",
+    ]);
+    assert_golden_master(&expected, &actual, "domain indoor-air-quality events sync");
+}
+
+/// GM-014: Domain events DDL generation in RECREATE mode
+///
+/// Tests that `--domain indoor-air-quality --events --action recreate` produces
+/// identical DDL. This includes DROP CASCADE statements for all events objects.
+#[test]
+fn golden_master_events_recreate() {
+    let expected = load_baseline("domain_indoor-air-quality_events_recreate.sql");
+    let actual = execute_gold_ddl(&[
+        "--config-dir",
+        "./config",
+        "generate",
+        "--domain",
+        "indoor-air-quality",
+        "--events",
+        "--action",
+        "recreate",
+    ]);
+    assert_golden_master(
+        &expected,
+        &actual,
+        "domain indoor-air-quality events recreate",
+    );
+}
+
+// =============================================================================
 // Checksum Verification Test
 // =============================================================================
 

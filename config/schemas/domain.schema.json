@@ -294,6 +294,17 @@
           "items": { "$ref": "#/definitions/objective" },
           "description": "List of objectives for optimization."
         },
+        "events": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Events infrastructure configuration.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "chunk_interval": { "type": "string" },
+            "retention": { "type": "string" },
+            "detection_schedule": { "type": "string" }
+          }
+        },
         "constraints": {
           "type": "array",
           "items": { "$ref": "#/definitions/constraint" },
@@ -330,6 +341,17 @@
       "type": "array",
       "items": { "$ref": "#/definitions/objective" },
       "description": "List of objectives for optimization."
+    },
+    "events": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Events infrastructure configuration.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "chunk_interval": { "type": "string" },
+        "retention": { "type": "string" },
+        "detection_schedule": { "type": "string" }
+      }
     },
     "constraints": {
       "type": "array",

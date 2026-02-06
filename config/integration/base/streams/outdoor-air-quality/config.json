@@ -1,0 +1,484 @@
+{
+  "stream_id": "outdoor-air-quality",
+  "stream_type": "observation",
+  "description": "Outdoor air quality data from OpenWeatherMap Air Pollution API",
+  "version": "1.0.0",
+  "enabled": true,
+  "retention_days": 90,
+  "compression_after_days": 7,
+  "partitioning_strategy": "daily",
+  "fields": [
+    {
+      "name": "aqi",
+      "type": "float",
+      "nullable": false,
+      "unit": "1-5_scale",
+      "range": [
+        1,
+        5
+      ],
+      "description": "Air Quality Index (1=Good, 5=Very Poor)"
+    },
+    {
+      "name": "co",
+      "type": "float",
+      "nullable": true,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        50000
+      ],
+      "description": "Carbon Monoxide concentration"
+    },
+    {
+      "name": "no",
+      "type": "float",
+      "nullable": true,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        1000
+      ],
+      "description": "Nitrogen Monoxide concentration"
+    },
+    {
+      "name": "no2",
+      "type": "float",
+      "nullable": true,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        1000
+      ],
+      "description": "Nitrogen Dioxide concentration"
+    },
+    {
+      "name": "o3",
+      "type": "float",
+      "nullable": true,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        1000
+      ],
+      "description": "Ozone concentration"
+    },
+    {
+      "name": "so2",
+      "type": "float",
+      "nullable": true,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        1000
+      ],
+      "description": "Sulfur Dioxide concentration"
+    },
+    {
+      "name": "pm2_5",
+      "type": "float",
+      "nullable": false,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        1000
+      ],
+      "description": "Particulate Matter 2.5 micrometers"
+    },
+    {
+      "name": "pm10",
+      "type": "float",
+      "nullable": true,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        1000
+      ],
+      "description": "Particulate Matter 10 micrometers"
+    },
+    {
+      "name": "nh3",
+      "type": "float",
+      "nullable": true,
+      "unit": "μg/m³",
+      "range": [
+        0,
+        200
+      ],
+      "description": "Ammonia concentration"
+    }
+  ],
+  "sources": [
+    {
+      "type": "http_poll",
+      "enabled": true,
+      "ndp_id": "weather-owm-001",
+      "context": {
+        "source_type": {
+          "provider": "openweathermap",
+          "purpose": "air_quality"
+        },
+        "location": {
+          "coordinates": [
+            29.95838,
+            -81.30878
+          ],
+          "type": "outdoor",
+          "path": "beachhouse"
+        }
+      },
+      "poll_interval_secs": 600,
+      "timeout_secs": 30,
+      "parser_name": "openweathermap_air_pollution",
+      "endpoints": [
+        {
+          "endpoint_id": "openweathermap_air_pollution",
+          "location_id": "home",
+          "lat": 29.95838,
+          "lon": -81.30878,
+          "url": "https://api.openweathermap.org/data/2.5/air_pollution?lat=29.95838&lon=-81.30878",
+          "auth_type": "query_param",
+          "auth_key": "appid",
+          "auth_value": "${OPENWEATHERMAP_API_KEY}"
+        }
+      ],
+      "parser": {
+        "parser_type": "json_path",
+        "location_id_field": "coord",
+        "default_location_id": "${OWM_LOCATION_NAME}",
+        "default_tags": {
+          "source": "openweathermap",
+          "api": "air_pollution",
+          "stream_id": "outdoor-air-quality"
+        },
+        "field_mappings": [
+          {
+            "path": "list[0].main.aqi",
+            "metric_name": "aqi",
+            "unit": "1-5_scale"
+          },
+          {
+            "path": "list[0].components.co",
+            "metric_name": "co",
+            "unit": "ug/m3"
+          },
+          {
+            "path": "list[0].components.no",
+            "metric_name": "no",
+            "unit": "ug/m3"
+          },
+          {
+            "path": "list[0].components.no2",
+            "metric_name": "no2",
+            "unit": "ug/m3"
+          },
+          {
+            "path": "list[0].components.o3",
+            "metric_name": "o3",
+            "unit": "ug/m3"
+          },
+          {
+            "path": "list[0].components.so2",
+            "metric_name": "so2",
+            "unit": "ug/m3"
+          },
+          {
+            "path": "list[0].components.pm2_5",
+            "metric_name": "pm2_5",
+            "unit": "ug/m3"
+          },
+          {
+            "path": "list[0].components.pm10",
+            "metric_name": "pm10",
+            "unit": "ug/m3"
+          },
+          {
+            "path": "list[0].components.nh3",
+            "metric_name": "nh3",
+            "unit": "ug/m3"
+          }
+        ]
+      }
+    }
+  ],
+  "storage": {
+    "batch_size": 50,
+    "batch_timeout_secs": 30,
+    "buffer_capacity": 500
+  },
+  "silver_etl": {
+    "enabled": true,
+    "target_table": "silver.outdoor_air_quality",
+    "description": "Outdoor air quality from OpenWeatherMap Air Pollution API",
+    "grain": "One row per observation (~10 minute intervals)",
+    "timestamp": {
+      "source_field": "timestamp",
+      "target_field": "observation_time",
+      "transform": "microseconds_to_timestamp"
+    },
+    "identity_fields": [
+      {
+        "source": "ndp_id",
+        "target": "ndp_id"
+      }
+    ],
+    "field_mappings": [
+      {
+        "source_path": "raw_payload.list[0].main.aqi",
+        "target_column": "aqi_owm",
+        "type": "smallint",
+        "unit": "1-5 scale",
+        "description": "OpenWeatherMap Air Quality Index",
+        "nullable": false,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 1,
+            "max": 5,
+            "action": "flag"
+          },
+          {
+            "rule": "null_check",
+            "action": "reject"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].main.aqi",
+        "target_column": "aqi_epa",
+        "type": "smallint",
+        "unit": "0-500 scale",
+        "description": "EPA Air Quality Index (derived from OWM)",
+        "nullable": true,
+        "transform": {
+          "type": "expression",
+          "expression": "CASE aqi_owm\n  WHEN 1 THEN 25   -- Good (0-50)\n  WHEN 2 THEN 75   -- Moderate (51-100)\n  WHEN 3 THEN 125  -- Unhealthy for Sensitive (101-150)\n  WHEN 4 THEN 175  -- Unhealthy (151-200)\n  WHEN 5 THEN 300  -- Very Unhealthy/Hazardous (201-500)\n  ELSE NULL\nEND\n"
+        }
+      },
+      {
+        "source_path": "raw_payload.list[0].components.pm2_5",
+        "target_column": "pm25",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "PM2.5 particulate matter",
+        "nullable": false,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 1000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].components.pm10",
+        "target_column": "pm10",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "PM10 particulate matter",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 2000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].components.co",
+        "target_column": "co_ugm3",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "Carbon monoxide concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 50000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].components.no",
+        "target_column": "no_ugm3",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "Nitrogen monoxide concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 1000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].components.no2",
+        "target_column": "no2_ugm3",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "Nitrogen dioxide concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 1000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].components.o3",
+        "target_column": "o3_ugm3",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "Ozone concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 1000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].components.so2",
+        "target_column": "so2_ugm3",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "Sulfur dioxide concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 1000,
+            "action": "flag"
+          }
+        ]
+      },
+      {
+        "source_path": "raw_payload.list[0].components.nh3",
+        "target_column": "nh3_ugm3",
+        "type": "double_precision",
+        "unit": "ug/m3",
+        "description": "Ammonia concentration",
+        "nullable": true,
+        "dq_rules": [
+          {
+            "rule": "range_check",
+            "min": 0,
+            "max": 200,
+            "action": "flag"
+          }
+        ]
+      }
+    ],
+    "dq_rules": [
+      {
+        "rule": "cross_field_check",
+        "name": "pm10_gte_pm25",
+        "expression": "pm10 IS NULL OR pm25 IS NULL OR pm10 >= pm25",
+        "message": "pm10_less_than_pm25",
+        "action": "flag"
+      },
+      {
+        "rule": "freshness_check",
+        "field": "observation_time",
+        "max_age": "2 hours",
+        "max_future": "10 minutes",
+        "reference": "ingestion_time",
+        "action": "flag"
+      },
+      {
+        "rule": "rate_of_change",
+        "field": "pm25",
+        "max_change_per_minute": 50,
+        "partition_by": [
+          "ndp_id"
+        ],
+        "action": "flag"
+      },
+      {
+        "rule": "completeness_check",
+        "level": "batch",
+        "field": "pm25",
+        "min_completeness": 0.95,
+        "action": "warn"
+      },
+      {
+        "rule": "completeness_check",
+        "level": "batch",
+        "field": "aqi_owm",
+        "min_completeness": 0.98,
+        "action": "warn"
+      }
+    ],
+    "dq_output": {
+      "enabled": true,
+      "target_column": "dq_flags",
+      "include_rules": true,
+      "include_values": false,
+      "transparency": {
+        "enabled": true,
+        "table": "silver.dq_transparency",
+        "include_sample_payload": true,
+        "max_samples_per_rule": 10
+      }
+    },
+    "deduplication": {
+      "enabled": true,
+      "key_columns": [
+        "observation_time",
+        "ndp_id"
+      ],
+      "strategy": "upsert"
+    },
+    "incremental": {
+      "enabled": true,
+      "watermark_column": "observation_time",
+      "lag_interval": "5 minutes"
+    }
+  },
+  "gold_etl": {
+    "enabled": true,
+    "description": "Gold layer aggregates for outdoor air quality monitoring",
+    "aggregates": {
+      "granularities": ["1 hour"],
+      "fields": {
+        "pm25": { "metrics": ["mean", "std", "min", "max", "p95"] },
+        "pm10": { "metrics": ["mean", "min", "max"] },
+        "aqi_owm": { "metrics": ["mean", "min", "max"] },
+        "aqi_epa": { "metrics": ["mean", "min", "max"] },
+        "o3_ugm3": { "metrics": ["mean", "max"] },
+        "no2_ugm3": { "metrics": ["mean", "max"] },
+        "co_ugm3": { "metrics": ["mean", "max"] },
+        "so2_ugm3": { "metrics": ["mean", "max"] }
+      }
+    },
+    "features": {
+      "lag": {
+        "enabled": true,
+        "lags_hours": [1, 6, 24],
+        "fields": ["pm25", "aqi_epa"]
+      },
+      "rolling": {
+        "enabled": true,
+        "windows": ["4 hours", "24 hours"],
+        "stats": ["mean", "std"],
+        "fields": ["pm25"]
+      }
+    }
+  },
+  "config_version": 2
+}

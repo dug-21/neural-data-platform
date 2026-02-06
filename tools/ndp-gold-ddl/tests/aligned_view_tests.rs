@@ -220,6 +220,7 @@ fn test_single_stream_no_coalesce() {
             null_handling: NullHandling::Preserve,
         },
         objectives: vec![],
+        events: None,
     };
 
     let generator = AlignedViewGenerator::new(loader);
@@ -473,6 +474,7 @@ fn test_primary_stream_first_in_from() {
             null_handling: NullHandling::Preserve,
         },
         objectives: vec![],
+        events: None,
     };
 
     let generator = AlignedViewGenerator::new(loader);
@@ -532,6 +534,7 @@ fn test_no_primary_stream_error() {
             null_handling: NullHandling::Preserve,
         },
         objectives: vec![],
+        events: None,
     };
 
     let generator = AlignedViewGenerator::new(loader);

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.10] - 2026-02-06
+
+Wire events generator into ndp-gold-ddl CLI and deployment pipeline.
+
+### Added
+
+- **`--events` CLI flag** for `ndp-gold-ddl generate --domain <id> --events`
+  - Generates events hypertable, unified view, hourly CAs, detection procedure, and scheduled job
+  - Config-driven via `events` section in `domain.json`
+- **`events_hourly_by_entity` continuous aggregate** — per-entity/stream hourly event rollup
+  - Groups by `entity_id`, `stream_id` with same 15-minute refresh schedule
+  - Compound index on `(entity_id, bucket DESC)`
+- **Events section in `domain.json`** — `enabled`, `chunk_interval`, `retention`, `detection_schedule`
+- **deploy.sh events DDL generation** — `handle_domain()` now generates and applies events DDL
+  - Uses `ON_ERROR_STOP=1` for reliable error detection (fixes v1.1.6 silent failure root cause)
+
+### Changed
+
+- **Manifest format** — replaced migration-based deployment with domain declaration + tool build
+- **`EventsGenerator::from_domain_config()`** — now reads `events` config from domain when present
+
+### Removed
+
+- **008_events_hourly_refresh_policies.sql** — generator handles refresh policies natively
+
 ## [1.1.9] - 2026-02-06
 
 Deployment Tooling Foundation (ops-001). Extracts dictionary and dimension sync from Bash into Rust, with London TDD.

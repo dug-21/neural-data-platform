@@ -63,10 +63,13 @@ pub struct EventsGenerator {
 
 impl EventsGenerator {
     /// Create a new generator from domain configuration
+    ///
+    /// Uses events config from the domain if present, otherwise falls back to defaults.
     pub fn from_domain_config(domain: &DomainConfig) -> Self {
+        let config = domain.events.clone().unwrap_or_else(EventsConfig::new);
         Self {
             domain_id: domain.id.clone(),
-            config: EventsConfig::new(),
+            config,
         }
     }
 
@@ -116,6 +119,8 @@ impl EventsGenerator {
         ddl_parts.push(String::new());
         ddl_parts.push(self.generate_hourly_aggregate(action)?);
         ddl_parts.push(String::new());
+        ddl_parts.push(self.generate_hourly_by_entity_aggregate(action)?);
+        ddl_parts.push(String::new());
         ddl_parts.push(self.generate_detection_procedure()?);
         ddl_parts.push(String::new());
         ddl_parts.push(self.generate_detection_job()?);
@@ -164,6 +169,7 @@ END $$;
         Ok(format!(
             r#"-- Drop existing events infrastructure
 DROP VIEW IF EXISTS gold.events_unified CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly_by_entity CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly CASCADE;
 DROP TABLE IF EXISTS gold.events CASCADE;
 
@@ -314,7 +320,7 @@ WITH NO DATA"#;
 
         let refresh_policy = r#"-- Refresh policy for events hourly aggregate
 SELECT add_continuous_aggregate_policy('gold.events_hourly',
-    start_offset => INTERVAL '2 hours',
+    start_offset => INTERVAL '3 hours',
     end_offset => INTERVAL '1 hour',
     schedule_interval => INTERVAL '15 minutes',
     if_not_exists => TRUE
@@ -327,16 +333,91 @@ CREATE INDEX IF NOT EXISTS idx_events_hourly_bucket
         match action {
             Action::Sync => Ok(format!(
                 r#"-- Hourly events continuous aggregate (create if not exists)
--- CA-SYNC-CHECK: schema=gold name=events_hourly
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM timescaledb_information.continuous_aggregates
+        WHERE view_schema = 'gold'
+          AND view_name = 'events_hourly'
+    ) THEN
+        {create_ca_indented};
+        RAISE NOTICE 'Created continuous aggregate: gold.events_hourly';
+    ELSE
+        RAISE NOTICE 'gold.events_hourly already exists, skipping';
+    END IF;
+END $$;
+
+{refresh_policy}"#,
+                create_ca_indented = Self::indent(create_ca, 8),
+                refresh_policy = refresh_policy,
+            )),
+            Action::Recreate => Ok(format!(
+                r#"-- Hourly events continuous aggregate (recreate)
+DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly CASCADE;
+
 {create_ca};
 
 {refresh_policy}"#,
                 create_ca = create_ca,
                 refresh_policy = refresh_policy,
             )),
+        }
+    }
+
+    /// Generate hourly events by entity continuous aggregate SQL
+    pub fn generate_hourly_by_entity_aggregate(&self, action: Action) -> Result<String> {
+        let create_ca = r#"CREATE MATERIALIZED VIEW gold.events_hourly_by_entity
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 hour', event_time) AS bucket,
+    entity_id,
+    stream_id,
+    COUNT(*) AS total_events,
+    COUNT(*) FILTER (WHERE event_type = 'state_transition') AS state_transition_count,
+    COUNT(*) FILTER (WHERE event_type = 'threshold_crossing') AS threshold_crossing_count
+FROM gold.events
+GROUP BY bucket, entity_id, stream_id
+WITH NO DATA"#;
+
+        let refresh_policy = r#"-- Refresh policy for events hourly by entity aggregate
+SELECT add_continuous_aggregate_policy('gold.events_hourly_by_entity',
+    start_offset => INTERVAL '3 hours',
+    end_offset => INTERVAL '1 hour',
+    schedule_interval => INTERVAL '15 minutes',
+    if_not_exists => TRUE
+);
+
+-- Indexes for events hourly by entity
+CREATE INDEX IF NOT EXISTS idx_events_hourly_by_entity_bucket
+    ON gold.events_hourly_by_entity (bucket DESC);
+
+CREATE INDEX IF NOT EXISTS idx_events_hourly_by_entity_entity_bucket
+    ON gold.events_hourly_by_entity (entity_id, bucket DESC);"#;
+
+        match action {
+            Action::Sync => Ok(format!(
+                r#"-- Hourly events by entity continuous aggregate (create if not exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM timescaledb_information.continuous_aggregates
+        WHERE view_schema = 'gold'
+          AND view_name = 'events_hourly_by_entity'
+    ) THEN
+        {create_ca_indented};
+        RAISE NOTICE 'Created continuous aggregate: gold.events_hourly_by_entity';
+    ELSE
+        RAISE NOTICE 'gold.events_hourly_by_entity already exists, skipping';
+    END IF;
+END $$;
+
+{refresh_policy}"#,
+                create_ca_indented = Self::indent(create_ca, 8),
+                refresh_policy = refresh_policy,
+            )),
             Action::Recreate => Ok(format!(
-                r#"-- Hourly events continuous aggregate (recreate)
-DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly CASCADE;
+                r#"-- Hourly events by entity continuous aggregate (recreate)
+DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly_by_entity CASCADE;
 
 {create_ca};
 
@@ -353,6 +434,22 @@ DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly CASCADE;
 
         Ok(format!(
             r#"-- Event detection procedure (runs as TimescaleDB job)
+-- Delete dependent jobs and DROP procedure to avoid "cannot remove parameter defaults" error
+DO $$
+DECLARE
+    _job_id INTEGER;
+BEGIN
+    FOR _job_id IN
+        SELECT job_id FROM timescaledb_information.jobs
+        WHERE proc_schema = 'gold' AND proc_name = 'detect_events'
+    LOOP
+        PERFORM delete_job(_job_id);
+        RAISE NOTICE 'Deleted job % (gold.detect_events) before procedure replacement', _job_id;
+    END LOOP;
+END $$;
+
+DROP PROCEDURE IF EXISTS gold.detect_events(integer, jsonb);
+
 CREATE OR REPLACE PROCEDURE gold.detect_events(job_id INT, config JSONB)
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -544,13 +641,11 @@ COMMENT ON PROCEDURE gold.detect_events IS
     pub fn generate_detection_job(&self) -> Result<String> {
         Ok(format!(
             r#"-- Schedule the detection job (every {schedule})
-SELECT add_job('gold.detect_events', '{schedule}',
-    config => '{{}}'::JSONB,
-    if_not_exists => TRUE
-);
-
-COMMENT ON FUNCTION gold.detect_events IS
-    'Scheduled job: Detects events every {schedule} and inserts into gold.events.';"#,
+SELECT add_job(
+    'gold.detect_events'::regproc,
+    '{schedule}'::INTERVAL,
+    config => '{{}}'::JSONB
+);"#,
             schedule = self.config.detection_schedule,
         ))
     }
@@ -639,6 +734,7 @@ mod tests {
                 null_handling: NullHandling::Preserve,
             },
             objectives: vec![],
+            events: None,
         }
     }
 
@@ -1082,5 +1178,88 @@ mod tests {
             <EventsGenerator as IEventsGenerator>::generate_hourly_aggregate(&generator).unwrap();
 
         assert!(sql.contains("CREATE MATERIALIZED VIEW gold.events_hourly"));
+    }
+
+    // =========================================================================
+    // TDD Cycle 12: from_domain_config reads events config
+    // =========================================================================
+
+    #[test]
+    fn test_from_domain_config_uses_config_events_when_present() {
+        let mut domain = create_test_domain();
+        domain.events = Some(EventsConfig {
+            enabled: true,
+            chunk_interval: "14 days".to_string(),
+            retention: Some("2 years".to_string()),
+            detection_schedule: "30 minutes".to_string(),
+        });
+
+        let generator = EventsGenerator::from_domain_config(&domain);
+        let sql = generator.generate(Action::Recreate).unwrap();
+
+        assert!(sql.contains("INTERVAL '14 days'"));
+        assert!(sql.contains("INTERVAL '2 years'"));
+        assert!(sql.contains("'30 minutes'"));
+    }
+
+    #[test]
+    fn test_from_domain_config_uses_defaults_when_no_events_config() {
+        let domain = create_test_domain();
+        assert!(domain.events.is_none());
+
+        let generator = EventsGenerator::from_domain_config(&domain);
+        let sql = generator.generate(Action::Recreate).unwrap();
+
+        assert!(sql.contains("INTERVAL '7 days'"));
+        assert!(sql.contains("INTERVAL '1 year'"));
+        assert!(sql.contains("'15 minutes'"));
+    }
+
+    // =========================================================================
+    // TDD Cycle 13: events_hourly_by_entity CA
+    // =========================================================================
+
+    #[test]
+    fn test_generates_hourly_by_entity_aggregate() {
+        let domain = create_test_domain();
+        let generator = EventsGenerator::from_domain_config(&domain);
+
+        let sql = generator.generate(Action::Recreate).unwrap();
+
+        assert!(sql.contains("gold.events_hourly_by_entity"));
+        assert!(sql.contains("entity_id"));
+        assert!(sql.contains("stream_id"));
+        assert!(sql.contains("GROUP BY bucket, entity_id, stream_id"));
+    }
+
+    #[test]
+    fn test_hourly_by_entity_refresh_policy() {
+        let domain = create_test_domain();
+        let generator = EventsGenerator::from_domain_config(&domain);
+
+        let sql = generator.generate(Action::Recreate).unwrap();
+
+        assert!(sql.contains("add_continuous_aggregate_policy('gold.events_hourly_by_entity'"));
+    }
+
+    #[test]
+    fn test_hourly_by_entity_indexes() {
+        let domain = create_test_domain();
+        let generator = EventsGenerator::from_domain_config(&domain);
+
+        let sql = generator.generate(Action::Recreate).unwrap();
+
+        assert!(sql.contains("idx_events_hourly_by_entity_entity_bucket"));
+        assert!(sql.contains("(entity_id, bucket DESC)"));
+    }
+
+    #[test]
+    fn test_recreate_drops_hourly_by_entity() {
+        let domain = create_test_domain();
+        let generator = EventsGenerator::from_domain_config(&domain);
+
+        let sql = generator.generate(Action::Recreate).unwrap();
+
+        assert!(sql.contains("DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly_by_entity CASCADE"));
     }
 }

@@ -484,6 +484,7 @@ mod tests {
                 null_handling: NullHandling::Preserve,
             },
             objectives: vec![],
+            events: None,
         }
     }
 

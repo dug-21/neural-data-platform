@@ -16,7 +16,8 @@ use tracing_subscriber::EnvFilter;
 use ndp_gold_ddl::config::{Action, ConfigLoader, FileSystemConfigLoader};
 use ndp_gold_ddl::db::{PostgresCaChecker, PostgresClient};
 use ndp_gold_ddl::generators::{
-    AlignedViewGenerator, ContinuousAggregateGenerator, StateTransitionGenerator, TransitionConfig,
+    AlignedViewGenerator, ContinuousAggregateGenerator, EventsGenerator,
+    StateTransitionGenerator, TransitionConfig,
 };
 use ndp_gold_ddl::planner::SyncPlanner;
 
@@ -95,6 +96,10 @@ enum Commands {
         /// Generate state transitions view instead of continuous aggregate
         #[arg(long)]
         transitions: bool,
+
+        /// Generate events infrastructure DDL (requires --domain)
+        #[arg(long)]
+        events: bool,
     },
 
     /// Validate configuration without generating DDL
@@ -147,16 +152,27 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
             domain,
             action,
             transitions,
+            events,
         } => {
             let action: Action = action.parse().map_err(|e: String| e)?;
 
             if let Some(domain_id) = domain {
-                // Generate aligned view for domain
-                // Note: Domain generation doesn't use DB checks yet (future enhancement)
-                let domain_config = loader.load_domain_config(domain_id)?;
-                let generator = AlignedViewGenerator::new(loader);
-                let sql = generator.generate(&domain_config, action)?;
-                Ok(sql)
+                if *events {
+                    // Generate events infrastructure DDL for domain
+                    let domain_config = loader.load_domain_config(domain_id)?;
+                    let generator = EventsGenerator::from_domain_config(&domain_config);
+                    let sql = generator.generate(action)?;
+                    Ok(sql)
+                } else {
+                    // Generate aligned view for domain
+                    // Note: Domain generation doesn't use DB checks yet (future enhancement)
+                    let domain_config = loader.load_domain_config(domain_id)?;
+                    let generator = AlignedViewGenerator::new(loader);
+                    let sql = generator.generate(&domain_config, action)?;
+                    Ok(sql)
+                }
+            } else if *events {
+                Err("--events requires --domain".into())
             } else if let Some(stream_id) = stream {
                 // Generate DDL for stream
                 let stream_config = loader.load_stream_config(stream_id)?;

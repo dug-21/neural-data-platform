@@ -681,6 +681,16 @@ pub fn default_domain_schema() -> Value {
                     }
                 }
             },
+            "events": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "enabled": { "type": "boolean" },
+                    "chunk_interval": { "type": "string" },
+                    "retention": { "type": "string" },
+                    "detection_schedule": { "type": "string" }
+                }
+            },
             "constraints": {
                 "type": "array",
                 "items": {

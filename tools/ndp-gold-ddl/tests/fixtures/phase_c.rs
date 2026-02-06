@@ -66,6 +66,7 @@ pub fn create_three_stream_domain() -> DomainConfig {
             create_objective_config("healthy_co2", "co2", "<", 800.0),
             create_objective_config("healthy_pm25", "pm25", "<", 12.0),
         ],
+        events: None,
     }
 }
 
@@ -99,6 +100,7 @@ pub fn create_two_stream_domain() -> DomainConfig {
             null_handling: NullHandling::Preserve,
         },
         objectives: vec![],
+        events: None,
     }
 }
 
@@ -132,6 +134,7 @@ pub fn create_domain_with_forecast() -> DomainConfig {
             null_handling: NullHandling::Preserve,
         },
         objectives: vec![],
+        events: None,
     }
 }
 
