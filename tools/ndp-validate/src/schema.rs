@@ -688,7 +688,8 @@ pub fn default_domain_schema() -> Value {
                     "enabled": { "type": "boolean" },
                     "chunk_interval": { "type": "string" },
                     "retention": { "type": "string" },
-                    "detection_schedule": { "type": "string" }
+                    "detection_schedule": { "type": "string" },
+                    "refresh_start_offset_days": { "type": "integer", "minimum": 1 }
                 }
             },
             "constraints": {

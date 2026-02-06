@@ -122,17 +122,20 @@ FROM gold.events
 GROUP BY bucket
 WITH NO DATA;
 
--- Refresh policy for events hourly aggregate
+-- Refresh policy for events hourly aggregate (remove+add ensures correct offsets on redeploy)
+SELECT remove_continuous_aggregate_policy('gold.events_hourly', if_exists => TRUE);
 SELECT add_continuous_aggregate_policy('gold.events_hourly',
-    start_offset => INTERVAL '3 hours',
+    start_offset => INTERVAL '365 days',
     end_offset => INTERVAL '1 hour',
-    schedule_interval => INTERVAL '15 minutes',
-    if_not_exists => TRUE
+    schedule_interval => INTERVAL '15 minutes'
 );
 
 -- Index for time range queries
 CREATE INDEX IF NOT EXISTS idx_events_hourly_bucket
     ON gold.events_hourly (bucket DESC);
+
+-- Backfill: materialize any events outside the rolling refresh window
+CALL refresh_continuous_aggregate('gold.events_hourly', NULL, NULL);
 
 -- Hourly events by entity continuous aggregate (recreate)
 DROP MATERIALIZED VIEW IF EXISTS gold.events_hourly_by_entity CASCADE;
@@ -150,12 +153,12 @@ FROM gold.events
 GROUP BY bucket, entity_id, stream_id
 WITH NO DATA;
 
--- Refresh policy for events hourly by entity aggregate
+-- Refresh policy for events hourly by entity aggregate (remove+add ensures correct offsets on redeploy)
+SELECT remove_continuous_aggregate_policy('gold.events_hourly_by_entity', if_exists => TRUE);
 SELECT add_continuous_aggregate_policy('gold.events_hourly_by_entity',
-    start_offset => INTERVAL '3 hours',
+    start_offset => INTERVAL '365 days',
     end_offset => INTERVAL '1 hour',
-    schedule_interval => INTERVAL '15 minutes',
-    if_not_exists => TRUE
+    schedule_interval => INTERVAL '15 minutes'
 );
 
 -- Indexes for events hourly by entity
@@ -164,6 +167,9 @@ CREATE INDEX IF NOT EXISTS idx_events_hourly_by_entity_bucket
 
 CREATE INDEX IF NOT EXISTS idx_events_hourly_by_entity_entity_bucket
     ON gold.events_hourly_by_entity (entity_id, bucket DESC);
+
+-- Backfill: materialize any events outside the rolling refresh window
+CALL refresh_continuous_aggregate('gold.events_hourly_by_entity', NULL, NULL);
 
 -- Event detection procedure (runs as TimescaleDB job)
 -- Delete dependent jobs and DROP procedure to avoid "cannot remove parameter defaults" error

@@ -130,6 +130,7 @@ pub fn create_energy_monitoring_domain() -> DomainConfig {
             chunk_interval: "7 days".to_string(),
             retention: Some("1 year".to_string()),
             detection_schedule: "15 minutes".to_string(),
+            refresh_start_offset_days: 365,
         }),
     }
 }

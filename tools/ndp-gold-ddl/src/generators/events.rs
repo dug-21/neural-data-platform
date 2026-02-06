@@ -34,6 +34,12 @@ pub struct EventsConfig {
     /// Detection job schedule (e.g., "15 minutes")
     #[serde(default = "default_detection_schedule")]
     pub detection_schedule: String,
+
+    /// Refresh window for continuous aggregates (days).
+    /// The CA refresh policy re-processes data this far back each cycle.
+    /// Defaults to 365 to match the typical 1-year retention.
+    #[serde(default = "default_refresh_start_offset_days")]
+    pub refresh_start_offset_days: u32,
 }
 
 fn default_chunk_interval() -> String {
@@ -44,6 +50,10 @@ fn default_detection_schedule() -> String {
     "15 minutes".to_string()
 }
 
+fn default_refresh_start_offset_days() -> u32 {
+    365
+}
+
 impl EventsConfig {
     /// Create a new events config with default values
     pub fn new() -> Self {
@@ -52,6 +62,7 @@ impl EventsConfig {
             chunk_interval: default_chunk_interval(),
             retention: Some("1 year".to_string()),
             detection_schedule: default_detection_schedule(),
+            refresh_start_offset_days: default_refresh_start_offset_days(),
         }
     }
 }
@@ -369,18 +380,22 @@ WITH NO DATA"#,
             gold_schema = GOLD_SCHEMA,
         );
 
+        let refresh_start_offset_days = self.config.refresh_start_offset_days;
         let refresh_policy = format!(
-            r#"-- Refresh policy for events hourly aggregate
+            r#"-- Refresh policy for events hourly aggregate (remove+add ensures correct offsets on redeploy)
+SELECT remove_continuous_aggregate_policy('{gold_schema}.events_hourly', if_exists => TRUE);
 SELECT add_continuous_aggregate_policy('{gold_schema}.events_hourly',
-    start_offset => INTERVAL '3 hours',
+    start_offset => INTERVAL '{refresh_start_offset_days} days',
     end_offset => INTERVAL '1 hour',
-    schedule_interval => INTERVAL '15 minutes',
-    if_not_exists => TRUE
+    schedule_interval => INTERVAL '15 minutes'
 );
 
 -- Index for time range queries
 CREATE INDEX IF NOT EXISTS idx_events_hourly_bucket
-    ON {gold_schema}.events_hourly (bucket DESC);"#,
+    ON {gold_schema}.events_hourly (bucket DESC);
+
+-- Backfill: materialize any events outside the rolling refresh window
+CALL refresh_continuous_aggregate('{gold_schema}.events_hourly', NULL, NULL);"#,
             gold_schema = GOLD_SCHEMA,
         );
 
@@ -438,13 +453,14 @@ WITH NO DATA"#,
             gold_schema = GOLD_SCHEMA,
         );
 
+        let refresh_start_offset_days = self.config.refresh_start_offset_days;
         let refresh_policy = format!(
-            r#"-- Refresh policy for events hourly by entity aggregate
+            r#"-- Refresh policy for events hourly by entity aggregate (remove+add ensures correct offsets on redeploy)
+SELECT remove_continuous_aggregate_policy('{gold_schema}.events_hourly_by_entity', if_exists => TRUE);
 SELECT add_continuous_aggregate_policy('{gold_schema}.events_hourly_by_entity',
-    start_offset => INTERVAL '3 hours',
+    start_offset => INTERVAL '{refresh_start_offset_days} days',
     end_offset => INTERVAL '1 hour',
-    schedule_interval => INTERVAL '15 minutes',
-    if_not_exists => TRUE
+    schedule_interval => INTERVAL '15 minutes'
 );
 
 -- Indexes for events hourly by entity
@@ -452,7 +468,10 @@ CREATE INDEX IF NOT EXISTS idx_events_hourly_by_entity_bucket
     ON {gold_schema}.events_hourly_by_entity (bucket DESC);
 
 CREATE INDEX IF NOT EXISTS idx_events_hourly_by_entity_entity_bucket
-    ON {gold_schema}.events_hourly_by_entity (entity_id, bucket DESC);"#,
+    ON {gold_schema}.events_hourly_by_entity (entity_id, bucket DESC);
+
+-- Backfill: materialize any events outside the rolling refresh window
+CALL refresh_continuous_aggregate('{gold_schema}.events_hourly_by_entity', NULL, NULL);"#,
             gold_schema = GOLD_SCHEMA,
         );
 
@@ -1406,6 +1425,7 @@ mod tests {
             chunk_interval: "7 days".to_string(),
             retention: Some("1 year".to_string()),
             detection_schedule: "15 minutes".to_string(),
+            refresh_start_offset_days: 365,
         }
     }
 
@@ -1643,9 +1663,14 @@ mod tests {
 
         let sql = generator.generate(Action::Recreate).unwrap();
 
+        // Remove old policy before adding (idempotent redeploy)
+        assert!(sql.contains("remove_continuous_aggregate_policy('gold.events_hourly'"));
         assert!(sql.contains("add_continuous_aggregate_policy"));
         assert!(sql.contains("gold.events_hourly"));
+        assert!(sql.contains("start_offset => INTERVAL '365 days'"));
         assert!(sql.contains("schedule_interval"));
+        // Backfill after creation
+        assert!(sql.contains("CALL refresh_continuous_aggregate('gold.events_hourly'"));
     }
 
     // =========================================================================
@@ -1938,6 +1963,7 @@ mod tests {
             chunk_interval: "14 days".to_string(),
             retention: Some("2 years".to_string()),
             detection_schedule: "30 minutes".to_string(),
+            refresh_start_offset_days: 730,
         });
 
         let generator = EventsGenerator::from_domain_config(
@@ -1997,7 +2023,12 @@ mod tests {
 
         let sql = generator.generate(Action::Recreate).unwrap();
 
+        // Remove old policy before adding (idempotent redeploy)
+        assert!(sql.contains("remove_continuous_aggregate_policy('gold.events_hourly_by_entity'"));
         assert!(sql.contains("add_continuous_aggregate_policy('gold.events_hourly_by_entity'"));
+        assert!(sql.contains("start_offset => INTERVAL '365 days'"));
+        // Backfill after creation
+        assert!(sql.contains("CALL refresh_continuous_aggregate('gold.events_hourly_by_entity'"));
     }
 
     #[test]
