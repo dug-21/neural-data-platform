@@ -75,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -n \"$PROMPT\" ] && npx @claude-flow/cli@latest hooks route --task \"$PROMPT\" || true",
+            "command": "[ -n \"$PROMPT\" ] && bash .claude/hooks/prompt-check.sh \"$PROMPT\" || true",
             "timeout": 5000,
             "continueOnError": true
           }
