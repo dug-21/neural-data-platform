@@ -59,6 +59,7 @@ Eliminate 50+ hardcoded domain-specific values from Gold DDL generators (`events
 |----|--------|---------|
 | BUG-001 | FIXED | Duplicate CTE names in detection procedure when objectives share metric (humidity_pct, temperature_c) |
 | BUG-002 | FIXED | Domain objectives sync migrated from dead Bash to `ndp domain sync` Rust CLI (v1.1.12). 18 London TDD tests, E2E verified. |
+| BUG-003 | FIXED | CA refresh policy: hardcoded 3-hour start_offset + if_not_exists caused events_hourly to miss historical data. Now config-driven (v1.1.13). |
 
 ## Release Target
 - **Version:** v1.1.11 (PATCH -- refactoring, no new features)

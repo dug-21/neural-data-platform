@@ -1,0 +1,18 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.13",
+  "description": "Fix CA refresh policy: config-driven start_offset, remove+add pattern, backfill (BUG-003, ops-002)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "sync"
+    }
+  ]
+}

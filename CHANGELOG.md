@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.13] - 2026-02-06
+
+Fix CA refresh policy: events_hourly showed no data because start_offset was hardcoded to 3 hours and if_not_exists prevented updates on redeploy (BUG-003, ops-002).
+
+### Fixed
+
+- **events_hourly empty after deploy** (BUG-003) — CA refresh policy used `start_offset => INTERVAL '3 hours'` with `if_not_exists => TRUE`, causing historical events to never materialize and preventing offset changes on redeploy
+- Replaced `if_not_exists` with remove+add pattern for idempotent redeployment
+- Added `CALL refresh_continuous_aggregate(..., NULL, NULL)` to backfill data outside the rolling window
+
+### Changed
+
+- **`refresh_start_offset_days`** — new optional config field in `EventsConfig` (default 365). Controls how far back the CA refresh policy extends. Existing configs without the field use the default.
+- **ndp-validate schema** — added `refresh_start_offset_days` (integer, minimum 1) to events schema
+
 ## [1.1.12] - 2026-02-06
 
 Fix domain objectives sync: migrate ~200 lines of dead Bash (YAML-based, never worked with JSON configs) to Rust CLI command `ndp domain sync` (BUG-002, ops-002).
