@@ -72,7 +72,8 @@ pub fn parse_csv(csv_content: &[u8], config: &DimensionConfig) -> Result<Vec<Vec
 /// Build a parameterized INSERT SQL statement for a batch of rows.
 ///
 /// Returns `(sql, params_per_row)` where `sql` contains `$1`, `$2`, etc.
-/// placeholders. Each row occupies `params_per_row` parameter slots.
+/// placeholders with type casts for non-text columns (e.g. `$5::TEXT[]`).
+/// Each row occupies `params_per_row` parameter slots.
 ///
 /// Example output for a 3-column table with 2 rows:
 /// ```text
@@ -82,21 +83,33 @@ pub fn parse_csv(csv_content: &[u8], config: &DimensionConfig) -> Result<Vec<Vec
 pub fn build_insert_sql(config: &DimensionConfig, row_count: usize) -> (String, usize) {
     let schema_name = &config.target.schema;
     let table_name = &config.target.table;
-    let columns: Vec<&str> = config
-        .schema
-        .fields
+    let fields = &config.schema.fields;
+    let params_per_row = fields.len();
+
+    let column_list: String = fields
         .iter()
         .map(|f| f.name.as_str())
-        .collect();
-    let params_per_row = columns.len();
+        .collect::<Vec<_>>()
+        .join(", ");
 
-    let column_list = columns.join(", ");
+    // Build type casts for non-text fields so PostgreSQL coerces the
+    // text parameter to the correct column type (e.g. TEXT[] for arrays).
+    let type_casts: Vec<Option<String>> = fields
+        .iter()
+        .map(|f| pg_cast_suffix(&f.field_type))
+        .collect();
 
     let mut value_groups: Vec<String> = Vec::with_capacity(row_count);
     for row_idx in 0..row_count {
         let base = row_idx * params_per_row;
         let placeholders: Vec<String> = (1..=params_per_row)
-            .map(|i| format!("${}", base + i))
+            .map(|i| {
+                let param = format!("${}", base + i);
+                match &type_casts[i - 1] {
+                    Some(cast) => format!("{}{}", param, cast),
+                    None => param,
+                }
+            })
             .collect();
         value_groups.push(format!("({})", placeholders.join(", ")));
     }
@@ -110,6 +123,21 @@ pub fn build_insert_sql(config: &DimensionConfig, row_count: usize) -> (String, 
     );
 
     (sql, params_per_row)
+}
+
+/// Return a SQL type cast suffix for field types that need explicit casting.
+///
+/// Plain text columns need no cast (tokio-postgres sends String as TEXT).
+/// Array and other non-text types need an explicit cast so PostgreSQL
+/// can coerce the text parameter to the target column type.
+fn pg_cast_suffix(field_type: &str) -> Option<String> {
+    match field_type {
+        "text" | "TEXT" => None,
+        _ => {
+            let pg_type = field_type.to_uppercase().replace('_', " ");
+            Some(format!("::{}", pg_type))
+        }
+    }
 }
 
 /// Build TRUNCATE SQL for the target table.
@@ -240,6 +268,44 @@ mod tests {
         let config = test_config(&["id"]);
         let sql = build_truncate_sql(&config);
         assert_eq!(sql, "TRUNCATE TABLE silver.test_table");
+    }
+
+    #[test]
+    fn test_build_insert_sql_with_type_cast() {
+        // Simulate a config with a TEXT[] column
+        let mut config = test_config(&["id", "name", "tags"]);
+        config.schema.fields[2].field_type = "text[]".to_string();
+
+        let (sql, ppr) = build_insert_sql(&config, 1);
+        assert_eq!(ppr, 3);
+        assert_eq!(
+            sql,
+            "INSERT INTO silver.test_table (id, name, tags) VALUES ($1, $2, $3::TEXT[])"
+        );
+    }
+
+    #[test]
+    fn test_build_insert_sql_cast_multi_row() {
+        let mut config = test_config(&["id", "arr"]);
+        config.schema.fields[1].field_type = "text[]".to_string();
+
+        let (sql, _) = build_insert_sql(&config, 2);
+        assert_eq!(
+            sql,
+            "INSERT INTO silver.test_table (id, arr) VALUES ($1, $2::TEXT[]), ($3, $4::TEXT[])"
+        );
+    }
+
+    #[test]
+    fn test_pg_cast_suffix() {
+        assert_eq!(pg_cast_suffix("text"), None);
+        assert_eq!(pg_cast_suffix("TEXT"), None);
+        assert_eq!(pg_cast_suffix("text[]"), Some("::TEXT[]".to_string()));
+        assert_eq!(pg_cast_suffix("integer"), Some("::INTEGER".to_string()));
+        assert_eq!(
+            pg_cast_suffix("double_precision"),
+            Some("::DOUBLE PRECISION".to_string())
+        );
     }
 
     /// Helper: wrap a string into `Some(String)`.

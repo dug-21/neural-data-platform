@@ -50,9 +50,9 @@
       },
       {
         "name": "correlates_with",
-        "type": "text",
+        "type": "text[]",
         "nullable": true,
-        "description": "Comma-separated list of correlated entity ndp_ids"
+        "description": "Array of correlated entity ndp_ids"
       },
       {
         "name": "orientation",
