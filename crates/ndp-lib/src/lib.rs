@@ -21,6 +21,7 @@
 //! - [`types`] - Shared types (SyncReport, SyncOptions)
 
 pub mod config;
+pub mod convert;
 pub mod db;
 pub mod dictionary;
 pub mod dimension;

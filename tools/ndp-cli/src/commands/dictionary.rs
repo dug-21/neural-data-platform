@@ -55,32 +55,85 @@ pub async fn run(
 
             tracing::info!(stream_count = configs.len(), "Loaded stream configurations");
 
+            // Convert StreamConfig -> StreamDictionaryEntry
+            let entries: Vec<ndp_lib::dictionary::types::StreamDictionaryEntry> = configs
+                .iter()
+                .map(ndp_lib::convert::stream_config_to_dictionary_entry)
+                .collect();
+
+            let options = ndp_lib::types::SyncOptions { dry_run };
+
             if dry_run {
-                println!(
-                    "DRY RUN: Would sync {} stream(s) to data_dictionary",
-                    configs.len()
-                );
+                let report =
+                    ndp_lib::dictionary::sync_dictionary(&entries, &NoOpDbClient, &options).await?;
+
+                println!("DRY RUN dictionary sync:");
+                println!("  Streams:        {}", report.items_processed);
+                println!("  Bronze items:   {}", report.items_created);
+                println!("  Silver items:   {}", report.items_updated);
+
                 for config in &configs {
-                    println!("  - {} ({})", config.stream_id, config.description);
+                    let etl_info = config
+                        .silver_etl
+                        .as_ref()
+                        .and_then(|e| e.target_table.as_deref())
+                        .unwrap_or("(no silver)");
+                    println!("  - {} -> {}", config.stream_id, etl_info);
                 }
                 return Ok(());
             }
 
             // Connect to DB and run sync
-            // NOTE: Dictionary sync requires StreamConfig -> StreamDictionaryEntry
-            // conversion, which is Phase B completion work (not Phase C scope).
             tracing::info!(db_url = %db_url, "Connecting to database");
-            let _db = ndp_lib::db::PostgresClient::connect(db_url, 10).await?;
-            let _options = ndp_lib::types::SyncOptions { dry_run };
+            let db = ndp_lib::db::PostgresClient::connect(db_url, 10).await?;
 
-            // TODO(Phase B): Convert Vec<StreamConfig> to Vec<StreamDictionaryEntry>
-            //                 then call ndp_lib::dictionary::sync_dictionary()
-            println!(
-                "dictionary sync: {} stream(s) found (wiring pending Phase B completion)",
-                configs.len()
-            );
+            let report = ndp_lib::dictionary::sync_dictionary(&entries, &db, &options).await?;
+
+            println!("Dictionary sync complete:");
+            println!("  Streams synced: {}", report.items_processed);
+            println!("  Bronze created: {}", report.items_created);
+            println!("  Silver updated: {}", report.items_updated);
+            println!("  Duration:       {:.2}s", report.duration.as_secs_f64());
+
+            if !report.errors.is_empty() {
+                println!("  Warnings:       {}", report.errors.len());
+                for err in &report.errors {
+                    println!("    - {}: {}", err.item, err.message);
+                }
+            }
 
             Ok(())
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NoOpDbClient for dry-run mode
+// ---------------------------------------------------------------------------
+
+use async_trait::async_trait;
+
+struct NoOpDbClient;
+
+#[async_trait]
+impl ndp_lib::DbClient for NoOpDbClient {
+    async fn query(
+        &self,
+        _query: &str,
+        _params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+    ) -> ndp_lib::Result<Vec<tokio_postgres::Row>> {
+        unreachable!("NoOpDbClient should not be called in dry_run mode")
+    }
+
+    async fn execute(
+        &self,
+        _query: &str,
+        _params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+    ) -> ndp_lib::Result<u64> {
+        unreachable!("NoOpDbClient should not be called in dry_run mode")
+    }
+
+    async fn batch_execute(&self, _sql: &str) -> ndp_lib::Result<()> {
+        unreachable!("NoOpDbClient should not be called in dry_run mode")
     }
 }

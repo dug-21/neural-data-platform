@@ -51,6 +51,10 @@ pub struct StreamConfig {
     #[serde(default)]
     pub fields: Vec<BronzeField>,
 
+    /// Data sources feeding this stream (MQTT, HTTP, etc.).
+    #[serde(default)]
+    pub sources: Vec<SourceConfig>,
+
     /// Silver ETL configuration (optional -- some streams may not have it).
     #[serde(default)]
     pub silver_etl: Option<SilverEtlConfig>,
@@ -83,6 +87,29 @@ pub struct BronzeField {
 
     #[serde(default)]
     pub range: Option<Vec<serde_json::Value>>,
+}
+
+/// A data source definition from the `sources[]` array.
+///
+/// Sources have varied shapes (MQTT vs HTTP), so we capture the common
+/// fields and stash everything else into `extra` for the dictionary config blob.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SourceConfig {
+    #[serde(rename = "type")]
+    pub source_type: String,
+
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    #[serde(default)]
+    pub ndp_id: Option<String>,
+
+    #[serde(default)]
+    pub parser: Option<serde_json::Value>,
+
+    /// All remaining fields captured as-is for the dictionary config JSONB column.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Silver ETL configuration block.
@@ -260,9 +287,7 @@ fn default_batch_size() -> usize {
 /// Loads stream and dimension configs from the local filesystem.
 ///
 /// Streams are expected at `<streams_dir>/<stream_id>/config.json`.
-/// Dimensions are expected at `<dimensions_dir>/<dim_id>/config.json`
-/// (or the legacy `.yaml` path, which this loader does NOT read --
-/// dimension configs should be migrated to JSON per ops-001-12).
+/// Dimensions are expected at `<dimensions_dir>/<dim_id>.json` (flat file pattern).
 pub struct FileSystemConfigLoader {
     streams_dir: PathBuf,
     dimensions_dir: PathBuf,
@@ -353,7 +378,8 @@ impl ConfigLoader for FileSystemConfigLoader {
     }
 
     fn load_dimension_config(&self, dimension_id: &str) -> Result<DimensionConfig> {
-        let config_path = self.dimensions_dir.join(dimension_id).join("config.json");
+        // Flat file pattern: <dimensions_dir>/<dim_id>.json
+        let config_path = self.dimensions_dir.join(format!("{}.json", dimension_id));
 
         if !config_path.exists() {
             return Err(NdpLibError::ConfigNotFound {

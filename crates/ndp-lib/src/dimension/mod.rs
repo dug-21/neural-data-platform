@@ -84,6 +84,14 @@ pub async fn sync_dimension(
     // 3. Insert in batches
     let mut items_created: usize = 0;
 
+    // Identify which fields are array types (need Vec<String> params)
+    let field_types: Vec<&str> = config
+        .schema
+        .fields
+        .iter()
+        .map(|f| f.field_type.as_str())
+        .collect();
+
     for chunk in rows.chunks(batch_size) {
         let (insert_sql, params_per_row) = build_insert_sql(config, chunk.len());
 
@@ -95,14 +103,28 @@ pub async fn sync_dimension(
             );
             items_created += chunk.len();
         } else {
-            // Flatten chunk into a parameter list
-            let flat_params: Vec<Option<String>> =
-                chunk.iter().flat_map(|row| row.iter().cloned()).collect();
+            // Build typed params: Box<dyn ToSql> to handle mixed types
+            // TEXT columns -> Option<String>, TEXT[] columns -> Option<Vec<String>>
+            let mut boxed_params: Vec<Box<dyn tokio_postgres::types::ToSql + Sync>> =
+                Vec::with_capacity(params_per_row * chunk.len());
 
-            // Build references for tokio-postgres params
-            let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = flat_params
+            for row in chunk.iter() {
+                for (i, cell) in row.iter().enumerate() {
+                    let ft = field_types.get(i).copied().unwrap_or("text");
+                    if ft.ends_with("[]") {
+                        // Array column: parse "{a,b}" into Vec<String>
+                        let arr: Option<Vec<String>> =
+                            cell.as_ref().map(|s| csv_import::parse_pg_array(s));
+                        boxed_params.push(Box::new(arr));
+                    } else {
+                        boxed_params.push(Box::new(cell.clone()));
+                    }
+                }
+            }
+
+            let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = boxed_params
                 .iter()
-                .map(|opt| opt as &(dyn tokio_postgres::types::ToSql + Sync))
+                .map(|b| b.as_ref())
                 .collect();
 
             let affected = db.execute(&insert_sql, &param_refs).await.map_err(|e| {

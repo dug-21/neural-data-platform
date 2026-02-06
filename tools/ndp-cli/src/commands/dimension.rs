@@ -49,8 +49,7 @@ pub async fn run(
             let config_path = config.unwrap_or_else(|| {
                 base_config_dir
                     .join("dimensions")
-                    .join(&dimension_id)
-                    .join("config.json")
+                    .join(format!("{}.json", dimension_id))
             });
 
             tracing::info!(
