@@ -1,0 +1,21 @@
+[package]
+name = "ndp-lib"
+version = "0.1.0"
+edition = "2021"
+description = "NDP shared operational logic library"
+
+[dependencies]
+ndp-types = { path = "../ndp-types" }
+tokio-postgres = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+csv = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"

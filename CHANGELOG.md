@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.9] - 2026-02-06
+
+Deployment Tooling Foundation (ops-001). Extracts dictionary and dimension sync from Bash into Rust, with London TDD.
+
+### Added
+
+- **ndp-lib crate** (`crates/ndp-lib/`)
+  - `sync_dictionary()` - Replaces ~460 lines of Bash SQL generation with parameterized queries
+  - `sync_dimension()` - CSV-to-Silver dimension import with batch INSERT
+  - `DbClient` trait (query/execute/batch_execute) for mockable database access
+  - `ConfigLoader` trait for source-agnostic config loading (files today, etcd later)
+  - `SyncReport` structured output from all sync operations
+  - 57 London TDD tests with MockDbClient
+
+- **ndp-cli tool** (`tools/ndp-cli/`)
+  - `ndp dictionary sync` - Sync data dictionary from stream configs
+  - `ndp dimension sync <id>` - Sync dimension table from CSV
+  - Entity/verb CLI structure designed for V1.1-V2.0 journey
+  - `--dry-run` support on all commands
+  - Environment-aware config resolution (DEPLOY_ENV=integration|pi)
+
+- **Dimension config JSON migration** (ops-001-12)
+  - `config/base/dimensions/entity_context.json` (YAML preserved as fallback)
+
+- **deploy.sh integration** (ops-001-09)
+  - `command -v ndp` fallback wrapper around `sync_to_data_dictionary()`
+  - `command -v ndp` fallback wrapper around `sync_dimension()`
+  - `ndp-cli` added to supported tool builds
+  - JSON-priority glob for dimension configs (`*.json` before `*.yaml`)
+
+### Fixed
+
+- **Stale data dictionary bug** (ops-001-13) - Bash `sync_to_data_dictionary()` read legacy `.yaml` files instead of authoritative `.json` configs; Rust implementation reads `.json` only
+
+### Technical Notes
+
+- Functions take parsed structs, not file paths (source-agnostic for files/etcd)
+- Parameterized SQL ($1, $2) replaces Bash string concatenation
+- Bronze layer: DELETE + INSERT; Silver layer: UPSERT
+- 600+ tests passing across all crates (ndp-lib: 57, ndp-types: 88, ndp-gold-ddl: 338, ndp-validate: 217)
+- No changes to existing crate code - purely additive
+
 ## [1.1.8] - 2026-02-05
 
 Domain Configuration Standardization (FE-002). Migrates domain configs from YAML to JSON, fixes schema format, and adds CLI validation.
@@ -353,7 +395,8 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.8...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.9...HEAD
+[1.1.9]: https://github.com/dug-21/neural-data-platform/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/dug-21/neural-data-platform/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/dug-21/neural-data-platform/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/dug-21/neural-data-platform/compare/v1.1.2...v1.1.6

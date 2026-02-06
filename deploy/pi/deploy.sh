@@ -381,6 +381,48 @@ sync_to_data_dictionary() {
         sleep 2
     done
 
+    # Use Rust CLI if available (ops-001 Phase D)
+    local ndp_tool=""
+    if command -v ndp &> /dev/null; then
+        ndp_tool="ndp"
+    elif [ -x "/opt/ndp/bin/ndp" ]; then
+        ndp_tool="/opt/ndp/bin/ndp"
+    elif [ -x "$REPO_ROOT/target/release/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/release/ndp"
+    elif [ -x "$REPO_ROOT/target/debug/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/debug/ndp"
+    fi
+
+    if [ -n "$ndp_tool" ]; then
+        log "Using ndp CLI for dictionary sync ($ndp_tool)..."
+        local ndp_args="dictionary sync --config-dir $CONFIG_STREAMS_DIR"
+
+        # Add db-url based on environment
+        if [ -n "${TIMESCALE_URL:-}" ]; then
+            ndp_args="$ndp_args --db-url $TIMESCALE_URL"
+        fi
+
+        if [ "${DRY_RUN:-false}" = "true" ]; then
+            ndp_args="$ndp_args --dry-run"
+        fi
+
+        if $ndp_tool $ndp_args; then
+            log "Data Dictionary sync successful (via ndp CLI)"
+            return 0
+        else
+            error "ndp dictionary sync FAILED. Not falling back to Bash."
+            error "Fix the Rust implementation or remove ndp binary to use Bash fallback."
+            return 1
+        fi
+    fi
+
+    # Fallback: Bash implementation (only when ndp binary does not exist)
+    log "ndp CLI not found, using Bash dictionary sync"
+    _sync_to_data_dictionary_bash
+}
+
+# Original Bash implementation (preserved as fallback for ops-001 Phase D)
+_sync_to_data_dictionary_bash() {
     local CONFIG_DIR="$CONFIG_STREAMS_DIR"
     local SQL_FILE="/tmp/data_dictionary_sync_$$.sql"
 
@@ -1174,16 +1216,29 @@ sync_dimension() {
     update_dimension_state "$dimension_id" "syncing"
 
     # Call the Rust CLI to perform the actual sync if available
+    local ndp_tool=""
     if command -v ndp &> /dev/null; then
-        if ndp dimension sync "$dimension_id" --config "$config_file" --source "$source_file"; then
+        ndp_tool="ndp"
+    elif [ -x "/opt/ndp/bin/ndp" ]; then
+        ndp_tool="/opt/ndp/bin/ndp"
+    elif [ -x "$REPO_ROOT/target/release/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/release/ndp"
+    elif [ -x "$REPO_ROOT/target/debug/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/debug/ndp"
+    fi
+
+    if [ -n "$ndp_tool" ]; then
+        if $ndp_tool dimension sync "$dimension_id" --config "$config_file" --source "$source_file"; then
             update_dimension_state "$dimension_id" "success"
             return 0
         else
+            error "ndp dimension sync FAILED for $dimension_id. Not falling back to SQL."
+            error "Fix the Rust implementation or remove ndp binary to use SQL fallback."
             update_dimension_state "$dimension_id" "failed"
             return 1
         fi
     else
-        # Fallback to direct SQL import
+        # Fallback to direct SQL import (only when ndp binary does not exist)
         if import_dimension_sql "$config_file" "$source_file" "$strategy"; then
             update_dimension_state "$dimension_id" "success"
             return 0
@@ -1214,8 +1269,8 @@ sync_dimensions() {
     local dimension_count=0
     local success_count=0
 
-    # Find all dimension config files
-    for config_file in "$dimension_dir"/*.yaml "$dimension_dir"/*.yml; do
+    # Find all dimension config files (JSON preferred, then YAML)
+    for config_file in "$dimension_dir"/*.json "$dimension_dir"/*.yaml "$dimension_dir"/*.yml; do
         if [ -f "$config_file" ]; then
             local dimension_id=$(yaml_get "$config_file" "dimension_id" "")
             local table_name=$(yaml_get "$config_file" "target.table" "")
@@ -1224,7 +1279,7 @@ sync_dimensions() {
             local strategy=$(yaml_get "$config_file" "load.strategy" "truncate_and_load")
 
             if [ -z "$dimension_id" ]; then
-                dimension_id=$(basename "$config_file" | sed 's/\.\(yaml\|yml\)$//')
+                dimension_id=$(basename "$config_file" | sed 's/\.\(json\|yaml\|yml\)$//')
             fi
 
             if [ -z "$table_name" ]; then
@@ -1272,14 +1327,14 @@ list_dimensions() {
     echo "  ID                           TABLE                    STATUS           LAST_SYNC"
     echo "  -------------------------------------------------------------------------"
 
-    for config_file in "$dimension_dir"/*.yaml "$dimension_dir"/*.yml; do
+    for config_file in "$dimension_dir"/*.json "$dimension_dir"/*.yaml "$dimension_dir"/*.yml; do
         if [ -f "$config_file" ]; then
             local dimension_id=$(yaml_get "$config_file" "dimension_id" "")
             local table_name=$(yaml_get "$config_file" "target.table" "")
             local schema_name=$(yaml_get "$config_file" "target.schema" "silver")
 
             if [ -z "$dimension_id" ]; then
-                dimension_id=$(basename "$config_file" | sed 's/\.\(yaml\|yml\)$//')
+                dimension_id=$(basename "$config_file" | sed 's/\.\(json\|yaml\|yml\)$//')
             fi
 
             local status="unknown"
@@ -1933,9 +1988,13 @@ handle_tool() {
             cargo_package="ndp-validate"
             binary_name="ndp-validate"
             ;;
+        ndp-cli)
+            cargo_package="ndp-cli"
+            binary_name="ndp"
+            ;;
         *)
             error "Unknown tool: $tool_id"
-            error "Supported tools: ndp-gold-ddl, ndp-validate"
+            error "Supported tools: ndp-gold-ddl, ndp-validate, ndp-cli"
             return 1
             ;;
     esac
