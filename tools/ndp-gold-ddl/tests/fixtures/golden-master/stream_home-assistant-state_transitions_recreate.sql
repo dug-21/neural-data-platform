@@ -28,19 +28,10 @@ SELECT
     EXTRACT(EPOCH FROM (event_time - LAG(event_time) OVER w)) * 1000 AS duration_ms,
     -- Transition direction (for binary on/off states),
     CASE
-        WHEN LAG(state) OVER w = 'off' AND state = 'on' THEN 'opening'
-        WHEN LAG(state) OVER w = 'on' AND state = 'off' THEN 'closing'
         WHEN LAG(state) OVER w IS NULL THEN 'initial'
-        ELSE 'unknown'
-    END AS transition_direction,
-    -- Device type derived from entity_id,
-    CASE
-        WHEN ndp_id LIKE 'door_%' THEN 'door'
-        WHEN ndp_id LIKE 'window_%' THEN 'window'
-        WHEN ndp_id LIKE 'motion_%' THEN 'motion'
-        WHEN ndp_id LIKE 'light_%' THEN 'light'
-        ELSE 'other'
-    END AS device_type
+        WHEN LAG(state) OVER w IS DISTINCT FROM state THEN 'changed'
+        ELSE 'unchanged'
+    END AS transition_direction
 FROM silver.state_events
 WINDOW w AS (PARTITION BY ndp_id ORDER BY event_time);
 

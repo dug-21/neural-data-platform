@@ -460,6 +460,7 @@ pub fn create_gold_stream_config(stream_id: &str) -> StreamConfig {
 
     StreamConfig {
         stream_id: stream_id.to_string(),
+        stream_type: None,
         fields: vec![
             FieldConfig {
                 name: "pm25".to_string(),
@@ -490,6 +491,7 @@ pub fn create_gold_stream_config(stream_id: &str) -> StreamConfig {
 pub fn create_state_event_stream_config(stream_id: &str) -> StreamConfig {
     StreamConfig {
         stream_id: stream_id.to_string(),
+        stream_type: Some(StreamType::StateEvent),
         fields: vec![
             FieldConfig {
                 name: "state".to_string(),

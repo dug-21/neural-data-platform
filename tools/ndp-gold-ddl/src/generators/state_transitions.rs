@@ -13,6 +13,17 @@ use crate::error::{GoldDdlError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::constants::{GOLD_SCHEMA, NDP_ENTITY_COLUMN};
+
+/// Rule mapping entity_id LIKE patterns to device types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceTypeRule {
+    /// SQL LIKE pattern (e.g., "door_%")
+    pub pattern: String,
+    /// Device type label (e.g., "door")
+    pub device_type: String,
+}
+
 /// Configuration for state transition extraction
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TransitionConfig {
@@ -39,6 +50,14 @@ pub struct TransitionConfig {
     /// Optional mapping for transition direction (e.g., "off_to_on" -> "opening")
     #[serde(default)]
     pub direction_mapping: Option<HashMap<String, String>>,
+
+    /// Optional device type mapping. If None, device_type column is omitted.
+    #[serde(default)]
+    pub device_type_mapping: Option<Vec<DeviceTypeRule>>,
+
+    /// Valid states for this stream (e.g., ["on", "off"])
+    #[serde(default)]
+    pub states: Vec<String>,
 }
 
 impl TransitionConfig {
@@ -51,6 +70,8 @@ impl TransitionConfig {
             track_duration: true,
             include_in_alignment: true,
             direction_mapping: None,
+            device_type_mapping: None,
+            states: vec![],
         }
     }
 
@@ -64,10 +85,12 @@ impl TransitionConfig {
             .map(|t| TransitionConfig {
                 enabled: t.enabled,
                 state_field: t.field.clone(),
-                entity_field: "ndp_id".to_string(), // Default entity field
+                entity_field: NDP_ENTITY_COLUMN.to_string(),
                 track_duration: true,
                 include_in_alignment: true,
                 direction_mapping: None,
+                device_type_mapping: None,
+                states: t.states.clone(),
             })
     }
 }
@@ -150,7 +173,11 @@ impl StateTransitionGenerator {
 
     /// Get the transition view name
     fn get_view_name(&self) -> String {
-        format!("gold.{}_transitions", self.stream_id.replace('-', "_"))
+        format!(
+            "{}.{}_transitions",
+            GOLD_SCHEMA,
+            self.stream_id.replace('-', "_")
+        )
     }
 
     /// Generate the CREATE MATERIALIZED VIEW statement
@@ -187,16 +214,20 @@ impl StateTransitionGenerator {
             columns.push("-- Transition direction (for binary on/off states)".to_string());
             columns.push(self.generate_direction_case(&config.state_field, mapping));
         } else {
-            // Default direction logic for on/off states
+            // Default direction logic using configured states
             columns.push(String::new());
             columns.push("-- Transition direction (for binary on/off states)".to_string());
-            columns.push(self.generate_default_direction_case(&config.state_field));
+            columns.push(self.generate_default_direction_case(&config.state_field, &config.states));
         }
 
-        // Add device type derivation from entity field
-        columns.push(String::new());
-        columns.push("-- Device type derived from entity_id".to_string());
-        columns.push(self.generate_device_type_case(&config.entity_field));
+        // Add device type derivation from entity field (only if mapping configured)
+        if let Some(ref case_sql) =
+            self.generate_device_type_case(&config.entity_field, &config.device_type_mapping)
+        {
+            columns.push(String::new());
+            columns.push("-- Device type derived from entity_id".to_string());
+            columns.push(case_sql.clone());
+        }
 
         // Build the full SQL
         let column_sql = columns
@@ -289,31 +320,60 @@ COMMENT ON MATERIALIZED VIEW {view_name} IS
         )
     }
 
-    /// Generate default direction CASE for on/off states
-    fn generate_default_direction_case(&self, state_field: &str) -> String {
-        format!(
-            r#"CASE
-        WHEN LAG({state}) OVER w = 'off' AND {state} = 'on' THEN 'opening'
-        WHEN LAG({state}) OVER w = 'on' AND {state} = 'off' THEN 'closing'
+    /// Generate default direction CASE using configured states
+    fn generate_default_direction_case(&self, state_field: &str, states: &[String]) -> String {
+        if states.len() >= 2 {
+            let state_a = &states[0];
+            let state_b = &states[1];
+            format!(
+                r#"CASE
+        WHEN LAG({state}) OVER w = '{b}' AND {state} = '{a}' THEN 'activating'
+        WHEN LAG({state}) OVER w = '{a}' AND {state} = '{b}' THEN 'deactivating'
         WHEN LAG({state}) OVER w IS NULL THEN 'initial'
         ELSE 'unknown'
     END AS transition_direction"#,
-            state = state_field
-        )
+                state = state_field,
+                a = state_a,
+                b = state_b
+            )
+        } else {
+            // No states configured: generic direction
+            format!(
+                r#"CASE
+        WHEN LAG({state}) OVER w IS NULL THEN 'initial'
+        WHEN LAG({state}) OVER w IS DISTINCT FROM {state} THEN 'changed'
+        ELSE 'unchanged'
+    END AS transition_direction"#,
+                state = state_field
+            )
+        }
     }
 
-    /// Generate device type derivation CASE
-    fn generate_device_type_case(&self, entity_field: &str) -> String {
-        format!(
-            r#"CASE
-        WHEN {entity} LIKE 'door_%' THEN 'door'
-        WHEN {entity} LIKE 'window_%' THEN 'window'
-        WHEN {entity} LIKE 'motion_%' THEN 'motion'
-        WHEN {entity} LIKE 'light_%' THEN 'light'
-        ELSE 'other'
-    END AS device_type"#,
-            entity = entity_field
-        )
+    /// Generate device type derivation CASE from config mapping
+    fn generate_device_type_case(
+        &self,
+        entity_field: &str,
+        device_type_mapping: &Option<Vec<DeviceTypeRule>>,
+    ) -> Option<String> {
+        let mapping = device_type_mapping.as_ref()?;
+        if mapping.is_empty() {
+            return None;
+        }
+
+        let cases: Vec<String> = mapping
+            .iter()
+            .map(|rule| {
+                format!(
+                    "WHEN {} LIKE '{}' THEN '{}'",
+                    entity_field, rule.pattern, rule.device_type
+                )
+            })
+            .collect();
+
+        Some(format!(
+            "CASE\n        {}\n        ELSE 'other'\n    END AS device_type",
+            cases.join("\n        ")
+        ))
     }
 
     /// Wrap CREATE statement with sync mode (IF NOT EXISTS check)
@@ -322,7 +382,7 @@ COMMENT ON MATERIALIZED VIEW {view_name} IS
         let (schema, name) = if parts.len() == 2 {
             (parts[0], parts[1])
         } else {
-            ("gold", view_name)
+            (GOLD_SCHEMA, view_name)
         };
 
         Ok(format!(
@@ -330,7 +390,7 @@ COMMENT ON MATERIALIZED VIEW {view_name} IS
 -- Generated by ndp-gold-ddl
 -- Mode: SYNC (create if not exists)
 
-CREATE SCHEMA IF NOT EXISTS gold;
+CREATE SCHEMA IF NOT EXISTS {gold_schema};
 
 DO $$
 BEGIN
@@ -348,6 +408,7 @@ BEGIN
     END IF;
 END $$;"#,
             stream_id = self.stream_id,
+            gold_schema = GOLD_SCHEMA,
             schema = schema,
             name = name,
             view_name = view_name,
@@ -369,7 +430,7 @@ END $$;"#,
 -- Generated by ndp-gold-ddl
 -- Mode: RECREATE (drop and create)
 
-CREATE SCHEMA IF NOT EXISTS gold;
+CREATE SCHEMA IF NOT EXISTS {gold_schema};
 
 -- Drop existing views
 DROP VIEW IF EXISTS {actual_view_name} CASCADE;
@@ -378,6 +439,7 @@ DROP MATERIALIZED VIEW IF EXISTS {view_name} CASCADE;
 -- Create the transition view
 {create_sql}"#,
             stream_id = self.stream_id,
+            gold_schema = GOLD_SCHEMA,
             view_name = view_name,
             actual_view_name = actual_view_name,
             create_sql = create_sql,
@@ -433,12 +495,15 @@ mod tests {
             track_duration: true,
             include_in_alignment: true,
             direction_mapping: None,
+            device_type_mapping: None,
+            states: vec![],
         }
     }
 
     fn create_test_stream_config() -> StreamConfig {
         StreamConfig {
             stream_id: "home-assistant-state".to_string(),
+            stream_type: None,
             fields: vec![],
             silver_etl: Some(SilverEtlConfig {
                 target_table: "silver.state_events".to_string(),
@@ -631,7 +696,10 @@ mod tests {
 
     #[test]
     fn test_default_direction_logic() {
-        let config = create_test_transition_config();
+        let config = TransitionConfig {
+            states: vec!["on".to_string(), "off".to_string()],
+            ..create_test_transition_config()
+        };
         let generator = StateTransitionGenerator::new(
             "home-assistant-state",
             "silver.state_events",
@@ -641,10 +709,27 @@ mod tests {
         let sql = generator.generate(&config, Action::Recreate).unwrap();
 
         assert!(sql.contains("transition_direction"));
-        assert!(sql.contains("'opening'"));
-        assert!(sql.contains("'closing'"));
+        assert!(sql.contains("'activating'"));
+        assert!(sql.contains("'deactivating'"));
         assert!(sql.contains("'initial'"));
         assert!(sql.contains("'unknown'"));
+    }
+
+    #[test]
+    fn test_default_direction_no_states_uses_generic() {
+        let config = create_test_transition_config(); // states: vec![]
+        let generator = StateTransitionGenerator::new(
+            "home-assistant-state",
+            "silver.state_events",
+            "event_time",
+        );
+
+        let sql = generator.generate(&config, Action::Recreate).unwrap();
+
+        assert!(sql.contains("transition_direction"));
+        assert!(sql.contains("'initial'"));
+        assert!(sql.contains("'changed'"));
+        assert!(sql.contains("'unchanged'"));
     }
 
     #[test]
@@ -676,7 +761,27 @@ mod tests {
 
     #[test]
     fn test_device_type_derived_from_entity() {
-        let config = create_test_transition_config();
+        let config = TransitionConfig {
+            device_type_mapping: Some(vec![
+                DeviceTypeRule {
+                    pattern: "door_%".to_string(),
+                    device_type: "door".to_string(),
+                },
+                DeviceTypeRule {
+                    pattern: "window_%".to_string(),
+                    device_type: "window".to_string(),
+                },
+                DeviceTypeRule {
+                    pattern: "motion_%".to_string(),
+                    device_type: "motion".to_string(),
+                },
+                DeviceTypeRule {
+                    pattern: "light_%".to_string(),
+                    device_type: "light".to_string(),
+                },
+            ]),
+            ..create_test_transition_config()
+        };
         let generator = StateTransitionGenerator::new(
             "home-assistant-state",
             "silver.state_events",
@@ -688,6 +793,23 @@ mod tests {
         assert!(sql.contains("device_type"));
         assert!(sql.contains("LIKE 'door_%'"));
         assert!(sql.contains("LIKE 'window_%'"));
+    }
+
+    #[test]
+    fn test_device_type_omitted_when_no_mapping() {
+        let config = create_test_transition_config(); // device_type_mapping: None
+        let generator = StateTransitionGenerator::new(
+            "home-assistant-state",
+            "silver.state_events",
+            "event_time",
+        );
+
+        let sql = generator.generate(&config, Action::Recreate).unwrap();
+
+        assert!(
+            !sql.contains("device_type"),
+            "device_type column should be omitted when no mapping configured"
+        );
     }
 
     // =========================================================================

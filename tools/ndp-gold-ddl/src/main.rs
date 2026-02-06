@@ -16,8 +16,8 @@ use tracing_subscriber::EnvFilter;
 use ndp_gold_ddl::config::{Action, ConfigLoader, FileSystemConfigLoader};
 use ndp_gold_ddl::db::{PostgresCaChecker, PostgresClient};
 use ndp_gold_ddl::generators::{
-    AlignedViewGenerator, ContinuousAggregateGenerator, EventsGenerator,
-    StateTransitionGenerator, TransitionConfig,
+    AlignedViewGenerator, ContinuousAggregateGenerator, EventsGenerator, StateTransitionGenerator,
+    TransitionConfig,
 };
 use ndp_gold_ddl::planner::SyncPlanner;
 
@@ -160,7 +160,11 @@ async fn run(cli: &Cli) -> Result<String, Box<dyn std::error::Error>> {
                 if *events {
                     // Generate events infrastructure DDL for domain
                     let domain_config = loader.load_domain_config(domain_id)?;
-                    let generator = EventsGenerator::from_domain_config(&domain_config);
+                    let events_loader = FileSystemConfigLoader::new(&cli.config_dir);
+                    let generator = EventsGenerator::from_domain_config(
+                        &domain_config,
+                        Box::new(events_loader),
+                    );
                     let sql = generator.generate(action)?;
                     Ok(sql)
                 } else {

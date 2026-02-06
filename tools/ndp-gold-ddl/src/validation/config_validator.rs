@@ -274,6 +274,7 @@ mod tests {
     fn create_test_stream_config() -> StreamConfig {
         StreamConfig {
             stream_id: "air-quality".to_string(),
+            stream_type: None,
             fields: vec![
                 FieldConfig {
                     name: "pm25".to_string(),

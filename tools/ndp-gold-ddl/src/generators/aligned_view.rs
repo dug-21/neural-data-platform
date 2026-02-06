@@ -13,6 +13,7 @@ use crate::config::{
 };
 use crate::error::{GoldDdlError, Result};
 use crate::generators::column_builder::{ColumnBuilder, DefaultColumnBuilder};
+use crate::generators::constants::GOLD_SCHEMA;
 use crate::generators::join_builder::{DefaultJoinBuilder, JoinBuilder};
 
 /// Generator for aligned views
@@ -116,9 +117,15 @@ impl<L: ConfigLoader> AlignedViewGenerator<L> {
         })
     }
 
-    /// Determine stream type based on stream ID naming conventions
-    /// In production, this would read from stream config
+    /// Determine stream type from config, falling back to heuristic
     fn determine_stream_type(&self, stream_id: &str) -> StreamType {
+        // Try to load stream config and read stream_type
+        if let Ok(stream_config) = self.config_loader.load_stream_config(stream_id) {
+            if let Some(st) = stream_config.stream_type {
+                return st;
+            }
+        }
+        // Fallback to heuristic for backward compatibility
         if stream_id.contains("forecast") {
             StreamType::Forecast
         } else if stream_id.contains("state") || stream_id.contains("event") {
@@ -134,7 +141,7 @@ impl<L: ConfigLoader> AlignedViewGenerator<L> {
     fn derive_gold_table_name(&self, stream_id: &str, granularity: &str) -> String {
         let normalized_id = stream_id.replace('-', "_");
         let suffix = self.granularity_to_suffix(granularity);
-        format!("gold.{}_{}", normalized_id, suffix)
+        format!("{}.{}_{}", GOLD_SCHEMA, normalized_id, suffix)
     }
 
     /// Convert granularity to table suffix
@@ -223,30 +230,31 @@ DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_matviews
-        WHERE schemaname = 'gold'
+        WHERE schemaname = '{gold_schema}'
           AND matviewname = '{view_name}'
     ) THEN
-        CREATE MATERIALIZED VIEW gold.{view_name} AS
+        CREATE MATERIALIZED VIEW {gold_schema}.{view_name} AS
         SELECT
 {column_list}
         {joins}
         WHERE {bucket_coalesce} >= NOW() - INTERVAL '90 days';
 
-        RAISE NOTICE 'Created aligned view: gold.{view_name}';
+        RAISE NOTICE 'Created aligned view: {gold_schema}.{view_name}';
     ELSE
-        RAISE NOTICE 'gold.{view_name} already exists, skipping';
+        RAISE NOTICE '{gold_schema}.{view_name} already exists, skipping';
     END IF;
 END $$;
 
 -- Index for efficient bucket queries
 CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
-    ON gold.{view_name} (bucket);
+    ON {gold_schema}.{view_name} (bucket);
 
 -- Refresh command (run manually or via scheduler)
--- REFRESH MATERIALIZED VIEW gold.{view_name};
+-- REFRESH MATERIALIZED VIEW {gold_schema}.{view_name};
 "#,
             domain_config.id,
             stream_list,
+            gold_schema = GOLD_SCHEMA,
             view_name = view_name,
             column_list = column_list,
             joins = joins,
@@ -279,10 +287,10 @@ CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
 -- Mode: RECREATE (drop and create)
 
 -- Drop existing view
-DROP MATERIALIZED VIEW IF EXISTS gold.{view_name} CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {gold_schema}.{view_name} CASCADE;
 
 -- Create aligned view
-CREATE MATERIALIZED VIEW gold.{view_name} AS
+CREATE MATERIALIZED VIEW {gold_schema}.{view_name} AS
 SELECT
 {column_list}
 {joins}
@@ -290,13 +298,14 @@ WHERE {bucket_coalesce} >= NOW() - INTERVAL '90 days';
 
 -- Index for efficient bucket queries
 CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
-    ON gold.{view_name} (bucket);
+    ON {gold_schema}.{view_name} (bucket);
 
 -- Refresh command (run manually or via scheduler)
--- REFRESH MATERIALIZED VIEW gold.{view_name};
+-- REFRESH MATERIALIZED VIEW {gold_schema}.{view_name};
 "#,
             domain_config.id,
             stream_list,
+            gold_schema = GOLD_SCHEMA,
             view_name = view_name,
             column_list = column_list,
             joins = joins,
@@ -401,6 +410,7 @@ mod tests {
         fn with_stream(mut self, stream_id: &str, gold_enabled: bool) -> Self {
             let config = crate::config::StreamConfig {
                 stream_id: stream_id.to_string(),
+                stream_type: None,
                 fields: vec![
                     crate::config::FieldConfig {
                         name: "pm25".to_string(),

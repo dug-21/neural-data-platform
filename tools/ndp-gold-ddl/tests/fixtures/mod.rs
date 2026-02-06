@@ -14,6 +14,8 @@
 //! let objective = create_objective("healthy_co2", "co2", "<", 800.0);
 //! ```
 
+pub mod energy_monitoring;
 pub mod phase_c;
 
+// Re-export phase_c for existing test files that use `fixtures::*`
 pub use phase_c::*;

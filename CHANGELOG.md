@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.11] - 2026-02-06
+
+Fix duplicate CTE names in events detection procedure. Config-driven event generators (ops-002).
+
+### Fixed
+
+- **Duplicate CTE names in detection procedure** — objectives sharing the same metric (e.g., `comfortable_humidity_min` and `comfortable_humidity_max` both targeting `humidity_pct`) produced duplicate `{metric}_crossings` CTEs, causing PostgreSQL to reject the procedure. CTE names now use `{objective_id}_crossings` for uniqueness.
+- **Detection procedure union** — all 6 objectives now referenced in `all_crossings` UNION (previously 2 were silently dropped by deduplication)
+
+### Changed
+
+- **Config-driven event generators (ops-002)** — eliminated 50+ hardcoded domain-specific references from events, state_transitions, and aligned_view generators
+  - `EventsGenerator` reads objectives, streams, transitions from `DomainConfig` and `StreamConfig` via `ConfigLoader` trait
+  - `StateTransitionsGenerator` reads device type mapping and states from `TransitionConfig`
+  - `AlignedViewGenerator` reads `stream_type` from `StreamConfig` with heuristic fallback
+  - New `constants.rs` module for `NDP_ENTITY_COLUMN`, `GOLD_SCHEMA`, `SILVER_SCHEMA`
+- **153 new tests** — London TDD with `MockConfigLoader`, fictional "energy-monitoring" domain proves generators are truly generic
+
 ## [1.1.10] - 2026-02-06
 
 Wire events generator into ndp-gold-ddl CLI and deployment pipeline.

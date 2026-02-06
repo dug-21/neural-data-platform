@@ -1,0 +1,18 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.11",
+  "description": "Fix duplicate CTE names in detection procedure; config-driven event generators (ops-002)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "sync"
+    }
+  ]
+}

@@ -43,9 +43,9 @@ pub use error::{GoldDdlError, Result};
 
 pub use generators::{
     generate_classification_sql, generate_gold_table_sql, AlignedViewGenerator,
-    ClassificationSyncer, ContinuousAggregateGenerator, DefaultClassificationSyncer,
-    EventsConfig, EventsGenerator, IEventsGenerator, ITransitionGenerator,
-    RefreshPolicyGenerator, StateTransitionGenerator, TransitionConfig,
+    ClassificationSyncer, ContinuousAggregateGenerator, DefaultClassificationSyncer, EventsConfig,
+    EventsGenerator, IEventsGenerator, ITransitionGenerator, RefreshPolicyGenerator,
+    StateTransitionGenerator, TransitionConfig,
 };
 
 pub use registry::{FeatureConfig, FeatureGenerator, FeatureRegistry, SqlColumn};

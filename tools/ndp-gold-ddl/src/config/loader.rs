@@ -329,7 +329,10 @@ mod tests {
         let config = loader.load_domain_config("null-handling-domain").unwrap();
 
         use crate::config::domain::NullHandling;
-        assert_eq!(config.streams[0].null_handling, Some(NullHandling::CarryForward));
+        assert_eq!(
+            config.streams[0].null_handling,
+            Some(NullHandling::CarryForward)
+        );
         assert_eq!(config.streams[1].null_handling, None);
     }
 
@@ -573,7 +576,11 @@ mod tests {
         let result = loader.load_domain_config("extra-fields-domain");
 
         // Should succeed even with extra fields
-        assert!(result.is_ok(), "JSON with extra fields should still parse: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "JSON with extra fields should still parse: {:?}",
+            result.err()
+        );
     }
 
     // ========== UA-015: JSON field ordering ==========

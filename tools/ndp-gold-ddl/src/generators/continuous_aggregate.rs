@@ -305,6 +305,7 @@ mod tests {
     fn create_test_stream_config() -> StreamConfig {
         StreamConfig {
             stream_id: "air-quality".to_string(),
+            stream_type: None,
             fields: vec![],
             silver_etl: Some(SilverEtlConfig {
                 target_table: "silver.air_quality_observations".to_string(),

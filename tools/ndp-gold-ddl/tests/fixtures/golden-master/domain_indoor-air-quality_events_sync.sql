@@ -237,7 +237,7 @@ BEGIN
             LAG(s.state) OVER (PARTITION BY s.ndp_id ORDER BY s.event_time) AS from_state,
             s.state AS to_state,
             EXTRACT(EPOCH FROM (s.event_time - LAG(s.event_time) OVER (PARTITION BY s.ndp_id ORDER BY s.event_time))) * 1000 AS duration_ms
-        FROM silver.home_assistant_state s
+        FROM silver.state_events s
         WHERE s.event_time > last_run
     ),
     actual_transitions AS (
@@ -262,11 +262,29 @@ BEGIN
         COALESCE(
             (SELECT jsonb_build_object(
                 'indoor_co2', a.indoor_co2_mean,
+                'indoor_humidity_pct', a.indoor_humidity_pct_mean,
+                'indoor_nox_index', a.indoor_nox_index_mean,
+                'indoor_pm10', a.indoor_pm10_mean,
                 'indoor_pm25', a.indoor_pm25_mean,
-                'indoor_temp', a.indoor_temperature_c_mean,
-                'outdoor_temp', a.outdoor_temperature_c_mean,
-                'outdoor_pm25', a.outdoor_aqi_pm25_mean,
-                'window_state', a.state_state_last
+                'indoor_temperature_c', a.indoor_temperature_c_mean,
+                'indoor_tvoc_index', a.indoor_tvoc_index_mean,
+                'outdoor_aqi_aqi_epa', a.outdoor_aqi_aqi_epa_mean,
+                'outdoor_aqi_aqi_owm', a.outdoor_aqi_aqi_owm_mean,
+                'outdoor_aqi_co_ugm3', a.outdoor_aqi_co_ugm3_mean,
+                'outdoor_aqi_no2_ugm3', a.outdoor_aqi_no2_ugm3_mean,
+                'outdoor_aqi_o3_ugm3', a.outdoor_aqi_o3_ugm3_mean,
+                'outdoor_aqi_pm10', a.outdoor_aqi_pm10_mean,
+                'outdoor_aqi_pm25', a.outdoor_aqi_pm25_mean,
+                'outdoor_aqi_so2_ugm3', a.outdoor_aqi_so2_ugm3_mean,
+                'outdoor_cloud_cover_pct', a.outdoor_cloud_cover_pct_mean,
+                'outdoor_feels_like_c', a.outdoor_feels_like_c_mean,
+                'outdoor_humidity_pct', a.outdoor_humidity_pct_mean,
+                'outdoor_precipitation_mm', a.outdoor_precipitation_mm_mean,
+                'outdoor_pressure_pa', a.outdoor_pressure_pa_mean,
+                'outdoor_temperature_c', a.outdoor_temperature_c_mean,
+                'outdoor_visibility_m', a.outdoor_visibility_m_mean,
+                'outdoor_wind_speed_kmh', a.outdoor_wind_speed_kmh_mean,
+                'state_state', a.state_state_count
             ) FROM gold.indoor_air_quality_aligned a
             WHERE a.bucket = time_bucket('1 hour', t.event_time)),
             '{}'::JSONB
@@ -290,11 +308,15 @@ BEGIN
             co2_mean AS co2_value,
             LAG(co2_mean) OVER (PARTITION BY ndp_id ORDER BY bucket) AS co2_prev,
             pm25_mean AS pm25_value,
-            LAG(pm25_mean) OVER (PARTITION BY ndp_id ORDER BY bucket) AS pm25_prev
-        FROM gold.air_quality_hourly
+            LAG(pm25_mean) OVER (PARTITION BY ndp_id ORDER BY bucket) AS pm25_prev,
+            humidity_pct_mean AS humidity_pct_value,
+            LAG(humidity_pct_mean) OVER (PARTITION BY ndp_id ORDER BY bucket) AS humidity_pct_prev,
+            temperature_c_mean AS temperature_c_value,
+            LAG(temperature_c_mean) OVER (PARTITION BY ndp_id ORDER BY bucket) AS temperature_c_prev
+        FROM gold.air_quality_observations_hourly
         WHERE bucket > last_run - INTERVAL '1 hour'
     ),
-    co2_crossings AS (
+    healthy_co2_crossings AS (
         SELECT
             bucket AS event_time,
             stream_id,
@@ -303,8 +325,8 @@ BEGIN
             'co2' AS metric,
             800.0 AS threshold_value,
             CASE
-                WHEN co2_prev < 800 AND co2_value >= 800 THEN 'rising'
-                WHEN co2_prev >= 800 AND co2_value < 800 THEN 'falling'
+                WHEN co2_prev < 800.0 AND co2_value >= 800.0 THEN 'rising'
+                WHEN co2_prev >= 800.0 AND co2_value < 800.0 THEN 'falling'
             END AS crossing_direction,
             co2_value AS metric_value,
             co2_prev AS previous_metric_value,
@@ -314,11 +336,11 @@ BEGIN
           AND co2_prev IS NOT NULL
           AND co2_value IS NOT NULL
           AND (
-              (co2_prev < 800 AND co2_value >= 800)
-              OR (co2_prev >= 800 AND co2_value < 800)
+              (co2_prev < 800.0 AND co2_value >= 800.0)
+              OR (co2_prev >= 800.0 AND co2_value < 800.0)
           )
     ),
-    pm25_crossings AS (
+    healthy_pm25_crossings AS (
         SELECT
             bucket AS event_time,
             stream_id,
@@ -327,8 +349,8 @@ BEGIN
             'pm25' AS metric,
             12.0 AS threshold_value,
             CASE
-                WHEN pm25_prev < 12 AND pm25_value >= 12 THEN 'rising'
-                WHEN pm25_prev >= 12 AND pm25_value < 12 THEN 'falling'
+                WHEN pm25_prev < 12.0 AND pm25_value >= 12.0 THEN 'rising'
+                WHEN pm25_prev >= 12.0 AND pm25_value < 12.0 THEN 'falling'
             END AS crossing_direction,
             pm25_value AS metric_value,
             pm25_prev AS previous_metric_value,
@@ -338,14 +360,118 @@ BEGIN
           AND pm25_prev IS NOT NULL
           AND pm25_value IS NOT NULL
           AND (
-              (pm25_prev < 12 AND pm25_value >= 12)
-              OR (pm25_prev >= 12 AND pm25_value < 12)
+              (pm25_prev < 12.0 AND pm25_value >= 12.0)
+              OR (pm25_prev >= 12.0 AND pm25_value < 12.0)
+          )
+    ),
+    comfortable_humidity_min_crossings AS (
+        SELECT
+            bucket AS event_time,
+            stream_id,
+            entity_id,
+            'threshold_crossing' AS event_type,
+            'humidity_pct' AS metric,
+            40.0 AS threshold_value,
+            CASE
+                WHEN humidity_pct_prev < 40.0 AND humidity_pct_value >= 40.0 THEN 'rising'
+                WHEN humidity_pct_prev >= 40.0 AND humidity_pct_value < 40.0 THEN 'falling'
+            END AS crossing_direction,
+            humidity_pct_value AS metric_value,
+            humidity_pct_prev AS previous_metric_value,
+            'comfortable_humidity_min' AS objective_id
+        FROM hourly_obs
+        WHERE bucket > last_run
+          AND humidity_pct_prev IS NOT NULL
+          AND humidity_pct_value IS NOT NULL
+          AND (
+              (humidity_pct_prev < 40.0 AND humidity_pct_value >= 40.0)
+              OR (humidity_pct_prev >= 40.0 AND humidity_pct_value < 40.0)
+          )
+    ),
+    comfortable_humidity_max_crossings AS (
+        SELECT
+            bucket AS event_time,
+            stream_id,
+            entity_id,
+            'threshold_crossing' AS event_type,
+            'humidity_pct' AS metric,
+            60.0 AS threshold_value,
+            CASE
+                WHEN humidity_pct_prev < 60.0 AND humidity_pct_value >= 60.0 THEN 'rising'
+                WHEN humidity_pct_prev >= 60.0 AND humidity_pct_value < 60.0 THEN 'falling'
+            END AS crossing_direction,
+            humidity_pct_value AS metric_value,
+            humidity_pct_prev AS previous_metric_value,
+            'comfortable_humidity_max' AS objective_id
+        FROM hourly_obs
+        WHERE bucket > last_run
+          AND humidity_pct_prev IS NOT NULL
+          AND humidity_pct_value IS NOT NULL
+          AND (
+              (humidity_pct_prev < 60.0 AND humidity_pct_value >= 60.0)
+              OR (humidity_pct_prev >= 60.0 AND humidity_pct_value < 60.0)
+          )
+    ),
+    comfortable_temperature_min_crossings AS (
+        SELECT
+            bucket AS event_time,
+            stream_id,
+            entity_id,
+            'threshold_crossing' AS event_type,
+            'temperature_c' AS metric,
+            20.0 AS threshold_value,
+            CASE
+                WHEN temperature_c_prev < 20.0 AND temperature_c_value >= 20.0 THEN 'rising'
+                WHEN temperature_c_prev >= 20.0 AND temperature_c_value < 20.0 THEN 'falling'
+            END AS crossing_direction,
+            temperature_c_value AS metric_value,
+            temperature_c_prev AS previous_metric_value,
+            'comfortable_temperature_min' AS objective_id
+        FROM hourly_obs
+        WHERE bucket > last_run
+          AND temperature_c_prev IS NOT NULL
+          AND temperature_c_value IS NOT NULL
+          AND (
+              (temperature_c_prev < 20.0 AND temperature_c_value >= 20.0)
+              OR (temperature_c_prev >= 20.0 AND temperature_c_value < 20.0)
+          )
+    ),
+    comfortable_temperature_max_crossings AS (
+        SELECT
+            bucket AS event_time,
+            stream_id,
+            entity_id,
+            'threshold_crossing' AS event_type,
+            'temperature_c' AS metric,
+            24.0 AS threshold_value,
+            CASE
+                WHEN temperature_c_prev < 24.0 AND temperature_c_value >= 24.0 THEN 'rising'
+                WHEN temperature_c_prev >= 24.0 AND temperature_c_value < 24.0 THEN 'falling'
+            END AS crossing_direction,
+            temperature_c_value AS metric_value,
+            temperature_c_prev AS previous_metric_value,
+            'comfortable_temperature_max' AS objective_id
+        FROM hourly_obs
+        WHERE bucket > last_run
+          AND temperature_c_prev IS NOT NULL
+          AND temperature_c_value IS NOT NULL
+          AND (
+              (temperature_c_prev < 24.0 AND temperature_c_value >= 24.0)
+              OR (temperature_c_prev >= 24.0 AND temperature_c_value < 24.0)
           )
     ),
     all_crossings AS (
-        SELECT * FROM co2_crossings
+        SELECT * FROM healthy_co2_crossings
         UNION ALL
-        SELECT * FROM pm25_crossings
+        SELECT * FROM healthy_pm25_crossings
+        UNION ALL
+        SELECT * FROM comfortable_humidity_min_crossings
+        UNION ALL
+        SELECT * FROM comfortable_humidity_max_crossings
+        UNION ALL
+        SELECT * FROM comfortable_temperature_min_crossings
+        UNION ALL
+        SELECT * FROM comfortable_temperature_max_crossings
     )
     INSERT INTO gold.events (
         event_time, stream_id, entity_id, event_type,
@@ -368,16 +494,34 @@ BEGIN
         COALESCE(
             (SELECT jsonb_build_object(
                 'indoor_co2', a.indoor_co2_mean,
+                'indoor_humidity_pct', a.indoor_humidity_pct_mean,
+                'indoor_nox_index', a.indoor_nox_index_mean,
+                'indoor_pm10', a.indoor_pm10_mean,
                 'indoor_pm25', a.indoor_pm25_mean,
-                'indoor_temp', a.indoor_temperature_c_mean,
-                'outdoor_temp', a.outdoor_temperature_c_mean,
-                'outdoor_pm25', a.outdoor_aqi_pm25_mean,
-                'window_state', a.state_state_last
+                'indoor_temperature_c', a.indoor_temperature_c_mean,
+                'indoor_tvoc_index', a.indoor_tvoc_index_mean,
+                'outdoor_aqi_aqi_epa', a.outdoor_aqi_aqi_epa_mean,
+                'outdoor_aqi_aqi_owm', a.outdoor_aqi_aqi_owm_mean,
+                'outdoor_aqi_co_ugm3', a.outdoor_aqi_co_ugm3_mean,
+                'outdoor_aqi_no2_ugm3', a.outdoor_aqi_no2_ugm3_mean,
+                'outdoor_aqi_o3_ugm3', a.outdoor_aqi_o3_ugm3_mean,
+                'outdoor_aqi_pm10', a.outdoor_aqi_pm10_mean,
+                'outdoor_aqi_pm25', a.outdoor_aqi_pm25_mean,
+                'outdoor_aqi_so2_ugm3', a.outdoor_aqi_so2_ugm3_mean,
+                'outdoor_cloud_cover_pct', a.outdoor_cloud_cover_pct_mean,
+                'outdoor_feels_like_c', a.outdoor_feels_like_c_mean,
+                'outdoor_humidity_pct', a.outdoor_humidity_pct_mean,
+                'outdoor_precipitation_mm', a.outdoor_precipitation_mm_mean,
+                'outdoor_pressure_pa', a.outdoor_pressure_pa_mean,
+                'outdoor_temperature_c', a.outdoor_temperature_c_mean,
+                'outdoor_visibility_m', a.outdoor_visibility_m_mean,
+                'outdoor_wind_speed_kmh', a.outdoor_wind_speed_kmh_mean,
+                'state_state', a.state_state_count
             ) FROM gold.indoor_air_quality_aligned a
             WHERE a.bucket = c.event_time),
             '{}'::JSONB
         ),
-        jsonb_build_object('condition', '<', 'unit', CASE c.metric WHEN 'co2' THEN 'ppm' ELSE 'ug/m3' END)
+        jsonb_build_object('condition', '<', 'unit', CASE c.metric WHEN 'co2' THEN 'ppm' WHEN 'pm25' THEN 'ug/m3' WHEN 'humidity_pct' THEN 'percent' WHEN 'humidity_pct' THEN 'percent' WHEN 'temperature_c' THEN 'celsius' WHEN 'temperature_c' THEN 'celsius' ELSE '' END)
     FROM all_crossings c
     ON CONFLICT DO NOTHING;
 

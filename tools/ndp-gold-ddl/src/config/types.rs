@@ -5,6 +5,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::config::domain::StreamType;
+
 /// Valid aggregate metrics
 pub const VALID_METRICS: &[&str] = &[
     "mean", "std", "min", "max", "count", "p95", "p99", "first", "last",
@@ -250,6 +252,11 @@ impl RefreshPolicyConfig {
 pub struct StreamConfig {
     /// Stream identifier
     pub stream_id: String,
+
+    /// Stream type (observation, state_event, forecast, dimension).
+    /// If not set, defaults to Observation via heuristic fallback.
+    #[serde(default)]
+    pub stream_type: Option<StreamType>,
 
     /// Field definitions
     #[serde(default)]

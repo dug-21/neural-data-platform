@@ -11,6 +11,7 @@
 pub mod aligned_view;
 pub mod classification;
 pub mod column_builder;
+pub mod constants;
 pub mod continuous_aggregate;
 pub mod events;
 pub mod join_builder;
@@ -31,4 +32,6 @@ pub use null_handler::{
     CarryForwardNullHandler, InterpolateNullHandler, NullHandler, PreserveNullHandler,
 };
 pub use refresh_policy::RefreshPolicyGenerator;
-pub use state_transitions::{ITransitionGenerator, StateTransitionGenerator, TransitionConfig};
+pub use state_transitions::{
+    DeviceTypeRule, ITransitionGenerator, StateTransitionGenerator, TransitionConfig,
+};
