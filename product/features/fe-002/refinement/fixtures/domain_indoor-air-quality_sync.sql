@@ -14,50 +14,50 @@ BEGIN
             COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket) AS bucket,
 
     -- indoor (Observation)
+            indoor.co2_mean AS indoor_co2_mean,
+            indoor.co2_std AS indoor_co2_std,
+            indoor.co2_min AS indoor_co2_min,
+            indoor.co2_max AS indoor_co2_max,
+            indoor.humidity_pct_mean AS indoor_humidity_pct_mean,
+            indoor.humidity_pct_min AS indoor_humidity_pct_min,
+            indoor.humidity_pct_max AS indoor_humidity_pct_max,
+            indoor.nox_index_mean AS indoor_nox_index_mean,
+            indoor.nox_index_max AS indoor_nox_index_max,
+            indoor.pm10_mean AS indoor_pm10_mean,
+            indoor.pm10_min AS indoor_pm10_min,
+            indoor.pm10_max AS indoor_pm10_max,
             indoor.pm25_mean AS indoor_pm25_mean,
             indoor.pm25_std AS indoor_pm25_std,
             indoor.pm25_min AS indoor_pm25_min,
             indoor.pm25_max AS indoor_pm25_max,
             indoor.pm25_p95 AS indoor_pm25_p95,
-            indoor.co2_mean AS indoor_co2_mean,
-            indoor.co2_std AS indoor_co2_std,
-            indoor.co2_min AS indoor_co2_min,
-            indoor.co2_max AS indoor_co2_max,
             indoor.temperature_c_mean AS indoor_temperature_c_mean,
             indoor.temperature_c_min AS indoor_temperature_c_min,
             indoor.temperature_c_max AS indoor_temperature_c_max,
             indoor.tvoc_index_mean AS indoor_tvoc_index_mean,
             indoor.tvoc_index_max AS indoor_tvoc_index_max,
-            indoor.nox_index_mean AS indoor_nox_index_mean,
-            indoor.nox_index_max AS indoor_nox_index_max,
-            indoor.humidity_pct_mean AS indoor_humidity_pct_mean,
-            indoor.humidity_pct_min AS indoor_humidity_pct_min,
-            indoor.humidity_pct_max AS indoor_humidity_pct_max,
-            indoor.pm10_mean AS indoor_pm10_mean,
-            indoor.pm10_min AS indoor_pm10_min,
-            indoor.pm10_max AS indoor_pm10_max,
             indoor.sample_count AS indoor_sample_count,
             COALESCE(indoor.sample_count, 0) AS indoor_samples,
 
     -- outdoor (Observation)
-            outdoor.precipitation_mm_mean AS outdoor_precipitation_mm_mean,
-            outdoor.precipitation_mm_max AS outdoor_precipitation_mm_max,
-            outdoor.precipitation_mm_count AS outdoor_precipitation_mm_count,
             outdoor.cloud_cover_pct_mean AS outdoor_cloud_cover_pct_mean,
             outdoor.feels_like_c_mean AS outdoor_feels_like_c_mean,
             outdoor.feels_like_c_min AS outdoor_feels_like_c_min,
             outdoor.feels_like_c_max AS outdoor_feels_like_c_max,
+            outdoor.humidity_pct_mean AS outdoor_humidity_pct_mean,
+            outdoor.humidity_pct_min AS outdoor_humidity_pct_min,
+            outdoor.humidity_pct_max AS outdoor_humidity_pct_max,
+            outdoor.precipitation_mm_mean AS outdoor_precipitation_mm_mean,
+            outdoor.precipitation_mm_max AS outdoor_precipitation_mm_max,
+            outdoor.precipitation_mm_count AS outdoor_precipitation_mm_count,
+            outdoor.pressure_pa_mean AS outdoor_pressure_pa_mean,
             outdoor.temperature_c_mean AS outdoor_temperature_c_mean,
             outdoor.temperature_c_min AS outdoor_temperature_c_min,
             outdoor.temperature_c_max AS outdoor_temperature_c_max,
             outdoor.visibility_m_mean AS outdoor_visibility_m_mean,
             outdoor.visibility_m_min AS outdoor_visibility_m_min,
-            outdoor.humidity_pct_mean AS outdoor_humidity_pct_mean,
-            outdoor.humidity_pct_min AS outdoor_humidity_pct_min,
-            outdoor.humidity_pct_max AS outdoor_humidity_pct_max,
             outdoor.wind_speed_kmh_mean AS outdoor_wind_speed_kmh_mean,
             outdoor.wind_speed_kmh_max AS outdoor_wind_speed_kmh_max,
-            outdoor.pressure_pa_mean AS outdoor_pressure_pa_mean,
             outdoor.sample_count AS outdoor_sample_count,
             COALESCE(outdoor.sample_count, 0) AS outdoor_samples,
 
@@ -101,12 +101,18 @@ BEGIN
             COALESCE(state.sample_count, 0) AS state_samples,
 
     -- outdoor_aqi (Observation)
-            outdoor_aqi.so2_ugm3_mean AS outdoor_aqi_so2_ugm3_mean,
-            outdoor_aqi.so2_ugm3_max AS outdoor_aqi_so2_ugm3_max,
-            outdoor_aqi.o3_ugm3_mean AS outdoor_aqi_o3_ugm3_mean,
-            outdoor_aqi.o3_ugm3_max AS outdoor_aqi_o3_ugm3_max,
+            outdoor_aqi.aqi_epa_mean AS outdoor_aqi_aqi_epa_mean,
+            outdoor_aqi.aqi_epa_min AS outdoor_aqi_aqi_epa_min,
+            outdoor_aqi.aqi_epa_max AS outdoor_aqi_aqi_epa_max,
+            outdoor_aqi.aqi_owm_mean AS outdoor_aqi_aqi_owm_mean,
+            outdoor_aqi.aqi_owm_min AS outdoor_aqi_aqi_owm_min,
+            outdoor_aqi.aqi_owm_max AS outdoor_aqi_aqi_owm_max,
             outdoor_aqi.co_ugm3_mean AS outdoor_aqi_co_ugm3_mean,
             outdoor_aqi.co_ugm3_max AS outdoor_aqi_co_ugm3_max,
+            outdoor_aqi.no2_ugm3_mean AS outdoor_aqi_no2_ugm3_mean,
+            outdoor_aqi.no2_ugm3_max AS outdoor_aqi_no2_ugm3_max,
+            outdoor_aqi.o3_ugm3_mean AS outdoor_aqi_o3_ugm3_mean,
+            outdoor_aqi.o3_ugm3_max AS outdoor_aqi_o3_ugm3_max,
             outdoor_aqi.pm10_mean AS outdoor_aqi_pm10_mean,
             outdoor_aqi.pm10_min AS outdoor_aqi_pm10_min,
             outdoor_aqi.pm10_max AS outdoor_aqi_pm10_max,
@@ -115,14 +121,8 @@ BEGIN
             outdoor_aqi.pm25_min AS outdoor_aqi_pm25_min,
             outdoor_aqi.pm25_max AS outdoor_aqi_pm25_max,
             outdoor_aqi.pm25_p95 AS outdoor_aqi_pm25_p95,
-            outdoor_aqi.aqi_epa_mean AS outdoor_aqi_aqi_epa_mean,
-            outdoor_aqi.aqi_epa_min AS outdoor_aqi_aqi_epa_min,
-            outdoor_aqi.aqi_epa_max AS outdoor_aqi_aqi_epa_max,
-            outdoor_aqi.no2_ugm3_mean AS outdoor_aqi_no2_ugm3_mean,
-            outdoor_aqi.no2_ugm3_max AS outdoor_aqi_no2_ugm3_max,
-            outdoor_aqi.aqi_owm_mean AS outdoor_aqi_aqi_owm_mean,
-            outdoor_aqi.aqi_owm_min AS outdoor_aqi_aqi_owm_min,
-            outdoor_aqi.aqi_owm_max AS outdoor_aqi_aqi_owm_max,
+            outdoor_aqi.so2_ugm3_mean AS outdoor_aqi_so2_ugm3_mean,
+            outdoor_aqi.so2_ugm3_max AS outdoor_aqi_so2_ugm3_max,
             outdoor_aqi.sample_count AS outdoor_aqi_sample_count,
             COALESCE(outdoor_aqi.sample_count, 0) AS outdoor_aqi_samples,
 
@@ -147,6 +147,36 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_indoor_air_quality_aligned_bucket
     ON gold.indoor_air_quality_aligned (bucket);
 
--- Refresh command (run manually or via scheduler)
--- REFRESH MATERIALIZED VIEW gold.indoor_air_quality_aligned;
+-- Scheduled refresh for aligned materialized view
+-- Delete dependent jobs and DROP procedure for clean redeploy
+DO $$
+DECLARE
+    _job_id INTEGER;
+BEGIN
+    FOR _job_id IN
+        SELECT job_id FROM timescaledb_information.jobs
+        WHERE proc_schema = 'gold' AND proc_name = 'refresh_indoor_air_quality_aligned'
+    LOOP
+        PERFORM delete_job(_job_id);
+        RAISE NOTICE 'Deleted job % (gold.refresh_indoor_air_quality_aligned) before procedure replacement', _job_id;
+    END LOOP;
+END $$;
+
+DROP PROCEDURE IF EXISTS gold.refresh_indoor_air_quality_aligned(integer, jsonb);
+
+CREATE OR REPLACE PROCEDURE gold.refresh_indoor_air_quality_aligned(job_id INT, config JSONB)
+LANGUAGE plpgsql AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW gold.indoor_air_quality_aligned;
+    RAISE NOTICE 'Refreshed aligned view: gold.indoor_air_quality_aligned';
+    COMMIT;
+END;
+$$;
+
+-- Schedule refresh every 15 minutes (aligns with CA refresh intervals)
+SELECT add_job(
+    'gold.refresh_indoor_air_quality_aligned'::regproc,
+    '15 minutes'::INTERVAL,
+    config => '{}'::JSONB
+);
 

@@ -138,6 +138,36 @@ WHERE COALESCE(indoor.bucket, outdoor.bucket, state.bucket, outdoor_aqi.bucket) 
 CREATE INDEX IF NOT EXISTS idx_indoor_air_quality_aligned_bucket
     ON gold.indoor_air_quality_aligned (bucket);
 
--- Refresh command (run manually or via scheduler)
--- REFRESH MATERIALIZED VIEW gold.indoor_air_quality_aligned;
+-- Scheduled refresh for aligned materialized view
+-- Delete dependent jobs and DROP procedure for clean redeploy
+DO $$
+DECLARE
+    _job_id INTEGER;
+BEGIN
+    FOR _job_id IN
+        SELECT job_id FROM timescaledb_information.jobs
+        WHERE proc_schema = 'gold' AND proc_name = 'refresh_indoor_air_quality_aligned'
+    LOOP
+        PERFORM delete_job(_job_id);
+        RAISE NOTICE 'Deleted job % (gold.refresh_indoor_air_quality_aligned) before procedure replacement', _job_id;
+    END LOOP;
+END $$;
+
+DROP PROCEDURE IF EXISTS gold.refresh_indoor_air_quality_aligned(integer, jsonb);
+
+CREATE OR REPLACE PROCEDURE gold.refresh_indoor_air_quality_aligned(job_id INT, config JSONB)
+LANGUAGE plpgsql AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW gold.indoor_air_quality_aligned;
+    RAISE NOTICE 'Refreshed aligned view: gold.indoor_air_quality_aligned';
+    COMMIT;
+END;
+$$;
+
+-- Schedule refresh every 15 minutes (aligns with CA refresh intervals)
+SELECT add_job(
+    'gold.refresh_indoor_air_quality_aligned'::regproc,
+    '15 minutes'::INTERVAL,
+    config => '{}'::JSONB
+);
 

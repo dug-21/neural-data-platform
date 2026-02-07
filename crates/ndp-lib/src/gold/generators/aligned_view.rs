@@ -249,8 +249,7 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
     ON {gold_schema}.{view_name} (bucket);
 
--- Refresh command (run manually or via scheduler)
--- REFRESH MATERIALIZED VIEW {gold_schema}.{view_name};
+{refresh_job}
 "#,
             domain_config.id,
             stream_list,
@@ -259,6 +258,7 @@ CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
             column_list = column_list,
             joins = joins,
             bucket_coalesce = bucket_coalesce,
+            refresh_job = Self::generate_refresh_job(view_name),
         );
 
         Ok(sql)
@@ -300,8 +300,7 @@ WHERE {bucket_coalesce} >= NOW() - INTERVAL '90 days';
 CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
     ON {gold_schema}.{view_name} (bucket);
 
--- Refresh command (run manually or via scheduler)
--- REFRESH MATERIALIZED VIEW {gold_schema}.{view_name};
+{refresh_job}
 "#,
             domain_config.id,
             stream_list,
@@ -310,9 +309,56 @@ CREATE INDEX IF NOT EXISTS idx_{view_name}_bucket
             column_list = column_list,
             joins = joins,
             bucket_coalesce = bucket_coalesce,
+            refresh_job = Self::generate_refresh_job(view_name),
         );
 
         Ok(sql)
+    }
+
+    /// Generate refresh job SQL for the aligned materialized view.
+    ///
+    /// Produces idempotent DDL that:
+    /// 1. Deletes any existing TimescaleDB jobs for the refresh procedure
+    /// 2. Drops the existing procedure (avoids "cannot remove parameter defaults" error)
+    /// 3. Creates a refresh procedure
+    /// 4. Schedules the procedure via `add_job()` at 15-minute intervals
+    fn generate_refresh_job(view_name: &str) -> String {
+        format!(
+            r#"-- Scheduled refresh for aligned materialized view
+-- Delete dependent jobs and DROP procedure for clean redeploy
+DO $$
+DECLARE
+    _job_id INTEGER;
+BEGIN
+    FOR _job_id IN
+        SELECT job_id FROM timescaledb_information.jobs
+        WHERE proc_schema = '{gold_schema}' AND proc_name = 'refresh_{view_name}'
+    LOOP
+        PERFORM delete_job(_job_id);
+        RAISE NOTICE 'Deleted job % ({gold_schema}.refresh_{view_name}) before procedure replacement', _job_id;
+    END LOOP;
+END $$;
+
+DROP PROCEDURE IF EXISTS {gold_schema}.refresh_{view_name}(integer, jsonb);
+
+CREATE OR REPLACE PROCEDURE {gold_schema}.refresh_{view_name}(job_id INT, config JSONB)
+LANGUAGE plpgsql AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW {gold_schema}.{view_name};
+    RAISE NOTICE 'Refreshed aligned view: {gold_schema}.{view_name}';
+    COMMIT;
+END;
+$$;
+
+-- Schedule refresh every 15 minutes (aligns with CA refresh intervals)
+SELECT add_job(
+    '{gold_schema}.refresh_{view_name}'::regproc,
+    '15 minutes'::INTERVAL,
+    config => '{{}}'::JSONB
+);"#,
+            gold_schema = GOLD_SCHEMA,
+            view_name = view_name,
+        )
     }
 
     /// Get comma-separated list of stream aliases

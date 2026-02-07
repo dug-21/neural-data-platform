@@ -198,7 +198,7 @@ BEGIN
     -- Get last successful run time
     SELECT last_successful_finish INTO last_run
     FROM timescaledb_information.job_stats
-    WHERE job_id = detect_events.job_id;
+    WHERE timescaledb_information.job_stats.job_id = detect_events.job_id;
 
     -- Default to 2 hours ago if first run
     last_run := COALESCE(last_run, NOW() - INTERVAL '2 hours');
@@ -292,7 +292,7 @@ BEGIN
             LAG(humidity_pct_mean) OVER (PARTITION BY ndp_id ORDER BY bucket) AS humidity_pct_prev,
             temperature_c_mean AS temperature_c_value,
             LAG(temperature_c_mean) OVER (PARTITION BY ndp_id ORDER BY bucket) AS temperature_c_prev
-        FROM gold.air_quality_observations_hourly
+        FROM gold.air_quality_hourly
         WHERE bucket > last_run - INTERVAL '1 hour'
     ),
     healthy_co2_crossings AS (

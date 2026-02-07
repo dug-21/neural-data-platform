@@ -511,20 +511,17 @@ DROP MATERIALIZED VIEW IF EXISTS {gold_schema}.events_hourly_by_entity CASCADE;
         }
     }
 
-    /// Derive the Gold CA table name from a silver target_table.
+    /// Derive the Gold continuous-aggregate table name from a stream ID.
     ///
-    /// Convention: strip the silver schema prefix, use the remainder with `_hourly`
-    /// suffix in the gold schema.
+    /// Convention: replace hyphens with underscores in the stream_id, then append
+    /// `_hourly` in the gold schema.  This matches the naming used by
+    /// `ContinuousAggregateGenerator::generate()` in `continuous_aggregate.rs`.
     ///
     /// Examples:
-    /// - `silver.air_quality` -> `gold.air_quality_hourly`
-    /// - `silver.state_events` -> `gold.state_events_hourly`
-    /// - `air_quality` (no prefix) -> `gold.air_quality_hourly`
-    fn derive_gold_ca_table(silver_table: &str) -> String {
-        let table_id = silver_table
-            .strip_prefix(&format!("{}.", SILVER_SCHEMA))
-            .unwrap_or(silver_table);
-        format!("{}.{}_hourly", GOLD_SCHEMA, table_id)
+    /// - `"air-quality"` -> `"gold.air_quality_hourly"`
+    /// - `"outdoor-air-quality"` -> `"gold.outdoor_air_quality_hourly"`
+    fn derive_gold_ca_table(stream_id: &str) -> String {
+        format!("{}.{}_hourly", GOLD_SCHEMA, stream_id.replace('-', "_"))
     }
 
     /// Build a list of context columns from the domain's aligned streams.
@@ -796,32 +793,11 @@ DROP MATERIALIZED VIEW IF EXISTS {gold_schema}.events_hourly_by_entity CASCADE;
             .map(|r| r.stream_id.as_str())
             .unwrap_or(&self.domain_id);
 
-        // Determine Gold CA table: load primary stream config and derive from silver table
+        // Determine Gold CA table from stream_id (matches continuous_aggregate.rs naming)
         let gold_ca_table = if let Some(pref) = primary_ref {
-            if let Ok(stream_config) = self.config_loader.load_stream_config(&pref.stream_id) {
-                if let Some(ref silver_etl) = stream_config.silver_etl {
-                    Self::derive_gold_ca_table(&silver_etl.target_table)
-                } else {
-                    // Fallback: derive from stream_id
-                    format!(
-                        "{}.{}_hourly",
-                        GOLD_SCHEMA,
-                        pref.stream_id.replace('-', "_")
-                    )
-                }
-            } else {
-                format!(
-                    "{}.{}_hourly",
-                    GOLD_SCHEMA,
-                    pref.stream_id.replace('-', "_")
-                )
-            }
+            Self::derive_gold_ca_table(&pref.stream_id)
         } else {
-            format!(
-                "{}.{}_hourly",
-                GOLD_SCHEMA,
-                self.domain_id.replace('-', "_")
-            )
+            Self::derive_gold_ca_table(&self.domain_id)
         };
 
         // Build the hourly_obs CTE columns: for each objective, include a value and prev column
@@ -1031,7 +1007,7 @@ BEGIN
     -- Get last successful run time
     SELECT last_successful_finish INTO last_run
     FROM timescaledb_information.job_stats
-    WHERE job_id = detect_events.job_id;
+    WHERE timescaledb_information.job_stats.job_id = detect_events.job_id;
 
     -- Default to 2 hours ago if first run
     last_run := COALESCE(last_run, NOW() - INTERVAL '2 hours');
@@ -1084,7 +1060,7 @@ BEGIN
     -- Get last successful run time
     SELECT last_successful_finish INTO last_run
     FROM timescaledb_information.job_stats
-    WHERE job_id = detect_events.job_id;
+    WHERE timescaledb_information.job_stats.job_id = detect_events.job_id;
 
     -- Default to 2 hours ago if first run
     last_run := COALESCE(last_run, NOW() - INTERVAL '2 hours');
@@ -2300,18 +2276,26 @@ mod tests {
     }
 
     #[test]
-    fn test_derive_gold_ca_table_strips_silver_prefix() {
+    fn test_derive_gold_ca_table_from_stream_id() {
         assert_eq!(
-            EventsGenerator::derive_gold_ca_table("silver.air_quality"),
+            EventsGenerator::derive_gold_ca_table("air-quality"),
             "gold.air_quality_hourly"
         );
     }
 
     #[test]
-    fn test_derive_gold_ca_table_handles_no_prefix() {
+    fn test_derive_gold_ca_table_no_hyphens() {
         assert_eq!(
             EventsGenerator::derive_gold_ca_table("weather_forecast"),
             "gold.weather_forecast_hourly"
+        );
+    }
+
+    #[test]
+    fn test_derive_gold_ca_table_multiple_hyphens() {
+        assert_eq!(
+            EventsGenerator::derive_gold_ca_table("outdoor-air-quality"),
+            "gold.outdoor_air_quality_hourly"
         );
     }
 

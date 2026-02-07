@@ -202,12 +202,12 @@ fn test_unit_mapping_uses_objective_config() {
 fn test_gold_table_name_from_config() {
     let sql = generate_energy_monitoring_sql();
 
-    // Gold CA table should be derived from silver.smart_meter_observations
-    // -> gold.smart_meter_observations_hourly
+    // Gold CA table should be derived from stream_id "smart-meter"
+    // -> gold.smart_meter_hourly (matching continuous_aggregate.rs naming)
     assert_sql_contains(
         &sql,
-        "gold.smart_meter_observations_hourly",
-        "HD-006: gold table derived from smart-meter silver config",
+        "gold.smart_meter_hourly",
+        "HD-006: gold table derived from smart-meter stream_id",
     );
 
     // Must NOT contain air-quality gold table

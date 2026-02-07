@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.15] - 2026-02-07
+
+Fix Gold events detection and aligned view refresh — three bugs that caused Grafana dashboards to show no data for events and aligned views.
+
+### Fixed
+
+- **`detect_events` referenced nonexistent table** — `derive_gold_ca_table()` derived Gold CA name from Silver table (`gold.air_quality_observations_hourly`) instead of stream_id (`gold.air_quality_hourly`). Introduced in v1.1.11 (ops-002 config-driven rewrite). Threshold crossings were silently failing.
+- **Aligned view had no auto-refresh** — `gold.indoor_air_quality_aligned` is a regular materialized view with no scheduled refresh. Added TimescaleDB job (`refresh_indoor_air_quality_aligned`, every 15 min) generated as part of domain DDL.
+- **`detect_events` PL/pgSQL `job_id` ambiguity** — parameter name `job_id` conflicted with `timescaledb_information.job_stats.job_id` column. Fully qualified the column reference.
+
+### Technical Notes
+
+- 492 ndp-lib tests, 15 ndp-gold-ddl tests, 0 failures
+- Integration-tested against live TimescaleDB: detect_events executes cleanly, refresh job schedules correctly
+- 68 existing events on Pi preserved (no schema changes to gold.events)
+
 ## [1.1.14] - 2026-02-07
 
 Gold module migration to ndp-lib and `ndp gold` CLI commands (ops-003 phase 1). Gold DDL generation now lives in the shared library. deploy.sh dispatches through `ndp gold` instead of `ndp-gold-ddl`.
