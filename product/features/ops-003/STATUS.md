@@ -1,16 +1,16 @@
 # ops-003: Unified Action Library
 
 ## Current Phase
-refinement (Phase 1 implementation in progress)
+Phase 2 ready for implementation (v1.1.15 — Validate Migration)
 
 ## Progress
 - [x] Analysis complete (6 documents in `analysis/`)
 - [x] CLI UX design revised (`10-CLI-UX-DESIGN-REVISED.md`)
 - [x] SCOPE.md created (3-release plan: v1.1.14, v1.1.15, v1.1.16)
 - [x] Phase 1 SPARC planning complete (5 artifacts in `phase-1/`)
-- [x] Phase 1 implementation (v1.1.14 — Gold Migration) -- in progress, tests passing
-- [ ] Phase 1 release (v1.1.14)
-- [ ] Phase 2 SPARC planning (v1.1.15 — Validate Migration)
+- [x] Phase 1 implementation (v1.1.14 — Gold Migration)
+- [x] Phase 1 release (v1.1.14) — released 2026-02-07, tag v1.1.14
+- [x] Phase 2 SPARC planning complete (5 artifacts in `phase-2/`)
 - [ ] Phase 2 implementation (v1.1.15)
 - [ ] Phase 2 release (v1.1.15)
 - [ ] Phase 3 SPARC planning (v1.1.16 — Shared Constants + Cross-cutting)
@@ -18,7 +18,7 @@ refinement (Phase 1 implementation in progress)
 - [ ] Phase 3 release (v1.1.16)
 
 ## Active Work
-Phase 1 implementation and verification in progress. See verification report below.
+Phase 2 SPARC Refinement complete. Ready for implementation.
 
 ## Scope Summary
 Migrate Gold DDL generation and config validation into `ndp-lib`, establishing it as the single library of NDP actions. Retire `ndp-gold-ddl` and `ndp-validate` standalone binaries from deploy.sh. Single `ndp` binary for all deployment operations.
