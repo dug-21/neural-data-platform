@@ -533,10 +533,8 @@ mod tests {
 
     #[test]
     fn test_convert_real_domain_config() {
-        let content =
-            include_str!("../../../config/domains/indoor-air-quality/domain.json");
-        let config: crate::config::DomainConfig =
-            serde_json::from_str(content).unwrap();
+        let content = include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: crate::config::DomainConfig = serde_json::from_str(content).unwrap();
         let entry = domain_config_to_sync_entry(&config);
 
         assert_eq!(entry.domain_id, "indoor-air-quality");
@@ -555,10 +553,8 @@ mod tests {
 
     #[test]
     fn test_convert_objective_fields_flattened() {
-        let content =
-            include_str!("../../../config/domains/indoor-air-quality/domain.json");
-        let config: crate::config::DomainConfig =
-            serde_json::from_str(content).unwrap();
+        let content = include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: crate::config::DomainConfig = serde_json::from_str(content).unwrap();
         let entry = domain_config_to_sync_entry(&config);
 
         // First objective: healthy_co2
@@ -575,10 +571,8 @@ mod tests {
 
     #[test]
     fn test_convert_stream_mappings() {
-        let content =
-            include_str!("../../../config/domains/indoor-air-quality/domain.json");
-        let config: crate::config::DomainConfig =
-            serde_json::from_str(content).unwrap();
+        let content = include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let config: crate::config::DomainConfig = serde_json::from_str(content).unwrap();
         let entry = domain_config_to_sync_entry(&config);
 
         assert_eq!(entry.streams.len(), 4);

@@ -7,6 +7,7 @@
 5. **You are training future agents.** Knowledge capture is as important as code delivery.
 6. **Anti-stub**: Never leave TODO, `unimplemented!()`, `todo!()`, or placeholder functions. Ask the user if blocked.
 7. **Never save files to root.** Use project directory structure.
+8. **Never use claude plan mode** Write to scope.md.  Leverage full SPARC planning swarm.
 
 ---
 

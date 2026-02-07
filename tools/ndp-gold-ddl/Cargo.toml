@@ -10,6 +10,9 @@ name = "ndp-gold-ddl"
 path = "src/main.rs"
 
 [dependencies]
+# Shared library (gold module migrated here in v1.1.14)
+ndp-lib = { path = "../../crates/ndp-lib" }
+
 # CLI interface
 clap = { version = "4", features = ["derive", "env"] }
 

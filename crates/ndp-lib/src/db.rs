@@ -87,6 +87,27 @@ impl DbClient for PostgresClient {
     }
 }
 
+/// No-op database client for dry-run mode.
+///
+/// All methods return empty results. Used when database operations
+/// should be skipped (e.g., `--dry-run` mode in CLI commands).
+pub struct NoOpDbClient;
+
+#[async_trait]
+impl DbClient for NoOpDbClient {
+    async fn query(&self, _query: &str, _params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        Ok(vec![])
+    }
+
+    async fn execute(&self, _query: &str, _params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+        Ok(0)
+    }
+
+    async fn batch_execute(&self, _sql: &str) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

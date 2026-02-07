@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.14] - 2026-02-07
+
+Gold module migration to ndp-lib and `ndp gold` CLI commands (ops-003 phase 1). Gold DDL generation now lives in the shared library. deploy.sh dispatches through `ndp gold` instead of `ndp-gold-ddl`.
+
+### Added
+
+- **`ndp gold generate|sync|recreate` CLI commands** — full parity with ndp-gold-ddl binary
+  - `--stream`, `--domain`, `--transitions`, `--events`, `--dry-run`, `--validate-only`, `--no-validate` flags
+  - `--events requires --domain` guard matches old binary behavior
+  - `--validate-only` validates config without generating DDL
+- **`crates/ndp-lib/src/gold/` module** — 29 files migrated from ndp-gold-ddl with shared imports
+  - Config (loader, domain, types), generators (8), planner, registry (4), validation, error, db
+  - Convenience API: `generate_stream()`, `generate_domain()`, `sync_stream()`, `sync_domain()`, `recreate_stream()`
+  - `GenerateOptions` struct for transitions/events/verbose flags
+- **Golden master tests** — 15 tests (14 DDL comparisons + 1 checksum verification) in ndp-lib
+- **DbClient trait unification** — `PostgresCaChecker` uses `ndp_lib::db::DbClient`
+
+### Changed
+
+- **deploy.sh** — 3 gold dispatch sites now use `ndp gold` commands with no fallback (error + return 1)
+  - `handle_gold_table`: `ndp gold sync --stream`
+  - `handle_domain_declaration`: `ndp gold sync --domain` and `ndp gold generate --domain --events`
+
+### Fixed
+
+- **deploy.sh `--config-dir` path** (BUG-004) — dispatch sites passed `$REPO_ROOT/config` but ndp CLI expects `config/base` (uses `.parent()` to reach config root). Fixed 3 sites.
+
+### Technical Notes
+
+- 491 ndp-lib tests (355 unit + 121 integration + 15 golden master), 0 failures, 1 ignored
+- 13 live integration tests against TimescaleDB (12 pass, 1 pre-existing config issue)
+- ndp-gold-ddl retained as thin wrapper (re-exports ndp-lib)
+
 ## [1.1.13] - 2026-02-06
 
 Fix CA refresh policy: events_hourly showed no data because start_offset was hardcoded to 3 hours and if_not_exists prevented updates on redeploy (BUG-003, ops-002).

@@ -27,6 +27,10 @@ struct Cli {
     #[arg(long, env = "TIMESCALE_URL", global = true)]
     db_url: Option<String>,
 
+    /// Database connection timeout in seconds.
+    #[arg(long, default_value = "10", global = true)]
+    db_timeout: u64,
+
     /// Environment: integration or pi.
     #[arg(long, env = "DEPLOY_ENV", default_value = "pi", global = true)]
     env: String,
@@ -49,6 +53,9 @@ enum Commands {
 
     /// Domain configuration operations.
     Domain(commands::domain::DomainArgs),
+
+    /// Gold layer DDL operations.
+    Gold(commands::gold::GoldArgs),
 }
 
 impl Cli {
@@ -64,44 +71,54 @@ impl Cli {
             })
     }
 
-    /// Resolve the database URL based on --db-url or TIMESCALE_URL env.
-    ///
-    /// The CLI runs on the host (not inside Docker), so deploy.sh must pass
-    /// --db-url with the host-accessible URL. No hardcoded passwords.
-    fn resolve_db_url(&self) -> String {
-        self.db_url
-            .clone()
-            .unwrap_or_else(|| {
-                eprintln!("Error: No database URL provided.");
-                eprintln!("Pass --db-url or set TIMESCALE_URL environment variable.");
-                std::process::exit(1);
-            })
-    }
+}
+
+/// Require a database URL, exiting with an error if missing.
+///
+/// Called for commands that always need a database connection (dictionary,
+/// dimension, domain). Gold commands handle the optional URL internally
+/// since `generate` does not require a database.
+fn require_db_url(db_url: &Option<String>) -> String {
+    db_url
+        .clone()
+        .unwrap_or_else(|| {
+            eprintln!("Error: No database URL provided.");
+            eprintln!("Pass --db-url or set TIMESCALE_URL environment variable.");
+            std::process::exit(1);
+        })
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
+    // Initialize tracing (default to warn; use RUST_LOG=info for verbose)
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
         )
         .init();
 
     let cli = Cli::parse();
     let config_dir = cli.resolve_config_dir();
-    let db_url = cli.resolve_db_url();
+    let db_url = cli.db_url;
+    let db_timeout = cli.db_timeout;
 
     match cli.command {
         Commands::Dictionary(args) => {
+            let db_url = require_db_url(&db_url);
             commands::dictionary::run(args, &config_dir, &db_url).await?;
         }
         Commands::Dimension(args) => {
+            let db_url = require_db_url(&db_url);
             commands::dimension::run(args, &config_dir, &db_url).await?;
         }
         Commands::Domain(args) => {
+            let db_url = require_db_url(&db_url);
             commands::domain::run(args, &config_dir, &db_url).await?;
+        }
+        Commands::Gold(args) => {
+            commands::gold::run(args, &config_dir, db_url.as_deref(), db_timeout).await?;
         }
     }
 

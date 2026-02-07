@@ -1912,8 +1912,8 @@ handle_tool() {
 
 # Handle gold-table declaration
 # Args: $1 = declaration JSON
-# Calls ndp-gold-ddl Rust tool to generate DDL, then applies to TimescaleDB
-# The tool handles idempotency by checking database state when --database-url is provided
+# Calls ndp gold subcommand to generate DDL, then applies to TimescaleDB
+# The tool handles idempotency by checking database state when --db-url is provided
 handle_gold_table() {
     local declaration="$1"
     local stream_id=$(echo "$declaration" | jq -r '.stream_id')
@@ -1929,24 +1929,23 @@ handle_gold_table() {
 
     # Check for dry-run mode (set by --dry-run flag)
     if [ "${DRY_RUN:-false}" = "true" ]; then
-        log "  [DRY-RUN] Would call: ndp-gold-ddl generate --stream $stream_id --action $action"
+        log "  [DRY-RUN] Would call: ndp gold $action --stream $stream_id"
         return 0
     fi
 
-    # Check if ndp-gold-ddl tool is available
-    local gold_ddl_tool=""
-    if command -v ndp-gold-ddl &> /dev/null; then
-        gold_ddl_tool="ndp-gold-ddl"
-    elif [ -x "/opt/ndp/bin/ndp-gold-ddl" ]; then
-        gold_ddl_tool="/opt/ndp/bin/ndp-gold-ddl"
-    elif [ -x "$REPO_ROOT/target/release/ndp-gold-ddl" ]; then
-        gold_ddl_tool="$REPO_ROOT/target/release/ndp-gold-ddl"
-    elif [ -x "$REPO_ROOT/target/debug/ndp-gold-ddl" ]; then
-        gold_ddl_tool="$REPO_ROOT/target/debug/ndp-gold-ddl"
+    # Resolve ndp tool (required -- no fallback)
+    local ndp_tool=""
+    if command -v ndp &> /dev/null; then
+        ndp_tool="ndp"
+    elif [ -x "/opt/ndp/bin/ndp" ]; then
+        ndp_tool="/opt/ndp/bin/ndp"
+    elif [ -x "$REPO_ROOT/target/release/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/release/ndp"
+    elif [ -x "$REPO_ROOT/target/debug/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/debug/ndp"
     else
-        warn "  ndp-gold-ddl tool not found, skipping Gold DDL generation"
-        warn "  Build the tool with: cargo build --release -p ndp-gold-ddl"
-        return 0
+        error "ndp tool not found. Build with: cargo build --release -p ndp-cli"
+        return 1
     fi
 
     # Build database URL for the tool to connect and check existence
@@ -1954,14 +1953,14 @@ handle_gold_table() {
     local db_password="${POSTGRES_PASSWORD:-ndp_secure_password}"
     local db_url="postgresql://postgres:${db_password}@localhost:5432/ndp"
 
-    # Call Rust tool for DDL generation with database connectivity
+    # Call ndp gold for DDL generation with database connectivity
     # Tool connects to DB, checks what exists, and outputs only needed DDL
-    log "  Generating Gold DDL using $gold_ddl_tool (with DB check)..."
+    log "  Generating Gold DDL using $ndp_tool gold $action (with DB check)..."
     local ddl
-    ddl=$("$gold_ddl_tool" --config-dir "$REPO_ROOT/config" \
-        --database-url "$db_url" \
-        --db-timeout 10 \
-        generate --stream "$stream_id" --action "$action" 2>&1)
+    ddl=$("$ndp_tool" gold "$action" --stream "$stream_id" \
+        --config-dir "$REPO_ROOT/config/base" \
+        --db-url "$db_url" \
+        --db-timeout 10 2>&1)
     local exit_code=$?
 
     if [ $exit_code -ne 0 ]; then
@@ -2066,29 +2065,26 @@ handle_domain() {
         warn "  etcd not available, skipping domain config sync"
     fi
 
-    # Check if ndp-gold-ddl tool is available for aligned view generation
-    local gold_ddl_tool=""
-    if command -v ndp-gold-ddl &> /dev/null; then
-        gold_ddl_tool="ndp-gold-ddl"
-    elif [ -x "/opt/ndp/bin/ndp-gold-ddl" ]; then
-        gold_ddl_tool="/opt/ndp/bin/ndp-gold-ddl"
-    elif [ -x "$REPO_ROOT/target/release/ndp-gold-ddl" ]; then
-        gold_ddl_tool="$REPO_ROOT/target/release/ndp-gold-ddl"
-    elif [ -x "$REPO_ROOT/target/debug/ndp-gold-ddl" ]; then
-        gold_ddl_tool="$REPO_ROOT/target/debug/ndp-gold-ddl"
-    fi
-
-    if [ -z "$gold_ddl_tool" ]; then
-        warn "  ndp-gold-ddl tool not found, skipping aligned view DDL generation"
-        warn "  Build the tool with: cargo build --release -p ndp-gold-ddl"
-        return 0
+    # Resolve ndp tool (required -- no fallback)
+    local ndp_tool=""
+    if command -v ndp &> /dev/null; then
+        ndp_tool="ndp"
+    elif [ -x "/opt/ndp/bin/ndp" ]; then
+        ndp_tool="/opt/ndp/bin/ndp"
+    elif [ -x "$REPO_ROOT/target/release/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/release/ndp"
+    elif [ -x "$REPO_ROOT/target/debug/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/debug/ndp"
+    else
+        error "ndp tool not found. Build with: cargo build --release -p ndp-cli"
+        return 1
     fi
 
     # Generate and apply aligned view DDL
-    # Note: --config-dir is a top-level option, must come before subcommand
-    log "  Generating aligned view DDL using $gold_ddl_tool..."
+    log "  Generating aligned view DDL using $ndp_tool gold generate..."
     local ddl
-    ddl=$("$gold_ddl_tool" --config-dir "$REPO_ROOT/config" generate --domain "$domain_id" --action "$action" 2>&1)
+    ddl=$("$ndp_tool" gold generate --domain "$domain_id" \
+        --config-dir "$REPO_ROOT/config/base" 2>&1)
     local exit_code=$?
 
     if [ $exit_code -ne 0 ]; then
@@ -2111,9 +2107,10 @@ handle_domain() {
     fi
 
     # Generate and apply events DDL (if configured in domain.json)
-    log "  Generating events DDL using $gold_ddl_tool..."
+    log "  Generating events DDL using $ndp_tool gold generate --events..."
     local events_ddl
-    events_ddl=$("$gold_ddl_tool" --config-dir "$REPO_ROOT/config" generate --domain "$domain_id" --events --action "$action" 2>&1)
+    events_ddl=$("$ndp_tool" gold generate --domain "$domain_id" --events \
+        --config-dir "$REPO_ROOT/config/base" 2>&1)
     local events_exit_code=$?
 
     if [ $events_exit_code -eq 0 ] && [ -n "$events_ddl" ]; then

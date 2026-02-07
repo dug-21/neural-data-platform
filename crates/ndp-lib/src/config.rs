@@ -724,8 +724,7 @@ mod tests {
 
     #[test]
     fn test_parse_real_domain_config() {
-        let content =
-            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let content = include_str!("../../../config/domains/indoor-air-quality/domain.json");
         let config: DomainConfig = serde_json::from_str(content).unwrap();
 
         assert_eq!(config.id, "indoor-air-quality");
@@ -741,8 +740,7 @@ mod tests {
 
     #[test]
     fn test_domain_config_no_constraints() {
-        let content =
-            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let content = include_str!("../../../config/domains/indoor-air-quality/domain.json");
         let config: DomainConfig = serde_json::from_str(content).unwrap();
 
         // The real indoor-air-quality domain has no constraints
@@ -757,11 +755,9 @@ mod tests {
         write_domain_config(&domains_dir, "alpha-domain", r#"{"id":"alpha-domain"}"#);
         write_domain_config(&domains_dir, "beta-domain", r#"{"id":"beta-domain"}"#);
 
-        let loader = FileSystemConfigLoader::new(
-            tmp.path().join("streams"),
-            tmp.path().join("dimensions"),
-        )
-        .with_domains_dir(&domains_dir);
+        let loader =
+            FileSystemConfigLoader::new(tmp.path().join("streams"), tmp.path().join("dimensions"))
+                .with_domains_dir(&domains_dir);
 
         let ids = loader.discover_domain_ids().unwrap();
         assert_eq!(ids, vec!["alpha-domain", "beta-domain"]);
@@ -773,15 +769,12 @@ mod tests {
         let domains_dir = tmp.path().join("domains");
 
         // Copy real indoor-air-quality config into the tempdir
-        let real_content =
-            include_str!("../../../config/domains/indoor-air-quality/domain.json");
+        let real_content = include_str!("../../../config/domains/indoor-air-quality/domain.json");
         write_domain_config(&domains_dir, "indoor-air-quality", real_content);
 
-        let loader = FileSystemConfigLoader::new(
-            tmp.path().join("streams"),
-            tmp.path().join("dimensions"),
-        )
-        .with_domains_dir(&domains_dir);
+        let loader =
+            FileSystemConfigLoader::new(tmp.path().join("streams"), tmp.path().join("dimensions"))
+                .with_domains_dir(&domains_dir);
 
         let configs = loader.load_domain_configs().unwrap();
         assert_eq!(configs.len(), 1);

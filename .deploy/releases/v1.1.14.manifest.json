@@ -1,0 +1,22 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.14",
+  "description": "Gold module migration to ndp-lib + ndp gold CLI commands (ops-003 phase 1)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-cli",
+      "action": "build"
+    },
+    {
+      "type": "tool",
+      "id": "ndp-gold-ddl",
+      "action": "build"
+    },
+    {
+      "type": "gold",
+      "action": "sync"
+    }
+  ]
+}

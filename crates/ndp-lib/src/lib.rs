@@ -17,6 +17,7 @@
 //! - [`config`] - Configuration loader trait and filesystem implementation
 //! - [`dictionary`] - Dictionary sync logic (Phase B)
 //! - [`dimension`] - Dimension sync logic (Phase C)
+//! - [`gold`] - Gold layer DDL generation (continuous aggregates, aligned views, events)
 //! - [`error`] - Error types
 //! - [`types`] - Shared types (SyncReport, SyncOptions)
 
@@ -27,9 +28,10 @@ pub mod dictionary;
 pub mod dimension;
 pub mod domain;
 pub mod error;
+pub mod gold;
 pub mod types;
 
 // Re-exports for convenience
-pub use db::DbClient;
+pub use db::{DbClient, NoOpDbClient};
 pub use error::{NdpLibError, Result};
 pub use types::{SyncError, SyncOptions, SyncReport};
