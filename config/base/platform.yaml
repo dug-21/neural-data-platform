@@ -27,7 +27,7 @@ subscribers:
   bronze:
     enabled: true
     batch_size: 100
-    flush_interval_secs: 5
+    flush_interval_secs: 30
     max_retries: 3
 
   # Silver layer subscriber - transforms Bronze to TimescaleDB
