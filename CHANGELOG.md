@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-08
+
+AIR-017 Phase 1: Bronze write-ahead architecture. Separates durability (WAL) from archival (Parquet) in the Bronze layer. WAL provides immediate durability on event receipt; Parquet is a periodic snapshot from an in-memory accumulator. Read-modify-write is eliminated entirely.
+
+### Added
+
+- **WAL v2** (`core/src/storage/wal.rs`) — sequence-numbered entries, watermark-based truncation via `commit_to()`, replaces delete-all `commit()`
+- **InMemoryAccumulator** (`core/src/storage/accumulator.rs`) — HashMap-based accumulator with dedup by `(source_id, timestamp, value_hash)`, memory estimation, per-stream drain
+- **WAL on event receipt** — BronzeSubscriber writes WAL immediately on event arrival (millisecond durability, was up to 30s)
+- **Periodic Parquet snapshots** — configurable `snapshot_interval_secs` (default 1800s), full overwrite from accumulator (no read-modify-write)
+- **Startup crash recovery** — seed accumulator from today's Parquet, replay WAL entries after last snapshot watermark
+- **`write_raw_snapshot()`** on RawStore trait — bulk write from Vec without WAL (used by snapshot path)
+- **`snapshot_interval_secs`** and **`day_rollover_utc_hour`** config fields in `platform.yaml`
+- **4 integration tests** — full ingest-snapshot cycle, crash recovery, snapshot overwrite, multi-stream isolation
+- **CancellationToken fix** for coordinator tests — 3 previously-hanging tests now complete in <1s
+
+### Changed
+
+- **BronzeSubscriber** — rewritten with WAL-on-receipt, accumulator, snapshot timer in `select!` loop
+- **ParquetStore** — WAL removed from `write_raw_batch()`, `append_to_raw_parquet()` deprecated
+- **BronzeSubscriber constructor** — now takes `snapshot_interval_secs` and `day_rollover_utc_hour` parameters
+
+### Technical Notes
+
+- 861 platform-core lib tests passing in 1.66s (was hanging indefinitely due to coordinator test bug)
+- 1,690 total tests across platform-core (861), ndp-lib (675+), ndp-validate (65+)
+- Parquet write frequency: ~2,880/day → ~24-48/day
+- Parquet write cost: O(file_size) read+write → O(day's data) write only
+- Durability latency: up to 30s → milliseconds
+- Memory: stable O(day's data) in accumulator (~22 MiB for current volumes)
+
 ## [1.1.17] - 2026-02-08
 
 Validate migration to ndp-lib (ops-003 phase 2). All validation logic now lives in `crates/ndp-lib/src/validate/`, the `ndp validate` CLI command replaces the standalone `ndp-validate` binary, and deploy.sh uses no-fallback dispatch.

@@ -327,6 +327,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
     use tokio::sync::broadcast;
+    use tokio_util::sync::CancellationToken;
 
     // ========== TEST HELPERS ==========
 
@@ -338,6 +339,7 @@ mod tests {
         events_received: Arc<AtomicUsize>,
         should_fail_start: bool,
         should_fail_stop: bool,
+        cancellation_token: CancellationToken,
     }
 
     impl TestSubscriber {
@@ -349,6 +351,7 @@ mod tests {
                 events_received: Arc::new(AtomicUsize::new(0)),
                 should_fail_start: false,
                 should_fail_stop: false,
+                cancellation_token: CancellationToken::new(),
             }
         }
 
@@ -368,6 +371,10 @@ mod tests {
         fn events_count(&self) -> usize {
             self.events_received.load(Ordering::SeqCst)
         }
+
+        fn cancellation_token(&self) -> CancellationToken {
+            self.cancellation_token.clone()
+        }
     }
 
     #[async_trait::async_trait]
@@ -386,17 +393,24 @@ mod tests {
 
             self.started.store(true, Ordering::SeqCst);
 
-            // Simple receive loop
+            // Receive loop with cancellation support
             loop {
-                match receiver.recv().await {
-                    Ok(_) => {
-                        self.events_received.fetch_add(1, Ordering::SeqCst);
-                    }
-                    Err(broadcast::error::RecvError::Lagged(_)) => {
-                        continue;
-                    }
-                    Err(broadcast::error::RecvError::Closed) => {
+                tokio::select! {
+                    _ = self.cancellation_token.cancelled() => {
                         break;
+                    }
+                    result = receiver.recv() => {
+                        match result {
+                            Ok(_) => {
+                                self.events_received.fetch_add(1, Ordering::SeqCst);
+                            }
+                            Err(broadcast::error::RecvError::Lagged(_)) => {
+                                continue;
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -526,7 +540,9 @@ mod tests {
         let mut coordinator = SubscriberCoordinator::new(event_bus.clone());
 
         let subscriber1 = TestSubscriber::new("test-1");
+        let cancel1 = subscriber1.cancellation_token();
         let subscriber2 = TestSubscriber::new("test-2");
+        let cancel2 = subscriber2.cancellation_token();
 
         coordinator.register(Box::new(subscriber1)).unwrap();
         coordinator.register(Box::new(subscriber2)).unwrap();
@@ -539,8 +555,9 @@ mod tests {
         // Subscribers are moved to tasks, so running_tasks should have entries
         assert_eq!(coordinator.running_tasks.len(), 2);
 
-        // Clean up: close event bus channel
-        drop(event_bus);
+        // Clean up: cancel subscribers so tasks exit
+        cancel1.cancel();
+        cancel2.cancel();
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
@@ -568,15 +585,15 @@ mod tests {
         let event_bus = create_test_event_bus();
         let mut coordinator = SubscriberCoordinator::new(event_bus.clone());
 
-        coordinator
-            .register(Box::new(TestSubscriber::new("test-1")))
-            .unwrap();
+        let subscriber = TestSubscriber::new("test-1");
+        let cancel = subscriber.cancellation_token();
+        coordinator.register(Box::new(subscriber)).unwrap();
         coordinator.start_all().await.unwrap();
 
-        // Dropping event_bus closes the channel, which stops subscribers
-        drop(event_bus);
+        // Signal the subscriber to stop via cancellation token
+        cancel.cancel();
 
-        // Give tasks time to notice channel closure
+        // Give tasks time to notice cancellation
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let result = coordinator.stop_all().await;
@@ -619,12 +636,13 @@ mod tests {
         let event_bus = create_test_event_bus();
         let mut coordinator = SubscriberCoordinator::new(event_bus.clone());
 
-        coordinator
-            .register(Box::new(TestSubscriber::new("test-1")))
-            .unwrap();
-        coordinator
-            .register(Box::new(TestSubscriber::new("test-2")))
-            .unwrap();
+        let sub1 = TestSubscriber::new("test-1");
+        let cancel1 = sub1.cancellation_token();
+        let sub2 = TestSubscriber::new("test-2");
+        let cancel2 = sub2.cancellation_token();
+
+        coordinator.register(Box::new(sub1)).unwrap();
+        coordinator.register(Box::new(sub2)).unwrap();
         coordinator.start_all().await.unwrap();
 
         // Give tasks time to start
@@ -637,8 +655,9 @@ mod tests {
         assert!(health.subscriber_health.contains_key("test-1"));
         assert!(health.subscriber_health.contains_key("test-2"));
 
-        // Clean up
-        drop(event_bus);
+        // Clean up: cancel subscribers so tasks exit
+        cancel1.cancel();
+        cancel2.cancel();
     }
 
     #[tokio::test]
@@ -646,15 +665,15 @@ mod tests {
         let event_bus = create_test_event_bus();
         let mut coordinator = SubscriberCoordinator::new(event_bus.clone());
 
-        coordinator
-            .register(Box::new(TestSubscriber::new("test-1")))
-            .unwrap();
+        let subscriber = TestSubscriber::new("test-1");
+        let cancel = subscriber.cancellation_token();
+        coordinator.register(Box::new(subscriber)).unwrap();
         coordinator.start_all().await.unwrap();
 
-        // Close the channel to stop the subscriber
-        drop(event_bus);
+        // Cancel the subscriber so its task finishes
+        cancel.cancel();
 
-        // Wait for task to finish - increase timeout for reliability
+        // Wait for task to finish
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         let health = coordinator.health_check().await;
@@ -672,13 +691,15 @@ mod tests {
         let event_bus = create_test_event_bus();
         let mut coordinator = SubscriberCoordinator::new(event_bus.clone());
 
-        // Register
-        coordinator
-            .register(Box::new(TestSubscriber::new("bronze")))
-            .unwrap();
-        coordinator
-            .register(Box::new(TestSubscriber::new("silver")))
-            .unwrap();
+        // Register (capture cancellation tokens before moving subscribers)
+        let bronze_sub = TestSubscriber::new("bronze");
+        let bronze_cancel = bronze_sub.cancellation_token();
+        coordinator.register(Box::new(bronze_sub)).unwrap();
+
+        let silver_sub = TestSubscriber::new("silver");
+        let silver_cancel = silver_sub.cancellation_token();
+        coordinator.register(Box::new(silver_sub)).unwrap();
+
         assert_eq!(coordinator.subscriber_count(), 2);
         assert_eq!(coordinator.state(), CoordinatorState::Idle);
 
@@ -702,10 +723,11 @@ mod tests {
         // Give time for processing
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        // Stop (by closing event bus first)
-        drop(event_bus);
+        // Signal subscribers to stop via cancellation tokens
+        bronze_cancel.cancel();
+        silver_cancel.cancel();
 
-        // Give tasks time to notice channel closure
+        // Give tasks time to notice cancellation
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let result = coordinator.stop_all().await;

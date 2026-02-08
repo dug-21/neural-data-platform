@@ -495,11 +495,21 @@ impl ParquetStore {
         path
     }
 
+    /// Get the base storage path
+    ///
+    /// Used by BronzeSubscriber during recovery to scan for today's Parquet files.
+    pub fn base_path(&self) -> &Path {
+        &self.base_path
+    }
+
     /// Write raw data points to Parquet file with 5-column schema
     ///
     /// AIR-010 P3-02: Uses spawn_blocking to prevent blocking the async runtime during
     /// CPU-intensive Parquet serialization and Snappy compression.
-    async fn write_raw_parquet(&self, points: Vec<RawDataPoint>, path: &Path) -> CoreResult<()> {
+    ///
+    /// Public for direct use by BronzeSubscriber snapshot writes (AIR-017),
+    /// bypassing the read-modify-write path of append_to_raw_parquet.
+    pub async fn write_raw_parquet(&self, points: Vec<RawDataPoint>, path: &Path) -> CoreResult<()> {
         if points.is_empty() {
             return Ok(());
         }
@@ -560,6 +570,14 @@ impl ParquetStore {
     }
 
     /// Append raw data points to an existing Parquet file or create new one
+    ///
+    /// Uses read-modify-write: reads existing data, merges with new points, writes all.
+    /// Still used by `write_raw()` for single-point writes in tests.
+    #[deprecated(
+        since = "1.2.0",
+        note = "Use write_raw_snapshot for full-overwrite snapshot writes (AIR-017). \
+                This read-modify-write path is retained only for legacy write_raw() callers."
+    )]
     async fn append_to_raw_parquet(
         &self,
         points: Vec<RawDataPoint>,
@@ -691,6 +709,7 @@ impl ParquetStore {
 
 #[async_trait]
 impl RawStore for ParquetStore {
+    #[allow(deprecated)] // Uses append_to_raw_parquet; retained for backward compatibility
     async fn write_raw(&self, point: RawDataPoint) -> CoreResult<()> {
         // Append to WAL first
         let mut wal = self.wal.lock().await;
@@ -706,20 +725,15 @@ impl RawStore for ParquetStore {
 
     /// Write a batch of raw data points to Parquet storage
     ///
-    /// AIR-010 P1-02: Parallelized partition writes using try_join_all for improved throughput.
+    /// Groups points by partition path and writes each partition directly.
+    ///
+    /// AIR-017 P1-08: WAL logic removed. BronzeSubscriber now owns the WAL and
+    /// handles durability via its own WAL append + snapshot cycle.
+    /// This method no longer touches the WAL or uses read-modify-write.
     async fn write_raw_batch(&self, points: Vec<RawDataPoint>) -> CoreResult<()> {
         if points.is_empty() {
             return Ok(());
         }
-
-        // Append all to WAL first
-        let mut wal = self.wal.lock().await;
-        for point in &points {
-            let entry = serde_json::to_vec(point)
-                .map_err(|e| CoreError::Storage(format!("Failed to serialize raw point: {}", e)))?;
-            wal.append(&entry)?;
-        }
-        drop(wal);
 
         // M-014: Pre-allocate HashMap with typical partition count (usually 1-3 partitions per batch)
         let mut grouped: HashMap<PathBuf, Vec<RawDataPoint>> = HashMap::with_capacity(3);
@@ -728,16 +742,20 @@ impl RawStore for ParquetStore {
             grouped.entry(path).or_default().push(point);
         }
 
-        // Write partitions sequentially (parallel writes require Arc<Self> refactor)
+        // Write partitions sequentially using direct write (no read-modify-write)
         for (path, partition_points) in grouped {
-            self.append_to_raw_parquet(partition_points, path).await?;
+            self.write_raw_parquet(partition_points, &path).await?;
         }
 
-        // Commit WAL
-        let mut wal = self.wal.lock().await;
-        wal.commit()?;
-
         Ok(())
+    }
+
+    async fn write_raw_snapshot(
+        &self,
+        points: Vec<RawDataPoint>,
+        path: &std::path::Path,
+    ) -> CoreResult<()> {
+        self.write_raw_parquet(points, path).await
     }
 
     async fn query_raw(

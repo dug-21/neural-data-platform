@@ -107,9 +107,28 @@ Move WAL writes from ParquetStore to BronzeSubscriber. Add an in-memory accumula
 
 Add a midnight timer that finalizes yesterday's Parquet file and starts a fresh accumulator. Evolve WAL from "commit = delete all" to "commit up to watermark" so WAL entries for today survive yesterday's commit.
 
-### Phase 3: Read path integration
+### Phase 3: Read path integration + Silver resilience
 
-Expose the in-memory accumulator to the read path (Silver catch-up, MCP server) so queries can access data that hasn't been snapshot to Parquet yet. This may be a separate feature if Silver catch-up is rare enough that staleness is acceptable.
+Expose the in-memory accumulator to the read path (Silver catch-up, MCP server) so queries can access data that hasn't been snapshot to Parquet yet.
+
+More critically, this phase must address a **pre-existing Silver data-loss bug** that air-017 makes worse. Today, SilverSubscriber has no retry or re-queue mechanism. When TimescaleDB is down:
+
+1. Silver continues receiving events from EventBus
+2. Every `output.write()` call fails → error logged → **event dropped forever**
+3. `high_water_mark` stays frozen at last successful write
+4. `catch_up()` only runs once at startup (`silver.rs:536`), never re-triggers
+5. **Recovery requires a full process restart** to re-enter `start()` → `catch_up()`
+
+Under air-017, the catch-up path reads from Bronze Parquet, which is now 30-60 minutes stale. So even a restart leaves a gap equal to the snapshot interval.
+
+**Options (to be decided during SPARC Architecture phase):**
+
+- **A. Accumulator-backed BronzeReader**: `read_since()` merges Parquet + accumulator data. Closes the staleness gap but couples Silver to Bronze internals.
+- **B. Silver-side retry buffer**: Silver buffers failed writes and replays them when TimescaleDB recovers. Simpler, doesn't require Bronze changes, but duplicates buffering logic.
+- **C. Periodic re-catch-up**: Silver detects sustained write failures and re-triggers `catch_up()` after recovery. Lightweight but still limited by Parquet staleness unless combined with (A).
+- **D. Accept the gap**: Snapshot interval is 30-60 min. On Pi, TimescaleDB downtime triggers a process restart anyway (Docker restart policy). Catch-up on restart covers most of the gap. Document as known limitation.
+
+The pre-existing bug (Silver drops events on write failure with no recovery path other than restart) exists today regardless of air-017. Fixing it properly is valuable but may warrant its own feature scope.
 
 ---
 
@@ -143,7 +162,8 @@ subscribers:
 - One Parquet file per day per stream per data type (parsed + raw) — unchanged
 - Parquet file naming (`readings.parquet`, `data.parquet`) — unchanged
 - Parquet schema — unchanged
-- Silver ETL real-time path (EventBus subscriber) — unchanged
+- Silver ETL real-time path (EventBus subscriber) — unchanged (receives events directly, not from Bronze)
+- Silver catch-up path (`BronzeReader.read_since()`) — reads from Parquet today, must read from accumulator+Parquet in Phase 3
 - Store trait interface (`write`, `write_batch`, `query`, `query_raw`) — may need to merge in-memory data for reads (Phase 3)
 - WAL must survive process crashes and be replayable on startup
 - No new runtime dependencies beyond what air-016 Phase 1 adds
@@ -155,7 +175,8 @@ subscribers:
 
 - Sidecar files / multi-file-per-day approaches (explicitly rejected by this design)
 - Parquet row group append / footer rewrite (complexity and corruption risk on Pi)
-- Silver ETL changes (unless Phase 3 read-path integration is needed)
+- Silver retry/re-queue mechanism (pre-existing bug, may warrant own feature scope)
+- Silver ETL transform logic changes (read-path integration in Phase 3 is in scope)
 - Polars removal (may happen naturally since write path becomes simpler)
 - Compaction (not needed — single file per day, overwritten periodically)
 - MQTT unbounded cache fix (separate issue)
@@ -185,5 +206,7 @@ This needs to evolve for air-017:
 | Day rollover timer drift | Low | Low | Recompute next midnight on each tick; use wall clock not interval |
 | WAL grows unbounded if snapshots fail | Medium | Medium | Cap WAL size; alert on snapshot failure; retry logic |
 | Read path returns stale data (Phase 3 deferred) | Medium | Low | Silver catch-up is rare; MCP can tolerate minutes of staleness |
+| TimescaleDB downtime + Silver data loss | Medium | Medium | Pre-existing bug: Silver drops events on write failure. air-017 makes catch-up gap wider (snapshot interval vs near-real-time). Docker restart policy is current mitigation. Phase 3 or separate feature needed for proper fix. |
+| Silver catch-up reads stale Parquet after restart | High (given air-017) | Medium | Parquet is up to 1 snapshot interval behind. Phase 3 option A (accumulator-backed BronzeReader) or forced snapshot before process exit mitigates. |
 | Process crash loses in-memory accumulator | N/A | None | WAL replay rebuilds it; this is the design |
 | Power loss corrupts WAL mid-write | Low | Low | WAL uses line-delimited JSON + flush(); partial last line is skipped on replay |

@@ -401,8 +401,24 @@ async fn initialize_multi_stream_coordinator(
         flush_interval_secs: 30,
         max_retries: 3,
         stream_filter: Vec::new(), // Accept all streams
+        snapshot_interval_secs: 1800, // 30 min Parquet snapshot interval
+        day_rollover_utc_hour: 0,     // Midnight UTC rollover
     };
-    let bronze_subscriber = BronzeSubscriber::new("bronze-parquet", bronze_config, store.clone());
+    let bronze_wal_path = std::path::Path::new(&config.storage.base_path).join("bronze_wal.log");
+    let bronze_data_dir = config.storage.base_path.clone();
+    let bronze_subscriber = match BronzeSubscriber::new(
+        "bronze-parquet",
+        bronze_config,
+        store.clone(),
+        &bronze_wal_path,
+        &bronze_data_dir,
+    ) {
+        Ok(sub) => sub,
+        Err(e) => {
+            tracing::error!("Failed to create BronzeSubscriber: {}", e);
+            return Err(e.into());
+        }
+    };
 
     if let Err(e) = subscriber_coordinator.register(Box::new(bronze_subscriber)) {
         tracing::warn!("Failed to register BronzeSubscriber: {}", e);

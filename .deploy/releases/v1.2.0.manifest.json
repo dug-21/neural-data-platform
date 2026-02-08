@@ -1,0 +1,18 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.0",
+  "description": "AIR-017 Phase 1: Bronze write-ahead architecture — WAL on receipt, in-memory accumulator, periodic Parquet snapshots",
+  "changes": [
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "build"
+    },
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "restart"
+    }
+  ]
+}

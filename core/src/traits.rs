@@ -1,4 +1,4 @@
-use crate::error::CoreResult;
+use crate::error::{CoreError, CoreResult};
 use crate::types::RawDataPoint;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -183,6 +183,21 @@ pub trait RawStore: Send + Sync {
         end: DateTime<Utc>,
         source_filter: Option<String>,
     ) -> CoreResult<Vec<RawDataPoint>>;
+
+    /// Write raw data points directly to a specific path (overwrite, no read-modify-write).
+    ///
+    /// Used by BronzeSubscriber snapshot writes (AIR-017) to bypass the
+    /// read-modify-write cycle of write_raw_batch. Default implementation
+    /// returns an error for stores that do not support direct snapshot writes.
+    async fn write_raw_snapshot(
+        &self,
+        _points: Vec<RawDataPoint>,
+        _path: &std::path::Path,
+    ) -> CoreResult<()> {
+        Err(CoreError::Storage(
+            "write_raw_snapshot not implemented".to_string(),
+        ))
+    }
 }
 
 #[async_trait]
@@ -267,6 +282,11 @@ mod tests {
                 end: DateTime<Utc>,
                 source_filter: Option<String>,
             ) -> CoreResult<Vec<RawDataPoint>>;
+            async fn write_raw_snapshot(
+                &self,
+                points: Vec<RawDataPoint>,
+                path: &std::path::Path,
+            ) -> CoreResult<()>;
         }
     }
 
