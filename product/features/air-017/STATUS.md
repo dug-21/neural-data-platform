@@ -51,7 +51,7 @@
 - [x] P1-10: Integration tests (full cycle with real ParquetStore) — 4 tests
 - [x] Full test suite verification (`cargo test -p platform-core --lib`) — 861 tests, 1.66s
 - [x] Coordinator test hang fix (3 tests used CancellationToken)
-- [x] Phase 1 released (v1.2.0)
+- [x] Phase 1 released (v1.1.18)
 - [ ] Phase 2 implemented
 - [ ] Phase 2 tests passing
 - [ ] Phase 3 implemented

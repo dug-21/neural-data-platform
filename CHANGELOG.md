@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-02-08
+## [1.1.18] - 2026-02-08
 
 AIR-017 Phase 1: Bronze write-ahead architecture. Separates durability (WAL) from archival (Parquet) in the Bronze layer. WAL provides immediate durability on event receipt; Parquet is a periodic snapshot from an in-memory accumulator. Read-modify-write is eliminated entirely.
 

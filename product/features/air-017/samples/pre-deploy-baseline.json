@@ -1,0 +1,130 @@
+{
+  "_meta": {
+    "purpose": "Pre-deployment Bronze data baseline for v1.2.0 (AIR-017 Phase 1) validation",
+    "captured_at": "2026-02-08T20:02:00Z",
+    "captured_from": "MCP ndp.sample_data",
+    "version_before": "v1.1.17",
+    "version_deploying": "v1.1.18",
+    "instructions": "After deploying v1.2.0, wait 5-10 minutes, then re-sample each stream. Compare: (1) streams still active, (2) row counts increasing, (3) schema matches (same payload keys), (4) timestamps advancing. Use: mcp__ndp__sample_data(stream_id=..., n=5) and mcp__ndp__data_freshness(layer='bronze')"
+  },
+  "streams": {
+    "air-quality": {
+      "source_id": "air-quality-Mqtt",
+      "ndp_id": "aq_airgradient_1",
+      "poll_type": "mqtt",
+      "latest_timestamp": 1770509095826029,
+      "sample_count": 5,
+      "payload_keys": ["atmp", "atmpCompensated", "boot", "bootCount", "firmware", "ledMode", "model", "noxIndex", "noxRaw", "pm003Count", "pm005Count", "pm01", "pm01Count", "pm01Standard", "pm02", "pm02Compensated", "pm02Count", "pm02Standard", "pm10", "pm10Count", "pm10Standard", "pm50Count", "rco2", "rhum", "rhumCompensated", "serialno", "tvocIndex", "tvocRaw", "wifi"],
+      "payload_key_count": 29,
+      "sample_values": {
+        "atmp": 17.62,
+        "rco2": 429.33,
+        "pm02": 0.67,
+        "rhum": 50.61
+      }
+    },
+    "outdoor-weather": {
+      "source_id": "outdoor-weather-Http",
+      "ndp_id": "weather-owm-002",
+      "poll_type": "httppoll",
+      "latest_timestamp": 1770511502027764,
+      "sample_count": 5,
+      "payload_keys": ["base", "clouds", "cod", "coord", "dt", "id", "main", "name", "sys", "timezone", "visibility", "weather", "wind"],
+      "payload_key_count": 13,
+      "sample_values": {
+        "main.temp": 8.33,
+        "main.humidity": 74,
+        "wind.speed": 2.53,
+        "visibility": 10000
+      }
+    },
+    "outdoor-air-quality": {
+      "source_id": "outdoor-air-quality-Http",
+      "ndp_id": "weather-owm-001",
+      "poll_type": "httppoll",
+      "latest_timestamp": 1770511502101048,
+      "sample_count": 5,
+      "payload_keys": ["coord", "list"],
+      "payload_key_count": 2,
+      "sample_values": {
+        "list[0].main.aqi": 2,
+        "list[0].components.pm2_5": 7.18,
+        "list[0].components.o3": 82.76,
+        "list[0].components.co": 187.32
+      }
+    },
+    "nws-observations": {
+      "source_id": "nws-observations-Http",
+      "ndp_id": "weather-nws-003",
+      "poll_type": "httppoll",
+      "latest_timestamp": 1770510002154168,
+      "sample_count": 5,
+      "payload_keys": ["@context", "geometry", "id", "properties", "type"],
+      "payload_key_count": 5,
+      "sample_values": {
+        "properties.temperature.value": 11,
+        "properties.dewpoint.value": 6,
+        "properties.windSpeed.value": 5.544,
+        "properties.stationId": "KSGJ"
+      }
+    },
+    "nws-station-observations": {
+      "source_id": "nws-station-observations-Http",
+      "ndp_id": null,
+      "poll_type": "httppoll",
+      "latest_timestamp": 1770512702105630,
+      "sample_count": 5,
+      "payload_keys": ["@context", "geometry", "id", "properties", "type"],
+      "payload_key_count": 5,
+      "sample_values": {
+        "properties.temperature.value": 9,
+        "properties.relativeHumidity.value": 81.49,
+        "properties.windDirection.value": 360,
+        "properties.stationId": "KSGJ"
+      }
+    },
+    "home-assistant-state": {
+      "source_id": "home-assistant-state-Mqtt",
+      "ndp_id": "door_dinettewindow",
+      "poll_type": "mqtt",
+      "latest_timestamp": 1770578797944823,
+      "sample_count": 5,
+      "payload_keys": ["_raw_text", "_topic"],
+      "payload_key_count": 2,
+      "sample_values": {
+        "_raw_text": "on",
+        "_topic": "homeassistant/binary_sensor/door_dinettewindow/state"
+      }
+    },
+    "nws-forecast-hourly": {
+      "source_id": "nws-forecast-hourly-Http",
+      "ndp_id": "weather-nws-001",
+      "poll_type": "httppoll",
+      "latest_timestamp": 1770514502848340,
+      "sample_count": 2,
+      "payload_keys": ["@context", "geometry", "properties", "type"],
+      "payload_key_count": 4,
+      "note": "Large payload (~95KB per row). Verify top-level keys match."
+    },
+    "nws-gridpoints-forecast": {
+      "source_id": "nws-gridpoints-forecast-Http",
+      "ndp_id": "weather-nws-002",
+      "poll_type": "httppoll",
+      "latest_timestamp": 1770514502479594,
+      "sample_count": 2,
+      "payload_keys": ["@id", "@type", "apparentTemperature", "atmosphericDispersionIndex", "ceilingHeight", "davisStabilityIndex", "dewpoint", "dispersionIndex", "elevation", "forecastOffice", "grasslandFireDangerIndex", "gridId", "gridX", "gridY", "hainesIndex"],
+      "payload_key_count": 68,
+      "note": "68 forecast metrics. Verify key count >= 68 and top-level structure matches."
+    }
+  },
+  "validation_checklist": {
+    "step_1": "Wait 5-10 minutes after deploy for data to flow",
+    "step_2": "Run: mcp__ndp__data_freshness(layer='bronze') — all streams should show timestamps AFTER deploy time",
+    "step_3": "Run: mcp__ndp__sample_data(stream_id='air-quality', n=5) — verify payload_key_count == 29, timestamps advancing",
+    "step_4": "Run: mcp__ndp__sample_data(stream_id='outdoor-weather', n=5) — verify payload_key_count == 13",
+    "step_5": "Spot-check 2-3 other streams for same schema shape",
+    "step_6": "Verify Parquet file sizes are growing (ls -la on Pi data dir)",
+    "step_7": "Check WAL file exists and has entries (new v2 format with sequence numbers)",
+    "step_8": "Check logs for 'Recovery: seeded accumulator' on first startup (proves recovery path works)"
+  }
+}
