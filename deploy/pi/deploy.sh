@@ -2080,11 +2080,17 @@ handle_domain() {
         return 1
     fi
 
-    # Generate and apply aligned view DDL
-    log "  Generating aligned view DDL using $ndp_tool gold generate..."
+    # Generate aligned view DDL — use subcommand matching the manifest action
+    # ndp gold generate = sync mode (IF NOT EXISTS)
+    # ndp gold recreate = recreate mode (DROP + CREATE)
+    local gold_verb="generate"
+    if [ "$action" = "recreate" ]; then
+        gold_verb="recreate"
+    fi
+    log "  Generating aligned view DDL using $ndp_tool gold $gold_verb..."
     local ddl
-    ddl=$("$ndp_tool" gold generate --domain "$domain_id" \
-        --action "$action" --config-dir "$REPO_ROOT/config/base" 2>&1)
+    ddl=$("$ndp_tool" gold "$gold_verb" --domain "$domain_id" \
+        --config-dir "$REPO_ROOT/config/base" 2>&1)
     local exit_code=$?
 
     if [ $exit_code -ne 0 ]; then
@@ -2110,7 +2116,7 @@ handle_domain() {
     log "  Generating events DDL using $ndp_tool gold generate --events..."
     local events_ddl
     events_ddl=$("$ndp_tool" gold generate --domain "$domain_id" --events \
-        --action "$action" --config-dir "$REPO_ROOT/config/base" 2>&1)
+        --config-dir "$REPO_ROOT/config/base" 2>&1)
     local events_exit_code=$?
 
     if [ $events_exit_code -eq 0 ] && [ -n "$events_ddl" ]; then
