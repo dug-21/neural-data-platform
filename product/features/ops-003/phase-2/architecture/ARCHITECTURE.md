@@ -2,9 +2,16 @@
 
 > **Author**: ndp-architect
 > **Date**: 2026-02-07
+> **Revised**: 2026-02-08
 > **Status**: Proposed
 > **Scope**: ops-003-05 through ops-003-07
 > **Predecessor**: Phase 1 (v1.1.14 Gold Migration) -- follow the same patterns
+
+### Revision History
+
+| Date | Changes |
+|------|---------|
+| 2026-02-08 | **Amendment 1**: (D1) CLI uses flat flags per UX Design doc: `--stream <path>` replaces positional CONFIG_PATH; `--schema --generate` / `--schema --verify <path>` replaces `--generate-schema` / `--verify-schema`. (D2) `serde_yaml` dropped -- all configs are JSON since v1.1.8. (D3) `is_valid_granularity()` deduplication added to module structure. (D4) Clap struct updated for `--schema` flag group. |
 
 ---
 
@@ -41,7 +48,7 @@ Key boundary rule: **ndp-lib contains validation logic and result types. The CLI
 
 **Harder:**
 - `cli.rs` must be surgically split: result types and exit codes move to ndp-lib, output formatters stay in ndp-cli.
-- `jsonschema`, `schemars`, `serde_yaml`, `strsim`, `regex`, and `sqlparser` become ndp-lib dependencies (increases compile-time footprint).
+- `jsonschema`, `schemars`, `strsim`, `regex`, and `sqlparser` become ndp-lib dependencies (increases compile-time footprint).
 - 217 tests must be migrated with exact path updates.
 - The `Cli` struct tests (clap parsing) stay in ndp-validate since they test the standalone binary interface.
 
@@ -71,7 +78,7 @@ crates/ndp-lib/src/
     schema.rs                     # SchemaValidator, DomainSchemaValidator (jsonschema)
     schema_gen.rs                 # generate_schema, verify_schema, compare_schemas (schemars)
     semantic/
-      mod.rs                      # SemanticValidator coordinator
+      mod.rs                      # SemanticValidator coordinator + shared helpers (is_valid_granularity)
       sources.rs                  # Source configuration validation
       source_path.rs              # Source path cross-reference validation
       dq_rules.rs                 # DQ rule syntax validation
@@ -106,8 +113,8 @@ The `cli.rs` split is the critical design decision of this phase. See Section 3 
 | `src/semantic/sources.rs` | `src/validate/semantic/sources.rs` | Moves as-is |
 | `src/semantic/source_path.rs` | `src/validate/semantic/source_path.rs` | Moves as-is |
 | `src/semantic/dq_rules.rs` | `src/validate/semantic/dq_rules.rs` | Moves as-is |
-| `src/semantic/gold.rs` | `src/validate/semantic/gold.rs` | Moves as-is |
-| `src/semantic/domain.rs` | `src/validate/semantic/domain.rs` | Moves as-is |
+| `src/semantic/gold.rs` | `src/validate/semantic/gold.rs` | Remove local `is_valid_granularity()`; call `super::is_valid_granularity()` |
+| `src/semantic/domain.rs` | `src/validate/semantic/domain.rs` | Remove local `is_valid_granularity()`; call `super::is_valid_granularity()` |
 | `src/semantic/table_exists.rs` | `src/validate/semantic/table_exists.rs` | Moves as-is (stub) |
 | `src/lib.rs` | `src/validate/mod.rs` | Rewritten as public API |
 | `src/main.rs` | stays in ndp-validate | Thin wrapper |
@@ -123,7 +130,7 @@ pub mod error;         // ValidationError, ErrorCode, Severity, ValidationLayer
 pub mod results;       // ValidationResult, BatchValidationResult, exit_codes
 pub mod schema;        // SchemaValidator, DomainSchemaValidator
 pub mod schema_gen;    // Schema generation and verification
-pub mod semantic;      // SemanticValidator and all sub-validators
+pub mod semantic;      // SemanticValidator, sub-validators, shared helpers (is_valid_granularity)
 
 // Re-exports at validate/mod.rs level for convenience
 pub use error::{ErrorCode, Severity, ValidationError, ValidationLayer, SchemaValidatorError};
@@ -150,7 +157,7 @@ pub use semantic::domain::validate_domain_semantic;
 | `schemars` | `0.8` | No | YES | Schema generation from Rust types |
 | `serde` | `1.0` (derive) | Yes (workspace) | Already in ndp-lib | Already a dependency |
 | `serde_json` | `1.0` | Yes (workspace) | Already in ndp-lib | Already a dependency |
-| `serde_yaml` | `0.9` | No | YES | YAML config parsing in validation |
+| `serde_yaml` | `0.9` | No | **NO -- DROPPED** | All configs are JSON since v1.1.8. YAML code paths stripped during migration (Amendment 1.3). |
 | `thiserror` | `1.0` | Yes (workspace) | Already in ndp-lib | Already a dependency |
 | `sqlparser` | `0.50` (visitor) | No | YES | DQ rule SQL syntax validation |
 | `regex` | `1.0` | No | YES | Pattern validation in DQ rules |
@@ -179,7 +186,7 @@ pub use semantic::domain::validate_domain_semantic;
 # NEW for validate module:
 jsonschema = "0.17"
 schemars = "0.8"
-serde_yaml = "0.9"
+# NOTE: serde_yaml intentionally omitted -- all configs are JSON since v1.1.8 (Amendment 1.3)
 sqlparser = { version = "0.50", features = ["visitor"] }
 regex = "1"
 strsim = "0.11"
@@ -191,12 +198,11 @@ strsim = "0.11"
 |---|---|---|---|
 | `jsonschema` | Moderate (JSON Schema engine) | ~200KB | Negligible |
 | `schemars` | Light (derive macros) | ~50KB | Negligible |
-| `serde_yaml` | Light | ~80KB | Negligible |
 | `sqlparser` | Moderate (SQL parser) | ~300KB | Negligible |
 | `regex` | Light (already a transitive dep) | ~0 | Negligible |
 | `strsim` | Trivial | ~5KB | Negligible |
 
-Total estimated binary size increase: ~635KB. Combined with Phase 1, the `ndp` binary stays well under the 15MB target.
+Total estimated binary size increase: ~555KB. Combined with Phase 1, the `ndp` binary stays well under the 15MB target.
 
 ### 2.4 Feature Flags
 
@@ -355,7 +361,7 @@ pub fn compare_schemas(schema_path: &Path) -> Result<Vec<String>, SchemaGenError
 
 ### 4.2 API Design Rationale
 
-**Paths not parsed structs**: Unlike Gold's `ConfigLoader` pattern, the validate API takes file paths. This is intentional. Validation must read files, parse JSON/YAML, and detect syntax errors. The parse step IS part of validation. Gold's `ConfigLoader` can assume valid config because it runs after validation.
+**Paths not parsed structs**: Unlike Gold's `ConfigLoader` pattern, the validate API takes file paths. This is intentional. Validation must read files, parse JSON, and detect syntax errors. The parse step IS part of validation. Gold's `ConfigLoader` can assume valid config because it runs after validation.
 
 **Optional schema path**: The schema path parameter is optional. When `None`, the embedded default schema is used. This allows both CLI usage (user specifies path) and library usage (embedded default).
 
@@ -457,6 +463,8 @@ let content = std::fs::read_to_string(config_path)?; // Err if file not found
 
 ### 7.1 Clap Structure: `ndp validate`
 
+Uses flat flags per the UX Design doc (`10-CLI-UX-DESIGN-REVISED.md` lines 193-203). Schema operations use a `--schema` flag group (not a subcommand): `--schema --generate` and `--schema --verify <path>`.
+
 ```rust
 // tools/ndp-cli/src/commands/validate.rs
 
@@ -466,33 +474,37 @@ use std::path::PathBuf;
 /// Config validation operations.
 #[derive(Args)]
 pub struct ValidateArgs {
-    /// Config file path to validate (stream config).
-    #[arg(value_name = "CONFIG_PATH", conflicts_with_all = ["all", "domain", "domain_all", "generate_schema", "verify_schema"])]
-    pub config_path: Option<PathBuf>,
+    /// Validate a single stream config file.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["all", "domain", "domain_all", "schema"])]
+    pub stream: Option<PathBuf>,
 
     /// Validate all stream configs in the config directory.
-    #[arg(short, long, conflicts_with_all = ["config_path", "domain", "domain_all", "generate_schema", "verify_schema"])]
+    #[arg(short, long, conflicts_with_all = ["stream", "domain", "domain_all", "schema"])]
     pub all: bool,
 
     /// Validate a domain configuration file.
-    #[arg(long, value_name = "FILE", conflicts_with_all = ["config_path", "all", "domain_all", "generate_schema", "verify_schema"])]
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["stream", "all", "domain_all", "schema"])]
     pub domain: Option<PathBuf>,
 
     /// Validate all domain configs in config/domains/.
-    #[arg(long, conflicts_with_all = ["config_path", "all", "domain", "generate_schema", "verify_schema"])]
+    #[arg(long, conflicts_with_all = ["stream", "all", "domain", "schema"])]
     pub domain_all: bool,
 
-    /// Generate JSON Schema from ndp-types to stdout.
-    #[arg(long, conflicts_with_all = ["config_path", "all", "domain", "domain_all", "verify_schema"])]
-    pub generate_schema: bool,
+    /// Enable schema management mode. Use with --generate or --verify.
+    #[arg(long, conflicts_with_all = ["stream", "all", "domain", "domain_all"])]
+    pub schema: bool,
 
-    /// Write generated schema to file (requires --generate-schema).
-    #[arg(long, requires = "generate_schema")]
+    /// Generate JSON Schema from ndp-types to stdout (requires --schema).
+    #[arg(long, requires = "schema", conflicts_with = "verify")]
+    pub generate: bool,
+
+    /// Verify committed schema matches generated schema (requires --schema).
+    #[arg(long, value_name = "PATH", requires = "schema", conflicts_with = "generate")]
+    pub verify: Option<PathBuf>,
+
+    /// Write generated schema to file (requires --schema --generate).
+    #[arg(long, requires = "generate")]
     pub output: Option<PathBuf>,
-
-    /// Verify committed schema matches generated schema (for CI).
-    #[arg(long, value_name = "PATH", conflicts_with_all = ["config_path", "all", "domain", "domain_all", "generate_schema"])]
-    pub verify_schema: Option<PathBuf>,
 
     /// Skip semantic validation (Layer 2), only run schema validation.
     #[arg(long)]
@@ -520,6 +532,8 @@ pub struct ValidateArgs {
 }
 ```
 
+**Flag group design**: `--schema` is a boolean flag that enables schema management mode. Within that mode, `--generate` and `--verify <path>` are the operations. This keeps the CLI flat (no subcommands) while grouping related operations. The `requires = "schema"` constraint on `--generate` and `--verify` ensures they cannot be used without `--schema`.
+
 ### 7.2 Integration into main.rs
 
 ```rust
@@ -542,17 +556,17 @@ Note: The validate command uses `process::exit()` with a specific exit code rath
 
 | Standalone (ndp-validate) | Subcommand (ndp validate) | Notes |
 |---|---|---|
-| `ndp-validate config.json` | `ndp validate config.json` | Positional arg preserved |
+| `ndp-validate config.json` | `ndp validate --stream config.json` | Positional becomes `--stream` named flag |
 | `ndp-validate --all` | `ndp validate --all` | Identical |
 | `ndp-validate -a` | `ndp validate -a` | Short flag preserved |
 | `ndp-validate --domain FILE` | `ndp validate --domain FILE` | Identical |
 | `ndp-validate --domain-all` | `ndp validate --domain-all` | Identical |
-| `ndp-validate --schema-only FILE` | `ndp validate --schema-only FILE` | Identical |
+| `ndp-validate --schema-only FILE` | `ndp validate --stream FILE --schema-only` | `--schema-only` is a modifier, `--stream` replaces positional |
 | `ndp-validate --format human` | `ndp validate --format human` | Identical |
 | `ndp-validate --strict` | `ndp validate --strict` | Identical |
-| `ndp-validate --generate-schema` | `ndp validate --generate-schema` | Identical |
-| `ndp-validate --generate-schema --output FILE` | `ndp validate --generate-schema --output FILE` | Identical |
-| `ndp-validate --verify-schema FILE` | `ndp validate --verify-schema FILE` | Identical |
+| `ndp-validate --generate-schema` | `ndp validate --schema --generate` | Flat flag group (not subcommand) |
+| `ndp-validate --generate-schema --output FILE` | `ndp validate --schema --generate --output FILE` | `--output` requires `--generate` |
+| `ndp-validate --verify-schema FILE` | `ndp validate --schema --verify FILE` | Flat flag group (not subcommand) |
 | `ndp-validate --config-dir DIR` | `ndp --config-dir DIR validate --all` | `--config-dir` is global in ndp-cli |
 | `ndp-validate --check-tables --timescale-url URL` | `ndp --db-url URL validate --check-tables` | Deferred: table checking not yet wired to DbClient |
 | `ndp-validate --verbose` | `RUST_LOG=debug` | Verbose via tracing env filter |
@@ -684,7 +698,7 @@ if [ -z "$ndp_tool" ]; then
 fi
 
 log "  Validating domain config..."
-if ! "$ndp_tool" --config-dir "$CONFIG_STREAMS_DIR" validate --domain "$config_file" --format human; then
+if ! "$ndp_tool" validate --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human; then
     error "Domain config validation failed: $config_file"
     return 1
 fi
@@ -693,7 +707,7 @@ log "  Domain config validation passed"
 
 **Key changes:**
 - `validate_tool` eliminated. Reuses `ndp_tool` from the gold dispatch earlier in the same function.
-- `--config-dir` is a global flag, placed before the `validate` subcommand.
+- `--config-dir "$CONFIG_STREAMS_DIR"` preserved (deploy.sh config vars are authoritative).
 - The `if [ -n "$validate_tool" ]` conditional eliminated: validation is now mandatory. If ndp is missing, the function already failed at the gold dispatch.
 - `warn` + skip eliminated: no fallback.
 
@@ -751,7 +765,7 @@ User specifies --domain-schema-path?
 
 ### 9.3 Schema Generation Output Path
 
-The `--generate-schema --output FILE` and `--verify-schema FILE` commands work with absolute or relative paths. No config-dir resolution needed -- these are file operations, not config discovery.
+The `--schema --generate --output FILE` and `--schema --verify FILE` commands work with absolute or relative paths. No config-dir resolution needed -- these are file operations, not config discovery.
 
 ---
 
@@ -795,8 +809,8 @@ deploy.sh passes explicit file paths to the validate command. It does NOT rely o
 # $config_file is an absolute path resolved by deploy.sh
 
 # Site 4: handle_domain_declaration()
-"$ndp_tool" --config-dir "$CONFIG_STREAMS_DIR" validate --domain "$config_file" --format human
-# $CONFIG_STREAMS_DIR passed so domain semantic validation can resolve stream references
+"$ndp_tool" validate --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human
+# $CONFIG_STREAMS_DIR passed; deploy.sh config vars are authoritative
 ```
 
 ---
@@ -837,7 +851,7 @@ pub async fn validate_table_exists(
 ### Step 1: Prepare ndp-lib
 
 1. Add `pub mod validate;` to `crates/ndp-lib/src/lib.rs`.
-2. Add dependencies to `crates/ndp-lib/Cargo.toml`: `jsonschema`, `schemars`, `serde_yaml`, `sqlparser`, `regex`, `strsim`.
+2. Add dependencies to `crates/ndp-lib/Cargo.toml`: `jsonschema`, `schemars`, `sqlparser`, `regex`, `strsim`. Do NOT add `serde_yaml` (all configs are JSON since v1.1.8).
 3. Create empty module structure under `crates/ndp-lib/src/validate/`.
 
 ### Step 2: Create results.rs from cli.rs Extract
@@ -879,6 +893,31 @@ For each moved file, find and replace:
 - `use crate::schema` with `use crate::validate::schema`
 - `use crate::schema_gen` with `use crate::validate::schema_gen`
 - `use crate::semantic` with `use crate::validate::semantic`
+
+### Step 4a: Strip YAML Code Paths
+
+Remove dead YAML code paths during migration (Amendment 1.3):
+- `main.rs:92-104`: Format auto-detection for `.yaml`/`.yml` -- strip, accept JSON only.
+- `semantic/domain.rs:499-565`: Stream discovery fallback to `config.yaml`/`config.yml` -- strip, discover `config.json` only.
+- Remove any `use serde_yaml` imports from moved files.
+
+### Step 4b: Deduplicate `is_valid_granularity()`
+
+Extract `is_valid_granularity()` from both `semantic/gold.rs` and `semantic/domain.rs` into `semantic/mod.rs`:
+
+```rust
+// crates/ndp-lib/src/validate/semantic/mod.rs
+
+/// Check if a granularity string is valid.
+/// Pattern: <number> <unit> where unit is minute(s), hour(s), or day(s).
+/// Used by both gold.rs and domain.rs validators.
+pub(crate) fn is_valid_granularity(granularity: &str) -> bool {
+    let pattern = regex::Regex::new(r"^\d+\s+(minute|hour|day)s?$").unwrap();
+    pattern.is_match(granularity)
+}
+```
+
+Update `semantic/gold.rs` and `semantic/domain.rs` to remove their local copies and call `super::is_valid_granularity()` instead.
 
 ### Step 5: Write validate/mod.rs
 
@@ -923,6 +962,18 @@ diff <(target/debug/ndp-validate --all --config-dir config/base/streams --format
 # Compare output for domain validation
 diff <(target/debug/ndp-validate --domain-all --format json) \
      <(target/debug/ndp validate --domain-all --format json)
+
+# Compare output for single stream (note: positional becomes --stream)
+diff <(target/debug/ndp-validate config/base/streams/scd30/config.json --format json) \
+     <(target/debug/ndp validate --stream config/base/streams/scd30/config.json --format json)
+
+# Compare schema generation (note: --generate-schema becomes --schema --generate)
+diff <(target/debug/ndp-validate --generate-schema) \
+     <(target/debug/ndp validate --schema --generate)
+
+# Compare schema verification
+diff <(target/debug/ndp-validate --verify-schema schemas/stream-config.v1.1.schema.json 2>&1; echo "exit:$?") \
+     <(target/debug/ndp validate --schema --verify schemas/stream-config.v1.1.schema.json 2>&1; echo "exit:$?")
 
 # Compare exit codes
 target/debug/ndp-validate --all --config-dir config/base/streams; echo "Exit: $?"
@@ -969,7 +1020,7 @@ csv = { workspace = true }
 # NEW for validate module:
 jsonschema = "0.17"
 schemars = "0.8"
-serde_yaml = "0.9"
+# NOTE: serde_yaml intentionally omitted -- all configs are JSON since v1.1.8 (Amendment 1.3)
 sqlparser = { version = "0.50", features = ["visitor"] }
 regex = "1"
 strsim = "0.11"
@@ -1006,12 +1057,12 @@ serde_json = "1.0"
 # ADD: ndp-lib for all validation logic
 ndp-lib = { path = "../../crates/ndp-lib" }
 
-# REMOVE (moved to ndp-lib):
+# REMOVE (moved to ndp-lib or dropped):
 # ndp-types = { workspace = true }
 # jsonschema = "0.17"
 # schemars = "0.8"
 # serde = { version = "1.0", features = ["derive"] }
-# serde_yaml = "0.9"
+# serde_yaml = "0.9"              # DROPPED entirely -- not in ndp-lib either
 # thiserror = "1.0"
 # sqlparser = { version = "0.50", features = ["visitor"] }
 # regex = "1.0"
@@ -1048,12 +1099,12 @@ Note: `serde_json` is retained because the thin wrapper's `main.rs` may still fo
 |---|---|---|---|
 | cli.rs split introduces bug in result type behavior | Medium | High | Extract tests with types. Run both ndp-validate and ndp validate against same configs. |
 | jsonschema/schemars add transitive dependency conflicts | Low | Medium | Both are already pinned to specific versions. Run `cargo tree -d` to check for duplicates. |
-| Embedded schema JSON strings break during move | Low | High | Schema is embedded via `include_str!` or inline JSON. Move the string literal with the file. Verify with `ndp validate --verify-schema`. |
+| Embedded schema JSON strings break during move | Low | High | Schema is embedded via `include_str!` or inline JSON. Move the string literal with the file. Verify with `ndp validate --schema --verify`. |
 | DQ rule validator's regex crate conflicts with existing transitive dep | Low | Low | `regex` is already a transitive dependency of multiple workspace crates. Adding it explicitly is safe. |
 | deploy.sh exit code mismatch (ndp-validate exits 0/1/2, ndp-cli exits 0/1) | Medium | High | Validate command uses `process::exit()` with dp-019 exit codes, bypassing the `Result`-based exit. See Section 7.2. |
 | `--config-dir` meaning differs between standalone and ndp-cli | Medium | Medium | Document in Section 10. Validate command appends `/streams` to the global config-dir. Test in integration env. |
 | Clap test breakage (standalone Cli struct tests reference ndp_validate types) | Low | Low | Clap tests stay in ndp-validate; they test the standalone CLI interface which is preserved. |
-| Binary size growth from new deps | Low | Low | Estimated ~635KB increase. Total stays under 15MB target. |
+| Binary size growth from new deps | Low | Low | Estimated ~555KB increase. Total stays under 15MB target. |
 | Compile time increase from sqlparser + jsonschema | Medium | Low | Single build replaces 2 builds (ndp-lib + ndp-validate). Net neutral or improvement. |
 | Phase 3 blocked if validate API surface is wrong | Medium | High | Design `gold_config()` API now even though it is not wired until v1.1.16. Ensure the function signature works for the cross-cutting validation use case. |
 
@@ -1084,7 +1135,7 @@ Run `cargo check -p ndp-lib` after each group (1-2, 3-4, 5-11, 12).
 |---|---|
 | `crates/ndp-lib/src/validate/` | 11 source files (error, results, schema, schema_gen, semantic/*) |
 | `crates/ndp-lib/src/lib.rs` | Add `pub mod validate;` |
-| `crates/ndp-lib/Cargo.toml` | Add 6 runtime dependencies |
+| `crates/ndp-lib/Cargo.toml` | Add 5 runtime dependencies (jsonschema, schemars, sqlparser, regex, strsim) |
 | `tools/ndp-cli/src/commands/validate.rs` | New file: validate CLI command + output formatters |
 | `tools/ndp-cli/src/commands/mod.rs` | Add `pub mod validate;` |
 | `tools/ndp-cli/src/main.rs` | Add `Validate` variant |

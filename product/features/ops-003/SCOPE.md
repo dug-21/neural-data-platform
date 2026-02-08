@@ -110,6 +110,7 @@ V1.2 adds `ndp pattern scan`, `ndp job create`, and other actions that will live
 | **ops-003-10** | Gold validation unification | Remove duplicate Gold config validation from gold module; use `validate::gold_config()` | Single validation pipeline for Gold config |
 | **ops-003-11** | NoOpDbClient dedup | Single `NoOpDbClient` in ndp-lib for dry-run mode | 3 copies → 1 |
 | **ops-003-12** | Standalone binary thin wrappers | ndp-gold-ddl and ndp-validate re-export from ndp-lib | Standalone binaries still buildable but just delegate to ndp-lib |
+| **ops-003-13** | Retire stale YAML stream configs | Rename `config/**/config.yaml` to `config.yaml.bak` | No `.yaml` stream/domain configs remain active; `platform.yaml` unchanged |
 
 ### Out of Scope (Deferred)
 

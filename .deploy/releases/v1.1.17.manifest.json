@@ -1,0 +1,28 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.17",
+  "description": "Validate migration to ndp-lib — ndp validate CLI replaces ndp-validate standalone, deploy.sh no-fallback switchover",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-cli",
+      "action": "build"
+    },
+    {
+      "type": "tool",
+      "id": "ndp-validate",
+      "action": "build"
+    },
+    {
+      "type": "validate",
+      "id": "all-streams",
+      "action": "sync"
+    },
+    {
+      "type": "validate",
+      "id": "all-domains",
+      "action": "sync"
+    }
+  ]
+}

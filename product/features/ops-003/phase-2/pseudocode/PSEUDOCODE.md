@@ -5,6 +5,13 @@
 > **Date:** 2026-02-07
 > **Scope:** 13 source files, 9,897 lines, 217 tests, 2 deploy.sh dispatch sites
 
+### Revision History
+
+| Date | Revision | Decisions Applied |
+|------|----------|-------------------|
+| 2026-02-07 | v1 | Initial pseudocode |
+| 2026-02-08 | v2 | D1: Flat flags (not entity/verb subcommands) per CLI UX Design. D2: Drop serde_yaml dependency and YAML code paths. D3: Deduplicate is_valid_granularity() to semantic/mod.rs. D4: Schema ops use `--schema --generate` / `--schema --verify <path>` flag combinations. |
+
 ---
 
 ## Table of Contents
@@ -34,7 +41,7 @@ validate/
 +-- schema.rs           SchemaValidator, DomainSchemaValidator, default schemas
 +-- schema_gen.rs       generate_schema(), verify_schema(), compare_schemas()
 +-- semantic/
-    +-- mod.rs          SemanticValidator coordinator
+    +-- mod.rs          SemanticValidator coordinator + is_valid_granularity() (D3: shared)
     +-- sources.rs      FR-020: Source config validation
     +-- source_path.rs  FR-022: Source path cross-reference
     +-- dq_rules.rs     DQ rule syntax, column refs, action validation
@@ -156,16 +163,15 @@ impl Default for ValidateOptions {
 
 /// Validate a single stream config file.
 ///
-/// Reads the file, parses JSON/YAML, runs Layer 1 (schema) and optionally
+/// Reads the file, parses JSON, runs Layer 1 (schema) and optionally
 /// Layer 2 (semantic) validation.
 ///
 /// ALGORITHM:
 ///   1. Read file content
-///   2. Detect format (JSON vs YAML) by extension
-///   3. Parse into serde_json::Value
-///   4. Run SchemaValidator (Layer 1)
-///   5. If !schema_only, run SemanticValidator (Layer 2)
-///   6. Return ValidationResult
+///   2. Parse JSON into serde_json::Value
+///   3. Run SchemaValidator (Layer 1)
+///   4. If !schema_only, run SemanticValidator (Layer 2)
+///   5. Return ValidationResult
 pub fn validate_stream(
     config_path: &std::path::Path,
     opts: &ValidateOptions,
@@ -241,17 +247,11 @@ BEGIN
 
     result <- ValidationResult::new(config_path.display())
 
-    // Read and parse
+    // Read and parse JSON
     content <- fs::read_to_string(config_path)?
 
-    // Detect format by extension
-    value <- IF extension is "yaml" or "yml" THEN
-        serde_yaml::from_str(content)
-            .map_err(|e| result.add_error(syntax_error(e)))
-    ELSE
-        serde_json::from_str(content)
-            .map_err(|e| result.add_error(syntax_error(e)))
-    END IF
+    value <- serde_json::from_str(content)
+        .map_err(|e| result.add_error(syntax_error(e)))
 
     IF value failed to parse THEN
         RETURN Ok(result)   // Already has syntax error
@@ -470,8 +470,8 @@ FILE 2: tools/ndp-cli/src/commands/validate.rs
     DO NOT MOVE:
         - Cli struct (clap) -- replaced by new ValidateArgs in commands/validate.rs
         - Cli::validate_args() -- argument validation moves into new Clap structs
-        - Cli::is_schema_mode() -- replaced by match on subcommand
-        - Cli::is_domain_mode() -- replaced by match on subcommand
+        - Cli::is_schema_mode() -- replaced by args.schema flag
+        - Cli::is_domain_mode() -- replaced by args.domain/args.domain_all flags
         - All Cli-specific tests -- replaced by new Clap-based tests
 ```
 
@@ -647,7 +647,30 @@ TYPES MOVED:
     SemanticValidator struct + impl,
     re-exports of sub-module functions
 
-TESTS: none (this file has no tests)
+DEDUPLICATION (D3): Add shared is_valid_granularity() to this module.
+    Currently defined as private `fn` in BOTH gold.rs (line 430) and
+    domain.rs (line 403) with identical regex-based implementations.
+    Extract to semantic/mod.rs as a pub(crate) function:
+
+        /// Check if a granularity string matches the expected format.
+        ///
+        /// Valid formats: "<number> <unit>" where unit is minute(s), hour(s), or day(s).
+        /// Examples: "1 hour", "15 minutes", "1 day", "7 days", "30 minute"
+        pub(crate) fn is_valid_granularity(granularity: &str) -> bool {
+            let pattern = regex::Regex::new(
+                r"^\d+\s+(minute|minutes|hour|hours|day|days)$"
+            ).unwrap();
+            pattern.is_match(granularity)
+        }
+
+    Then update gold.rs and domain.rs to call `super::is_valid_granularity()`
+    instead of their local definitions. Remove the local `fn is_valid_granularity`
+    from both files.
+
+    gold.rs test_granularity_patterns() test should move to semantic/mod.rs
+    alongside the shared function. (One copy of tests, not two.)
+
+TESTS: none originally; add granularity pattern tests from gold.rs (D3)
 ```
 
 #### 2.4.6 semantic/sources.rs
@@ -705,11 +728,15 @@ IMPORT CHANGES:
     OLD: use crate::error::{ErrorCode, Severity, ValidationError};
     NEW: use crate::validate::error::{ErrorCode, Severity, ValidationError};
 
+DEDUPLICATION (D3): Remove local `fn is_valid_granularity()` (line 430).
+    Replace all calls with `super::is_valid_granularity()` (from semantic/mod.rs).
+    Move test_granularity_patterns() to semantic/mod.rs tests.
+
 NOTE: Contains hardcoded VALID_METRICS and VALID_ROLLING_STATS lists
       that duplicate the ones in gold::config::types. In v1.1.16 these
       will be unified into ndp_lib::constants. For v1.1.15, move as-is.
 
-TESTS MOVED: ~30 tests (inline)
+TESTS MOVED: ~29 tests (inline; test_granularity_patterns moves to mod.rs)
 ```
 
 #### 2.4.10 semantic/domain.rs
@@ -721,6 +748,9 @@ DEST:   crates/ndp-lib/src/validate/semantic/domain.rs
 IMPORT CHANGES:
     OLD: use crate::error::{ErrorCode, Severity, ValidationError};
     NEW: use crate::validate::error::{ErrorCode, Severity, ValidationError};
+
+DEDUPLICATION (D3): Remove local `fn is_valid_granularity()` (line 403).
+    Replace all calls with `super::is_valid_granularity()` (from semantic/mod.rs).
 
 TESTS MOVED: ~25 tests (inline)
 ```
@@ -744,108 +774,89 @@ TESTS MOVED: ~8 tests (inline)
 
 ### 3.1 Clap Structs
 
+> **Design decision (D1/D4):** `ndp validate` uses flat flags, not entity/verb
+> subcommands. This aligns with the authoritative CLI UX design
+> (`product/research/deployment/10-CLI-UX-DESIGN-REVISED.md` lines 193-203).
+> Stream/domain selection is via `--stream`/`--domain` flags.
+> Schema operations use `--schema --generate` / `--schema --verify <path>`.
+
 ```rust
 // tools/ndp-cli/src/commands/validate.rs
 
-use clap::{Args, Subcommand, ValueEnum};
+use clap::{Args, ValueEnum};
 use std::path::PathBuf;
 
-/// Config validation operations.
+/// Config validation operations (flat-flag interface).
+///
+/// Examples:
+///   ndp validate --all
+///   ndp validate --stream config/base/streams/pm25/config.json
+///   ndp validate --domain config/domains/indoor-air-quality/domain.json
+///   ndp validate --domain-all
+///   ndp validate --schema --generate
+///   ndp validate --schema --generate --output schema.json
+///   ndp validate --schema --verify config/schema/stream.schema.json
 #[derive(Args)]
 pub struct ValidateArgs {
-    #[command(subcommand)]
-    pub command: ValidateCommands,
-}
+    /// Validate ALL stream and domain configs (full platform validation).
+    #[arg(long)]
+    pub all: bool,
 
-#[derive(Subcommand)]
-pub enum ValidateCommands {
-    /// Validate stream configuration(s).
-    Stream {
-        /// Path to a single stream config file.
-        #[arg(value_name = "CONFIG_PATH", conflicts_with = "all")]
-        config_path: Option<PathBuf>,
+    /// Validate a single stream config file.
+    #[arg(long, value_name = "CONFIG_PATH", conflicts_with = "all")]
+    pub stream: Option<PathBuf>,
 
-        /// Validate all stream configs in the config directory.
-        #[arg(long)]
-        all: bool,
+    /// Validate a single domain config file.
+    #[arg(long, value_name = "DOMAIN_PATH", conflicts_with_all = ["all", "stream"])]
+    pub domain: Option<PathBuf>,
 
-        /// Skip semantic validation (Layer 2), only run schema validation.
-        #[arg(long)]
-        schema_only: bool,
+    /// Validate all domain configs in the domains directory.
+    #[arg(long, conflicts_with_all = ["all", "stream", "domain"])]
+    pub domain_all: bool,
 
-        /// Check that Silver tables exist in TimescaleDB (requires --timescale-url).
-        #[arg(long)]
-        check_tables: bool,
+    /// Enable schema generation/verification mode.
+    #[arg(long, conflicts_with_all = ["all", "stream", "domain", "domain_all"])]
+    pub schema: bool,
 
-        /// Output format.
-        #[arg(long, value_enum, default_value = "json")]
-        format: CliOutputFormat,
+    /// Generate JSON Schema from ndp-types (requires --schema).
+    #[arg(long, requires = "schema", conflicts_with = "verify")]
+    pub generate: bool,
 
-        /// Treat warnings as errors.
-        #[arg(long)]
-        strict: bool,
+    /// Verify committed schema matches generated schema (requires --schema).
+    #[arg(long, requires = "schema", conflicts_with = "generate", value_name = "SCHEMA_PATH")]
+    pub verify: Option<PathBuf>,
 
-        /// TimescaleDB connection string (required for --check-tables).
-        #[arg(long, env = "TIMESCALE_URL")]
-        timescale_url: Option<String>,
+    /// Write generated schema to file instead of stdout (requires --schema --generate).
+    #[arg(long, requires = "generate")]
+    pub output: Option<PathBuf>,
 
-        /// Show validation progress.
-        #[arg(short, long)]
-        verbose: bool,
-    },
+    /// Skip semantic validation (Layer 2), only run schema validation.
+    #[arg(long)]
+    pub schema_only: bool,
 
-    /// Validate domain configuration(s).
-    Domain {
-        /// Path to a single domain config file.
-        #[arg(value_name = "DOMAIN_PATH", conflicts_with = "all")]
-        domain_path: Option<PathBuf>,
+    /// Treat warnings as errors.
+    #[arg(long)]
+    pub strict: bool,
 
-        /// Validate all domain configs in the domains directory.
-        #[arg(long)]
-        all: bool,
+    /// Check that Silver tables exist in TimescaleDB (requires --timescale-url).
+    #[arg(long)]
+    pub check_tables: bool,
 
-        /// Skip semantic validation (Layer 2), only run schema validation.
-        #[arg(long)]
-        schema_only: bool,
+    /// TimescaleDB connection string (required for --check-tables).
+    #[arg(long, env = "TIMESCALE_URL")]
+    pub timescale_url: Option<String>,
 
-        /// Output format.
-        #[arg(long, value_enum, default_value = "json")]
-        format: CliOutputFormat,
+    /// Output format.
+    #[arg(long, value_enum, default_value = "json")]
+    pub format: CliOutputFormat,
 
-        /// Treat warnings as errors.
-        #[arg(long)]
-        strict: bool,
+    /// Show validation progress.
+    #[arg(short, long)]
+    pub verbose: bool,
 
-        /// Show validation progress.
-        #[arg(short, long)]
-        verbose: bool,
-
-        /// Directory containing domain configs (for --all).
-        #[arg(long, default_value = "config/domains")]
-        domains_dir: PathBuf,
-    },
-
-    /// JSON Schema generation and verification.
-    Schema {
-        #[command(subcommand)]
-        command: SchemaCommands,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum SchemaCommands {
-    /// Generate JSON Schema from ndp-types to stdout.
-    Generate {
-        /// Write schema to file instead of stdout.
-        #[arg(long)]
-        output: Option<PathBuf>,
-    },
-
-    /// Verify committed schema matches generated schema (for CI).
-    Verify {
-        /// Path to committed schema file.
-        path: PathBuf,
-    },
+    /// Directory containing domain configs (for --domain-all).
+    #[arg(long, default_value = "config/domains")]
+    pub domains_dir: PathBuf,
 }
 
 /// CLI output format (maps to ndp_lib::validate::OutputFormat).
@@ -861,68 +872,73 @@ pub enum CliOutputFormat {
 ```
 ALGORITHM: validate::run
 INPUT:
-    args (ValidateArgs) - parsed Clap arguments
+    args (ValidateArgs) - parsed Clap arguments (flat flags)
     base_config_dir (Path) - resolved config base directory (from global --config-dir)
 OUTPUT: Result<(), Box<dyn Error>>
 
 BEGIN
-    MATCH args.command:
-        ValidateCommands::Stream { config_path, all, schema_only, check_tables,
-                                   format, strict, timescale_url, verbose } =>
-            opts <- ValidateOptions {
-                schema_only,
-                strict,
-                format: format.into(),
-                check_tables,
-                timescale_url,
-                schema_path: None,
-                domain_schema_path: None,
-            }
+    // --- Schema mode (--schema) ---
+    IF args.schema THEN
+        IF args.generate THEN
+            run_generate_schema(args.output)
+        ELSE IF args.verify IS SOME THEN
+            run_verify_schema(args.verify.unwrap())
+        ELSE
+            RETURN error("--schema requires either --generate or --verify <path>")
+        END IF
+        RETURN Ok(())
+    END IF
 
-            IF all THEN
-                result <- ndp_lib::validate::validate_all_streams(base_config_dir, &opts)?
-                output_batch_result(&result, format, strict)
-            ELSE IF config_path IS SOME THEN
-                result <- ndp_lib::validate::validate_stream(config_path, &opts)?
-                output_single_result(&result, format, strict)
-            ELSE
-                RETURN error("Must specify a config path or --all")
-            END IF
+    // --- Build common ValidateOptions ---
+    opts <- ValidateOptions {
+        schema_only: args.schema_only,
+        strict: args.strict,
+        format: args.format.into(),
+        check_tables: args.check_tables,
+        timescale_url: args.timescale_url,
+        schema_path: None,
+        domain_schema_path: None,
+    }
 
-        ValidateCommands::Domain { domain_path, all, schema_only, format,
-                                    strict, verbose, domains_dir } =>
-            opts <- ValidateOptions {
-                schema_only,
-                strict,
-                format: format.into(),
-                ..Default::default()
-            }
+    // --- Full platform validation (--all) ---
+    IF args.all THEN
+        stream_result <- ndp_lib::validate::validate_all_streams(base_config_dir, &opts)?
+        domain_result <- ndp_lib::validate::validate_all_domains(
+            &args.domains_dir, Some(base_config_dir), &opts
+        )?
+        output_batch_result(&stream_result, args.format, args.strict)
+        output_batch_result(&domain_result, args.format, args.strict)
+        RETURN Ok(())
+    END IF
 
-            // Streams dir for semantic cross-reference validation
-            streams_dir <- base_config_dir
+    // --- Single stream (--stream <path>) ---
+    IF args.stream IS SOME THEN
+        result <- ndp_lib::validate::validate_stream(args.stream.unwrap(), &opts)?
+        output_single_result(&result, args.format, args.strict)
+        RETURN Ok(())
+    END IF
 
-            IF all THEN
-                result <- ndp_lib::validate::validate_all_domains(
-                    &domains_dir, Some(streams_dir), &opts
-                )?
-                output_batch_result(&result, format, strict)
-            ELSE IF domain_path IS SOME THEN
-                result <- ndp_lib::validate::validate_domain(
-                    domain_path, Some(streams_dir), &opts
-                )?
-                output_single_result(&result, format, strict)
-            ELSE
-                RETURN error("Must specify a domain path or --all")
-            END IF
+    // --- Domain validation (--domain <path> or --domain-all) ---
+    IF args.domain IS SOME THEN
+        streams_dir <- base_config_dir
+        result <- ndp_lib::validate::validate_domain(
+            args.domain.unwrap(), Some(streams_dir), &opts
+        )?
+        output_single_result(&result, args.format, args.strict)
+        RETURN Ok(())
+    END IF
 
-        ValidateCommands::Schema { command } =>
-            MATCH command:
-                SchemaCommands::Generate { output } =>
-                    run_generate_schema(output)
-                SchemaCommands::Verify { path } =>
-                    run_verify_schema(&path)
-            END MATCH
-    END MATCH
+    IF args.domain_all THEN
+        streams_dir <- base_config_dir
+        result <- ndp_lib::validate::validate_all_domains(
+            &args.domains_dir, Some(streams_dir), &opts
+        )?
+        output_batch_result(&result, args.format, args.strict)
+        RETURN Ok(())
+    END IF
+
+    // --- No mode selected ---
+    RETURN error("Must specify --all, --stream <path>, --domain <path>, --domain-all, or --schema")
 END
 
 
@@ -1002,7 +1018,7 @@ BEGIN
                 Err(e) => eprintln("Could not compute differences: {e}")
             END MATCH
 
-            eprintln("To fix: ndp validate schema generate --output {path}")
+            eprintln("To fix: ndp validate --schema --generate --output {path}")
             std::process::exit(1)
 
         Err(e) =>
@@ -1054,20 +1070,11 @@ pub mod validate;   // NEW
 
 ```rust
 // tools/ndp-cli/src/main.rs changes:
+// NOTE: Commands enum already uses #[derive(Subcommand)] at entity level.
+// validate is an entity (top-level subcommand). Its *arguments* are flat flags.
 
-#[derive(Subcommand)]
 enum Commands {
-    /// Data dictionary operations.
-    Dictionary(commands::dictionary::DictionaryArgs),
-
-    /// Dimension table operations.
-    Dimension(commands::dimension::DimensionArgs),
-
-    /// Domain configuration operations.
-    Domain(commands::domain::DomainArgs),
-
-    /// Gold layer DDL operations.
-    Gold(commands::gold::GoldArgs),
+    // ... existing variants ...
 
     /// Config validation operations.                     // NEW
     Validate(commands::validate::ValidateArgs),           // NEW
@@ -1075,10 +1082,7 @@ enum Commands {
 
 // In main():
 match cli.command {
-    Commands::Dictionary(args) => { /* existing */ }
-    Commands::Dimension(args) => { /* existing */ }
-    Commands::Domain(args) => { /* existing */ }
-    Commands::Gold(args) => { /* existing */ }
+    // ... existing arms ...
     Commands::Validate(args) => {                         // NEW
         commands::validate::run(args, &config_dir).await?;
     }
@@ -1091,18 +1095,21 @@ match cli.command {
 DIAGRAM: Global Flag Flow from CLI to Library
 
 User invocation:
-    ndp validate stream --all --config-dir config/base/streams --format human --strict
+    ndp validate --all --config-dir config/base/streams --format human --strict
 
 Clap parsing (main.rs):
     cli.config_dir   = Some("config/base/streams")
     cli.command      = Commands::Validate(ValidateArgs {
-        command: ValidateCommands::Stream {
-            config_path: None,
-            all: true,
-            format: CliOutputFormat::Human,
-            strict: true,
-            ...
-        }
+        all: true,
+        stream: None,
+        domain: None,
+        domain_all: false,
+        schema: false,
+        generate: false,
+        verify: None,
+        format: CliOutputFormat::Human,
+        strict: true,
+        ...
     })
 
 Resolution (main.rs):
@@ -1174,16 +1181,12 @@ validate_domain_configs() {
             continue
         fi
 
-        # Find domain config file (same 4-way lookup as before)
+        # Find domain config file (JSON only -- YAML dropped per D2)
         local config_file=""
         if [ -f "$CONFIG_DOMAINS_DIR/$domain_id/domain.json" ]; then
             config_file="$CONFIG_DOMAINS_DIR/$domain_id/domain.json"
         elif [ -f "$REPO_ROOT/config/domains/$domain_id/domain.json" ]; then
             config_file="$REPO_ROOT/config/domains/$domain_id/domain.json"
-        elif [ -f "$CONFIG_DOMAINS_DIR/$domain_id/domain.yaml" ]; then
-            config_file="$CONFIG_DOMAINS_DIR/$domain_id/domain.yaml"
-        elif [ -f "$REPO_ROOT/config/domains/$domain_id/domain.yaml" ]; then
-            config_file="$REPO_ROOT/config/domains/$domain_id/domain.yaml"
         fi
 
         if [ -z "$config_file" ]; then
@@ -1192,8 +1195,8 @@ validate_domain_configs() {
         fi
 
         log "  Validating: $domain_id"
-        # NEW: ndp validate domain <path> --format human
-        if ! "$ndp_tool" validate domain "$config_file" --format human 2>&1 | \
+        # NEW: ndp validate --domain <path> --format human
+        if ! "$ndp_tool" validate --domain "$config_file" --format human 2>&1 | \
             grep -v '^\[PASS\]'; then
             : # Validation passed
         else
@@ -1211,7 +1214,7 @@ validate_domain_configs() {
 KEY DIFFERENCES FROM BEFORE:
     1. error + return 1 instead of warn + return 0 when ndp missing
     2. "ndp" binary instead of "ndp-validate"
-    3. "$ndp_tool" validate domain "$config_file" --format human
+    3. "$ndp_tool" validate --domain "$config_file" --format human
        instead of "$validate_tool" --domain "$config_file" --format human
     4. ndp tool resolution uses same 4-way pattern as gold dispatch
 ```
@@ -1220,7 +1223,7 @@ KEY DIFFERENCES FROM BEFORE:
 
 ```bash
 ALGORITHM: handle_domain_declaration() Validate Section Switchover
-PURPOSE: Replace ndp-validate with ndp validate domain
+PURPOSE: Replace ndp-validate with ndp validate --domain
 
 # BEFORE: Separate 4-way lookup for validate_tool, warn+skip on missing
 # AFTER:  Reuse ndp_tool already resolved earlier in function (v1.1.14 gold dispatch)
@@ -1235,7 +1238,7 @@ PSEUDOCODE:
     # the gold section already error+return 1 if ndp is missing.
 
     log "  Validating domain config..."
-    if ! "$ndp_tool" validate domain "$config_file" \
+    if ! "$ndp_tool" validate --domain "$config_file" \
         --config-dir "$CONFIG_STREAMS_DIR" --format human; then
         error "Domain config validation failed: $config_file"
         return 1
@@ -1244,31 +1247,31 @@ PSEUDOCODE:
 
 KEY DIFFERENCES FROM BEFORE:
     1. No separate validate_tool resolution -- reuse ndp_tool from gold section
-    2. "$ndp_tool" validate domain instead of "$validate_tool" --domain
+    2. "$ndp_tool" validate --domain instead of "$validate_tool" --domain
     3. No warn+skip path -- if ndp is missing, function already failed at gold dispatch
-    4. --config-dir flag same value ($CONFIG_STREAMS_DIR) -- streams dir for cross-ref
+    4. --config-dir same value ($CONFIG_STREAMS_DIR) -- deploy.sh config vars are authoritative
 ```
 
-### 4.3 Flag Mapping: Standalone to Subcommand
+### 4.3 Flag Mapping: Standalone to Flat Flags
 
 ```
-STANDALONE -> SUBCOMMAND (deploy.sh invocations):
+STANDALONE -> FLAT FLAGS (deploy.sh invocations):
 
 validate_domain_configs() context:
     ndp-validate --domain "$config_file" --format human
-    -> ndp validate domain "$config_file" --format human
+    -> ndp validate --domain "$config_file" --format human
 
 handle_domain_declaration() context:
     ndp-validate --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human
-    -> ndp validate domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human
+    -> ndp validate --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human
 
 FULL FLAG MAPPING:
-    ndp-validate <path>                    -> ndp validate stream <path>
-    ndp-validate --all                     -> ndp validate stream --all
-    ndp-validate --domain <path>           -> ndp validate domain <path>
-    ndp-validate --domain-all              -> ndp validate domain --all
-    ndp-validate --generate-schema         -> ndp validate schema generate
-    ndp-validate --verify-schema <path>    -> ndp validate schema verify <path>
+    ndp-validate <path>                    -> ndp validate --stream <path>
+    ndp-validate --all                     -> ndp validate --all
+    ndp-validate --domain <path>           -> ndp validate --domain <path>
+    ndp-validate --domain-all              -> ndp validate --domain-all
+    ndp-validate --generate-schema         -> ndp validate --schema --generate
+    ndp-validate --verify-schema <path>    -> ndp validate --schema --verify <path>
     --schema-only                          -> --schema-only (same)
     --format json|human                    -> --format json|human (same)
     --strict                               -> --strict (same)
@@ -1365,7 +1368,6 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde_json = "1.0"     # for output formatting in main.rs
-serde_yaml = "0.9"     # for YAML parsing in main.rs
 
 # REMOVE (now provided by ndp-lib):
 # jsonschema, schemars, serde, thiserror, sqlparser, regex, strsim
@@ -1416,32 +1418,33 @@ RULE: In all #[cfg(test)] mod tests {} blocks:
 
 ### 6.3 CLI Tests That Need Rewriting
 
-The Clap-specific tests in `cli.rs` (approximately 50 tests) reference the `Cli` struct which is being replaced by `ValidateArgs` with a different structure (entity/verb vs flat flags). These tests must be **rewritten**, not moved.
+The Clap-specific tests in `cli.rs` (approximately 50 tests) reference the `Cli` struct which is being replaced by `ValidateArgs` with a flat-flag structure. These tests must be **rewritten**, not moved.
 
 ```
-TESTS TO REWRITE (new Clap structure):
+TESTS TO REWRITE (new flat-flag structure):
 
     test_cli_structure_is_valid          -> test_validate_args_structure_is_valid
-    test_parse_single_config_path        -> test_parse_stream_config_path
-    test_parse_config_path_with_spaces   -> test_parse_stream_path_with_spaces
-    test_parse_all_flag                  -> test_parse_stream_all_flag
-    test_parse_all_flag_short            -> (no short flag in entity/verb)
-    test_parse_schema_only_flag          -> test_parse_stream_schema_only
-    test_parse_check_tables_flag         -> test_parse_stream_check_tables
-    test_parse_format_json               -> test_parse_stream_format_json
-    test_parse_format_human              -> test_parse_stream_format_human
-    test_parse_strict_flag               -> test_parse_stream_strict
-    test_parse_verbose_flag              -> test_parse_stream_verbose
-    test_parse_generate_schema_flag      -> test_parse_schema_generate
-    test_parse_verify_schema_flag        -> test_parse_schema_verify
-    test_cli_accepts_domain_flag         -> test_parse_domain_config_path
-    test_cli_accepts_domain_all_flag     -> test_parse_domain_all
+    test_parse_single_config_path        -> test_parse_stream_flag
+    test_parse_config_path_with_spaces   -> test_parse_stream_flag_with_spaces
+    test_parse_all_flag                  -> test_parse_all_flag
+    test_parse_all_flag_short            -> (removed -- no short flag for --all)
+    test_parse_schema_only_flag          -> test_parse_schema_only_flag
+    test_parse_check_tables_flag         -> test_parse_check_tables_flag
+    test_parse_format_json               -> test_parse_format_json
+    test_parse_format_human              -> test_parse_format_human
+    test_parse_strict_flag               -> test_parse_strict_flag
+    test_parse_verbose_flag              -> test_parse_verbose_flag
+    test_parse_generate_schema_flag      -> test_parse_schema_generate_flags
+    test_parse_verify_schema_flag        -> test_parse_schema_verify_flags
+    test_cli_accepts_domain_flag         -> test_parse_domain_flag
+    test_cli_accepts_domain_all_flag     -> test_parse_domain_all_flag
 
-TESTS THAT BECOME IRRELEVANT (conflicts resolved by subcommand):
-    test_all_and_config_path_conflict    -> inherent in subcommand structure
-    test_generate_schema_conflicts_with_config_path -> different subcommands
-    test_generate_schema_conflicts_with_verify_schema -> different subcommands
-    test_cli_domain_conflicts_with_all   -> different subcommands
+TESTS FOR FLAT-FLAG CONFLICTS (clap conflicts_with):
+    test_all_and_stream_conflict         -> --all conflicts_with --stream
+    test_stream_and_domain_conflict      -> --stream conflicts_with --domain
+    test_schema_and_stream_conflict      -> --schema conflicts_with --stream/--domain/--all
+    test_generate_and_verify_conflict    -> --generate conflicts_with --verify
+    test_domain_all_and_domain_conflict  -> --domain-all conflicts_with --domain
 ```
 
 ### 6.4 Verification Gates
@@ -1483,7 +1486,6 @@ csv = { workspace = true }
 # NEW for v1.1.15 (validate module dependencies):
 jsonschema = "0.17"       # Layer 1 schema validation
 schemars = "0.8"          # Schema generation from Rust types
-serde_yaml = "0.9"        # YAML config parsing
 sqlparser = { version = "0.50", features = ["visitor"] }  # DQ rule SQL validation
 regex = "1"               # Pattern validation in semantic layer
 strsim = "0.11"           # Levenshtein distance for typo suggestions
@@ -1507,13 +1509,12 @@ Consider a `validate` feature flag to keep validation-specific dependencies opti
 ```toml
 [features]
 default = ["validate"]
-validate = ["dep:jsonschema", "dep:schemars", "dep:serde_yaml",
+validate = ["dep:jsonschema", "dep:schemars",
             "dep:sqlparser", "dep:regex", "dep:strsim"]
 
 [dependencies]
 jsonschema = { version = "0.17", optional = true }
 schemars = { version = "0.8", optional = true }
-serde_yaml = { version = "0.9", optional = true }
 sqlparser = { version = "0.50", features = ["visitor"], optional = true }
 regex = { version = "1", optional = true }
 strsim = { version = "0.11", optional = true }
@@ -1564,7 +1565,7 @@ STEP 1: Create module structure in ndp-lib
     mkdir -p crates/ndp-lib/src/validate/semantic
 
 STEP 2: Add validate dependencies to ndp-lib Cargo.toml
-    # Add jsonschema, schemars, serde_yaml, sqlparser, regex, strsim
+    # Add jsonschema, schemars, sqlparser, regex, strsim
     # (See Section 7.1)
 
     VERIFICATION GATE:
@@ -1642,15 +1643,15 @@ STEP 9: Add commands/validate.rs to ndp-cli
         cargo build -p ndp-cli
         # Test parity for stream validation:
         diff <(cargo run -p ndp-validate -- --all --config-dir config/base/streams --format json) \
-             <(cargo run -p ndp-cli -- validate stream --all --config-dir config/base/streams --format json)
+             <(cargo run -p ndp-cli -- validate --all --config-dir config/base/streams --format json)
 
         # Test parity for domain validation:
         diff <(cargo run -p ndp-validate -- --domain config/domains/indoor-air-quality/domain.json --format json) \
-             <(cargo run -p ndp-cli -- validate domain config/domains/indoor-air-quality/domain.json --format json)
+             <(cargo run -p ndp-cli -- validate --domain config/domains/indoor-air-quality/domain.json --format json)
 
         # Test schema generation parity:
         diff <(cargo run -p ndp-validate -- --generate-schema) \
-             <(cargo run -p ndp-cli -- validate schema generate)
+             <(cargo run -p ndp-cli -- validate --schema --generate)
 
 STEP 10: Update deploy.sh
     # Site 1: validate_domain_configs()         -- switch to ndp validate domain
@@ -1717,9 +1718,9 @@ It is a structured finding with Serialize. This is correct -- validation
 ### 9.3 Error Flow
 
 ```
-DIAGRAM: Error Flow for ndp validate stream <path>
+DIAGRAM: Error Flow for ndp validate --stream <path>
 
-    ndp validate stream config.json
+    ndp validate --stream config.json
         |
         v
     commands/validate.rs::run()
@@ -1768,7 +1769,7 @@ New files to create:           2
 
 Files to modify:               5
     crates/ndp-lib/src/lib.rs              (add pub mod validate)
-    crates/ndp-lib/Cargo.toml              (add 6 dependencies)
+    crates/ndp-lib/Cargo.toml              (add 5 dependencies)
     tools/ndp-cli/src/commands/mod.rs      (add pub mod validate)
     tools/ndp-cli/src/main.rs              (add Validate variant)
     deploy/pi/deploy.sh                    (2 dispatch sites)
@@ -1808,7 +1809,6 @@ ANALYSIS: New Dependencies Added to ndp-lib
 
 jsonschema  0.17  -- JSON Schema validation engine
 schemars    0.8   -- Derive JSON Schema from Rust types
-serde_yaml  0.9   -- YAML config parsing
 sqlparser   0.50  -- SQL WHERE clause parsing for DQ rules
 regex       1     -- Pattern validation
 strsim      0.11  -- Levenshtein distance for suggestions
@@ -1816,8 +1816,7 @@ strsim      0.11  -- Levenshtein distance for suggestions
 Build impact: ~15-20 second compile time increase for ndp-lib
               (these are non-trivial dependencies, especially sqlparser)
 
-Binary size: ~2-3 MB increase for ndp binary
-             (well within 15 MB target)
+Binary size: ~2-3 MB increase for ndp binary (well within 15 MB target)
 ```
 
 ### 10.4 Risk Assessment
@@ -1833,7 +1832,6 @@ RISK MATRIX:
 | schema_gen.rs ndp-types import breaks | Low | Medium | ndp-types already in ndp-lib deps |
 | deploy.sh flag mapping wrong | Medium | High | Integration test catches |
 | ndp-validate standalone breaks | Low | Medium | Dedicated test: cargo test -p ndp-validate |
-| serde_yaml version conflict | Low | Low | Same version as ndp-validate uses |
 | sqlparser version conflict | Low | Low | Same version as ndp-validate uses |
 | Circular dependency introduced | None | -- | ndp-lib has no workspace deps except ndp-types |
 ```
@@ -1888,11 +1886,11 @@ MODIFIED (after migration, thin wrapper):
 | Tests | 376 | 217 |
 | deploy.sh sites | 2 | 2 |
 | Module split | None (1:1 file map) | cli.rs splits into result.rs + CLI formatting |
-| New dependencies | mockall (dev) | jsonschema, schemars, serde_yaml, sqlparser, regex, strsim |
+| New dependencies | mockall (dev) | jsonschema, schemars, sqlparser, regex, strsim |
 | DB trait unification | CaChecker -> DbClient | None needed |
 | Config loader | Gold ConfigLoader moves | No config loader (reads files directly) |
 | Error types | GoldDdlError (independent) | ValidationError (structured findings, not Rust errors) |
-| CLI complexity | 3 subcommands (generate/sync/recreate) | 3 subcommands (stream/domain/schema) |
+| CLI complexity | 3 subcommands (generate/sync/recreate) | Flat flags (--stream/--domain/--schema) |
 
 ### Key Differences from Phase 1
 
@@ -1900,8 +1898,8 @@ MODIFIED (after migration, thin wrapper):
 
 2. **No database trait work.** Phase 1 required CaChecker -> DbClient adaptation. Phase 2 has no DB interaction (except optional --check-tables which is not yet implemented).
 
-3. **More new dependencies.** Phase 1 added only mockall. Phase 2 adds 6 runtime dependencies to ndp-lib. This increases compile time and binary size.
+3. **More new dependencies.** Phase 1 added only mockall. Phase 2 adds 5 runtime dependencies to ndp-lib. This increases compile time and binary size.
 
-4. **Test rewriting required.** Phase 1 tests moved 1:1. Phase 2 has ~50 Clap-specific tests that must be rewritten for the new entity/verb structure.
+4. **Test rewriting required.** Phase 1 tests moved 1:1. Phase 2 has ~50 Clap-specific tests that must be rewritten for the new flat-flag structure.
 
 5. **No config loader pattern.** Phase 1 migrated a ConfigLoader trait with FileSystemConfigLoader. Phase 2 validate functions take file paths directly -- no loader abstraction.

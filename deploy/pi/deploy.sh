@@ -1530,22 +1530,19 @@ validate_manifest() {
 validate_domain_configs() {
     local manifest_file="$1"
 
-    # Find ndp-validate tool
-    local validate_tool=""
-    if command -v ndp-validate &> /dev/null; then
-        validate_tool="ndp-validate"
-    elif [ -x "/opt/ndp/bin/ndp-validate" ]; then
-        validate_tool="/opt/ndp/bin/ndp-validate"
-    elif [ -x "$REPO_ROOT/target/release/ndp-validate" ]; then
-        validate_tool="$REPO_ROOT/target/release/ndp-validate"
-    elif [ -x "$REPO_ROOT/target/debug/ndp-validate" ]; then
-        validate_tool="$REPO_ROOT/target/debug/ndp-validate"
-    fi
-
-    if [ -z "$validate_tool" ]; then
-        warn "ndp-validate not available, skipping domain validation"
-        warn "Build with: cargo build -p ndp-validate --release"
-        return 0
+    # Resolve ndp tool (required -- no fallback)
+    local ndp_tool=""
+    if command -v ndp &> /dev/null; then
+        ndp_tool="ndp"
+    elif [ -x "/opt/ndp/bin/ndp" ]; then
+        ndp_tool="/opt/ndp/bin/ndp"
+    elif [ -x "$REPO_ROOT/target/release/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/release/ndp"
+    elif [ -x "$REPO_ROOT/target/debug/ndp" ]; then
+        ndp_tool="$REPO_ROOT/target/debug/ndp"
+    else
+        error "ndp tool not found. Build with: cargo build --release -p ndp-cli"
+        return 1
     fi
 
     # Extract domain IDs from manifest (both old .changes and new .declarations format)
@@ -1581,7 +1578,7 @@ validate_domain_configs() {
         fi
 
         log "  Validating: $domain_id"
-        if ! "$validate_tool" --domain "$config_file" --format human 2>&1 | grep -v '^\[PASS\]'; then
+        if ! "$ndp_tool" validate --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human 2>&1 | grep -v '^\[PASS\]'; then
             : # Validation passed (PASS output suppressed for cleaner logs)
         else
             validation_failed=true
@@ -2029,42 +2026,6 @@ handle_domain() {
         return 0
     fi
 
-    # Phase B (FE-002): Validate domain config using ndp-validate
-    local validate_tool=""
-    if command -v ndp-validate &> /dev/null; then
-        validate_tool="ndp-validate"
-    elif [ -x "/opt/ndp/bin/ndp-validate" ]; then
-        validate_tool="/opt/ndp/bin/ndp-validate"
-    elif [ -x "$REPO_ROOT/target/release/ndp-validate" ]; then
-        validate_tool="$REPO_ROOT/target/release/ndp-validate"
-    elif [ -x "$REPO_ROOT/target/debug/ndp-validate" ]; then
-        validate_tool="$REPO_ROOT/target/debug/ndp-validate"
-    fi
-
-    if [ -n "$validate_tool" ]; then
-        log "  Validating domain config..."
-        if ! "$validate_tool" --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human; then
-            error "Domain config validation failed: $config_file"
-            return 1
-        fi
-        log "  Domain config validation passed"
-    else
-        warn "  ndp-validate not available, skipping domain validation"
-        warn "  Build with: cargo build -p ndp-validate --release"
-    fi
-
-    # Sync domain config to etcd if available
-    log "  Syncing domain config to etcd..."
-    if dcx etcd etcdctl endpoint health >/dev/null 2>&1; then
-        if cat "$config_file" | dcx etcd etcdctl put "/domains/$domain_id/config" -; then
-            log "  Domain config synced to etcd at /domains/$domain_id/config"
-        else
-            warn "  Failed to sync domain config to etcd (non-fatal)"
-        fi
-    else
-        warn "  etcd not available, skipping domain config sync"
-    fi
-
     # Resolve ndp tool (required -- no fallback)
     local ndp_tool=""
     if command -v ndp &> /dev/null; then
@@ -2078,6 +2039,26 @@ handle_domain() {
     else
         error "ndp tool not found. Build with: cargo build --release -p ndp-cli"
         return 1
+    fi
+
+    # Validate domain config using ndp validate
+    log "  Validating domain config..."
+    if ! "$ndp_tool" validate --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human; then
+        error "Domain config validation failed: $config_file"
+        return 1
+    fi
+    log "  Domain config validation passed"
+
+    # Sync domain config to etcd if available
+    log "  Syncing domain config to etcd..."
+    if dcx etcd etcdctl endpoint health >/dev/null 2>&1; then
+        if cat "$config_file" | dcx etcd etcdctl put "/domains/$domain_id/config" -; then
+            log "  Domain config synced to etcd at /domains/$domain_id/config"
+        else
+            warn "  Failed to sync domain config to etcd (non-fatal)"
+        fi
+    else
+        warn "  etcd not available, skipping domain config sync"
     fi
 
     # Generate aligned view DDL — use subcommand matching the manifest action

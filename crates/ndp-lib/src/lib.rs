@@ -30,6 +30,7 @@ pub mod domain;
 pub mod error;
 pub mod gold;
 pub mod types;
+pub mod validate;
 
 // Re-exports for convenience
 pub use db::{DbClient, NoOpDbClient};

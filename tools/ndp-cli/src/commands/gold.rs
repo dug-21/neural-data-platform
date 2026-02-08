@@ -109,9 +109,7 @@ pub async fn run(
     // Gold configs live at config/base/streams/<id>/config.json and
     // config/domains/<domain>/domain.json. The Gold ConfigLoader needs
     // the config ROOT directory (parent of "base").
-    let config_dir = base_config_dir
-        .parent()
-        .unwrap_or(base_config_dir);
+    let config_dir = base_config_dir.parent().unwrap_or(base_config_dir);
 
     let loader = ndp_lib::gold::config::FileSystemConfigLoader::new(config_dir);
 
@@ -137,17 +135,13 @@ pub async fn run(
             events: _,
             dry_run,
             no_validate: _,
-        } => {
-            run_sync(&loader, stream, domain, db_url, db_timeout, dry_run).await
-        }
+        } => run_sync(&loader, stream, domain, db_url, db_timeout, dry_run).await,
         GoldCommands::Recreate {
             stream,
             domain,
             dry_run: _,
             no_validate: _,
-        } => {
-            run_recreate(&loader, stream, domain, db_url, db_timeout).await
-        }
+        } => run_recreate(&loader, stream, domain, db_url, db_timeout).await,
     }
 }
 
@@ -304,10 +298,8 @@ async fn run_recreate(
         tracing::info!(domain_id = %domain_id, "Recreating Gold DDL for domain");
 
         // Domain recreate generates aligned view DDL with Action::Recreate
-        let domain_config = ndp_lib::gold::config::ConfigLoader::load_domain_config(
-            loader,
-            &domain_id,
-        )?;
+        let domain_config =
+            ndp_lib::gold::config::ConfigLoader::load_domain_config(loader, &domain_id)?;
         let generator = ndp_lib::gold::AlignedViewGenerator::new(loader.clone());
         let ddl = generator.generate(&domain_config, ndp_lib::gold::config::Action::Recreate)?;
         println!("{ddl}");

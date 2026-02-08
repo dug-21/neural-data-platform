@@ -32,12 +32,16 @@ pub async fn run(
     db_url: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match args.command {
-        DomainCommands::Sync { domains_dir, dry_run } => {
+        DomainCommands::Sync {
+            domains_dir,
+            dry_run,
+        } => {
             // Resolve domains directory
             // Domains are at config/domains, NOT under config/base/
             // base_config_dir points to config/base, so go up one level
             let domains_dir = domains_dir.unwrap_or_else(|| {
-                base_config_dir.parent()
+                base_config_dir
+                    .parent()
                     .unwrap_or(base_config_dir)
                     .join("domains")
             });
@@ -53,14 +57,18 @@ pub async fn run(
             let loader = ndp_lib::config::FileSystemConfigLoader::new(
                 base_config_dir.join("streams"),
                 base_config_dir.join("dimensions"),
-            ).with_domains_dir(&domains_dir);
+            )
+            .with_domains_dir(&domains_dir);
 
             let configs = ndp_lib::config::ConfigLoader::load_domain_configs(&loader)?;
 
             tracing::info!(domain_count = configs.len(), "Loaded domain configurations");
 
             if configs.is_empty() {
-                println!("No domain configs found in {}. Nothing to sync.", domains_dir.display());
+                println!(
+                    "No domain configs found in {}. Nothing to sync.",
+                    domains_dir.display()
+                );
                 return Ok(());
             }
 
@@ -73,14 +81,16 @@ pub async fn run(
             let options = ndp_lib::types::SyncOptions { dry_run };
 
             if dry_run {
-                let report = ndp_lib::domain::sync_domains(&entries, &NoOpDbClient, &options).await?;
+                let report =
+                    ndp_lib::domain::sync_domains(&entries, &NoOpDbClient, &options).await?;
 
                 println!("DRY RUN domain sync:");
                 println!("  Domains:     {}", report.items_processed);
                 println!("  Total items: {}", report.items_created);
 
                 for config in &configs {
-                    println!("  - {} ({} streams, {} objectives, {} constraints)",
+                    println!(
+                        "  - {} ({} streams, {} objectives, {} constraints)",
                         config.id,
                         config.streams.len(),
                         config.objectives.len(),
@@ -98,10 +108,22 @@ pub async fn run(
 
             println!("Domain sync complete:");
             println!("  Domains synced:     {}", report.items_processed);
-            println!("  Streams mapped:     {}", entries.iter().map(|e| e.streams.len()).sum::<usize>());
-            println!("  Objectives synced:  {}", entries.iter().map(|e| e.objectives.len()).sum::<usize>());
-            println!("  Constraints synced: {}", entries.iter().map(|e| e.constraints.len()).sum::<usize>());
-            println!("  Duration:           {:.2}s", report.duration.as_secs_f64());
+            println!(
+                "  Streams mapped:     {}",
+                entries.iter().map(|e| e.streams.len()).sum::<usize>()
+            );
+            println!(
+                "  Objectives synced:  {}",
+                entries.iter().map(|e| e.objectives.len()).sum::<usize>()
+            );
+            println!(
+                "  Constraints synced: {}",
+                entries.iter().map(|e| e.constraints.len()).sum::<usize>()
+            );
+            println!(
+                "  Duration:           {:.2}s",
+                report.duration.as_secs_f64()
+            );
 
             if !report.errors.is_empty() {
                 println!("  Warnings:           {}", report.errors.len());

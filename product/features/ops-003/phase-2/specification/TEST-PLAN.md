@@ -6,6 +6,12 @@
 > **Status:** Draft
 > **AgentDB Patterns Used:** ID 16 (testing:ndp-types-london-tdd), ID 33 (procedure:integration-environment), ID 34 (implementation:ndp-entity-sync-module), ID 37 (convention:ndp-config-dir), ID 38 (testing:integration-e2e-checklist)
 
+### Revision History
+
+| Rev | Date | Author | Changes |
+|-----|------|--------|---------|
+| R1 | 2026-02-08 | ndp-tester | D1: CLI commands changed from entity/verb subcommands to flat flags per CLI UX Design (10-CLI-UX-DESIGN-REVISED.md lines 193-203, 388-395). All `ndp validate stream`, `ndp validate domain`, `ndp validate schema` subcommand forms replaced with `--stream`, `--domain`, `--schema` flags. D2: Confirmed no YAML-specific test cases exist (serde_yaml already absent from test plan; no changes needed). D3: Added UNIT-NEW-16 through UNIT-NEW-19 for `is_valid_granularity()` deduplication coverage. D4: Schema operations updated from `schema generate`/`schema verify` to `--schema --generate`/`--schema --verify`. New unit test count: 15 -> 19, total new/migrated: 322 -> 326. |
+
 ---
 
 ## 1. Test Strategy Overview
@@ -14,7 +20,7 @@
 
 | Layer | Purpose | Count Target | Speed |
 |---|---|---|---|
-| **Unit Tests** | Verify individual functions and modules in isolation | 222+ migrated, ~30 new | < 30s |
+| **Unit Tests** | Verify individual functions and modules in isolation | 222+ migrated, ~34 new | < 30s |
 | **CLI Parity Tests** | Prove `ndp validate` produces identical output to `ndp-validate` | ~55 new | < 60s |
 | **deploy.sh Integration** | Prove deploy.sh works with new `ndp` binary at both dispatch sites | ~12 new | < 30s |
 | **E2E Integration** | Validate real configs against live TimescaleDB | ~10 new | < 120s |
@@ -135,6 +141,10 @@ The migration creates new public API surface in `ndp_lib::validate::*` that need
 | UNIT-NEW-13 | `ndp_lib::validate::format_human()` | Result with errors | Contains `[FAIL]` and error messages |
 | UNIT-NEW-14 | `ndp_lib::validate::determine_exit_code()` | Strict mode with warnings | Returns exit code 1 |
 | UNIT-NEW-15 | `ndp_lib::validate::determine_exit_code()` | Non-strict mode with warnings | Returns exit code 0 |
+| UNIT-NEW-16 | `ndp_lib::validate::semantic::is_valid_granularity()` | Valid granularities: 1m, 5m, 15m, 30m, 1h, 4h, 1d | Returns `true` for each |
+| UNIT-NEW-17 | `ndp_lib::validate::semantic::is_valid_granularity()` | Invalid granularities: 2m, 3h, 1w, "", "foo" | Returns `false` for each |
+| UNIT-NEW-18 | `ndp_lib::validate::semantic::gold.rs` | `validate_gold_config()` calls shared `is_valid_granularity()` | No local `is_valid_granularity` definition in `gold.rs`; imports from `semantic::mod.rs` |
+| UNIT-NEW-19 | `ndp_lib::validate::semantic::domain.rs` | `validate_domain_config()` calls shared `is_valid_granularity()` | No local `is_valid_granularity` definition in `domain.rs`; imports from `semantic::mod.rs` |
 
 ### 2.6 Test Fixtures Migration
 
@@ -153,17 +163,17 @@ This is the CRITICAL section. Phase 1 taught us that flag combinations can silen
 
 ### 3.1 Flag Mapping Table
 
-The `ndp validate` CLI must accept all flags that `ndp-validate` accepts, mapped to the entity/verb pattern.
+The `ndp validate` CLI uses flat flags (not entity/verb subcommands). Authoritative command signatures from CLI UX Design (10-CLI-UX-DESIGN-REVISED.md lines 193-203).
 
 | ndp-validate Command | ndp validate Command | Behavior |
 |---|---|---|
-| `ndp-validate config.json` | `ndp validate stream config.json` | Single stream validation |
-| `ndp-validate --all` | `ndp validate stream --all` | Batch stream validation |
-| `ndp-validate --domain FILE` | `ndp validate domain FILE` | Single domain validation |
-| `ndp-validate --domain-all` | `ndp validate domain --all` | Batch domain validation |
-| `ndp-validate --generate-schema` | `ndp validate schema generate` | Schema generation |
-| `ndp-validate --generate-schema --output F` | `ndp validate schema generate --output F` | Schema generation to file |
-| `ndp-validate --verify-schema F` | `ndp validate schema verify F` | Schema drift detection |
+| `ndp-validate config.json` | `ndp validate --stream config.json` | Single stream validation |
+| `ndp-validate --all` | `ndp validate --all` | Full platform validation (all streams + domains) |
+| `ndp-validate --domain FILE` | `ndp validate --domain FILE` | Single domain validation |
+| `ndp-validate --domain-all` | `ndp validate --domain --all` | Batch domain validation |
+| `ndp-validate --generate-schema` | `ndp validate --schema --generate` | Schema generation |
+| `ndp-validate --generate-schema --output F` | `ndp validate --schema --generate --output F` | Schema generation to file |
+| `ndp-validate --verify-schema F` | `ndp validate --schema --verify F` | Schema drift detection |
 | `--schema-only` | `--schema-only` | Skip semantic validation |
 | `--check-tables` | `--check-tables` | Verify Silver tables exist |
 | `--format json\|human` | `--format json\|human` | Output format |
@@ -181,15 +191,15 @@ Each mode must produce identical output between old and new binaries.
 
 | Test ID | Mode | Old Command | New Command | Assertion |
 |---|---|---|---|---|
-| PAR-MODE-01 | Single stream | `ndp-validate config/base/streams/air-quality/config.json` | `ndp validate stream config/base/streams/air-quality/config.json` | JSON output identical |
-| PAR-MODE-02 | Single stream (human) | `ndp-validate --format human config.json` | `ndp validate stream --format human config.json` | Human output equivalent (ignore binary name in output) |
-| PAR-MODE-03 | All streams | `ndp-validate --all` | `ndp validate stream --all` | JSON output identical |
-| PAR-MODE-04 | Single domain | `ndp-validate --domain config/domains/indoor-air-quality/domain.json` | `ndp validate domain config/domains/indoor-air-quality/domain.json` | JSON output identical |
-| PAR-MODE-05 | All domains | `ndp-validate --domain-all` | `ndp validate domain --all` | JSON output identical |
-| PAR-MODE-06 | Generate schema | `ndp-validate --generate-schema` | `ndp validate schema generate` | stdout JSON identical |
-| PAR-MODE-07 | Generate schema to file | `ndp-validate --generate-schema --output /tmp/s.json` | `ndp validate schema generate --output /tmp/s.json` | File contents identical |
-| PAR-MODE-08 | Verify schema (match) | `ndp-validate --verify-schema schemas/stream-config.v1.1.schema.json` | `ndp validate schema verify schemas/stream-config.v1.1.schema.json` | Exit code identical (0) |
-| PAR-MODE-09 | Verify schema (drift) | `ndp-validate --verify-schema /tmp/wrong.json` | `ndp validate schema verify /tmp/wrong.json` | Exit code identical (1) |
+| PAR-MODE-01 | Single stream | `ndp-validate config/base/streams/air-quality/config.json` | `ndp validate --stream config/base/streams/air-quality/config.json` | JSON output identical |
+| PAR-MODE-02 | Single stream (human) | `ndp-validate --format human config.json` | `ndp validate --stream config.json --format human` | Human output equivalent (ignore binary name in output) |
+| PAR-MODE-03 | All streams + domains | `ndp-validate --all` | `ndp validate --all` | JSON output identical |
+| PAR-MODE-04 | Single domain | `ndp-validate --domain config/domains/indoor-air-quality/domain.json` | `ndp validate --domain config/domains/indoor-air-quality/domain.json` | JSON output identical |
+| PAR-MODE-05 | All domains | `ndp-validate --domain-all` | `ndp validate --domain --all` | JSON output identical |
+| PAR-MODE-06 | Generate schema | `ndp-validate --generate-schema` | `ndp validate --schema --generate` | stdout JSON identical |
+| PAR-MODE-07 | Generate schema to file | `ndp-validate --generate-schema --output /tmp/s.json` | `ndp validate --schema --generate --output /tmp/s.json` | File contents identical |
+| PAR-MODE-08 | Verify schema (match) | `ndp-validate --verify-schema schemas/stream-config.v1.1.schema.json` | `ndp validate --schema --verify schemas/stream-config.v1.1.schema.json` | Exit code identical (0) |
+| PAR-MODE-09 | Verify schema (drift) | `ndp-validate --verify-schema /tmp/wrong.json` | `ndp validate --schema --verify /tmp/wrong.json` | Exit code identical (1) |
 
 ### 3.3 Flag Behavior Tests
 
@@ -217,18 +227,18 @@ Phase 1 lesson: flags that conflict must produce clear errors, NOT silent ignori
 
 | Test ID | Invalid Combination | Expected |
 |---|---|---|
-| PAR-INV-01 | `ndp validate stream --all config.json` | Error: conflicts -- cannot specify both `--all` and a config path |
-| PAR-INV-02 | `ndp validate stream` (no path, no --all) | Error: must specify config path or `--all` |
-| PAR-INV-03 | `ndp validate stream --format xml config.json` | Error: invalid format value |
-| PAR-INV-04 | `ndp validate stream --check-tables config.json` (no DB URL) | Exit 2: `--check-tables` requires `--db-url` or `TIMESCALE_URL` |
-| PAR-INV-05 | `ndp validate schema generate config.json` | Error: `generate` does not accept positional args |
-| PAR-INV-06 | `ndp validate schema verify` (no path) | Error: verify requires a schema path argument |
-| PAR-INV-07 | `ndp validate stream --schema-only --check-tables config.json` | Valid (not conflicting -- schema-only skips semantic, check-tables is separate layer) OR error if they are designed to conflict |
-| PAR-INV-08 | `ndp validate domain --check-tables config.json` | Document expected behavior -- `--check-tables` may not apply to domains |
-| PAR-INV-09 | `ndp validate stream --all --domain-all` | Error: cannot mix stream and domain modes (if --domain-all is kept) |
-| PAR-INV-10 | `ndp validate stream nonexistent.json` | Exit 2: file not found |
-| PAR-INV-11 | `ndp validate domain nonexistent.json` | Exit 2: file not found |
-| PAR-INV-12 | `ndp validate schema verify nonexistent.json` | Exit 2: schema file not found |
+| PAR-INV-01 | `ndp validate --stream config.json --all` | Error: conflicts -- cannot specify both `--stream` and `--all` |
+| PAR-INV-02 | `ndp validate` (no flags at all) | Error: must specify `--stream`, `--domain`, `--all`, or `--schema` |
+| PAR-INV-03 | `ndp validate --stream config.json --format xml` | Error: invalid format value |
+| PAR-INV-04 | `ndp validate --stream config.json --check-tables` (no DB URL) | Exit 2: `--check-tables` requires `--db-url` or `TIMESCALE_URL` |
+| PAR-INV-05 | `ndp validate --schema --generate config.json` | Error: `--schema --generate` does not accept positional args |
+| PAR-INV-06 | `ndp validate --schema --verify` (no path) | Error: `--verify` requires a schema path argument |
+| PAR-INV-07 | `ndp validate --stream config.json --schema-only --check-tables` | Valid (not conflicting -- schema-only skips semantic, check-tables is separate layer) OR error if they are designed to conflict |
+| PAR-INV-08 | `ndp validate --domain config.json --check-tables` | Document expected behavior -- `--check-tables` may not apply to domains |
+| PAR-INV-09 | `ndp validate --stream config.json --domain config.json` | Error: cannot specify both `--stream` and `--domain` |
+| PAR-INV-10 | `ndp validate --stream nonexistent.json` | Exit 2: file not found |
+| PAR-INV-11 | `ndp validate --domain nonexistent.json` | Exit 2: file not found |
+| PAR-INV-12 | `ndp validate --schema --verify nonexistent.json` | Exit 2: schema file not found |
 
 ### 3.5 Exit Code Parity Tests
 
@@ -314,12 +324,12 @@ NEW_BIN="cargo run -p ndp-cli --"
 
 echo "=== PAR-MODE-01: Single stream ==="
 diff <($OLD_BIN "$CONFIG" 2>/dev/null | jq -S .) \
-     <($NEW_BIN validate stream "$CONFIG" 2>/dev/null | jq -S .) \
+     <($NEW_BIN validate --stream "$CONFIG" 2>/dev/null | jq -S .) \
      && echo "PASS" || echo "FAIL"
 
 echo "=== PAR-EXIT-01: Exit code (valid) ==="
 $OLD_BIN "$CONFIG" >/dev/null 2>&1; OLD_RC=$?
-$NEW_BIN validate stream "$CONFIG" >/dev/null 2>&1; NEW_RC=$?
+$NEW_BIN validate --stream "$CONFIG" >/dev/null 2>&1; NEW_RC=$?
 [ "$OLD_RC" -eq "$NEW_RC" ] && echo "PASS (both $OLD_RC)" || echo "FAIL ($OLD_RC != $NEW_RC)"
 ```
 
@@ -376,19 +386,19 @@ Phase 1 BUG-004 was caused by `--config-dir` receiving a path that was one level
 
 ```
 # CORRECT for stream validation:
-ndp validate stream --config-dir config/base/streams config.json
+ndp validate --stream config.json --config-dir config/base/streams
 # or via global --config-dir:
-ndp --config-dir config/base validate stream config.json
+ndp --config-dir config/base validate --stream config.json
 
 # CORRECT for domain validation:
-ndp validate domain --config-dir config/base/streams domain.json
+ndp validate --domain domain.json --config-dir config/base/streams
 # (domain validation uses --config-dir to find related streams, NOT the domain itself)
 
 # deploy.sh Site 2 currently passes:
 #   "$validate_tool" --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human
 #
 # For the new binary this becomes:
-#   ndp validate domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human
+#   ndp validate --domain "$config_file" --config-dir "$CONFIG_STREAMS_DIR" --format human
 ```
 
 Test DEPLOY-INT-10 specifically verifies that when deploy.sh calls the new binary, the `--config-dir` value resolves correctly and validation can find related stream configs for cross-reference checks.
@@ -443,16 +453,16 @@ EOF
 
 | Test ID | Config | Command | Assertion |
 |---|---|---|---|
-| E2E-01 | `config/base/streams/air-quality/config.json` | `ndp validate stream config.json --format json` | Exit 0, `"valid": true` |
-| E2E-02 | `config/base/streams/air-quality/config.json` | `ndp validate stream config.json --schema-only --format json` | Exit 0, no semantic errors |
-| E2E-03 | ALL stream configs | `ndp validate stream --all --config-dir config/base/streams` | Exit 0, all valid |
-| E2E-04 | `config/domains/indoor-air-quality/domain.json` | `ndp validate domain config/domains/indoor-air-quality/domain.json` | Exit 0 |
-| E2E-05 | ALL domain configs | `ndp validate domain --all --domains-dir config/domains` | Exit 0 |
-| E2E-06 | Air quality config | `ndp validate stream --check-tables --db-url postgresql://postgres:postgres@localhost:5432/ndp config.json` | Exit 0 if Silver tables exist, exit 1 with TABLE_NOT_FOUND if not |
-| E2E-07 | Schema verify | `ndp validate schema verify schemas/stream-config.v1.1.schema.json` | Exit 0 (schema in sync) |
-| E2E-08 | Schema generate | `ndp validate schema generate \| jq .title` | Outputs `"NDP Configuration Types"` |
-| E2E-09 | Piped JSON (deploy.sh pattern) | `ndp validate stream --all --format json 2>/dev/null \| jq '.summary.invalid_configs'` | Outputs `0` (all valid) |
-| E2E-10 | Verbose + human (deploy.sh pattern) | `ndp validate domain FILE --format human --verbose 2>&1` | stderr has "Running Layer", stdout has `[PASS]` |
+| E2E-01 | `config/base/streams/air-quality/config.json` | `ndp validate --stream config.json --format json` | Exit 0, `"valid": true` |
+| E2E-02 | `config/base/streams/air-quality/config.json` | `ndp validate --stream config.json --schema-only --format json` | Exit 0, no semantic errors |
+| E2E-03 | ALL stream configs | `ndp validate --all --config-dir config/base/streams` | Exit 0, all valid |
+| E2E-04 | `config/domains/indoor-air-quality/domain.json` | `ndp validate --domain config/domains/indoor-air-quality/domain.json` | Exit 0 |
+| E2E-05 | ALL domain configs | `ndp validate --domain --all --domains-dir config/domains` | Exit 0 |
+| E2E-06 | Air quality config | `ndp validate --stream config.json --check-tables --db-url postgresql://postgres:postgres@localhost:5432/ndp` | Exit 0 if Silver tables exist, exit 1 with TABLE_NOT_FOUND if not |
+| E2E-07 | Schema verify | `ndp validate --schema --verify schemas/stream-config.v1.1.schema.json` | Exit 0 (schema in sync) |
+| E2E-08 | Schema generate | `ndp validate --schema --generate \| jq .title` | Outputs `"NDP Configuration Types"` |
+| E2E-09 | Piped JSON (deploy.sh pattern) | `ndp validate --all --format json 2>/dev/null \| jq '.summary.invalid_configs'` | Outputs `0` (all valid) |
+| E2E-10 | Verbose + human (deploy.sh pattern) | `ndp validate --domain FILE --format human --verbose 2>&1` | stderr has "Running Layer", stdout has `[PASS]` |
 
 ### 5.3 Known Limitations (NOT Regressions)
 
@@ -525,14 +535,14 @@ sha256sum *.json *.txt > CHECKSUMS.sha256
 
 | Test ID | Baseline File | New Command | Comparison |
 |---|---|---|---|
-| GM-01 | `gm-01-valid-stream.json` | `ndp validate stream air-quality/config.json` | JSON structural equality |
-| GM-02 | `gm-02-invalid-missing-id.json` | `ndp validate stream invalid_missing_id.json` | JSON structural equality |
-| GM-03 | `gm-03-valid-domain.json` | `ndp validate domain domain.json` | JSON structural equality |
-| GM-04 | `gm-04-batch-streams.json` | `ndp validate stream --all` | JSON structural equality (sort results by config_path) |
-| GM-05 | `gm-05-schema-generate.json` | `ndp validate schema generate` | JSON structural equality |
-| GM-06 | `gm-06-human-output.txt` | `ndp validate stream --format human` (strip ANSI) | Line-by-line text comparison |
-| GM-07 | `gm-07-human-batch.txt` | `ndp validate stream --all --format human` (strip ANSI) | Line-by-line text comparison |
-| GM-08 | `gm-08-schema-only.json` | `ndp validate stream --schema-only invalid.json` | JSON structural equality |
+| GM-01 | `gm-01-valid-stream.json` | `ndp validate --stream air-quality/config.json` | JSON structural equality |
+| GM-02 | `gm-02-invalid-missing-id.json` | `ndp validate --stream invalid_missing_id.json` | JSON structural equality |
+| GM-03 | `gm-03-valid-domain.json` | `ndp validate --domain domain.json` | JSON structural equality |
+| GM-04 | `gm-04-batch-streams.json` | `ndp validate --all` | JSON structural equality (sort results by config_path) |
+| GM-05 | `gm-05-schema-generate.json` | `ndp validate --schema --generate` | JSON structural equality |
+| GM-06 | `gm-06-human-output.txt` | `ndp validate --stream config.json --format human` (strip ANSI) | Line-by-line text comparison |
+| GM-07 | `gm-07-human-batch.txt` | `ndp validate --all --format human` (strip ANSI) | Line-by-line text comparison |
+| GM-08 | `gm-08-schema-only.json` | `ndp validate --stream invalid.json --schema-only` | JSON structural equality |
 
 ### 6.2 Checksum Verification
 
@@ -598,11 +608,11 @@ fn assert_json_equivalent(old: &str, new: &str) {
 | All 222 ndp-validate tests pass under new module paths | `cargo test -p ndp-lib -- validate` | 222/222 pass (0 failures, 0 ignored) |
 | ndp-lib test count increases by at least 222 | `cargo test -p ndp-lib -- --list \| wc -l` | Count >= 316 (94 existing + 222 migrated) |
 | ndp-validate thin wrapper still compiles and passes its own tests | `cargo test -p ndp-validate` | All tests pass (65 CLI tests remain in wrapper) |
-| New convenience functions have unit tests | UNIT-NEW-01 through UNIT-NEW-15 | 15/15 pass |
+| New convenience functions have unit tests | UNIT-NEW-01 through UNIT-NEW-19 | 19/19 pass |
 | Import path changes are complete (no references to old paths) | `grep -r "ndp_validate::" crates/ndp-lib/` returns empty | 0 occurrences |
 | Test fixtures migrated correctly | `ls crates/ndp-lib/tests/validate_fixtures/configs/{valid,invalid}/` | 3 valid + 7 invalid config files present |
 
-### ops-003-06: `ndp validate` subcommands
+### ops-003-06: `ndp validate` flat-flag CLI
 
 | Criterion | Test(s) | Pass Condition |
 |---|---|---|
@@ -656,7 +666,7 @@ fn assert_json_equivalent(old: &str, new: &str) {
 - [ ] Run `cargo test -p ndp-cli` -- all tests pass
 - [ ] Run parity test script (`.test/validate-parity.sh`) -- all modes match
 - [ ] Run parity test suite: `cargo test -p ndp-lib -- validate_parity` (if Rust-based)
-- [ ] Verify new unit tests: `cargo test -p ndp-lib -- validate::tests::unit_new` (UNIT-NEW-01 through UNIT-NEW-15)
+- [ ] Verify new unit tests: `cargo test -p ndp-lib -- validate::tests::unit_new` (UNIT-NEW-01 through UNIT-NEW-19)
 
 ### 8.4 After deploy.sh Changes
 
@@ -694,14 +704,14 @@ fn assert_json_equivalent(old: &str, new: &str) {
 | Category | Count |
 |---|---|
 | Migrated unit tests (from ndp-validate) | 222 |
-| New ndp-lib API surface tests (UNIT-NEW-*) | 15 |
+| New ndp-lib API surface tests (UNIT-NEW-*) | 19 |
 | CLI parity tests (PAR-*) | 55 |
 | deploy.sh integration tests (DEPLOY-INT-*) | 12 |
 | E2E integration tests (E2E-*) | 10 |
 | Golden master tests (GM-*) | 8 |
-| **Total new/migrated tests** | **322** |
+| **Total new/migrated tests** | **326** |
 
-After Phase 2, `cargo test -p ndp-lib` should run approximately **316+ tests** (94 pre-existing + 222 migrated). The PAR-*, DEPLOY-INT-*, E2E-*, and GM-* tests are integration tests that run separately.
+After Phase 2, `cargo test -p ndp-lib` should run approximately **335+ tests** (94 pre-existing + 222 migrated + 19 new). The PAR-*, DEPLOY-INT-*, E2E-*, and GM-* tests are integration tests that run separately.
 
 ## Appendix B: Dependency on Phase 1
 

@@ -56,6 +56,9 @@ enum Commands {
 
     /// Gold layer DDL operations.
     Gold(commands::gold::GoldArgs),
+
+    /// Validate stream and domain configurations.
+    Validate(commands::validate::ValidateArgs),
 }
 
 impl Cli {
@@ -70,7 +73,6 @@ impl Cli {
                 _ => PathBuf::from("config/base"),
             })
     }
-
 }
 
 /// Require a database URL, exiting with an error if missing.
@@ -79,13 +81,11 @@ impl Cli {
 /// dimension, domain). Gold commands handle the optional URL internally
 /// since `generate` does not require a database.
 fn require_db_url(db_url: &Option<String>) -> String {
-    db_url
-        .clone()
-        .unwrap_or_else(|| {
-            eprintln!("Error: No database URL provided.");
-            eprintln!("Pass --db-url or set TIMESCALE_URL environment variable.");
-            std::process::exit(1);
-        })
+    db_url.clone().unwrap_or_else(|| {
+        eprintln!("Error: No database URL provided.");
+        eprintln!("Pass --db-url or set TIMESCALE_URL environment variable.");
+        std::process::exit(1);
+    })
 }
 
 #[tokio::main]
@@ -119,6 +119,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Gold(args) => {
             commands::gold::run(args, &config_dir, db_url.as_deref(), db_timeout).await?;
+        }
+        Commands::Validate(args) => {
+            let exit_code = commands::validate::run(args, &config_dir);
+            std::process::exit(exit_code);
         }
     }
 

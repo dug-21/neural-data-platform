@@ -1,63 +1,29 @@
-//! ndp-validate - Two-layer config validation for NDP streams
+//! ndp-validate - Thin wrapper around ndp_lib::validate
 //!
-//! This tool implements the dp-019 Config Validation Pipeline specification:
-//!
-//! ## Layer 1: JSON Schema Validation
-//! - Structural validation against JSON Schema
-//! - Type checking, required fields, enum values
-//! - Pattern matching for string formats
-//! - Unknown field detection (additionalProperties: false)
-//!
-//! ## Layer 2: Semantic Validation
-//! - Cross-field consistency checks (source_path references)
-//! - NDP-specific business rules (valid types, transforms)
-//! - DQ rule syntax validation
-//! - Levenshtein distance suggestions for typos
+//! All validation logic lives in `ndp_lib::validate`. This crate re-exports
+//! those types for backward compatibility and provides the CLI binary.
 //!
 //! ## Exit Codes
 //!
 //! - 0: Validation passed (may have warnings)
 //! - 1: Validation failed (has errors)
 //! - 2: System error (file not found, schema load failed, etc.)
-//!
-//! ## Usage
-//!
-//! ```bash
-//! # Validate a single config file
-//! ndp-validate config/base/streams/air-quality/config.json
-//!
-//! # Validate all configs
-//! ndp-validate --all
-//!
-//! # Schema-only validation (fast, no DB needed)
-//! ndp-validate --schema-only config/base/streams/air-quality/config.json
-//!
-//! # Full validation with table existence check
-//! ndp-validate --check-tables --timescale-url postgresql://localhost/ndp config.json
-//!
-//! # Human-readable output
-//! ndp-validate --format human --all
-//! ```
 
+// CLI module stays here (Clap struct is CLI-specific)
 pub mod cli;
-pub mod error;
-pub mod schema;
-pub mod schema_gen;
-pub mod semantic;
 
-// Re-export CLI types
-pub use cli::{
-    exit_codes, BatchValidationResult, Cli, OutputFormat, ValidationResult, ValidationSummary,
+// Re-export all validation types from ndp-lib
+pub use ndp_lib::validate::error;
+pub use ndp_lib::validate::schema;
+pub use ndp_lib::validate::schema_gen;
+pub use ndp_lib::validate::semantic;
+
+// Re-export commonly used types at crate root for backward compatibility
+pub use ndp_lib::validate::{
+    BatchSummary, BatchValidationResult, DomainSchemaValidator, ErrorCode, OutputFormat,
+    SchemaValidator, SchemaValidatorError, SemanticValidator, Severity, ValidationError,
+    ValidationLayer, ValidationResult, ValidationSummary, ValidateOptions,
+    determine_batch_exit_code, determine_exit_code, exit_codes, output_human, output_human_batch,
+    output_json, output_json_batch, validate_domain_config, validate_domain_file,
+    validate_all_domains, validate_stream, validate_stream_file, validate_all_streams,
 };
-
-// Re-export error types
-pub use error::{ErrorCode, Severity, ValidationError, ValidationLayer};
-
-// Re-export schema types
-pub use schema::{DomainSchemaValidator, SchemaValidator};
-
-// Re-export schema generation
-pub use schema_gen::{compare_schemas, generate_schema, verify_schema, SchemaGenError};
-
-// Re-export semantic domain validation
-pub use semantic::domain::validate_domain_semantic;

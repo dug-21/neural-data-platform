@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.17] - 2026-02-08
+
+Validate migration to ndp-lib (ops-003 phase 2). All validation logic now lives in `crates/ndp-lib/src/validate/`, the `ndp validate` CLI command replaces the standalone `ndp-validate` binary, and deploy.sh uses no-fallback dispatch.
+
+### Added
+
+- **`ndp validate` CLI command** with flat flags for all validation operations
+  - `--stream <path>`, `--all`, `--domain <path>`, `--domain-all` for config validation
+  - `--schema --generate`, `--schema --verify <path>` for JSON Schema operations
+  - `--schema-only`, `--check-tables`, `--format json|human`, `--strict`
+  - Exit codes: 0 (pass), 1 (validation error), 2 (system error) per dp-019
+- **`crates/ndp-lib/src/validate/` module** — 12 files migrated from ndp-validate
+  - `error.rs`, `result.rs`, `schema.rs`, `schema_gen.rs`, `semantic/{mod,sources,source_path,dq_rules,gold,domain,table_exists}.rs`
+  - Public API: `validate_stream()`, `validate_all_streams()`, `validate_domain_config()`, `validate_all_domains()`, `generate_schema()`, `verify_schema()`
+  - `ValidateOptions` struct for all validation configuration
+- **`is_valid_granularity()` deduplication** — shared implementation in `semantic/mod.rs`, called by both `gold.rs` and `domain.rs`
+
+### Changed
+
+- **deploy.sh** — 2 validate dispatch sites now use `ndp validate` with no-fallback policy (error + return 1)
+  - `validate_domain_configs()`: `ndp validate --domain <path> --config-dir $CONFIG_STREAMS_DIR --format human`
+  - `handle_domain()`: same pattern, consolidated with Gold dispatch
+- **ndp-validate** — now a thin wrapper re-exporting from `ndp_lib::validate`
+- **ndp-validate Cargo.toml** — `serde_yaml` dependency removed (all configs are JSON since v1.1.8)
+- **ndp-validate main.rs** — YAML format auto-detection code stripped
+
+### Technical Notes
+
+- 740 tests passing (675 ndp-lib + 65 ndp-validate), 0 failures
+- Output parity verified: `ndp validate` matches `ndp-validate` for stream, domain, schema operations
+- Integration-tested: 4 streams + 1 domain validated in integration environment
+- deploy.sh: `bash -n` syntax check clean, zero `ndp-validate` dispatch references remaining
+
 ## [1.1.16] - 2026-02-08
 
 Fix aligned view `ndp_id` fan-out that caused `detect_events` to fail with "more than one row returned by a subquery used as an expression".

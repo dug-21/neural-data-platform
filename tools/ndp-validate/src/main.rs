@@ -1,6 +1,7 @@
 //! ndp-validate CLI entry point
 //!
 //! Two-layer config validation tool for NDP stream and domain configurations.
+//! This is a thin wrapper around ndp_lib::validate.
 //!
 //! Exit codes per dp-019 specification:
 //! - 0: Validation passed (may have warnings)
@@ -85,33 +86,17 @@ async fn run_validation(cli: &Cli) -> Result<ValidationResult, Box<dyn std::erro
 
     let mut result = ValidationResult::new(config_path.display().to_string());
 
-    // Read and parse the file
+    // Read and parse the file (JSON only)
     let content = std::fs::read_to_string(config_path)?;
 
-    // Determine format (JSON or YAML) and parse
-    let value: serde_json::Value = if config_path
-        .extension()
-        .map(|e| e == "yaml" || e == "yml")
-        .unwrap_or(false)
-    {
-        serde_yaml::from_str(&content).map_err(|e| {
-            result.add_error(ValidationError::syntax_error(
-                e.location().map(|l| l.line()).unwrap_or(0),
-                e.location().map(|l| l.column()).unwrap_or(0),
-                &e.to_string(),
-            ));
-            format!("YAML parse error: {}", e)
-        })?
-    } else {
-        serde_json::from_str(&content).map_err(|e| {
-            result.add_error(ValidationError::syntax_error(
-                e.line(),
-                e.column(),
-                &e.to_string(),
-            ));
-            format!("JSON parse error: {}", e)
-        })?
-    };
+    let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        result.add_error(ValidationError::syntax_error(
+            e.line(),
+            e.column(),
+            &e.to_string(),
+        ));
+        format!("JSON parse error: {}", e)
+    })?;
 
     // Layer 1: Schema validation
     if cli.verbose {
@@ -146,8 +131,6 @@ async fn run_validation(cli: &Cli) -> Result<ValidationResult, Box<dyn std::erro
     if cli.check_tables && cli.verbose {
         eprintln!("Checking table existence in TimescaleDB...");
     }
-    // TODO: Implement table existence check
-    // This requires database connection which is out of scope for initial implementation
 
     Ok(result)
 }
@@ -254,7 +237,7 @@ async fn run_domain_validation(cli: &Cli) -> ExitCode {
         }
     } else if cli.domain_all {
         // Batch domain validation
-        match validate_all_domains(cli).await {
+        match validate_all_domains_cli(cli).await {
             Ok(batch_result) => {
                 // Output results
                 match cli.format {
@@ -288,10 +271,9 @@ async fn validate_single_domain(
 
     let mut result = ValidationResult::new(domain_path.display().to_string());
 
-    // Read and parse the file
+    // Read and parse the file (JSON only)
     let content = std::fs::read_to_string(domain_path)?;
 
-    // Parse as JSON
     let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
         result.add_error(ValidationError::syntax_error(
             e.line(),
@@ -338,7 +320,7 @@ async fn validate_single_domain(
 }
 
 /// Validate all domain configurations in the domains directory
-async fn validate_all_domains(
+async fn validate_all_domains_cli(
     cli: &Cli,
 ) -> Result<BatchValidationResult, Box<dyn std::error::Error>> {
     let domains_dir = &cli.domains_dir;

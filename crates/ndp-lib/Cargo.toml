@@ -16,6 +16,13 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
 
+# Validation dependencies (migrated from ndp-validate)
+jsonschema = "0.17"
+schemars = "0.8"
+sqlparser = { version = "0.50", features = ["visitor"] }
+regex = "1"
+strsim = "0.11"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tempfile = "3"
