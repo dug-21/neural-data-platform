@@ -16,6 +16,8 @@ Fix aligned view `ndp_id` fan-out that caused `detect_events` to fail with "more
 - **Aligned view produced multiple rows per bucket** — underlying CAs group by `(bucket, ndp_id)` but the aligned view joined on `bucket` only. With multiple Home Assistant entities per bucket, the FULL OUTER JOIN created a cartesian product. The `detect_events` context subquery (scalar) then failed on multi-row results.
 - **Permanent fix in `join_builder.rs`** — each CA source is now wrapped in a `(SELECT bucket, AGG(col) ... GROUP BY bucket)` subquery that collapses `ndp_id` before joining. Aggregate functions derived from column naming convention: `_mean`→AVG, `_min`→MIN, `_max`→MAX, `_count`→SUM, `_p95`→MAX, `sample_count`→SUM.
 
+- **deploy.sh ignored manifest `action` for domains** — `handle_domain()` parsed `$action` from the manifest but never passed `--action "$action"` to `ndp gold generate`. All domain DDL defaulted to `sync` mode regardless of manifest. Fixed both aligned view and events DDL generation calls.
+
 ### Technical Notes
 
 - 729 tests passing (361 ndp-lib + 31 aligned-view + 15 golden-master + 15 ndp-gold-ddl + 217 ndp-validate + other), 0 failures

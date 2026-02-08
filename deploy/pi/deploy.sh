@@ -2084,7 +2084,7 @@ handle_domain() {
     log "  Generating aligned view DDL using $ndp_tool gold generate..."
     local ddl
     ddl=$("$ndp_tool" gold generate --domain "$domain_id" \
-        --config-dir "$REPO_ROOT/config/base" 2>&1)
+        --action "$action" --config-dir "$REPO_ROOT/config/base" 2>&1)
     local exit_code=$?
 
     if [ $exit_code -ne 0 ]; then
@@ -2110,7 +2110,7 @@ handle_domain() {
     log "  Generating events DDL using $ndp_tool gold generate --events..."
     local events_ddl
     events_ddl=$("$ndp_tool" gold generate --domain "$domain_id" --events \
-        --config-dir "$REPO_ROOT/config/base" 2>&1)
+        --action "$action" --config-dir "$REPO_ROOT/config/base" 2>&1)
     local events_exit_code=$?
 
     if [ $events_exit_code -eq 0 ] && [ -n "$events_ddl" ]; then
