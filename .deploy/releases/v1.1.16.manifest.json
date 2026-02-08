@@ -1,0 +1,18 @@
+{
+  "$schema": "../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.16",
+  "description": "Fix aligned view ndp_id fan-out causing detect_events failure (one row per bucket guarantee)",
+  "changes": [
+    {
+      "type": "tool",
+      "id": "ndp-cli",
+      "action": "build"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "recreate"
+    }
+  ]
+}

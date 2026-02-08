@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.16] - 2026-02-08
+
+Fix aligned view `ndp_id` fan-out that caused `detect_events` to fail with "more than one row returned by a subquery used as an expression".
+
+### Fixed
+
+- **Aligned view produced multiple rows per bucket** — underlying CAs group by `(bucket, ndp_id)` but the aligned view joined on `bucket` only. With multiple Home Assistant entities per bucket, the FULL OUTER JOIN created a cartesian product. The `detect_events` context subquery (scalar) then failed on multi-row results.
+- **Permanent fix in `join_builder.rs`** — each CA source is now wrapped in a `(SELECT bucket, AGG(col) ... GROUP BY bucket)` subquery that collapses `ndp_id` before joining. Aggregate functions derived from column naming convention: `_mean`→AVG, `_min`→MIN, `_max`→MAX, `_count`→SUM, `_p95`→MAX, `sample_count`→SUM.
+
+### Technical Notes
+
+- 729 tests passing (361 ndp-lib + 31 aligned-view + 15 golden-master + 15 ndp-gold-ddl + 217 ndp-validate + other), 0 failures
+- Integration-tested: aligned view produces exactly 0 duplicate buckets, `detect_events` executes cleanly
+- Deployment uses `recreate` action — aligned view must be dropped/recreated to pick up subquery structure
+- 5 new unit tests for bucket subquery mechanics and aggregate function mapping
+
 ## [1.1.15] - 2026-02-07
 
 Fix Gold events detection and aligned view refresh — three bugs that caused Grafana dashboards to show no data for events and aligned views.

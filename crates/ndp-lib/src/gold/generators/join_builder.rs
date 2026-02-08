@@ -6,6 +6,11 @@
 //! - Inner: Only rows present in all streams
 //!
 //! Also handles forecast streams with LATERAL joins per ADR-FE001-003.
+//!
+//! Each non-forecast CA is wrapped in a subquery that collapses `ndp_id` by
+//! grouping on `bucket` only. Underlying CAs group by `(bucket, ndp_id)`,
+//! but the aligned view must produce exactly one row per bucket for
+//! deterministic context enrichment in event detection.
 
 use crate::gold::config::{AlignedStream, JoinStrategy, StreamType};
 
@@ -33,9 +38,10 @@ impl JoinBuilder for DefaultJoinBuilder {
 
         let mut sql = String::new();
 
-        // First stream is the FROM clause
+        // First stream is the FROM clause — wrapped in bucket subquery
         let primary = &streams[0];
-        sql.push_str(&format!("FROM {} {}", primary.gold_table, primary.alias));
+        let table_expr = Self::build_bucket_subquery(primary);
+        sql.push_str(&format!("FROM {} {}", table_expr, primary.alias));
 
         // Join remaining streams
         for (i, stream) in streams.iter().skip(1).enumerate() {
@@ -54,6 +60,73 @@ impl JoinBuilder for DefaultJoinBuilder {
 }
 
 impl DefaultJoinBuilder {
+    /// Wrap a CA table in a subquery that collapses ndp_id by grouping on bucket.
+    ///
+    /// Underlying CAs group by `(bucket, ndp_id)`. The aligned view needs exactly
+    /// one row per bucket, so we re-aggregate each CA by bucket only, using
+    /// appropriate aggregate functions derived from the column name suffix.
+    fn build_bucket_subquery(stream: &AlignedStream) -> String {
+        let mut agg_columns: Vec<String> = vec!["bucket".to_string()];
+
+        for col in &stream.columns {
+            if col == "bucket" {
+                continue;
+            }
+            let agg_fn = Self::aggregate_for_column(col);
+            agg_columns.push(format!("{}({}) AS {}", agg_fn, col, col));
+        }
+
+        format!(
+            "(SELECT {} FROM {} GROUP BY bucket)",
+            agg_columns.join(", "),
+            stream.gold_table
+        )
+    }
+
+    /// Derive the appropriate SQL aggregate function for a column
+    /// based on its naming suffix convention.
+    ///
+    /// The CAs already contain per-entity aggregates (e.g. `co2_mean` is
+    /// `AVG(co2)` per ndp_id). Re-aggregating across entities uses:
+    /// - `_mean` → `AVG` (average of per-entity means)
+    /// - `_min`  → `MIN` (true minimum across entities)
+    /// - `_max`  → `MAX` (true maximum across entities)
+    /// - `_std`  → `AVG` (approximate — not statistically precise)
+    /// - `_p95`  → `MAX` (conservative — take highest p95)
+    /// - `_count` / `sample_count` → `SUM` (total across entities)
+    /// - `_first` → `MIN` (deterministic text-safe choice)
+    /// - `_last`  → `MAX` (deterministic text-safe choice)
+    fn aggregate_for_column(column: &str) -> &'static str {
+        if column == "sample_count" {
+            return "SUM";
+        }
+        if column.ends_with("_mean") {
+            return "AVG";
+        }
+        if column.ends_with("_min") {
+            return "MIN";
+        }
+        if column.ends_with("_max") {
+            return "MAX";
+        }
+        if column.ends_with("_std") {
+            return "AVG";
+        }
+        if column.ends_with("_p95") {
+            return "MAX";
+        }
+        if column.ends_with("_count") {
+            return "SUM";
+        }
+        if column.ends_with("_first") {
+            return "MIN";
+        }
+        if column.ends_with("_last") {
+            return "MAX";
+        }
+        "AVG" // safe default for numeric columns
+    }
+
     /// Build a standard join clause (non-forecast)
     fn build_standard_join(
         &self,
@@ -63,6 +136,7 @@ impl DefaultJoinBuilder {
         strategy: JoinStrategy,
     ) -> String {
         let join_keyword = strategy.sql_keyword();
+        let table_expr = Self::build_bucket_subquery(stream);
 
         // Build the join condition
         let condition = match strategy {
@@ -90,7 +164,7 @@ impl DefaultJoinBuilder {
 
         format!(
             "{} {} {}\n    ON {}",
-            join_keyword, stream.gold_table, stream.alias, condition
+            join_keyword, table_expr, stream.alias, condition
         )
     }
 
@@ -151,6 +225,25 @@ mod tests {
         }
     }
 
+    /// Helper to create a test stream with realistic columns
+    fn create_stream_with_columns(
+        stream_id: &str,
+        alias: &str,
+        role: StreamRole,
+        stream_type: StreamType,
+        columns: Vec<&str>,
+    ) -> AlignedStream {
+        AlignedStream {
+            stream_id: stream_id.to_string(),
+            alias: alias.to_string(),
+            role,
+            stream_type,
+            gold_table: format!("gold.{}_hourly", stream_id.replace("-", "_")),
+            columns: columns.into_iter().map(String::from).collect(),
+            null_handling: NullHandling::Preserve,
+        }
+    }
+
     #[test]
     fn test_build_joins_single_stream() {
         let builder = DefaultJoinBuilder;
@@ -163,7 +256,8 @@ mod tests {
 
         let sql = builder.build_joins(&streams, JoinStrategy::FullOuter);
 
-        assert_eq!(sql, "FROM gold.air_quality_hourly indoor");
+        // Single stream wrapped in bucket subquery
+        assert!(sql.contains("FROM (SELECT bucket FROM gold.air_quality_hourly GROUP BY bucket) indoor"));
     }
 
     #[test]
@@ -187,7 +281,7 @@ mod tests {
         let sql = builder.build_joins(&streams, JoinStrategy::FullOuter);
 
         assert!(sql.contains("FULL OUTER JOIN"));
-        assert!(sql.contains("gold.outdoor_weather_hourly outdoor"));
+        assert!(sql.contains("gold.outdoor_weather_hourly"));
         assert!(sql.contains("indoor.bucket = outdoor.bucket"));
     }
 
@@ -349,5 +443,103 @@ mod tests {
 
         // Forecast should use COALESCE of non-forecast buckets
         assert!(sql.contains("WHERE f.issued_at <= COALESCE(indoor.bucket, outdoor.bucket)"));
+    }
+
+    // ========== Bucket subquery tests ==========
+
+    #[test]
+    fn test_bucket_subquery_collapses_ndp_id() {
+        let stream = create_stream_with_columns(
+            "air-quality",
+            "indoor",
+            StreamRole::Primary,
+            StreamType::Observation,
+            vec!["bucket", "co2_mean", "co2_min", "co2_max", "sample_count"],
+        );
+
+        let subquery = DefaultJoinBuilder::build_bucket_subquery(&stream);
+
+        assert!(subquery.contains("GROUP BY bucket"));
+        assert!(subquery.contains("AVG(co2_mean) AS co2_mean"));
+        assert!(subquery.contains("MIN(co2_min) AS co2_min"));
+        assert!(subquery.contains("MAX(co2_max) AS co2_max"));
+        assert!(subquery.contains("SUM(sample_count) AS sample_count"));
+        // Should NOT include ndp_id
+        assert!(!subquery.contains("ndp_id"));
+    }
+
+    #[test]
+    fn test_bucket_subquery_state_event_columns() {
+        let stream = create_stream_with_columns(
+            "home-assistant-state",
+            "state",
+            StreamRole::Actuator,
+            StreamType::StateEvent,
+            vec!["bucket", "state_count", "state_first", "state_last", "sample_count"],
+        );
+
+        let subquery = DefaultJoinBuilder::build_bucket_subquery(&stream);
+
+        assert!(subquery.contains("SUM(state_count) AS state_count"));
+        assert!(subquery.contains("MIN(state_first) AS state_first"));
+        assert!(subquery.contains("MAX(state_last) AS state_last"));
+        assert!(subquery.contains("SUM(sample_count) AS sample_count"));
+    }
+
+    #[test]
+    fn test_bucket_subquery_percentile_and_std() {
+        let stream = create_stream_with_columns(
+            "air-quality",
+            "indoor",
+            StreamRole::Primary,
+            StreamType::Observation,
+            vec!["bucket", "pm25_std", "pm25_p95"],
+        );
+
+        let subquery = DefaultJoinBuilder::build_bucket_subquery(&stream);
+
+        assert!(subquery.contains("AVG(pm25_std) AS pm25_std"));
+        assert!(subquery.contains("MAX(pm25_p95) AS pm25_p95"));
+    }
+
+    #[test]
+    fn test_aggregate_for_column_mapping() {
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("co2_mean"), "AVG");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("co2_min"), "MIN");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("co2_max"), "MAX");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("co2_std"), "AVG");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("pm25_p95"), "MAX");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("state_count"), "SUM");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("state_first"), "MIN");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("state_last"), "MAX");
+        assert_eq!(DefaultJoinBuilder::aggregate_for_column("sample_count"), "SUM");
+    }
+
+    #[test]
+    fn test_subquery_used_in_full_join() {
+        let builder = DefaultJoinBuilder;
+        let streams = vec![
+            create_stream_with_columns(
+                "air-quality",
+                "indoor",
+                StreamRole::Primary,
+                StreamType::Observation,
+                vec!["bucket", "co2_mean", "sample_count"],
+            ),
+            create_stream_with_columns(
+                "home-assistant-state",
+                "state",
+                StreamRole::Actuator,
+                StreamType::StateEvent,
+                vec!["bucket", "state_count", "sample_count"],
+            ),
+        ];
+
+        let sql = builder.build_joins(&streams, JoinStrategy::FullOuter);
+
+        // Both sources should be subqueries with GROUP BY
+        assert!(sql.contains("FROM (SELECT bucket, AVG(co2_mean) AS co2_mean, SUM(sample_count) AS sample_count FROM gold.air_quality_hourly GROUP BY bucket) indoor"));
+        assert!(sql.contains("FULL OUTER JOIN (SELECT bucket, SUM(state_count) AS state_count, SUM(sample_count) AS sample_count FROM gold.home_assistant_state_hourly GROUP BY bucket) state"));
+        assert!(sql.contains("indoor.bucket = state.bucket"));
     }
 }

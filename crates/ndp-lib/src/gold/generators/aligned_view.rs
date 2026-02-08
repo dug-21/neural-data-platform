@@ -745,7 +745,9 @@ mod tests {
         let sql = generator.generate(&domain, Action::Sync).unwrap();
 
         // Despite reversed input order, primary should be first in FROM
-        assert!(sql.contains("FROM gold.air_quality_hourly indoor"));
+        // (now wrapped in a bucket subquery that collapses ndp_id)
+        assert!(sql.contains("FROM (SELECT bucket"));
+        assert!(sql.contains("gold.air_quality_hourly"));
     }
 
     // ========== v11-005: London TDD Tests per SPEC-C01 ==========

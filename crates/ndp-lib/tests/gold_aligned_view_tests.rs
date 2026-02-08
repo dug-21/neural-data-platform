@@ -482,19 +482,24 @@ fn test_primary_stream_first_in_from() {
     // Act
     let sql = generator.generate(&domain, Action::Sync).unwrap();
 
-    // Assert: Primary stream should be in FROM
-    assert_sql_contains(
-        &sql,
-        "FROM gold.air_quality_hourly indoor",
-        "Primary stream should be in FROM clause",
+    // Assert: Primary stream should be in FROM (wrapped in bucket subquery)
+    assert!(
+        sql.contains("FROM (SELECT bucket"),
+        "Primary stream should be in FROM clause as bucket subquery:\n{}",
+        sql
+    );
+    assert!(
+        sql.contains("gold.air_quality_hourly"),
+        "Primary stream table should appear in FROM subquery:\n{}",
+        sql
     );
 
-    // Primary should NOT be in a JOIN clause
-    let from_pos = sql.find("FROM gold.air_quality");
-    let join_primary_pos = sql.find("JOIN gold.air_quality");
+    // Primary's table should appear in FROM before any JOIN reference
+    let from_pos = sql.find("gold.air_quality_hourly");
+    let join_outdoor_pos = sql.find("JOIN");
 
     assert!(from_pos.is_some(), "Primary should be in FROM");
-    if let Some(join_pos) = join_primary_pos {
+    if let Some(join_pos) = join_outdoor_pos {
         assert!(
             from_pos.unwrap() < join_pos,
             "Primary stream should appear in FROM before any JOIN"
