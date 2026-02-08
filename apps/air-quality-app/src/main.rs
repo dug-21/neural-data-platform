@@ -404,8 +404,8 @@ async fn initialize_multi_stream_coordinator(
         snapshot_interval_secs: 1800, // 30 min Parquet snapshot interval
         day_rollover_utc_hour: 0,     // Midnight UTC rollover
     };
-    let bronze_wal_path = std::path::Path::new(&config.storage.base_path).join("bronze_wal.log");
-    let bronze_data_dir = config.storage.base_path.clone();
+    let bronze_wal_path = store.base_path().join("bronze_wal.log");
+    let bronze_data_dir = store.base_path().to_string_lossy().to_string();
     let bronze_subscriber = match BronzeSubscriber::new(
         "bronze-parquet",
         bronze_config,

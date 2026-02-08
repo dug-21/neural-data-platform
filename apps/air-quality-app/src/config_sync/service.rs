@@ -624,6 +624,7 @@ impl StreamConfigYaml {
 
         Ok(StreamConfig {
             stream_id: self.stream_id.clone(),
+            stream_type: None,
             description: self.description.clone(),
             version: self.version.clone(),
             enabled: self.enabled,
