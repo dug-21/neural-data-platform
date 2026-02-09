@@ -302,6 +302,13 @@ impl WriteAheadLog {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// Return the WAL file size in bytes (0 if file doesn't exist).
+    pub fn file_size_bytes(&self) -> u64 {
+        std::fs::metadata(&self.path)
+            .map(|m| m.len())
+            .unwrap_or(0)
+    }
 }
 
 #[cfg(test)]

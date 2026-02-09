@@ -210,6 +210,22 @@ impl BronzeSubscriber {
         let total_points = self.accumulator.count();
         let source_count = points_by_source.len();
 
+        // BUG-004 diagnostic: memory state BEFORE Parquet writes
+        let accum_bytes = self.accumulator.memory_estimate_bytes();
+        let wal_bytes = self.wal.file_size_bytes();
+        let rss_before = read_process_rss_mib();
+        info!(
+            subscriber_id = %self.id,
+            accumulator_bytes = accum_bytes,
+            accumulator_mib = format_args!("{:.1}", accum_bytes as f64 / 1_048_576.0),
+            wal_bytes = wal_bytes,
+            wal_mib = format_args!("{:.1}", wal_bytes as f64 / 1_048_576.0),
+            rss_mib = rss_before.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
+            total_points = total_points,
+            sources = source_count,
+            "Snapshot starting — memory diagnostics"
+        );
+
         for (source_id, points) in points_by_source {
             let partition_path = self.partition_path(source_id, snapshot_time);
 
@@ -220,6 +236,42 @@ impl BronzeSubscriber {
                     SubscriberError::StorageError(format!("Snapshot write failed: {}", e))
                 })?;
         }
+
+        // BUG-004 diagnostic: memory state AFTER Parquet writes, BEFORE malloc_trim
+        let rss_after_writes = read_process_rss_mib();
+
+        // BUG-004: Force glibc to return freed pages to OS after Polars/Arrow allocations.
+        // Polars DataFrames may not release memory back to the OS on drop (see:
+        // stephenskory.com/a-polars-memory-leak-trick.html). malloc_trim nudges glibc.
+        #[cfg(target_os = "linux")]
+        {
+            extern "C" {
+                fn malloc_trim(pad: usize) -> i32;
+            }
+            unsafe { malloc_trim(0) };
+        }
+
+        // BUG-004 diagnostic: memory state AFTER malloc_trim
+        let rss_after_trim = read_process_rss_mib();
+        info!(
+            subscriber_id = %self.id,
+            rss_before_mib = rss_before.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
+            rss_after_writes_mib = rss_after_writes.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
+            rss_after_trim_mib = rss_after_trim.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
+            polars_delta_mib = match (rss_before, rss_after_writes) {
+                (Some(b), Some(a)) => format!("{:+.1}", a - b),
+                _ => "N/A".into(),
+            },
+            trim_reclaimed_mib = match (rss_after_writes, rss_after_trim) {
+                (Some(b), Some(a)) => format!("{:+.1}", b - a),
+                _ => "N/A".into(),
+            },
+            net_delta_mib = match (rss_before, rss_after_trim) {
+                (Some(b), Some(a)) => format!("{:+.1}", a - b),
+                _ => "N/A".into(),
+            },
+            "Snapshot RSS — polars_delta=writes-before, trim_reclaimed=writes-after_trim, net=after_trim-before"
+        );
 
         // All writes succeeded -- advance WAL watermark
         let max_seq = self.wal.next_sequence().saturating_sub(1);
@@ -383,13 +435,17 @@ impl Subscriber for BronzeSubscriber {
                     }
                 }
 
-                // Flush timer -- kept for metric logging / future WAL fsync
+                // Flush timer -- periodic memory diagnostics
                 _ = flush_timer.tick() => {
-                    // Periodic heartbeat -- no batch flush needed with WAL architecture
-                    debug!(
+                    let rss = read_process_rss_mib();
+                    info!(
                         subscriber_id = %self.id,
                         accumulator_count = self.accumulator.count(),
+                        accumulator_mib = format_args!("{:.1}", self.accumulator.memory_estimate_bytes() as f64 / 1_048_576.0),
+                        wal_mib = format_args!("{:.1}", self.wal.file_size_bytes() as f64 / 1_048_576.0),
+                        rss_mib = rss.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
                         wal_errors = self.wal_errors,
+                        events_received = self.events_received,
                         "Heartbeat"
                     );
                 }
@@ -483,6 +539,22 @@ impl Subscriber for BronzeSubscriber {
             details,
         }
     }
+}
+
+/// Read process RSS from /proc/self/status (Linux only). Returns MiB.
+fn read_process_rss_mib() -> Option<f64> {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|line| line.starts_with("VmRSS:"))
+                .and_then(|line| {
+                    line.split_whitespace()
+                        .nth(1)
+                        .and_then(|kb| kb.parse::<f64>().ok())
+                        .map(|kb| kb / 1024.0)
+                })
+        })
 }
 
 /// Extract stream_id from source_id by removing the protocol suffix

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.19] - 2026-02-09
+
+BUG-004: Diagnostic logging for Bronze memory leak investigation. Process RSS, accumulator size, and WAL file size are now logged on every heartbeat (5s) and snapshot cycle (30min). `malloc_trim(0)` called after Polars/Arrow Parquet writes to test whether glibc page retention is the cause.
+
+### Added
+
+- **Memory diagnostics on snapshot** — logs `rss_before_mib`, `rss_after_writes_mib`, `rss_after_trim_mib`, `polars_delta_mib`, `trim_reclaimed_mib`, `net_delta_mib`
+- **Memory diagnostics on heartbeat** — logs `accumulator_mib`, `wal_mib`, `rss_mib` every 5 seconds at `info` level
+- **`malloc_trim(0)` after Parquet writes** — forces glibc to return freed pages to OS (Linux only)
+- **`WriteAheadLog::file_size_bytes()`** — helper for WAL size logging
+- **BUG-004 planning artifacts** — SPARC spec and test plan under `product/features/air-017/bugs/`
+
+### Fixed
+
+- Updated air-017 STATUS.md to reflect Phase 1 production deployment status
+
 ## [1.1.18] - 2026-02-08
 
 AIR-017 Phase 1: Bronze write-ahead architecture. Separates durability (WAL) from archival (Parquet) in the Bronze layer. WAL provides immediate durability on event receipt; Parquet is a periodic snapshot from an in-memory accumulator. Read-modify-write is eliminated entirely.
