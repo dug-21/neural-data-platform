@@ -1,10 +1,3 @@
-// BUG-004: Use jemalloc instead of glibc malloc. Polars/Arrow allocations
-// fragment glibc's heap, leaking ~4.5 MiB per snapshot cycle. jemalloc
-// returns freed pages to the OS reliably.
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
-
 use air_quality_app::{
     api::create_router,
     config::AppConfig,
