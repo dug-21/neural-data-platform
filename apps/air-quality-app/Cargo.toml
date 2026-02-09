@@ -41,6 +41,10 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+# Memory allocator — mimalloc returns freed pages to OS reliably (BUG-004)
+# Unlike jemalloc, mimalloc detects page size at runtime (safe on ARM64 Pi 5)
+mimalloc = { version = "0.1", default-features = false }
+
 # Utilities
 chrono = { workspace = true }
 uuid = { workspace = true }
