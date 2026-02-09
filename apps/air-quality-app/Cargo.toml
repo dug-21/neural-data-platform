@@ -41,6 +41,10 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+# Memory allocator — jemalloc returns freed pages to OS reliably (BUG-004)
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6"
+
 # Utilities
 chrono = { workspace = true }
 uuid = { workspace = true }
