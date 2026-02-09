@@ -1,6 +1,7 @@
 //! Domain subcommand: `ndp domain <verb>`.
 
 use clap::{Args, Subcommand};
+use ndp_lib::NoOpDbClient;
 use std::path::Path;
 
 /// Domain configuration operations.
@@ -78,7 +79,10 @@ pub async fn run(
                 .map(ndp_lib::convert::domain_config_to_sync_entry)
                 .collect();
 
-            let options = ndp_lib::types::SyncOptions { dry_run };
+            let options = ndp_lib::types::SyncOptions {
+                dry_run,
+                ..Default::default()
+            };
 
             if dry_run {
                 let report =
@@ -134,36 +138,5 @@ pub async fn run(
 
             Ok(())
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// NoOpDbClient for dry-run mode
-// ---------------------------------------------------------------------------
-
-use async_trait::async_trait;
-
-struct NoOpDbClient;
-
-#[async_trait]
-impl ndp_lib::DbClient for NoOpDbClient {
-    async fn query(
-        &self,
-        _query: &str,
-        _params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
-    ) -> ndp_lib::Result<Vec<tokio_postgres::Row>> {
-        unreachable!("NoOpDbClient should not be called in dry_run mode")
-    }
-
-    async fn execute(
-        &self,
-        _query: &str,
-        _params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
-    ) -> ndp_lib::Result<u64> {
-        unreachable!("NoOpDbClient should not be called in dry_run mode")
-    }
-
-    async fn batch_execute(&self, _sql: &str) -> ndp_lib::Result<()> {
-        unreachable!("NoOpDbClient should not be called in dry_run mode")
     }
 }

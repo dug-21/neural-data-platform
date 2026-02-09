@@ -383,7 +383,10 @@ mod tests {
     }
 
     fn opts() -> SyncOptions {
-        SyncOptions { dry_run: false }
+        SyncOptions {
+            dry_run: false,
+            ..Default::default()
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -816,7 +819,10 @@ mod tests {
         domain.streams = vec![make_stream_mapping("aq", "aq", "primary")];
         domain.objectives = vec![make_objective("obj-pm25", "aq", "pm25")];
 
-        let dry_opts = SyncOptions { dry_run: true };
+        let dry_opts = SyncOptions {
+            dry_run: true,
+            ..Default::default()
+        };
         let report = sync_domains(&[domain], &db, &dry_opts).await.unwrap();
 
         assert!(db.calls().is_empty(), "Dry run must not execute any SQL");

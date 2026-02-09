@@ -134,8 +134,19 @@ pub async fn run(
             transitions: _,
             events: _,
             dry_run,
-            no_validate: _,
-        } => run_sync(&loader, stream, domain, db_url, db_timeout, dry_run).await,
+            no_validate,
+        } => {
+            run_sync(
+                &loader,
+                stream,
+                domain,
+                db_url,
+                db_timeout,
+                dry_run,
+                no_validate,
+            )
+            .await
+        }
         GoldCommands::Recreate {
             stream,
             domain,
@@ -203,8 +214,25 @@ async fn run_validate_only(
             if !gold_etl.enabled {
                 return Err(format!("Stream '{}' Gold ETL is disabled", stream_id).into());
             }
-            // Run config validation
-            ndp_lib::gold::validation::ConfigValidator::new().validate(&config)?;
+            // Run semantic validation (serializes typed config to JSON)
+            let json_value = serde_json::to_value(&config)
+                .map_err(|e| format!("Failed to serialize config: {}", e))?;
+            let validation_errors = ndp_lib::validate::validate_gold_etl(&json_value);
+            let blocking: Vec<_> = validation_errors
+                .iter()
+                .filter(|e| e.severity == ndp_lib::validate::Severity::Error)
+                .collect();
+            if !blocking.is_empty() {
+                let mut msg = format!(
+                    "Validation failed for stream '{}' with {} error(s):\n",
+                    stream_id,
+                    blocking.len()
+                );
+                for err in &blocking {
+                    msg.push_str(&format!("  - [{}] {}: {}\n", err.code, err.path, err.message));
+                }
+                return Err(msg.into());
+            }
             println!("Stream '{}' Gold ETL configuration is valid", stream_id);
         } else {
             return Err(format!("Stream '{}' has no gold_etl configuration", stream_id).into());
@@ -226,6 +254,7 @@ async fn run_sync(
     db_url: Option<&str>,
     db_timeout: u64,
     dry_run: bool,
+    no_validate: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(stream_id) = stream {
         let db_url = require_db_url(db_url)?;
@@ -233,10 +262,14 @@ async fn run_sync(
             stream_id = %stream_id,
             db_url = %db_url,
             dry_run = dry_run,
+            no_validate = no_validate,
             "Syncing Gold DDL for stream"
         );
 
-        let opts = ndp_lib::types::SyncOptions { dry_run };
+        let opts = ndp_lib::types::SyncOptions {
+            dry_run,
+            validate: !no_validate,
+        };
 
         if dry_run {
             // Dry-run: generate full DDL without DB checks
@@ -261,7 +294,10 @@ async fn run_sync(
     if let Some(domain_id) = domain {
         tracing::info!(domain_id = %domain_id, "Syncing Gold DDL for domain");
 
-        let opts = ndp_lib::types::SyncOptions { dry_run };
+        let opts = ndp_lib::types::SyncOptions {
+            dry_run,
+            validate: !no_validate,
+        };
         let ddl = ndp_lib::gold::sync_domain(loader, &domain_id, &opts)?;
         println!("{ddl}");
         return Ok(());

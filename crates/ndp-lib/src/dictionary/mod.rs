@@ -638,7 +638,10 @@ mod tests {
     }
 
     fn opts() -> SyncOptions {
-        SyncOptions { dry_run: false }
+        SyncOptions {
+            dry_run: false,
+            ..Default::default()
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1157,7 +1160,10 @@ mod tests {
         stream.fields = vec![make_field("f1", "float")];
         stream.silver_etl = Some(make_silver_etl("silver.test"));
 
-        let dry_opts = SyncOptions { dry_run: true };
+        let dry_opts = SyncOptions {
+            dry_run: true,
+            ..Default::default()
+        };
         let report = sync_dictionary(&[stream], &db, &dry_opts).await.unwrap();
 
         // No SQL should have been executed

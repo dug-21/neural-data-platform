@@ -47,11 +47,11 @@ pub use schema::{DomainSchemaValidator, SchemaValidator};
 pub use schema_gen::{compare_schemas, generate_schema, verify_schema, SchemaDifference};
 
 // Re-exports: semantic validators
+pub use semantic::table_exists::parse_table_reference;
 pub use semantic::{
     validate_domain, validate_domain_semantic, validate_dq_rules, validate_gold_etl,
     validate_source_paths, validate_sources, validate_table_exists, Validator as SemanticValidator,
 };
-pub use semantic::table_exists::parse_table_reference;
 
 // =============================================================================
 // ValidateOptions
@@ -247,9 +247,7 @@ pub fn validate_all_streams(
     }
 
     if results.is_empty() {
-        return Err(
-            format!("No config.json files found in {}", config_dir.display()).into(),
-        );
+        return Err(format!("No config.json files found in {}", config_dir.display()).into());
     }
 
     Ok(BatchValidationResult::from_results(results))
@@ -415,8 +413,7 @@ pub fn validate_all_domains(
                 match validate_domain_file(&domain_json, &domain_opts) {
                     Ok(result) => results.push(result),
                     Err(e) => {
-                        let mut result =
-                            ValidationResult::new(domain_json.display().to_string());
+                        let mut result = ValidationResult::new(domain_json.display().to_string());
                         result.add_error(ValidationError::semantic_error(
                             ErrorCode::InvalidDomainStream,
                             "$",
@@ -430,9 +427,7 @@ pub fn validate_all_domains(
     }
 
     if results.is_empty() {
-        return Err(
-            format!("No domain.json files found in {}", domains_dir.display()).into(),
-        );
+        return Err(format!("No domain.json files found in {}", domains_dir.display()).into());
     }
 
     Ok(BatchValidationResult::from_results(results))
@@ -497,7 +492,11 @@ mod tests {
         });
         let opts = ValidateOptions::default();
         let result = validate_stream(&config, &opts);
-        assert!(result.valid, "Valid config should pass: {:?}", result.errors);
+        assert!(
+            result.valid,
+            "Valid config should pass: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -554,7 +553,11 @@ mod tests {
             "alignment": { "view_name": "test_view", "granularity": "1 hour" }
         });
         let result = validate_domain_config(&config, Some(tmp.path()));
-        assert!(result.valid, "Valid domain should pass: {:?}", result.errors);
+        assert!(
+            result.valid,
+            "Valid domain should pass: {:?}",
+            result.errors
+        );
     }
 
     #[test]

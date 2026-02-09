@@ -32,7 +32,7 @@ pub use ndp_lib::gold::generators::{
 
 pub use ndp_lib::gold::registry::{FeatureConfig, FeatureGenerator, FeatureRegistry, SqlColumn};
 
-pub use ndp_lib::gold::validation::{validate_gold_config, ConfigValidator};
+pub use ndp_lib::gold::validation::{granularity_to_suffix, parse_granularity, parse_window};
 
 pub use ndp_lib::gold::planner::{CaAction, SyncPlan, SyncPlanner};
 

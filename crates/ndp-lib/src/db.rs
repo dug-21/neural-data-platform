@@ -157,4 +157,52 @@ mod tests {
             }
         });
     }
+
+    #[test]
+    fn test_noop_db_client_query_returns_empty_vec() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let client = NoOpDbClient;
+            let rows = client.query("SELECT 1", &[]).await.unwrap();
+            assert!(
+                rows.is_empty(),
+                "NoOpDbClient::query should return empty vec"
+            );
+        });
+    }
+
+    #[test]
+    fn test_noop_db_client_execute_returns_zero() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let client = NoOpDbClient;
+            let count = client
+                .execute("INSERT INTO t VALUES (1)", &[])
+                .await
+                .unwrap();
+            assert_eq!(
+                count, 0,
+                "NoOpDbClient::execute should return 0 rows affected"
+            );
+        });
+    }
+
+    #[test]
+    fn test_noop_db_client_batch_execute_returns_ok() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let client = NoOpDbClient;
+            let result = client.batch_execute("CREATE TABLE t (id INT)").await;
+            assert!(
+                result.is_ok(),
+                "NoOpDbClient::batch_execute should return Ok(())"
+            );
+        });
+    }
+
+    #[test]
+    fn test_noop_db_client_implements_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<NoOpDbClient>();
+    }
 }

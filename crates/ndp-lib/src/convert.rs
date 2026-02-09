@@ -90,7 +90,7 @@ fn convert_entity_schemas(value: &Option<serde_json::Value>) -> Vec<EntitySchema
             // Some configs use {"schema_name": {...}} object format
             return map
                 .iter()
-                .filter_map(|(name, v)| {
+                .map(|(name, v)| {
                     let description = v
                         .get("description")
                         .and_then(|d| d.as_str())
@@ -104,12 +104,12 @@ fn convert_entity_schemas(value: &Option<serde_json::Value>) -> Vec<EntitySchema
                         .and_then(|a| a.as_array())
                         .map(|arr| arr.iter().filter_map(parse_attribute).collect())
                         .unwrap_or_default();
-                    Some(EntitySchemaEntry {
+                    EntitySchemaEntry {
                         schema_name: name.clone(),
                         description,
                         device_class,
                         attributes,
-                    })
+                    }
                 })
                 .collect();
         }

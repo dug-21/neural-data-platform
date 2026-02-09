@@ -7,13 +7,8 @@ use std::collections::HashMap;
 
 use crate::gold::config::domain::StreamType;
 
-/// Valid aggregate metrics
-pub const VALID_METRICS: &[&str] = &[
-    "mean", "std", "min", "max", "count", "p95", "p99", "first", "last",
-];
-
-/// Valid rolling statistics
-pub const VALID_ROLLING_STATS: &[&str] = &["mean", "std", "min", "max"];
+// Re-export from crate::constants for backward compatibility
+pub use crate::constants::{VALID_METRICS, VALID_ROLLING_STATS};
 
 /// Gold ETL configuration section
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -1,7 +1,7 @@
 # ops-003: Unified Action Library
 
 ## Current Phase
-Phase 2 ready for implementation (v1.1.15 — Validate Migration)
+COMPLETE — all 3 phases delivered (v1.1.14, v1.1.17, v1.1.20)
 
 ## Progress
 - [x] Analysis complete (6 documents in `analysis/`)
@@ -11,14 +11,14 @@ Phase 2 ready for implementation (v1.1.15 — Validate Migration)
 - [x] Phase 1 implementation (v1.1.14 — Gold Migration)
 - [x] Phase 1 release (v1.1.14) — released 2026-02-07, tag v1.1.14
 - [x] Phase 2 SPARC planning complete (5 artifacts in `phase-2/`)
-- [ ] Phase 2 implementation (v1.1.15)
-- [ ] Phase 2 release (v1.1.15)
-- [ ] Phase 3 SPARC planning (v1.1.16 — Shared Constants + Cross-cutting)
-- [ ] Phase 3 implementation (v1.1.16)
-- [ ] Phase 3 release (v1.1.16)
+- [x] Phase 2 implementation (v1.1.17 — Validate Migration)
+- [x] Phase 2 release (v1.1.17) — released 2026-02-08, tag v1.1.17
+- [x] Phase 3 SPARC planning complete (5 artifacts in `phase-3/`)
+- [x] Phase 3 implementation (v1.1.20 — Shared Constants + Cross-cutting)
+- [x] Phase 3 release (v1.1.20) — released 2026-02-09, tag v1.1.20
 
 ## Active Work
-Phase 2 SPARC Refinement complete. Ready for implementation.
+None — ops-003 is complete. All 3 phases delivered.
 
 ## Scope Summary
 Migrate Gold DDL generation and config validation into `ndp-lib`, establishing it as the single library of NDP actions. Retire `ndp-gold-ddl` and `ndp-validate` standalone binaries from deploy.sh. Single `ndp` binary for all deployment operations.
@@ -27,9 +27,9 @@ Migrate Gold DDL generation and config validation into `ndp-lib`, establishing i
 
 | Release | Content | deploy.sh Sites | Status |
 |---------|---------|-----------------|--------|
-| **v1.1.14** | Gold module → ndp-lib + `ndp gold` commands | 2 (gold dispatch) | Planning complete |
-| **v1.1.15** | Validate module → ndp-lib + `ndp validate` commands | 2 (validate dispatch) | Not started |
-| **v1.1.16** | Shared constants, cross-cutting validation, dedup | 0 (internal only) | Not started |
+| **v1.1.14** | Gold module → ndp-lib + `ndp gold` commands | 2 (gold dispatch) | Released 2026-02-07 |
+| **v1.1.17** | Validate module → ndp-lib + `ndp validate` commands | 2 (validate dispatch) | Released 2026-02-08 |
+| **v1.1.20** | Shared constants, cross-cutting validation, dedup | 0 (internal only) | Released 2026-02-09 |
 
 ## Phase 1: v1.1.14 — Gold Migration
 
@@ -69,33 +69,61 @@ Migrate Gold DDL generation and config validation into `ndp-lib`, establishing i
 | New flag mapping tests | ~12 | 6 manual (config-dir, verbose, db-timeout, dry-run, missing-db-url, nonexistent) |
 | Integration E2E | Pass | Blocked (no Docker in CI env; protoc missing for etcd-client) |
 
-## Phase 2: v1.1.15 — Validate Migration
+## Phase 2: v1.1.17 — Validate Migration
 
 ### Scope Items
 
 | ID | Feature | Status |
 |----|---------|--------|
-| ops-003-05 | Validate module in ndp-lib (13 files, 217 tests) | Not started |
-| ops-003-06 | `ndp validate` CLI commands | Not started |
-| ops-003-07 | deploy.sh validate switchover (2 sites) | Not started |
+| ops-003-05 | Validate module in ndp-lib (12 files, 675 tests) | DONE -- 539 unit + 31 integration + 87 other + 18 doc = 675 tests passing |
+| ops-003-06 | `ndp validate` CLI commands | DONE -- flat flags, all modes working (stream, domain, schema, batch) |
+| ops-003-07 | deploy.sh validate switchover (2 sites) | DONE -- both sites use `ndp validate`, no fallback |
 
 ### SPARC Artifacts
-Not started. Plan after v1.1.14 ships.
 
-## Phase 3: v1.1.16 — Shared Constants + Cross-cutting
+| Phase | Document | Status |
+|-------|----------|--------|
+| Specification | `phase-2/specification/SPECIFICATION.md` | Done |
+| Test Plan | `phase-2/specification/TEST-PLAN.md` | Done |
+| Architecture | `phase-2/architecture/ARCHITECTURE.md` | Done |
+| Pseudocode | `phase-2/pseudocode/PSEUDOCODE.md` | Done |
+| Refinement | `phase-2/refinement/REFINEMENT.md` | Done |
+
+### Version Note
+Originally planned as v1.1.15, released as v1.1.17. Versions v1.1.15 and v1.1.16 were used for Gold events/aligned view bug fixes that shipped between Phase 1 and Phase 2.
+
+## Phase 3: v1.1.18 — Shared Constants + Cross-cutting
 
 ### Scope Items
 
 | ID | Feature | Status |
 |----|---------|--------|
-| ops-003-08 | Shared constants (`VALID_METRICS`, etc.) | Not started |
-| ops-003-09 | Cross-cutting validation (gold calls validate) | Not started |
-| ops-003-10 | Gold validation unification | Not started |
-| ops-003-11 | NoOpDbClient dedup (3 copies → 1) | Not started |
-| ops-003-12 | Standalone binary thin wrappers | Not started |
+| ops-003-08 | Shared constants (`VALID_METRICS`, etc.) in `ndp_lib::constants` | DONE — 5 constants, 7 tests, zero duplicates |
+| ops-003-09 | Cross-cutting validation (gold::sync calls validate::gold_config) | DONE — SyncOptions.validate=true default, --no-validate wired, 9 tests |
+| ops-003-10 | Gold validation unification (ConfigValidator gap analysis done) | DONE — 4 gaps ported, ConfigValidator removed, 4 tests |
+| ops-003-11 | NoOpDbClient dedup (3 CLI copies → ndp_lib::NoOpDbClient) | DONE — 69 lines removed, 4 tests, 2 deps dropped |
+| ops-003-12 | Standalone binary thin wrappers (ndp-gold-ddl) | DONE — re-exports updated (parse_granularity, parse_window, granularity_to_suffix) |
+| ops-003-13 | Retire stale YAML configs (7 files → .yaml.bak) | DONE — 7 files renamed, obsolete compat test removed |
 
 ### SPARC Artifacts
-Not started. Plan after v1.1.15 ships.
+
+| Phase | Document | Lines | Status |
+|-------|----------|-------|--------|
+| Specification | `phase-3/specification/SPECIFICATION.md` | 619 | Done |
+| Test Plan | `phase-3/specification/TEST-PLAN.md` | 684 | Done |
+| Architecture | `phase-3/architecture/ARCHITECTURE.md` | 978 | Done |
+| Pseudocode | `phase-3/pseudocode/PSEUDOCODE.md` | 2,004 | Done |
+| Refinement | `phase-3/refinement/REFINEMENT.md` | 1,121 | Done |
+
+### Key Findings from Planning
+
+1. **Constants duplication**: `VALID_METRICS` in 2 locations (identical 9 items), `VALID_STATS`/`VALID_ROLLING_STATS` in 2 locations (identical 4 items)
+2. **ConfigValidator gaps**: 4 checks in gold::ConfigValidator not in validate_gold_etl() (lag hours, rolling windows, trend window emptiness)
+3. **NoOpDbClient behavioral difference**: CLI copies use `unreachable!()`, ndp-lib uses `Ok(empty)` — safe to consolidate
+4. **7 stale YAML configs**: All have JSON replacements since v1.1.8
+5. **Net code change**: ~-80 lines (Phase 3 is a net deletion)
+6. **London TDD**: Outside-in test strategy, ~25 new tests planned
+7. **No deploy.sh changes**: Lowest risk release in ops-003
 
 ## Phase 1 Verification Report (2026-02-07)
 
@@ -203,6 +231,78 @@ Not started. Plan after v1.1.15 ships.
 - **Fixed**: Same session. 3 deploy.sh sites updated.
 - **Root cause**: ndp CLI convention is `--config-dir = config/base`, uses `.parent()` to reach config root. deploy.sh was passing `config/` directly.
 
+## Phase 2 Verification Report (2026-02-08)
+
+### Implementation Steps
+
+| Step | Description | Status |
+|------|-------------|--------|
+| A+B | Module structure + deps (jsonschema, schemars, sqlparser, regex, strsim) | DONE |
+| C | 11 source files migrated, `crate::` → `crate::validate::` import rewrite | DONE |
+| C.1 | `is_valid_granularity()` deduplicated to `semantic/mod.rs` | DONE |
+| C.2 | YAML code paths stripped (all configs JSON since v1.1.8) | DONE |
+| D | `cli.rs` split — `result.rs` (library types) extracted to ndp-lib | DONE |
+| D.2 | `ValidateOptions` struct + 6 public convenience functions | DONE |
+| E | `ndp-validate` → thin wrapper (`pub use ndp_lib::validate::*`) | DONE |
+| F | `ndp validate` CLI command with flat flags | DONE |
+| H | deploy.sh switchover — 2 dispatch sites, no-fallback policy | DONE |
+| I | Parity testing, exit codes, integration env validation | DONE |
+
+### Test Results
+
+| Package | Tests | Status |
+|---------|-------|--------|
+| ndp-lib (validate) | 675 | PASS |
+| ndp-validate | 65 | PASS |
+| ndp-cli | 0 | PASS (compile-only) |
+| **Total** | **740** | **0 failures** |
+
+### Output Parity
+
+| Scenario | Status | Notes |
+|----------|--------|-------|
+| Single stream (JSON) | PASS | Same error/warning counts, codes, severity |
+| Single stream (human) | PASS | Same line count, format |
+| Single domain (JSON) | PASS | Byte-identical |
+| All domains (JSON) | PASS | Both exit 0 |
+| Schema generate | PASS | Byte-identical |
+| All streams (JSON) | IMPROVED | Old `--all` was broken; new works correctly |
+
+### Exit Codes
+
+| Scenario | Expected | Actual |
+|----------|----------|--------|
+| Validation errors | 1 | 1 |
+| System error (missing file) | 2 | 2 |
+| Schema generate success | 0 | 0 |
+| Valid domain config | 0 | 0 |
+
+### deploy.sh Verification
+
+| Check | Status |
+|-------|--------|
+| `ndp-validate` in dispatch sites | 0 references (PASS) |
+| `ndp validate` dispatch at Site 1 (validate_domain_configs) | PASS |
+| `ndp validate` dispatch at Site 2 (handle_domain) | PASS |
+| No-fallback pattern (error + return 1) | PASS (2 sites) |
+| `bash -n` syntax check | PASS |
+
+### Integration Environment
+
+| Test | Result |
+|------|--------|
+| `ndp validate --all` (4 streams) | PASS (62 errors, 4 warnings -- pre-existing config issues) |
+| `ndp validate --domain-all` (1 domain) | PASS (0 errors, 0 warnings) |
+| `ndp validate --schema --generate` | PASS (exit 0) |
+
+### Key Decisions Made During Implementation
+
+1. **Released as v1.1.17** (not v1.1.15) — v1.1.15/v1.1.16 used for Gold bug fixes
+2. **Default format `json`** — aligned with standalone `ndp-validate` default
+3. **`serde_yaml` removed** from ndp-validate — all configs JSON since v1.1.8
+4. **Exit codes via `process::exit()`** in main.rs match arm — avoids changing return type for all commands
+5. **`is_valid_granularity` dedup** — thin wrapper delegation pattern (local fn calls `super::`)
+
 ## Knowledge Captured
 14 new AgentDB patterns (IDs 37-50) stored during Phase 1 planning:
 - ID 37: specification:library-extraction-migration
@@ -216,10 +316,72 @@ Not started. Plan after v1.1.15 ships.
 - ID 45: architecture:no-fallback-dispatch-policy
 - ID 46-50: pseudocode patterns (crate-migration, cli-command-addition, dbclient-adaptation, deploy-sh-dispatch, gold-migration-v1.1.14)
 
+Phase 2 patterns (IDs 1-4 in new AgentDB session):
+- ID 1: development:crate-module-migration
+- ID 2: development:ndp-cli-subcommand
+- ID 3: deployment:deploy-sh-ndp-dispatch
+- ID 4: procedure:crate-validate-migration
+
 ## Key References
 - SCOPE: `product/features/ops-003/SCOPE.md`
 - CLI UX: `product/research/deployment/10-CLI-UX-DESIGN-REVISED.md`
 - Analysis: `product/features/ops-003/analysis/`
 
+## Phase 3 Verification Report (2026-02-09)
+
+### Implementation Steps (3-wave swarm, 5 agents)
+
+| Wave | Step | Description | Status |
+|------|------|-------------|--------|
+| 1 | A+B | Constants module + wire 3 consumers | DONE — 7 tests, zero duplicates |
+| 1 | F | NoOpDbClient dedup (3 copies → 1 import) | DONE — -69 lines, -2 deps |
+| 1 | G | YAML retirement (7 files → .yaml.bak) | DONE — obsolete compat test removed |
+| 2 | C+D | SyncOptions.validate + gold::sync wiring + --no-validate | DONE — 9 tests |
+| 3 | E | ConfigValidator gap analysis + removal | DONE — 4 gaps ported, 4 tests |
+
+### Gap Analysis (ConfigValidator vs validate_gold_etl)
+
+| Check | ConfigValidator | validate_gold_etl | Action |
+|-------|----------------|-------------------|--------|
+| Lag lags_hours non-empty | Yes | No → Yes | Ported |
+| Lag hours >= 1 | Yes | No → Yes | Ported |
+| Rolling windows non-empty | Yes | No → Yes | Ported |
+| Trend window non-empty | Yes | No → Yes | Ported |
+| gold_etl exists/enabled | Yes | Skips (empty vec) | Handled upstream |
+| Granularity format | Yes | Yes | Already covered |
+| Field/metric validation | Yes | Yes | Already covered |
+
+### Test Results
+
+| Package | Tests | Status |
+|---------|-------|--------|
+| ndp-lib | 554 | PASS |
+| ndp-validate | 65 | PASS |
+| ndp-gold-ddl | 15 | PASS |
+| ndp-cli | 4+ | PASS |
+| ndp-types | 88+ | PASS |
+| platform-core | 861 | PASS |
+| **Total** | **874+** | **0 failures** |
+
+### Clippy
+
+`cargo clippy -p ndp-lib -p ndp-cli -p ndp-gold-ddl -p ndp-validate -- -D warnings` — **clean** (4 pre-existing issues also fixed)
+
+### Net Impact
+
+- **-2,568 lines** net (consolidation)
+- **+24 new tests** (7 constants + 9 cross-cutting + 4 gap + 4 NoOpDbClient)
+- **-9 ConfigValidator tests** (replaced by unified validation)
+- **-2 ndp-cli dependencies** (async-trait, tokio-postgres)
+- **0 deploy.sh changes**
+- **0 new CLI flags**
+
+### Design Decisions
+
+1. **Re-serialization approach** (struct → JSON → validate) avoids dual validation paths
+2. **Errors block, warnings pass** through gold sync
+3. **Utility functions kept** in gold::validation (parse_granularity, parse_window, granularity_to_suffix — used by generators)
+4. **SyncOptions::default() has validate=true** — all existing callers get validation automatically
+
 ## Last Updated
-2026-02-07 — Integration testing complete, 3 bugs found and fixed
+2026-02-09 — Phase 3 implementation complete, released as v1.1.20. ops-003 COMPLETE.

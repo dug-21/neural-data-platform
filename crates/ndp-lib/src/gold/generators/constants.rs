@@ -1,13 +1,6 @@
 //! Shared constants for Gold DDL generators
 //!
-//! Single source of truth for schema names, column names, and other
-//! values that are repeated across multiple generator files.
+//! Re-exports from `crate::constants` for backward compatibility.
+//! All constants are now defined in the top-level constants module.
 
-/// Default entity identifier column used across NDP streams.
-pub const NDP_ENTITY_COLUMN: &str = "ndp_id";
-
-/// Gold schema name. All Gold layer objects are created in this schema.
-pub const GOLD_SCHEMA: &str = "gold";
-
-/// Silver schema name. All Silver layer tables live here.
-pub const SILVER_SCHEMA: &str = "silver";
+pub use crate::constants::{GOLD_SCHEMA, NDP_ENTITY_COLUMN, SILVER_SCHEMA};

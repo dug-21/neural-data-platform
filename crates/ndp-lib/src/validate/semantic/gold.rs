@@ -12,18 +12,11 @@
 //! - `InvalidFeatureType` (405): unknown feature type
 //! - `InvalidGranularity` (406): granularity format not recognized
 
+use crate::constants::{VALID_METRICS, VALID_ROLLING_STATS};
 use crate::validate::error::{ErrorCode, Severity, ValidationError, ValidationLayer};
 use serde_json::Value;
 use std::collections::HashSet;
 use strsim::levenshtein;
-
-/// Valid aggregate metrics per SPEC-A01-gold-etl-schema.md
-const VALID_METRICS: &[&str] = &[
-    "mean", "std", "min", "max", "count", "p95", "p99", "first", "last",
-];
-
-/// Valid feature statistics
-const VALID_STATS: &[&str] = &["mean", "std", "min", "max"];
 
 /// Maximum Levenshtein distance for "did you mean" suggestions
 const MAX_SUGGESTION_DISTANCE: usize = 3;
@@ -211,6 +204,44 @@ fn validate_features(features: &Value, field_names: &HashSet<String>) -> Vec<Val
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if enabled {
+            // Validate lags_hours is non-empty
+            if let Some(lags_hours) = lag.get("lags_hours").and_then(|v| v.as_array()) {
+                if lags_hours.is_empty() {
+                    errors.push(ValidationError {
+                        layer: ValidationLayer::Semantic,
+                        code: ErrorCode::InvalidFeatureType,
+                        path: "$.gold_etl.features.lag.lags_hours".to_string(),
+                        message: "lags_hours cannot be empty when lag is enabled".to_string(),
+                        severity: Severity::Error,
+                        suggestion: Some("Add at least one lag hour, e.g. [1, 6, 24]".to_string()),
+                        context: None,
+                    });
+                } else {
+                    // Validate each hour is >= 1
+                    for (idx, hour) in lags_hours.iter().enumerate() {
+                        if let Some(h) = hour.as_i64() {
+                            if h < 1 {
+                                errors.push(ValidationError {
+                                    layer: ValidationLayer::Semantic,
+                                    code: ErrorCode::InvalidFeatureType,
+                                    path: format!(
+                                        "$.gold_etl.features.lag.lags_hours[{}]",
+                                        idx
+                                    ),
+                                    message: format!(
+                                        "Lag hours must be >= 1, got {}",
+                                        h
+                                    ),
+                                    severity: Severity::Error,
+                                    suggestion: None,
+                                    context: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
             // Validate lag fields exist
             if let Some(fields) = lag.get("fields").and_then(|v| v.as_array()) {
                 for (idx, field) in fields.iter().enumerate() {
@@ -240,6 +271,23 @@ fn validate_features(features: &Value, field_names: &HashSet<String>) -> Vec<Val
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if enabled {
+            // Validate windows is non-empty
+            if let Some(windows) = rolling.get("windows").and_then(|v| v.as_array()) {
+                if windows.is_empty() {
+                    errors.push(ValidationError {
+                        layer: ValidationLayer::Semantic,
+                        code: ErrorCode::InvalidFeatureType,
+                        path: "$.gold_etl.features.rolling.windows".to_string(),
+                        message: "windows cannot be empty when rolling is enabled".to_string(),
+                        severity: Severity::Error,
+                        suggestion: Some(
+                            "Add at least one window, e.g. [\"4 hours\", \"24 hours\"]".to_string(),
+                        ),
+                        context: None,
+                    });
+                }
+            }
+
             // Validate windows format
             if let Some(windows) = rolling.get("windows").and_then(|v| v.as_array()) {
                 for (idx, window) in windows.iter().enumerate() {
@@ -266,7 +314,7 @@ fn validate_features(features: &Value, field_names: &HashSet<String>) -> Vec<Val
             if let Some(stats) = rolling.get("stats").and_then(|v| v.as_array()) {
                 for (idx, stat) in stats.iter().enumerate() {
                     if let Some(s) = stat.as_str() {
-                        if !VALID_STATS.contains(&s) {
+                        if !VALID_ROLLING_STATS.contains(&s) {
                             errors.push(ValidationError {
                                 layer: ValidationLayer::Semantic,
                                 code: ErrorCode::InvalidFeatureType,
@@ -274,7 +322,7 @@ fn validate_features(features: &Value, field_names: &HashSet<String>) -> Vec<Val
                                 message: format!(
                                     "Invalid stat '{}'. Valid stats: {}",
                                     s,
-                                    VALID_STATS.join(", ")
+                                    VALID_ROLLING_STATS.join(", ")
                                 ),
                                 severity: Severity::Error,
                                 suggestion: None,
@@ -314,9 +362,19 @@ fn validate_features(features: &Value, field_names: &HashSet<String>) -> Vec<Val
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if enabled {
-            // Validate window format
+            // Validate window is non-empty
             if let Some(window) = trend.get("window").and_then(|v| v.as_str()) {
-                if !is_valid_granularity(window) {
+                if window.is_empty() {
+                    errors.push(ValidationError {
+                        layer: ValidationLayer::Semantic,
+                        code: ErrorCode::InvalidFeatureType,
+                        path: "$.gold_etl.features.trend.window".to_string(),
+                        message: "window cannot be empty when trend is enabled".to_string(),
+                        severity: Severity::Error,
+                        suggestion: Some("Set a window, e.g. '4 hours'".to_string()),
+                        context: None,
+                    });
+                } else if !is_valid_granularity(window) {
                     errors.push(ValidationError {
                         layer: ValidationLayer::Semantic,
                         code: ErrorCode::InvalidGranularity,
@@ -840,6 +898,179 @@ mod tests {
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].code, ErrorCode::InvalidGranularity);
         assert!(errors[0].path.contains("$.gold_etl.features.trend.window"));
+    }
+
+    // =========================================================================
+    // Test 15: Lag lags_hours non-empty when enabled
+    // =========================================================================
+    #[test]
+    fn test_validate_gold_etl_lag_hours_non_empty() {
+        let config = json!({
+            "stream_id": "air-quality",
+            "fields": [
+                { "name": "pm25", "type": "float" }
+            ],
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"]
+                },
+                "features": {
+                    "lag": {
+                        "enabled": true,
+                        "lags_hours": [],
+                        "fields": ["pm25"]
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            !errors.is_empty(),
+            "Expected error for empty lags_hours, got none"
+        );
+        let lag_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| e.path.contains("lag") && e.message.contains("lags_hours"))
+            .collect();
+        assert_eq!(
+            lag_errors.len(),
+            1,
+            "Expected exactly 1 lag lags_hours error, got: {:?}",
+            lag_errors
+        );
+        assert_eq!(lag_errors[0].code, ErrorCode::InvalidFeatureType);
+    }
+
+    // =========================================================================
+    // Test 16: Lag hours must be >= 1
+    // =========================================================================
+    #[test]
+    fn test_validate_gold_etl_lag_hours_minimum_one() {
+        let config = json!({
+            "stream_id": "air-quality",
+            "fields": [
+                { "name": "pm25", "type": "float" }
+            ],
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"]
+                },
+                "features": {
+                    "lag": {
+                        "enabled": true,
+                        "lags_hours": [1, 0, 24],
+                        "fields": ["pm25"]
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            !errors.is_empty(),
+            "Expected error for lag hours < 1, got none"
+        );
+        let hour_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| e.path.contains("lags_hours") && e.message.contains("must be >= 1"))
+            .collect();
+        assert_eq!(
+            hour_errors.len(),
+            1,
+            "Expected exactly 1 lag hours minimum error, got: {:?}",
+            hour_errors
+        );
+        assert_eq!(hour_errors[0].code, ErrorCode::InvalidFeatureType);
+    }
+
+    // =========================================================================
+    // Test 17: Rolling windows non-empty when enabled
+    // =========================================================================
+    #[test]
+    fn test_validate_gold_etl_rolling_windows_non_empty() {
+        let config = json!({
+            "stream_id": "air-quality",
+            "fields": [
+                { "name": "pm25", "type": "float" }
+            ],
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"]
+                },
+                "features": {
+                    "rolling": {
+                        "enabled": true,
+                        "windows": [],
+                        "stats": ["mean"],
+                        "fields": ["pm25"]
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            !errors.is_empty(),
+            "Expected error for empty rolling windows, got none"
+        );
+        let window_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| e.path.contains("rolling") && e.message.contains("windows"))
+            .collect();
+        assert_eq!(
+            window_errors.len(),
+            1,
+            "Expected exactly 1 rolling windows error, got: {:?}",
+            window_errors
+        );
+        assert_eq!(window_errors[0].code, ErrorCode::InvalidFeatureType);
+    }
+
+    // =========================================================================
+    // Test 18: Trend window non-empty when enabled
+    // =========================================================================
+    #[test]
+    fn test_validate_gold_etl_trend_window_non_empty() {
+        let config = json!({
+            "stream_id": "air-quality",
+            "fields": [
+                { "name": "pm25", "type": "float" }
+            ],
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"]
+                },
+                "features": {
+                    "trend": {
+                        "enabled": true,
+                        "window": "",
+                        "fields": ["pm25"]
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            !errors.is_empty(),
+            "Expected error for empty trend window, got none"
+        );
+        let window_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| e.path.contains("trend.window") && e.message.contains("window"))
+            .collect();
+        assert_eq!(
+            window_errors.len(),
+            1,
+            "Expected exactly 1 trend window error, got: {:?}",
+            window_errors
+        );
+        assert_eq!(window_errors[0].code, ErrorCode::InvalidFeatureType);
     }
 
     // =========================================================================

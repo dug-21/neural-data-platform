@@ -254,11 +254,9 @@ fn golden_master_lib_domain_recreate() {
     let expected = load_baseline("domain_indoor-air-quality_recreate.sql");
 
     // Domain recreate uses AlignedViewGenerator with Action::Recreate
-    let domain_config = ndp_lib::gold::config::ConfigLoader::load_domain_config(
-        &loader,
-        "indoor-air-quality",
-    )
-    .expect("load_domain_config should succeed");
+    let domain_config =
+        ndp_lib::gold::config::ConfigLoader::load_domain_config(&loader, "indoor-air-quality")
+            .expect("load_domain_config should succeed");
 
     let generator = ndp_lib::gold::AlignedViewGenerator::new(loader);
     let actual = generator
@@ -325,8 +323,8 @@ fn golden_master_lib_stream_outdoor_weather_sync() {
     };
 
     let expected = load_baseline("stream_outdoor-weather_sync.sql");
-    let actual = generate_stream(&loader, "outdoor-weather", &opts)
-        .expect("generate_stream should succeed");
+    let actual =
+        generate_stream(&loader, "outdoor-weather", &opts).expect("generate_stream should succeed");
 
     assert_golden_master(&expected, &actual, "ndp-lib stream outdoor-weather sync");
 }
@@ -342,8 +340,8 @@ fn golden_master_lib_stream_outdoor_weather_recreate() {
     };
 
     let expected = load_baseline("stream_outdoor-weather_recreate.sql");
-    let actual = recreate_stream(&loader, "outdoor-weather", &opts)
-        .expect("recreate_stream should succeed");
+    let actual =
+        recreate_stream(&loader, "outdoor-weather", &opts).expect("recreate_stream should succeed");
 
     assert_golden_master(
         &expected,
@@ -483,15 +481,12 @@ fn golden_master_lib_transitions_recreate() {
 
     // For transitions recreate, we need to go through the generator directly
     // since recreate_stream does not support the transitions flag.
-    let stream_config = ndp_lib::gold::config::ConfigLoader::load_stream_config(
-        &loader,
-        "home-assistant-state",
-    )
-    .expect("load_stream_config should succeed");
+    let stream_config =
+        ndp_lib::gold::config::ConfigLoader::load_stream_config(&loader, "home-assistant-state")
+            .expect("load_stream_config should succeed");
 
-    let transition_config =
-        ndp_lib::gold::TransitionConfig::from_stream_config(&stream_config)
-            .unwrap_or_else(|| ndp_lib::gold::TransitionConfig::new("state", "ndp_id"));
+    let transition_config = ndp_lib::gold::TransitionConfig::from_stream_config(&stream_config)
+        .unwrap_or_else(|| ndp_lib::gold::TransitionConfig::new("state", "ndp_id"));
     let generator = ndp_lib::gold::StateTransitionGenerator::from_stream_config(&stream_config)
         .expect("StateTransitionGenerator::from_stream_config should succeed");
     let actual = generator
@@ -539,16 +534,12 @@ fn golden_master_lib_events_recreate() {
 
     let expected = load_baseline("domain_indoor-air-quality_events_recreate.sql");
 
-    let domain_config = ndp_lib::gold::config::ConfigLoader::load_domain_config(
-        &loader,
-        "indoor-air-quality",
-    )
-    .expect("load_domain_config should succeed");
+    let domain_config =
+        ndp_lib::gold::config::ConfigLoader::load_domain_config(&loader, "indoor-air-quality")
+            .expect("load_domain_config should succeed");
 
-    let generator = ndp_lib::gold::EventsGenerator::from_domain_config(
-        &domain_config,
-        Box::new(loader),
-    );
+    let generator =
+        ndp_lib::gold::EventsGenerator::from_domain_config(&domain_config, Box::new(loader));
     let actual = generator
         .generate(ndp_lib::gold::Action::Recreate)
         .expect("EventsGenerator::generate should succeed");

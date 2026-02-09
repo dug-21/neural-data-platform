@@ -257,7 +257,8 @@ mod tests {
         let sql = builder.build_joins(&streams, JoinStrategy::FullOuter);
 
         // Single stream wrapped in bucket subquery
-        assert!(sql.contains("FROM (SELECT bucket FROM gold.air_quality_hourly GROUP BY bucket) indoor"));
+        assert!(sql
+            .contains("FROM (SELECT bucket FROM gold.air_quality_hourly GROUP BY bucket) indoor"));
     }
 
     #[test]
@@ -475,7 +476,13 @@ mod tests {
             "state",
             StreamRole::Actuator,
             StreamType::StateEvent,
-            vec!["bucket", "state_count", "state_first", "state_last", "sample_count"],
+            vec![
+                "bucket",
+                "state_count",
+                "state_first",
+                "state_last",
+                "sample_count",
+            ],
         );
 
         let subquery = DefaultJoinBuilder::build_bucket_subquery(&stream);
@@ -509,10 +516,22 @@ mod tests {
         assert_eq!(DefaultJoinBuilder::aggregate_for_column("co2_max"), "MAX");
         assert_eq!(DefaultJoinBuilder::aggregate_for_column("co2_std"), "AVG");
         assert_eq!(DefaultJoinBuilder::aggregate_for_column("pm25_p95"), "MAX");
-        assert_eq!(DefaultJoinBuilder::aggregate_for_column("state_count"), "SUM");
-        assert_eq!(DefaultJoinBuilder::aggregate_for_column("state_first"), "MIN");
-        assert_eq!(DefaultJoinBuilder::aggregate_for_column("state_last"), "MAX");
-        assert_eq!(DefaultJoinBuilder::aggregate_for_column("sample_count"), "SUM");
+        assert_eq!(
+            DefaultJoinBuilder::aggregate_for_column("state_count"),
+            "SUM"
+        );
+        assert_eq!(
+            DefaultJoinBuilder::aggregate_for_column("state_first"),
+            "MIN"
+        );
+        assert_eq!(
+            DefaultJoinBuilder::aggregate_for_column("state_last"),
+            "MAX"
+        );
+        assert_eq!(
+            DefaultJoinBuilder::aggregate_for_column("sample_count"),
+            "SUM"
+        );
     }
 
     #[test]

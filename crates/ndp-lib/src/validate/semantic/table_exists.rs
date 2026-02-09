@@ -170,7 +170,10 @@ mod tests {
         assert_eq!(errors[0].code, ErrorCode::TableCheckFailed);
         assert!(errors[0].message.contains("unavailable"));
         // Verify it's a warning (graceful degradation)
-        assert_eq!(errors[0].severity, crate::validate::error::Severity::Warning);
+        assert_eq!(
+            errors[0].severity,
+            crate::validate::error::Severity::Warning
+        );
     }
 
     #[test]

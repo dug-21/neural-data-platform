@@ -16,7 +16,9 @@
 //! - Error codes: SYNTAX_ERROR, MISSING_REQUIRED, INVALID_TYPE, UNKNOWN_FIELD,
 //!   PATTERN_MISMATCH, ENUM_VIOLATION
 
-use crate::validate::error::{ErrorCode, SchemaValidatorError, Severity, ValidationError, ValidationLayer};
+use crate::validate::error::{
+    ErrorCode, SchemaValidatorError, Severity, ValidationError, ValidationLayer,
+};
 use jsonschema::{Draft, JSONSchema};
 use serde_json::Value;
 use std::path::Path;

@@ -277,7 +277,10 @@ mod tests {
                      temp_living,temperature,Living Room Temp,home/living_room,{humidity_living},\n";
 
         let db = MockDbClient::new(1);
-        let options = SyncOptions { dry_run: false };
+        let options = SyncOptions {
+            dry_run: false,
+            ..Default::default()
+        };
 
         let report = sync_dimension(&config, csv, &db, &options).await.unwrap();
 
@@ -312,7 +315,10 @@ mod tests {
                      temp_outdoor,temperature,Outdoor Temperature,outdoor,\"{humidity_outdoor,aqi_outdoor}\",north\n";
 
         let db = MockDbClient::new(3);
-        let options = SyncOptions { dry_run: false };
+        let options = SyncOptions {
+            dry_run: false,
+            ..Default::default()
+        };
 
         let report = sync_dimension(&config, csv, &db, &options).await.unwrap();
 
@@ -328,7 +334,10 @@ mod tests {
                      a,b,c,d,e,f\n";
 
         let db = MockDbClient::new(1);
-        let options = SyncOptions { dry_run: false };
+        let options = SyncOptions {
+            dry_run: false,
+            ..Default::default()
+        };
 
         sync_dimension(&config, csv, &db, &options).await.unwrap();
 
@@ -353,7 +362,10 @@ mod tests {
                      a,b,c,d,e,f\n";
 
         let db = MockDbClient::new(0);
-        let options = SyncOptions { dry_run: true };
+        let options = SyncOptions {
+            dry_run: true,
+            ..Default::default()
+        };
 
         let report = sync_dimension(&config, csv, &db, &options).await.unwrap();
 
@@ -380,7 +392,10 @@ mod tests {
                      g,h,i,j,k,l\n";
 
         let db = MockDbClient::new(2);
-        let options = SyncOptions { dry_run: false };
+        let options = SyncOptions {
+            dry_run: false,
+            ..Default::default()
+        };
 
         let report = sync_dimension(&config, csv, &db, &options).await.unwrap();
 
@@ -398,7 +413,10 @@ mod tests {
         let csv = b"ndp_id,category,friendly_name,location_path,correlates_with,orientation\n";
 
         let db = MockDbClient::new(0);
-        let options = SyncOptions { dry_run: false };
+        let options = SyncOptions {
+            dry_run: false,
+            ..Default::default()
+        };
 
         let report = sync_dimension(&config, csv, &db, &options).await.unwrap();
 

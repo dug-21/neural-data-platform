@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.20] - 2026-02-09
+
+ops-003 Phase 3: Shared constants, cross-cutting validation, ConfigValidator unification, NoOpDbClient dedup, YAML retirement. Internal consolidation — zero deploy.sh changes, zero new CLI flags.
+
+### Added
+
+- **`ndp_lib::constants` module** — single source of truth for `VALID_METRICS`, `VALID_ROLLING_STATS`, `GOLD_SCHEMA`, `SILVER_SCHEMA`, `NDP_ENTITY_COLUMN`
+- **Cross-cutting validation** — `gold::sync_stream()` now validates config before DDL generation by default (`SyncOptions.validate = true`)
+- **`--no-validate` wiring** — existing CLI flag now connected to `SyncOptions.validate` for opt-out
+- **4 gap checks ported to `validate_gold_etl()`** — lag lags_hours non-empty, lag hours >= 1, rolling windows non-empty, trend window non-empty
+- **4 NoOpDbClient tests** in ndp-lib verifying contract
+- **7 constants tests** verifying exact values and counts
+
+### Changed
+
+- **Constants deduplicated** — `gold::config::types` and `validate::semantic::gold` now import from `ndp_lib::constants` instead of defining locally
+- **`gold::generators::constants`** re-exports from `ndp_lib::constants`
+- **ConfigValidator removed** — all validation now through `validate::semantic::gold::validate_gold_etl()` (4 gap checks ported first)
+- **NoOpDbClient deduplicated** — 3 CLI copies (unreachable!()) replaced with import from `ndp_lib::db::NoOpDbClient` (Ok(()))
+- **ndp-cli dependencies trimmed** — removed `async-trait` and `tokio-postgres` (no longer needed after NoOpDbClient dedup)
+
+### Removed
+
+- **7 `config.yaml` files** renamed to `.yaml.bak` under `config/base/streams/` (all configs JSON since v1.1.8)
+- **`core/tests/nws_config_compatibility_test.rs`** — obsolete YAML deserialization tests
+- **`gold::validation::ConfigValidator` struct** — replaced by unified `validate_gold_etl()`
+
+### Technical Notes
+
+- 874 tests passing across ndp-lib (554), ndp-validate (65), ndp-gold-ddl (15), ndp-cli (4+), ndp-types (88+), platform-core (861)
+- Clippy clean with `-D warnings` on all modified packages
+- Re-serialization approach (typed struct -> JSON -> validate) avoids dual validation paths
+- Utility functions `parse_granularity`, `parse_window`, `granularity_to_suffix` kept in `gold::validation` (used by generators)
+
 ## [1.1.19] - 2026-02-09
 
 BUG-004: Diagnostic logging for Bronze memory leak investigation. Process RSS, accumulator size, and WAL file size are now logged on every heartbeat (5s) and snapshot cycle (30min). `malloc_trim(0)` called after Polars/Arrow Parquet writes to test whether glibc page retention is the cause.
