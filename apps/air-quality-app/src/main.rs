@@ -1,11 +1,3 @@
-// BUG-004: Use mimalloc instead of glibc malloc. Polars/Arrow allocations
-// fragment glibc's heap, leaking ~4.5 MiB per snapshot cycle. mimalloc
-// eagerly purges freed pages. Safe on ARM64 Pi 5 (runtime page size detection).
-use mimalloc::MiMalloc;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
-
 use air_quality_app::{
     api::create_router,
     config::AppConfig,
