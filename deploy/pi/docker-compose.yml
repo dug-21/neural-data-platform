@@ -97,8 +97,6 @@ services:
       # DP-012: ThresholdProcessor for air quality alerts
       - THRESHOLD_PROCESSOR_ENABLED=${THRESHOLD_PROCESSOR_ENABLED:-true}
       - THRESHOLD_CONFIG_PATH=/config/processors/threshold-alerts.yaml
-      # BUG-004: mimalloc purge delay — return freed pages to OS immediately
-      - MIMALLOC_PURGE_DELAY=0
     depends_on:
       mosquitto:
         condition: service_healthy
