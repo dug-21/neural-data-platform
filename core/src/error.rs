@@ -20,8 +20,8 @@ pub enum CoreError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Polars error: {0}")]
-    Polars(String),
+    #[error("Arrow error: {0}")]
+    Arrow(String),
 
     #[error("Database error: {0}")]
     DatabaseError(String),
@@ -33,9 +33,15 @@ pub enum CoreError {
     Parser(String),
 }
 
-impl From<polars::error::PolarsError> for CoreError {
-    fn from(err: polars::error::PolarsError) -> Self {
-        CoreError::Polars(err.to_string())
+impl From<arrow::error::ArrowError> for CoreError {
+    fn from(err: arrow::error::ArrowError) -> Self {
+        CoreError::Arrow(err.to_string())
+    }
+}
+
+impl From<parquet::errors::ParquetError> for CoreError {
+    fn from(err: parquet::errors::ParquetError) -> Self {
+        CoreError::Arrow(err.to_string())
     }
 }
 

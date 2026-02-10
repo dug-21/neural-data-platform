@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.21] - 2026-02-10
+
+air-018: Replace Polars with arrow-rs + parquet crate in Bronze write/read path. Fixes BUG-004 OOM — Polars DataFrame create/drop leaked ~4.5 MiB per 30-min snapshot cycle on Pi 5, exhausting the 512 MiB container within 24-36 hours. Alternative allocators (jemalloc, mimalloc) crash on Pi 5 / kernel 6.14+ / cgroup v2.
+
+### Changed
+
+- **`core/src/storage/parquet.rs`** — all Polars API replaced with `arrow` v57 + `parquet` v57 crate direct usage
+  - Write path: `Series`/`DataFrame`/`ParquetWriter` replaced with `Int64Array`/`StringArray`/`Float64Array`/`RecordBatch`/`ArrowWriter`
+  - Read path: `ParquetReader` replaced with `ParquetRecordBatchReaderBuilder` + column downcast pattern
+  - Query filter: Polars lazy `.filter(col("timestamp").gt_eq(...))` replaced with manual microsecond comparison
+- **`core/src/error.rs`** — `CoreError::Polars` renamed to `CoreError::Arrow`; `From<ArrowError>` and `From<ParquetError>` impls replace `From<PolarsError>`
+- **`core/Cargo.toml`** — `polars` removed from `[dependencies]`, `arrow` + `parquet` added
+- **`Cargo.toml`** (workspace) — `arrow` v57 + `parquet` v57 added to `[workspace.dependencies]`
+
+### Added
+
+- **`test_timeseries_parquet_schema_metadata`** — AC-02 verification: 6-column schema names, types, nullable flags, Snappy compression
+- **`test_raw_parquet_schema_metadata`** — AC-02 verification: 5-column schema names, types, nullable flags, Snappy compression
+- Schema helper functions: `timeseries_schema()`, `raw_data_schema()`, `read_nullable_string()`, `read_nullable_json()`
+
+### Fixed
+
+- **BUG-004**: Bronze Parquet write no longer allocates/drops Polars DataFrames, eliminating the 4.5 MiB/cycle chunk leak that caused container OOM within 24-36 hours on Pi 5
+
+### Technical Notes
+
+- Parquet file schema identical — zero downstream impact to Silver ETL, MCP server, Grafana
+- 863 platform-core tests passing (+ 2 new schema metadata tests)
+- `polars` retained in workspace deps for `silver-etl` and `air-quality-app` (out of scope)
+- BUG-004 diagnostic logging in `bronze.rs` preserved for post-deploy verification
+- `malloc_trim(0)` call remains (harmless, confirms fix via near-zero `polars_delta`)
+
 ## [1.1.20] - 2026-02-09
 
 ops-003 Phase 3: Shared constants, cross-cutting validation, ConfigValidator unification, NoOpDbClient dedup, YAML retirement. Internal consolidation — zero deploy.sh changes, zero new CLI flags.

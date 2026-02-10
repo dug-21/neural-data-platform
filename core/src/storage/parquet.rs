@@ -6,7 +6,13 @@ use crate::traits::{
 use crate::types::RawDataPoint;
 use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Utc};
-use polars::prelude::*;
+use arrow::array::{Array, ArrayRef, Float64Array, Int64Array, StringArray};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::ArrowWriter;
+use parquet::basic::Compression;
+use parquet::file::properties::WriterProperties;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -83,6 +89,29 @@ impl ParquetStore {
             .unwrap_or_else(|| point.location_id.clone())
     }
 
+    /// 6-column Arrow schema for TimeSeriesPoint Parquet files
+    fn timeseries_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("timestamp", DataType::Int64, false),
+            Field::new("location_id", DataType::Utf8, false),
+            Field::new("metric", DataType::Utf8, false),
+            Field::new("value", DataType::Float64, false),
+            Field::new("ndp_id", DataType::Utf8, true),   // nullable
+            Field::new("context", DataType::Utf8, true),   // nullable
+        ]))
+    }
+
+    /// 5-column Arrow schema for RawDataPoint Parquet files
+    fn raw_data_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("timestamp", DataType::Int64, false),
+            Field::new("source_id", DataType::Utf8, false),
+            Field::new("ndp_id", DataType::Utf8, true),     // nullable
+            Field::new("context", DataType::Utf8, true),     // nullable
+            Field::new("raw_payload", DataType::Utf8, false),
+        ]))
+    }
+
     /// Write time series points to a Parquet file
     ///
     /// AIR-010 P3-02: Uses spawn_blocking to prevent blocking the async runtime during
@@ -94,12 +123,15 @@ impl ParquetStore {
 
         let path = path.to_path_buf();
 
-        // Move CPU-intensive work to blocking thread pool
+        // Move CPU-intensive work to blocking thread pool (AIR-010 P3-02)
         tokio::task::spawn_blocking(move || {
             let parent = path.parent().ok_or_else(|| {
                 CoreError::Storage("Invalid path: no parent directory".to_string())
             })?;
             std::fs::create_dir_all(parent)?;
+
+            // -- Build the Arrow schema (6 columns) --
+            let schema = Self::timeseries_schema();
 
             // P2-02: Pre-allocate Vecs with known capacity to avoid reallocations
             let len = points.len();
@@ -107,50 +139,77 @@ impl ParquetStore {
             let mut location_ids = Vec::with_capacity(len);
             let mut metrics = Vec::with_capacity(len);
             let mut values = Vec::with_capacity(len);
-            let mut ndp_ids = Vec::with_capacity(len);
-            let mut contexts = Vec::with_capacity(len);
+            // For nullable columns, use Vec<Option<String>> so Arrow builds a null bitmap
+            let mut ndp_ids: Vec<Option<String>> = Vec::with_capacity(len);
+            let mut contexts: Vec<Option<String>> = Vec::with_capacity(len);
 
             for p in &points {
                 timestamps.push(p.timestamp.timestamp_micros());
-                location_ids.push(p.location_id.clone());
+                location_ids.push(p.location_id.as_str());
                 metrics.push(
                     p.tags
                         .get("metric")
-                        .cloned()
-                        .unwrap_or_else(|| "unknown".to_string()),
+                        .map(|s| s.as_str())
+                        .unwrap_or("unknown"),
                 );
                 values.push(p.value);
                 ndp_ids.push(p.ndp_id.clone());
                 contexts.push(p.context.as_ref().map(|c| c.to_string()));
             }
 
-            let timestamp_series = Series::new("timestamp", timestamps);
-            let location_series = Series::new("location_id", location_ids);
-            let metric_series = Series::new("metric", metrics);
-            let value_series = Series::new("value", values);
-            let ndp_id_series = Series::new("ndp_id", ndp_ids);
-            let context_series = Series::new("context", contexts);
+            // -- Build Arrow arrays --
+            let ts_array = Int64Array::from(timestamps);
+            let loc_array = StringArray::from(
+                location_ids.into_iter().collect::<Vec<&str>>(),
+            );
+            let metric_array = StringArray::from(
+                metrics.into_iter().collect::<Vec<&str>>(),
+            );
+            let val_array = Float64Array::from(values);
+            // Nullable StringArray from Vec<Option<String>>:
+            let ndp_id_array = StringArray::from(
+                ndp_ids
+                    .iter()
+                    .map(|opt| opt.as_deref())
+                    .collect::<Vec<Option<&str>>>(),
+            );
+            let context_array = StringArray::from(
+                contexts
+                    .iter()
+                    .map(|opt| opt.as_deref())
+                    .collect::<Vec<Option<&str>>>(),
+            );
 
-            let mut df = DataFrame::new(vec![
-                timestamp_series,
-                location_series,
-                metric_series,
-                value_series,
-                ndp_id_series,
-                context_series,
+            // -- Build RecordBatch --
+            let batch = RecordBatch::try_new(schema.clone(), vec![
+                Arc::new(ts_array) as ArrayRef,
+                Arc::new(loc_array) as ArrayRef,
+                Arc::new(metric_array) as ArrayRef,
+                Arc::new(val_array) as ArrayRef,
+                Arc::new(ndp_id_array) as ArrayRef,
+                Arc::new(context_array) as ArrayRef,
             ])
-            .map_err(|e| CoreError::Storage(format!("Failed to create DataFrame: {}", e)))?;
+            .map_err(|e| CoreError::Storage(format!("Failed to create RecordBatch: {}", e)))?;
 
+            // -- Write Parquet with Snappy compression --
+            let props = WriterProperties::builder()
+                .set_compression(Compression::SNAPPY)
+                .build();
             let file = std::fs::File::create(&path)?;
-            ParquetWriter::new(file)
-                .with_compression(ParquetCompression::Snappy)
-                .finish(&mut df)
+            let mut writer = ArrowWriter::try_new(file, schema, Some(props))
+                .map_err(|e| CoreError::Storage(format!("Failed to create ArrowWriter: {}", e)))?;
+            writer
+                .write(&batch)
                 .map_err(|e| CoreError::Storage(format!("Failed to write Parquet: {}", e)))?;
+            writer
+                .close()
+                .map_err(|e| CoreError::Storage(format!("Failed to close Parquet writer: {}", e)))?;
 
             Ok::<_, CoreError>(())
         })
         .await
         .map_err(|e| CoreError::Storage(format!("Parquet write task panicked: {}", e)))??;
+
         Ok(())
     }
 
@@ -159,55 +218,81 @@ impl ParquetStore {
 
         if path.exists() {
             let file = std::fs::File::open(path)?;
-            let df = ParquetReader::new(file).finish().map_err(|e| {
-                CoreError::Storage(format!("Failed to read existing Parquet: {}", e))
-            })?;
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+                .map_err(|e| CoreError::Storage(format!("Failed to read existing Parquet: {}", e)))?;
+            let reader = builder.build()
+                .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
 
-            let timestamps = df
-                .column("timestamp")
-                .map_err(|e| CoreError::Storage(format!("Missing timestamp column: {}", e)))?
-                .i64()
-                .map_err(|e| CoreError::Storage(format!("Invalid timestamp type: {}", e)))?;
+            for batch_result in reader {
+                let batch = batch_result
+                    .map_err(|e| CoreError::Storage(format!("Failed to read batch: {}", e)))?;
 
-            let location_ids = df
-                .column("location_id")
-                .map_err(|e| CoreError::Storage(format!("Missing location_id column: {}", e)))?
-                .utf8()
-                .map_err(|e| CoreError::Storage(format!("Invalid location_id type: {}", e)))?;
+                let num_rows = batch.num_rows();
 
-            let metrics = df
-                .column("metric")
-                .map_err(|e| CoreError::Storage(format!("Missing metric column: {}", e)))?
-                .utf8()
-                .map_err(|e| CoreError::Storage(format!("Invalid metric type: {}", e)))?;
+                // -- Downcast required columns --
+                let timestamps = batch
+                    .column_by_name("timestamp")
+                    .ok_or_else(|| CoreError::Storage("Missing timestamp column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or_else(|| CoreError::Storage("Invalid timestamp type".to_string()))?;
 
-            let values = df
-                .column("value")
-                .map_err(|e| CoreError::Storage(format!("Missing value column: {}", e)))?
-                .f64()
-                .map_err(|e| CoreError::Storage(format!("Invalid value type: {}", e)))?;
+                let location_ids = batch
+                    .column_by_name("location_id")
+                    .ok_or_else(|| CoreError::Storage("Missing location_id column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| CoreError::Storage("Invalid location_id type".to_string()))?;
 
-            // AIR-009: Read ndp_id and context columns if they exist
-            let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
-            let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
+                let metrics = batch
+                    .column_by_name("metric")
+                    .ok_or_else(|| CoreError::Storage("Missing metric column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| CoreError::Storage("Invalid metric type".to_string()))?;
 
-            for i in 0..df.height() {
-                if let (Some(ts), Some(loc), Some(metric), Some(val)) = (
-                    timestamps.get(i),
-                    location_ids.get(i),
-                    metrics.get(i),
-                    values.get(i),
-                ) {
+                let values = batch
+                    .column_by_name("value")
+                    .ok_or_else(|| CoreError::Storage("Missing value column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<Float64Array>()
+                    .ok_or_else(|| CoreError::Storage("Invalid value type".to_string()))?;
+
+                // AIR-009: Optional nullable columns (ndp_id, context)
+                // Use column_by_name which returns Option; if column missing, treat as all-null.
+                let ndp_ids = batch
+                    .column_by_name("ndp_id")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                let contexts = batch
+                    .column_by_name("context")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                // -- Iterate rows --
+                for i in 0..num_rows {
+                    // Required columns: skip row if any is null (matches prior Polars behavior)
+                    if timestamps.is_null(i)
+                        || location_ids.is_null(i)
+                        || metrics.is_null(i)
+                        || values.is_null(i)
+                    {
+                        continue;
+                    }
+
+                    let ts = timestamps.value(i);
+                    let loc = location_ids.value(i);
+                    let metric = metrics.value(i);
+                    let val = values.value(i);
+
                     let timestamp = DateTime::from_timestamp_micros(ts)
                         .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
 
                     let mut tags = HashMap::new();
                     tags.insert("metric".to_string(), metric.to_string());
 
-                    // AIR-009: Extract ndp_id and context from columns
-                    let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
-                    let context = contexts
-                        .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+                    // AIR-009: Nullable columns -- check is_null before accessing value
+                    let ndp_id = read_nullable_string(ndp_ids, i);
+                    let context = read_nullable_json(contexts, i);
 
                     all_points.push(TimeSeriesPoint {
                         timestamp,
@@ -284,52 +369,94 @@ impl Store for ParquetStore {
     ) -> CoreResult<Vec<TimeSeriesPoint>> {
         let mut all_points = Vec::new();
 
+        let start_micros = start.timestamp_micros();
+        let end_micros = end.timestamp_micros();
+
         let mut current = start;
         while current <= end {
             let path = self.partition_path(location_id, current);
 
             if path.exists() {
                 let file = std::fs::File::open(&path)?;
-                let mut df = ParquetReader::new(file)
-                    .finish()
+                let builder = ParquetRecordBatchReaderBuilder::try_new(file)
                     .map_err(|e| CoreError::Storage(format!("Failed to read Parquet: {}", e)))?;
+                let reader = builder.build()
+                    .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
 
-                df = df
-                    .lazy()
-                    .filter(
-                        col("timestamp")
-                            .gt_eq(lit(start.timestamp_micros()))
-                            .and(col("timestamp").lt_eq(lit(end.timestamp_micros()))),
-                    )
-                    .collect()
-                    .map_err(|e| CoreError::Storage(format!("Failed to filter data: {}", e)))?;
+                for batch_result in reader {
+                    let batch = batch_result
+                        .map_err(|e| CoreError::Storage(format!("Failed to read batch: {}", e)))?;
 
-                let timestamps = df.column("timestamp")?.i64()?;
-                let location_ids = df.column("location_id")?.utf8()?;
-                let metrics = df.column("metric")?.utf8()?;
-                let values = df.column("value")?.f64()?;
+                    let num_rows = batch.num_rows();
 
-                // AIR-009: Read ndp_id and context columns if they exist
-                let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
-                let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
+                    // -- Downcast columns --
+                    let timestamps = batch
+                        .column_by_name("timestamp")
+                        .ok_or_else(|| CoreError::Storage("Missing timestamp column".to_string()))?
+                        .as_any()
+                        .downcast_ref::<Int64Array>()
+                        .ok_or_else(|| CoreError::Storage("Invalid timestamp type".to_string()))?;
 
-                for i in 0..df.height() {
-                    if let (Some(ts), Some(loc), Some(metric), Some(val)) = (
-                        timestamps.get(i),
-                        location_ids.get(i),
-                        metrics.get(i),
-                        values.get(i),
-                    ) {
+                    let location_ids = batch
+                        .column_by_name("location_id")
+                        .ok_or_else(|| CoreError::Storage("Missing location_id column".to_string()))?
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                        .ok_or_else(|| CoreError::Storage("Invalid location_id type".to_string()))?;
+
+                    let metrics_col = batch
+                        .column_by_name("metric")
+                        .ok_or_else(|| CoreError::Storage("Missing metric column".to_string()))?
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                        .ok_or_else(|| CoreError::Storage("Invalid metric type".to_string()))?;
+
+                    let values = batch
+                        .column_by_name("value")
+                        .ok_or_else(|| CoreError::Storage("Missing value column".to_string()))?
+                        .as_any()
+                        .downcast_ref::<Float64Array>()
+                        .ok_or_else(|| CoreError::Storage("Invalid value type".to_string()))?;
+
+                    // AIR-009: Optional nullable columns (ndp_id, context)
+                    let ndp_ids = batch
+                        .column_by_name("ndp_id")
+                        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                    let contexts = batch
+                        .column_by_name("context")
+                        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                    // -- Iterate rows with timestamp filter (replaces Polars lazy filter) --
+                    for i in 0..num_rows {
+                        if timestamps.is_null(i)
+                            || location_ids.is_null(i)
+                            || metrics_col.is_null(i)
+                            || values.is_null(i)
+                        {
+                            continue;
+                        }
+
+                        let ts = timestamps.value(i);
+
+                        // FILTER: replaces df.lazy().filter(col("timestamp").gt_eq/lt_eq)
+                        if ts < start_micros || ts > end_micros {
+                            continue;
+                        }
+
                         let timestamp = DateTime::from_timestamp_micros(ts)
                             .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
+
+                        let loc = location_ids.value(i);
+                        let metric = metrics_col.value(i);
+                        let val = values.value(i);
 
                         let mut tags = HashMap::new();
                         tags.insert("metric".to_string(), metric.to_string());
 
-                        // AIR-009: Extract ndp_id and context from columns
-                        let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
-                        let context = contexts
-                            .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+                        // AIR-009: Nullable columns -- check is_null before accessing value
+                        let ndp_id = read_nullable_string(ndp_ids, i);
+                        let context = read_nullable_json(contexts, i);
 
                         all_points.push(TimeSeriesPoint {
                             timestamp,
@@ -453,6 +580,31 @@ impl Store for ParquetStore {
 // - context: String (nullable, JSON-serialized metadata)
 // - raw_payload: String (JSON-serialized source data)
 
+/// Read a nullable string value from a StringArray at index i.
+/// Returns None if the column reference is None or the value at i is null.
+fn read_nullable_string(col: Option<&StringArray>, i: usize) -> Option<String> {
+    col.and_then(|c| {
+        if c.is_null(i) {
+            None
+        } else {
+            Some(c.value(i).to_string())
+        }
+    })
+}
+
+/// Read a nullable JSON value from a StringArray at index i.
+/// Returns None if the column reference is None, the value is null,
+/// or JSON deserialization fails.
+fn read_nullable_json(col: Option<&StringArray>, i: usize) -> Option<serde_json::Value> {
+    col.and_then(|c| {
+        if c.is_null(i) {
+            None
+        } else {
+            serde_json::from_str(c.value(i)).ok()
+        }
+    })
+}
+
 /// Extract stream_id from source_id by removing the protocol suffix
 ///
 /// source_id format: "{stream_id}-{SourceType}" (e.g., "air-quality-Mqtt", "nws-forecast-Http")
@@ -516,50 +668,77 @@ impl ParquetStore {
 
         let path = path.to_path_buf();
 
-        // Move CPU-intensive work to blocking thread pool
+        // Move CPU-intensive work to blocking thread pool (AIR-010 P3-02)
         tokio::task::spawn_blocking(move || {
             let parent = path.parent().ok_or_else(|| {
                 CoreError::Storage("Invalid path: no parent directory".to_string())
             })?;
             std::fs::create_dir_all(parent)?;
 
+            // -- Build the Arrow schema (5 columns) --
+            let schema = Self::raw_data_schema();
+
             // P2-02: Pre-allocate Vecs with known capacity to avoid reallocations
             let len = points.len();
             let mut timestamps = Vec::with_capacity(len);
             let mut source_ids = Vec::with_capacity(len);
-            let mut ndp_ids = Vec::with_capacity(len);
-            let mut contexts = Vec::with_capacity(len);
+            let mut ndp_ids: Vec<Option<String>> = Vec::with_capacity(len);
+            let mut contexts: Vec<Option<String>> = Vec::with_capacity(len);
             let mut raw_payloads = Vec::with_capacity(len);
 
             for p in &points {
                 timestamps.push(p.timestamp.timestamp_micros());
-                source_ids.push(p.source_id.clone());
+                source_ids.push(p.source_id.as_str());
                 ndp_ids.push(p.ndp_id.clone());
                 contexts.push(p.context.as_ref().map(|c| c.to_string()));
                 raw_payloads.push(p.raw_payload.to_string());
             }
 
-            // Create Series for DataFrame
-            let timestamp_series = Series::new("timestamp", timestamps);
-            let source_id_series = Series::new("source_id", source_ids);
-            let ndp_id_series = Series::new("ndp_id", ndp_ids);
-            let context_series = Series::new("context", contexts);
-            let raw_payload_series = Series::new("raw_payload", raw_payloads);
+            // -- Build Arrow arrays --
+            let ts_array = Int64Array::from(timestamps);
+            let source_id_array = StringArray::from(
+                source_ids.into_iter().collect::<Vec<&str>>(),
+            );
+            // Nullable arrays from Vec<Option<String>>
+            let ndp_id_array = StringArray::from(
+                ndp_ids
+                    .iter()
+                    .map(|opt| opt.as_deref())
+                    .collect::<Vec<Option<&str>>>(),
+            );
+            let context_array = StringArray::from(
+                contexts
+                    .iter()
+                    .map(|opt| opt.as_deref())
+                    .collect::<Vec<Option<&str>>>(),
+            );
+            let payload_array = StringArray::from(
+                raw_payloads.iter().map(|s| s.as_str()).collect::<Vec<&str>>(),
+            );
 
-            let mut df = DataFrame::new(vec![
-                timestamp_series,
-                source_id_series,
-                ndp_id_series,
-                context_series,
-                raw_payload_series,
+            // -- Build RecordBatch --
+            let batch = RecordBatch::try_new(schema.clone(), vec![
+                Arc::new(ts_array) as ArrayRef,
+                Arc::new(source_id_array) as ArrayRef,
+                Arc::new(ndp_id_array) as ArrayRef,
+                Arc::new(context_array) as ArrayRef,
+                Arc::new(payload_array) as ArrayRef,
             ])
-            .map_err(|e| CoreError::Storage(format!("Failed to create DataFrame: {}", e)))?;
+            .map_err(|e| CoreError::Storage(format!("Failed to create RecordBatch: {}", e)))?;
 
+            // -- Write Parquet with Snappy compression --
+            let props = WriterProperties::builder()
+                .set_compression(Compression::SNAPPY)
+                .build();
             let file = std::fs::File::create(&path)?;
-            ParquetWriter::new(file)
-                .with_compression(ParquetCompression::Snappy)
-                .finish(&mut df)
+            let mut writer = ArrowWriter::try_new(file, schema, Some(props))
+                .map_err(|e| CoreError::Storage(format!("Failed to create ArrowWriter: {}", e)))?;
+            writer
+                .write(&batch)
                 .map_err(|e| CoreError::Storage(format!("Failed to write Parquet: {}", e)))?;
+            writer
+                .close()
+                .map_err(|e| CoreError::Storage(format!("Failed to close Parquet writer: {}", e)))?;
 
             Ok::<_, CoreError>(())
         })
@@ -587,41 +766,64 @@ impl ParquetStore {
 
         if path.exists() {
             let file = std::fs::File::open(&path)?;
-            let df = ParquetReader::new(file).finish().map_err(|e| {
-                CoreError::Storage(format!("Failed to read existing Parquet: {}", e))
-            })?;
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+                .map_err(|e| CoreError::Storage(format!("Failed to read existing Parquet: {}", e)))?;
+            let reader = builder.build()
+                .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
 
-            // Read existing data and convert back to RawDataPoint
-            let timestamps = df
-                .column("timestamp")
-                .map_err(|e| CoreError::Storage(format!("Missing timestamp column: {}", e)))?
-                .i64()
-                .map_err(|e| CoreError::Storage(format!("Invalid timestamp type: {}", e)))?;
+            for batch_result in reader {
+                let batch = batch_result
+                    .map_err(|e| CoreError::Storage(format!("Failed to read batch: {}", e)))?;
 
-            let source_ids = df
-                .column("source_id")
-                .map_err(|e| CoreError::Storage(format!("Missing source_id column: {}", e)))?
-                .utf8()
-                .map_err(|e| CoreError::Storage(format!("Invalid source_id type: {}", e)))?;
+                let num_rows = batch.num_rows();
 
-            let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
-            let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
-            let raw_payloads = df
-                .column("raw_payload")
-                .map_err(|e| CoreError::Storage(format!("Missing raw_payload column: {}", e)))?
-                .utf8()
-                .map_err(|e| CoreError::Storage(format!("Invalid raw_payload type: {}", e)))?;
+                // -- Downcast required columns --
+                let timestamps = batch
+                    .column_by_name("timestamp")
+                    .ok_or_else(|| CoreError::Storage("Missing timestamp column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or_else(|| CoreError::Storage("Invalid timestamp type".to_string()))?;
 
-            for i in 0..df.height() {
-                if let (Some(ts), Some(source_id), Some(payload_str)) =
-                    (timestamps.get(i), source_ids.get(i), raw_payloads.get(i))
-                {
+                let source_ids = batch
+                    .column_by_name("source_id")
+                    .ok_or_else(|| CoreError::Storage("Missing source_id column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| CoreError::Storage("Invalid source_id type".to_string()))?;
+
+                let raw_payloads = batch
+                    .column_by_name("raw_payload")
+                    .ok_or_else(|| CoreError::Storage("Missing raw_payload column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| CoreError::Storage("Invalid raw_payload type".to_string()))?;
+
+                // -- Optional nullable columns --
+                let ndp_ids = batch
+                    .column_by_name("ndp_id")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                let contexts = batch
+                    .column_by_name("context")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                // -- Iterate rows --
+                for i in 0..num_rows {
+                    if timestamps.is_null(i) || source_ids.is_null(i) || raw_payloads.is_null(i) {
+                        continue;
+                    }
+
+                    let ts = timestamps.value(i);
+                    let source_id = source_ids.value(i);
+                    let payload_str = raw_payloads.value(i);
+
                     let timestamp = DateTime::from_timestamp_micros(ts)
                         .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
 
-                    let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
-                    let context = contexts
-                        .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+                    let ndp_id = read_nullable_string(ndp_ids, i);
+                    let context = read_nullable_json(contexts, i);
+
                     let raw_payload: serde_json::Value = serde_json::from_str(payload_str)
                         .map_err(|e| CoreError::Storage(format!("Invalid JSON payload: {}", e)))?;
 
@@ -770,20 +972,57 @@ impl RawStore for ParquetStore {
 
         for path in partition_files {
             let file = std::fs::File::open(&path)?;
-            let df = ParquetReader::new(file)
-                .finish()
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file)
                 .map_err(|e| CoreError::Storage(format!("Failed to read Parquet: {}", e)))?;
+            let reader = builder.build()
+                .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
 
-            let timestamps = df.column("timestamp")?.i64()?;
-            let source_ids = df.column("source_id")?.utf8()?;
-            let ndp_ids = df.column("ndp_id").ok().and_then(|c| c.utf8().ok());
-            let contexts = df.column("context").ok().and_then(|c| c.utf8().ok());
-            let raw_payloads = df.column("raw_payload")?.utf8()?;
+            for batch_result in reader {
+                let batch = batch_result
+                    .map_err(|e| CoreError::Storage(format!("Failed to read batch: {}", e)))?;
 
-            for i in 0..df.height() {
-                if let (Some(ts), Some(source_id), Some(payload_str)) =
-                    (timestamps.get(i), source_ids.get(i), raw_payloads.get(i))
-                {
+                let num_rows = batch.num_rows();
+
+                // -- Downcast columns --
+                let timestamps = batch
+                    .column_by_name("timestamp")
+                    .ok_or_else(|| CoreError::Storage("Missing timestamp column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or_else(|| CoreError::Storage("Invalid timestamp type".to_string()))?;
+
+                let source_ids = batch
+                    .column_by_name("source_id")
+                    .ok_or_else(|| CoreError::Storage("Missing source_id column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| CoreError::Storage("Invalid source_id type".to_string()))?;
+
+                let ndp_ids = batch
+                    .column_by_name("ndp_id")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                let contexts = batch
+                    .column_by_name("context")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+                let raw_payloads = batch
+                    .column_by_name("raw_payload")
+                    .ok_or_else(|| CoreError::Storage("Missing raw_payload column".to_string()))?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| CoreError::Storage("Invalid raw_payload type".to_string()))?;
+
+                // -- Iterate rows with filters --
+                for i in 0..num_rows {
+                    if timestamps.is_null(i) || source_ids.is_null(i) || raw_payloads.is_null(i) {
+                        continue;
+                    }
+
+                    let ts = timestamps.value(i);
+                    let source_id = source_ids.value(i);
+                    let payload_str = raw_payloads.value(i);
+
                     let timestamp = DateTime::from_timestamp_micros(ts)
                         .ok_or_else(|| CoreError::Storage("Invalid timestamp".to_string()))?;
 
@@ -799,9 +1038,9 @@ impl RawStore for ParquetStore {
                         }
                     }
 
-                    let ndp_id = ndp_ids.and_then(|col| col.get(i).map(|s| s.to_string()));
-                    let context = contexts
-                        .and_then(|col| col.get(i).and_then(|s| serde_json::from_str(s).ok()));
+                    let ndp_id = read_nullable_string(ndp_ids, i);
+                    let context = read_nullable_json(contexts, i);
+
                     let raw_payload: serde_json::Value = serde_json::from_str(payload_str)
                         .map_err(|e| CoreError::Storage(format!("Invalid JSON payload: {}", e)))?;
 
@@ -1582,31 +1821,213 @@ mod tests {
     #[tokio::test]
     async fn test_raw_parquet_schema_has_5_columns() {
         // TC-031: Verify the 5-column schema is created correctly
+        // AIR-018: Rewritten from Polars ParquetReader to arrow-rs ParquetRecordBatchReaderBuilder
         let (store, _temp) = create_test_store();
         let timestamp = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
 
+        // Arrange
         let point = RawDataPoint::new("test-Http", serde_json::json!({"value": 42}))
             .with_timestamp(timestamp)
             .with_ndp_id("test-001")
             .with_context(serde_json::json!({"room": "lab"}));
 
+        // Act
         store.write_raw(point).await.unwrap();
 
-        // Read back the parquet file and verify schema
+        // Assert - read back the parquet file and verify schema
         let path = store.raw_partition_path("test-Http", timestamp);
         assert!(path.exists(), "Parquet file should exist");
 
         let file = std::fs::File::open(&path).unwrap();
-        let df = ParquetReader::new(file).finish().unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let schema = builder.schema().clone();
 
-        // Verify 5 columns exist
-        let column_names: Vec<&str> = df.get_column_names();
+        // Verify 5 columns exist with correct names
+        let column_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
         assert_eq!(column_names.len(), 5, "Should have exactly 5 columns");
         assert!(column_names.contains(&"timestamp"));
         assert!(column_names.contains(&"source_id"));
         assert!(column_names.contains(&"ndp_id"));
         assert!(column_names.contains(&"context"));
         assert!(column_names.contains(&"raw_payload"));
+    }
+
+    // ========== AIR-018: SCHEMA COMPATIBILITY TESTS ==========
+
+    #[tokio::test]
+    async fn test_timeseries_parquet_schema_metadata() {
+        // AC-02: Verify 6-column TimeSeriesPoint schema, column names, types, nullable flags,
+        // and Snappy compression from Parquet file metadata.
+        use parquet::file::reader::{FileReader, SerializedFileReader};
+
+        let (store, _temp) = create_test_store();
+        let base_time = Utc.with_ymd_and_hms(2026, 2, 10, 12, 0, 0).unwrap();
+
+        // Arrange - write 3 TimeSeriesPoints with varied nullable values
+        let mut tags = HashMap::new();
+        tags.insert("metric".to_string(), "temperature".to_string());
+
+        let points = vec![
+            TimeSeriesPoint {
+                timestamp: base_time,
+                location_id: "sensor-001".to_string(),
+                value: 22.5,
+                tags: tags.clone(),
+                ndp_id: Some("ndp-001".to_string()),
+                context: Some(serde_json::json!({"room": "lab"})),
+            },
+            TimeSeriesPoint {
+                timestamp: base_time + chrono::Duration::minutes(1),
+                location_id: "sensor-001".to_string(),
+                value: 23.0,
+                tags: tags.clone(),
+                ndp_id: None,
+                context: None,
+            },
+            TimeSeriesPoint {
+                timestamp: base_time + chrono::Duration::minutes(2),
+                location_id: "sensor-001".to_string(),
+                value: 23.5,
+                tags: tags.clone(),
+                ndp_id: Some("ndp-003".to_string()),
+                context: None,
+            },
+        ];
+
+        // Act
+        store.write_batch(points).await.unwrap();
+
+        let path = store.partition_path("sensor-001", base_time);
+        assert!(path.exists(), "Parquet file should exist");
+
+        // Assert - Schema via ParquetRecordBatchReaderBuilder
+        let file = std::fs::File::open(&path).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let schema = builder.schema().clone();
+
+        // Verify column count
+        assert_eq!(schema.fields().len(), 6, "TimeSeriesPoint schema should have exactly 6 columns");
+
+        // Verify column names in order
+        let expected_names = ["timestamp", "location_id", "metric", "value", "ndp_id", "context"];
+        let actual_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
+        assert_eq!(actual_names, expected_names, "Column names must match in order");
+
+        // Verify column types
+        assert_eq!(*schema.field(0).data_type(), DataType::Int64, "timestamp should be Int64");
+        assert_eq!(*schema.field(1).data_type(), DataType::Utf8, "location_id should be Utf8");
+        assert_eq!(*schema.field(2).data_type(), DataType::Utf8, "metric should be Utf8");
+        assert_eq!(*schema.field(3).data_type(), DataType::Float64, "value should be Float64");
+        assert_eq!(*schema.field(4).data_type(), DataType::Utf8, "ndp_id should be Utf8");
+        assert_eq!(*schema.field(5).data_type(), DataType::Utf8, "context should be Utf8");
+
+        // Verify nullable flags
+        assert!(!schema.field(0).is_nullable(), "timestamp should NOT be nullable");
+        assert!(!schema.field(1).is_nullable(), "location_id should NOT be nullable");
+        assert!(!schema.field(2).is_nullable(), "metric should NOT be nullable");
+        assert!(!schema.field(3).is_nullable(), "value should NOT be nullable");
+        assert!(schema.field(4).is_nullable(), "ndp_id MUST be nullable");
+        assert!(schema.field(5).is_nullable(), "context MUST be nullable");
+
+        // Assert - Snappy compression via SerializedFileReader
+        let file2 = std::fs::File::open(&path).unwrap();
+        let parquet_reader = SerializedFileReader::new(file2).unwrap();
+        let metadata = parquet_reader.metadata();
+
+        // Verify row count
+        assert_eq!(metadata.file_metadata().num_rows(), 3, "Should have 3 rows");
+
+        // Verify Snappy compression on every column in every row group
+        assert!(metadata.num_row_groups() > 0, "Should have at least one row group");
+        let row_group = metadata.row_group(0);
+        assert_eq!(row_group.num_columns(), 6, "Row group should have 6 columns");
+        for col_idx in 0..row_group.num_columns() {
+            let col_meta = row_group.column(col_idx);
+            assert_eq!(
+                col_meta.compression(),
+                parquet::basic::Compression::SNAPPY,
+                "Column {} should use Snappy compression",
+                col_idx
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_raw_parquet_schema_metadata() {
+        // AC-02: Verify 5-column RawDataPoint schema, column names, types, nullable flags,
+        // and Snappy compression from Parquet file metadata.
+        use parquet::file::reader::{FileReader, SerializedFileReader};
+
+        let (store, _temp) = create_test_store();
+        let base_time = Utc.with_ymd_and_hms(2026, 2, 10, 12, 0, 0).unwrap();
+
+        // Arrange - write 3 RawDataPoints with varied nullable values
+        let points = vec![
+            RawDataPoint::new("schema-test-Http", serde_json::json!({"sensor": "pm25", "value": 12.5}))
+                .with_timestamp(base_time)
+                .with_ndp_id("device-001")
+                .with_context(serde_json::json!({"room": "office"})),
+            RawDataPoint::new("schema-test-Http", serde_json::json!({"sensor": "co2", "value": 450}))
+                .with_timestamp(base_time + chrono::Duration::minutes(1)),
+            RawDataPoint::new("schema-test-Http", serde_json::json!({"sensor": "temp", "value": 23.1}))
+                .with_timestamp(base_time + chrono::Duration::minutes(2))
+                .with_ndp_id("device-003"),
+        ];
+
+        // Act
+        store.write_raw_batch(points).await.unwrap();
+
+        let path = store.raw_partition_path("schema-test-Http", base_time);
+        assert!(path.exists(), "Parquet file should exist");
+
+        // Assert - Schema via ParquetRecordBatchReaderBuilder
+        let file = std::fs::File::open(&path).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let schema = builder.schema().clone();
+
+        // Verify column count
+        assert_eq!(schema.fields().len(), 5, "RawDataPoint schema should have exactly 5 columns");
+
+        // Verify column names in order
+        let expected_names = ["timestamp", "source_id", "ndp_id", "context", "raw_payload"];
+        let actual_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
+        assert_eq!(actual_names, expected_names, "Column names must match in order");
+
+        // Verify column types
+        assert_eq!(*schema.field(0).data_type(), DataType::Int64, "timestamp should be Int64");
+        assert_eq!(*schema.field(1).data_type(), DataType::Utf8, "source_id should be Utf8");
+        assert_eq!(*schema.field(2).data_type(), DataType::Utf8, "ndp_id should be Utf8");
+        assert_eq!(*schema.field(3).data_type(), DataType::Utf8, "context should be Utf8");
+        assert_eq!(*schema.field(4).data_type(), DataType::Utf8, "raw_payload should be Utf8");
+
+        // Verify nullable flags
+        assert!(!schema.field(0).is_nullable(), "timestamp should NOT be nullable");
+        assert!(!schema.field(1).is_nullable(), "source_id should NOT be nullable");
+        assert!(schema.field(2).is_nullable(), "ndp_id MUST be nullable");
+        assert!(schema.field(3).is_nullable(), "context MUST be nullable");
+        assert!(!schema.field(4).is_nullable(), "raw_payload should NOT be nullable");
+
+        // Assert - Snappy compression via SerializedFileReader
+        let file2 = std::fs::File::open(&path).unwrap();
+        let parquet_reader = SerializedFileReader::new(file2).unwrap();
+        let metadata = parquet_reader.metadata();
+
+        // Verify row count
+        assert_eq!(metadata.file_metadata().num_rows(), 3, "Should have 3 rows");
+
+        // Verify Snappy compression on every column in every row group
+        assert!(metadata.num_row_groups() > 0, "Should have at least one row group");
+        let row_group = metadata.row_group(0);
+        assert_eq!(row_group.num_columns(), 5, "Row group should have 5 columns");
+        for col_idx in 0..row_group.num_columns() {
+            let col_meta = row_group.column(col_idx);
+            assert_eq!(
+                col_meta.compression(),
+                parquet::basic::Compression::SNAPPY,
+                "Column {} should use Snappy compression",
+                col_idx
+            );
+        }
     }
 
     #[tokio::test]
