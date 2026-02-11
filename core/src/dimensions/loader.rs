@@ -552,8 +552,10 @@ pub mod timescale {
         for chunk in rows.chunks(batch_size) {
             for row in chunk {
                 let params = build_params(row, &columns, &loader.config.schema.fields)?;
-                let param_refs: Vec<&(dyn ToSql + Sync)> =
-                    params.iter().map(|p| p.as_ref() as &(dyn ToSql + Sync)).collect();
+                let param_refs: Vec<&(dyn ToSql + Sync)> = params
+                    .iter()
+                    .map(|p| p.as_ref() as &(dyn ToSql + Sync))
+                    .collect();
 
                 tx.execute(&insert_sql, &param_refs)
                     .await
@@ -581,8 +583,10 @@ pub mod timescale {
         for chunk in rows.chunks(batch_size) {
             for row in chunk {
                 let params = build_params(row, &columns, &loader.config.schema.fields)?;
-                let param_refs: Vec<&(dyn ToSql + Sync)> =
-                    params.iter().map(|p| p.as_ref() as &(dyn ToSql + Sync)).collect();
+                let param_refs: Vec<&(dyn ToSql + Sync)> = params
+                    .iter()
+                    .map(|p| p.as_ref() as &(dyn ToSql + Sync))
+                    .collect();
 
                 tx.execute(&upsert_sql, &param_refs)
                     .await

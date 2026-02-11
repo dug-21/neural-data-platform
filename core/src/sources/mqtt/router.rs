@@ -497,8 +497,11 @@ mod tests {
             .with_ndp_id_topic_segment(2);
         let router = TopicRouter::new(vec![sub]).unwrap();
 
-        let route = router.route("homeassistant/binary_sensor/door_backslider/state").unwrap();
-        let ndp_id = route.extract_ndp_id_from_topic("homeassistant/binary_sensor/door_backslider/state");
+        let route = router
+            .route("homeassistant/binary_sensor/door_backslider/state")
+            .unwrap();
+        let ndp_id =
+            route.extract_ndp_id_from_topic("homeassistant/binary_sensor/door_backslider/state");
 
         assert_eq!(ndp_id, Some("door_backslider".to_string()));
     }
@@ -511,23 +514,31 @@ mod tests {
         let sub0 = SubscriptionConfig::new("test", "a/+/+/+/+").with_ndp_id_topic_segment(0);
         let router0 = TopicRouter::new(vec![sub0]).unwrap();
         let route0 = router0.route(topic).unwrap();
-        assert_eq!(route0.extract_ndp_id_from_topic(topic), Some("a".to_string()));
+        assert_eq!(
+            route0.extract_ndp_id_from_topic(topic),
+            Some("a".to_string())
+        );
 
         let sub3 = SubscriptionConfig::new("test", "a/+/+/+/+").with_ndp_id_topic_segment(3);
         let router3 = TopicRouter::new(vec![sub3]).unwrap();
         let route3 = router3.route(topic).unwrap();
-        assert_eq!(route3.extract_ndp_id_from_topic(topic), Some("d".to_string()));
+        assert_eq!(
+            route3.extract_ndp_id_from_topic(topic),
+            Some("d".to_string())
+        );
 
         let sub4 = SubscriptionConfig::new("test", "a/+/+/+/+").with_ndp_id_topic_segment(4);
         let router4 = TopicRouter::new(vec![sub4]).unwrap();
         let route4 = router4.route(topic).unwrap();
-        assert_eq!(route4.extract_ndp_id_from_topic(topic), Some("e".to_string()));
+        assert_eq!(
+            route4.extract_ndp_id_from_topic(topic),
+            Some("e".to_string())
+        );
     }
 
     #[test]
     fn test_extract_ndp_id_from_topic_out_of_bounds() {
-        let sub = SubscriptionConfig::new("test", "a/b/c")
-            .with_ndp_id_topic_segment(10); // Out of bounds
+        let sub = SubscriptionConfig::new("test", "a/b/c").with_ndp_id_topic_segment(10); // Out of bounds
         let router = TopicRouter::new(vec![sub]).unwrap();
 
         let route = router.route("a/b/c").unwrap();
@@ -551,20 +562,35 @@ mod tests {
     #[test]
     fn test_extract_ndp_id_home_assistant_devices() {
         // Test realistic Home Assistant scenario with multiple devices
-        let sub = SubscriptionConfig::new("ha-binary-sensor", "homeassistant/binary_sensor/+/state")
-            .with_ndp_id_topic_segment(2);
+        let sub =
+            SubscriptionConfig::new("ha-binary-sensor", "homeassistant/binary_sensor/+/state")
+                .with_ndp_id_topic_segment(2);
         let router = TopicRouter::new(vec![sub]).unwrap();
 
         let devices = vec![
-            ("homeassistant/binary_sensor/door_backslider/state", "door_backslider"),
-            ("homeassistant/binary_sensor/door_officewindow/state", "door_officewindow"),
-            ("homeassistant/binary_sensor/door_dinettewindow/state", "door_dinettewindow"),
+            (
+                "homeassistant/binary_sensor/door_backslider/state",
+                "door_backslider",
+            ),
+            (
+                "homeassistant/binary_sensor/door_officewindow/state",
+                "door_officewindow",
+            ),
+            (
+                "homeassistant/binary_sensor/door_dinettewindow/state",
+                "door_dinettewindow",
+            ),
         ];
 
         for (topic, expected_ndp_id) in devices {
             let route = router.route(topic).unwrap();
             let ndp_id = route.extract_ndp_id_from_topic(topic);
-            assert_eq!(ndp_id, Some(expected_ndp_id.to_string()), "Failed for topic: {}", topic);
+            assert_eq!(
+                ndp_id,
+                Some(expected_ndp_id.to_string()),
+                "Failed for topic: {}",
+                topic
+            );
         }
     }
 }

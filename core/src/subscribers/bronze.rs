@@ -25,6 +25,10 @@
 //!       snapshot_interval_secs: 1800
 //! ```
 
+use crate::diagnostics::{
+    format_opt_mib, read_mallinfo2, read_proc_status_rss_bytes, read_process_rss_mib,
+    MemoryDiagnostics, MemoryTrend,
+};
 use crate::error::CoreResult;
 use crate::storage::accumulator::Accumulator;
 use crate::storage::wal::WriteAheadLog;
@@ -118,6 +122,7 @@ pub struct BronzeSubscriber {
     snapshots_written: u64,
     errors_total: u64,
     wal_errors: u64,
+    memory_trend: MemoryTrend,
 }
 
 impl BronzeSubscriber {
@@ -157,6 +162,7 @@ impl BronzeSubscriber {
             snapshots_written: 0,
             errors_total: 0,
             wal_errors: 0,
+            memory_trend: MemoryTrend::new(100),
         })
     }
 
@@ -210,23 +216,28 @@ impl BronzeSubscriber {
         let total_points = self.accumulator.count();
         let source_count = points_by_source.len();
 
-        // BUG-004 diagnostic: memory state BEFORE Parquet writes
+        // BUG-005 diagnostic: memory state BEFORE Parquet writes
         let accum_bytes = self.accumulator.memory_estimate_bytes();
         let wal_bytes = self.wal.file_size_bytes();
-        let rss_before = read_process_rss_mib();
+        let rss_before = read_proc_status_rss_bytes();
+        let alloc_before = read_mallinfo2();
         info!(
             subscriber_id = %self.id,
             accumulator_bytes = accum_bytes,
             accumulator_mib = format_args!("{:.1}", accum_bytes as f64 / 1_048_576.0),
             wal_bytes = wal_bytes,
             wal_mib = format_args!("{:.1}", wal_bytes as f64 / 1_048_576.0),
-            rss_mib = rss_before.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
+            rss_mib = format_opt_mib(rss_before),
+            fordblks_mib = format_opt_mib(alloc_before.as_ref().map(|a| a.fordblks)),
             total_points = total_points,
             sources = source_count,
             "Snapshot starting — memory diagnostics"
         );
 
+        let mut per_source_deltas: Vec<(String, usize, Option<i64>)> = Vec::new();
+
         for (source_id, points) in points_by_source {
+            let rss_pre = read_proc_status_rss_bytes();
             let partition_path = self.partition_path(source_id, snapshot_time);
 
             self.store
@@ -235,10 +246,30 @@ impl BronzeSubscriber {
                 .map_err(|e| {
                     SubscriberError::StorageError(format!("Snapshot write failed: {}", e))
                 })?;
+
+            let rss_post = read_proc_status_rss_bytes();
+            let delta = match (rss_pre, rss_post) {
+                (Some(pre), Some(post)) => Some(post as i64 - pre as i64),
+                _ => None,
+            };
+            per_source_deltas.push((source_id.to_string(), points.len(), delta));
         }
 
-        // BUG-004 diagnostic: memory state AFTER Parquet writes, BEFORE malloc_trim
-        let rss_after_writes = read_process_rss_mib();
+        // Log per-source deltas at debug level
+        for (source_id, count, delta) in &per_source_deltas {
+            debug!(
+                subscriber_id = %self.id,
+                source_id = %source_id,
+                points = count,
+                rss_delta_mib = delta
+                    .map(|d| format!("{:+.1}", d as f64 / 1_048_576.0))
+                    .unwrap_or_else(|| "N/A".into()),
+                "Snapshot per-source memory delta"
+            );
+        }
+
+        // BUG-005 diagnostic: memory state AFTER Parquet writes, BEFORE malloc_trim
+        let rss_after_writes = read_proc_status_rss_bytes();
 
         // BUG-004: Force glibc to return freed pages to OS after Polars/Arrow allocations.
         // Polars DataFrames may not release memory back to the OS on drop (see:
@@ -251,34 +282,37 @@ impl BronzeSubscriber {
             unsafe { malloc_trim(0) };
         }
 
-        // BUG-004 diagnostic: memory state AFTER malloc_trim
-        let rss_after_trim = read_process_rss_mib();
+        let rss_after_trim = read_proc_status_rss_bytes();
+        let alloc_after = read_mallinfo2();
+
         info!(
             subscriber_id = %self.id,
-            rss_before_mib = rss_before.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
-            rss_after_writes_mib = rss_after_writes.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
-            rss_after_trim_mib = rss_after_trim.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
-            polars_delta_mib = match (rss_before, rss_after_writes) {
-                (Some(b), Some(a)) => format!("{:+.1}", a - b),
+            rss_before_mib = format_opt_mib(rss_before),
+            rss_after_writes_mib = format_opt_mib(rss_after_writes),
+            rss_after_trim_mib = format_opt_mib(rss_after_trim),
+            write_delta_mib = match (rss_before, rss_after_writes) {
+                (Some(b), Some(a)) => format!("{:+.1}", (a as i64 - b as i64) as f64 / 1_048_576.0),
                 _ => "N/A".into(),
             },
             trim_reclaimed_mib = match (rss_after_writes, rss_after_trim) {
-                (Some(b), Some(a)) => format!("{:+.1}", b - a),
+                (Some(b), Some(a)) => format!("{:+.1}", (b as i64 - a as i64) as f64 / 1_048_576.0),
                 _ => "N/A".into(),
             },
             net_delta_mib = match (rss_before, rss_after_trim) {
-                (Some(b), Some(a)) => format!("{:+.1}", a - b),
+                (Some(b), Some(a)) => format!("{:+.1}", (a as i64 - b as i64) as f64 / 1_048_576.0),
                 _ => "N/A".into(),
             },
-            "Snapshot RSS — polars_delta=writes-before, trim_reclaimed=writes-after_trim, net=after_trim-before"
+            fordblks_before_mib = format_opt_mib(alloc_before.as_ref().map(|a| a.fordblks)),
+            fordblks_after_mib = format_opt_mib(alloc_after.as_ref().map(|a| a.fordblks)),
+            "Snapshot RSS — write_delta=writes-before, trim_reclaimed=writes-after_trim, net=after_trim-before"
         );
 
         // All writes succeeded -- advance WAL watermark
         let max_seq = self.wal.next_sequence().saturating_sub(1);
         if max_seq > 0 {
-            self.wal.commit_to(max_seq).map_err(|e| {
-                SubscriberError::StorageError(format!("WAL commit failed: {}", e))
-            })?;
+            self.wal
+                .commit_to(max_seq)
+                .map_err(|e| SubscriberError::StorageError(format!("WAL commit failed: {}", e)))?;
         }
 
         self.events_written = total_points as u64;
@@ -290,6 +324,21 @@ impl BronzeSubscriber {
             total_points = total_points,
             "Snapshot complete"
         );
+
+        // Trend summary every 10 snapshots
+        if self.snapshots_written.is_multiple_of(10) {
+            let rss_now = read_process_rss_mib();
+            info!(
+                subscriber_id = %self.id,
+                snapshots = self.snapshots_written,
+                trend_samples = self.memory_trend.len(),
+                rss_growth_mib_per_hour = self.memory_trend.growth_rate_bytes_per_hour()
+                    .map(|r| format!("{:.2}", r / 1_048_576.0))
+                    .unwrap_or_else(|| "N/A".into()),
+                rss_current_mib = rss_now.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
+                "Memory trend summary (every 10 snapshots)"
+            );
+        }
 
         Ok(())
     }
@@ -308,10 +357,7 @@ impl BronzeSubscriber {
         let today = Utc::now().date_naive();
 
         // Step 1: Seed from today's Parquet (if any)
-        let start_of_day = today
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
+        let start_of_day = today.and_hms_opt(0, 0, 0).unwrap().and_utc();
         let end_of_day = start_of_day + chrono::Duration::days(1);
 
         match self.store.query_raw(start_of_day, end_of_day, None).await {
@@ -345,10 +391,8 @@ impl BronzeSubscriber {
             Ok(wal_entries) => {
                 if !wal_entries.is_empty() {
                     let count = wal_entries.len();
-                    let points: Vec<RawDataPoint> = wal_entries
-                        .into_iter()
-                        .map(|e| e.point)
-                        .collect();
+                    let points: Vec<RawDataPoint> =
+                        wal_entries.into_iter().map(|e| e.point).collect();
                     self.accumulator.merge_wal_entries(points);
                     info!(
                         subscriber_id = %self.id,
@@ -437,15 +481,37 @@ impl Subscriber for BronzeSubscriber {
 
                 // Flush timer -- periodic memory diagnostics
                 _ = flush_timer.tick() => {
-                    let rss = read_process_rss_mib();
+                    let diag = MemoryDiagnostics::collect(&self.accumulator);
+
+                    // Record RSS for trend tracking
+                    if let Some(rss) = diag.rss_bytes {
+                        self.memory_trend.record(rss);
+                    }
+
                     info!(
                         subscriber_id = %self.id,
-                        accumulator_count = self.accumulator.count(),
-                        accumulator_mib = format_args!("{:.1}", self.accumulator.memory_estimate_bytes() as f64 / 1_048_576.0),
+                        // Existing fields (backward compatible)
+                        accumulator_count = diag.accumulator_count,
+                        accumulator_mib = format_args!("{:.1}", diag.accumulator_estimate_bytes as f64 / 1_048_576.0),
                         wal_mib = format_args!("{:.1}", self.wal.file_size_bytes() as f64 / 1_048_576.0),
-                        rss_mib = rss.map(|r| format!("{:.1}", r)).unwrap_or_else(|| "N/A".into()),
+                        rss_mib = diag.rss_mib_display(),
                         wal_errors = self.wal_errors,
                         events_received = self.events_received,
+                        // NEW: accumulator capacity fields
+                        accum_hash_cap = diag.accumulator_capacity,
+                        accum_vec_cap = diag.accumulator_vec_capacity_sum,
+                        accum_vec_len = diag.accumulator_vec_len_sum,
+                        // NEW: allocator fields
+                        arena_mib = format_opt_mib(diag.arena_bytes),
+                        fordblks_mib = format_opt_mib(diag.fordblks_bytes),
+                        hblkhd_mib = format_opt_mib(diag.hblkhd_bytes),
+                        // NEW: smaps fields
+                        heap_rss_mib = format_opt_mib(diag.heap_rss_bytes),
+                        anon_rss_mib = format_opt_mib(diag.anon_rss_bytes),
+                        // NEW: unaccounted gap
+                        unaccounted_mib = diag.unaccounted_bytes()
+                            .map(|b| format!("{:.1}", b as f64 / 1_048_576.0))
+                            .unwrap_or_else(|| "N/A".into()),
                         "Heartbeat"
                     );
                 }
@@ -454,7 +520,20 @@ impl Subscriber for BronzeSubscriber {
                 result = receiver.recv() => {
                     match result {
                         Ok(point) => {
+                            let rss_enter = read_proc_status_rss_bytes();
                             self.handle_point(point);
+                            let rss_exit = read_proc_status_rss_bytes();
+                            if let (Some(e), Some(x)) = (rss_enter, rss_exit) {
+                                let delta = x as i64 - e as i64;
+                                if delta.unsigned_abs() > 1_048_576 {
+                                    debug!(
+                                        subscriber_id = %self.id,
+                                        subsystem = "BronzeIngest",
+                                        rss_delta_mib = format!("{:+.1}", delta as f64 / 1_048_576.0),
+                                        "Subsystem memory delta > 1 MiB"
+                                    );
+                                }
+                            }
                         }
                         Err(RecvError::Lagged(n)) => {
                             warn!(
@@ -541,22 +620,6 @@ impl Subscriber for BronzeSubscriber {
     }
 }
 
-/// Read process RSS from /proc/self/status (Linux only). Returns MiB.
-fn read_process_rss_mib() -> Option<f64> {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|s| {
-            s.lines()
-                .find(|line| line.starts_with("VmRSS:"))
-                .and_then(|line| {
-                    line.split_whitespace()
-                        .nth(1)
-                        .and_then(|kb| kb.parse::<f64>().ok())
-                        .map(|kb| kb / 1024.0)
-                })
-        })
-}
-
 /// Extract stream_id from source_id by removing the protocol suffix
 ///
 /// source_id format: "{stream_id}-{SourceType}" (e.g., "air-quality-Mqtt", "nws-forecast-Http")
@@ -607,11 +670,8 @@ mod tests {
         config: BronzeSubscriberConfig,
         mock_store: MockRawStore,
     ) -> BronzeSubscriber {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "bronze_test_{}_{}",
-            id,
-            uuid::Uuid::new_v4()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("bronze_test_{}_{}", id, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let wal_path = temp_dir.join("wal.log");
         let data_dir = temp_dir.join("data");
@@ -626,11 +686,8 @@ mod tests {
         config: BronzeSubscriberConfig,
         mock_store: MockRawStore,
     ) -> (BronzeSubscriber, PathBuf) {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "bronze_test_{}_{}",
-            id,
-            uuid::Uuid::new_v4()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("bronze_test_{}_{}", id, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let wal_path = temp_dir.join("wal.log");
         let data_dir = temp_dir.join("data");
@@ -762,10 +819,8 @@ mod tests {
     #[test]
     fn test_subscriber_creation_returns_core_result() {
         // new() returns CoreResult<Self> because WAL creation can fail
-        let temp_dir = std::env::temp_dir().join(format!(
-            "bronze_result_test_{}",
-            uuid::Uuid::new_v4()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("bronze_result_test_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let wal_path = temp_dir.join("wal.log");
         let data_dir = temp_dir.join("data");
@@ -1218,9 +1273,8 @@ mod tests {
         mock_store: MockRawStore,
         wal_setup: impl FnOnce(&mut crate::storage::wal::WriteAheadLog),
     ) -> (BronzeSubscriber, PathBuf) {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "bronze_recovery_{}_{}", id, uuid::Uuid::new_v4()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("bronze_recovery_{}_{}", id, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let wal_path = temp_dir.join("wal.log");
         let data_dir = temp_dir.join("data");
@@ -1233,14 +1287,8 @@ mod tests {
         }
 
         // Construct subscriber -- WAL::new recovers state from existing file
-        let sub = BronzeSubscriber::new(
-            id,
-            config,
-            Arc::new(mock_store),
-            &wal_path,
-            &data_dir,
-        )
-        .unwrap();
+        let sub =
+            BronzeSubscriber::new(id, config, Arc::new(mock_store), &wal_path, &data_dir).unwrap();
         (sub, temp_dir)
     }
 
@@ -1270,7 +1318,11 @@ mod tests {
         let config = create_config(10, 60);
         let mut mock_store = MockRawStore::new();
 
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
         let ts1 = today_start + chrono::Duration::hours(1);
         let ts2 = today_start + chrono::Duration::hours(2);
         let ts3 = today_start + chrono::Duration::hours(3);
@@ -1306,22 +1358,22 @@ mod tests {
             .times(1)
             .returning(|_, _, _| Ok(vec![]));
 
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
         let ts1 = today_start + chrono::Duration::hours(4);
         let ts2 = today_start + chrono::Duration::hours(5);
 
-        let (mut subscriber, temp_dir) = create_recovery_subscriber(
-            "recovery-wal",
-            config,
-            mock_store,
-            |wal| {
+        let (mut subscriber, temp_dir) =
+            create_recovery_subscriber("recovery-wal", config, mock_store, |wal| {
                 // Append 2 entries to WAL (uncommitted -- watermark stays at 0)
                 let p1 = create_test_point_at("air-quality-Mqtt", ts1);
                 let p2 = create_test_point_at("outdoor-weather-Http", ts2);
                 wal.append_point(&p1).unwrap();
                 wal.append_point(&p2).unwrap();
-            },
-        );
+            });
 
         subscriber.recover().await.unwrap();
 
@@ -1338,7 +1390,11 @@ mod tests {
         let config = create_config(10, 60);
         let mut mock_store = MockRawStore::new();
 
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
         let ts1 = today_start + chrono::Duration::hours(1);
         let ts2 = today_start + chrono::Duration::hours(2);
         let ts3 = today_start + chrono::Duration::hours(3); // WAL-only
@@ -1355,11 +1411,8 @@ mod tests {
                 ])
             });
 
-        let (mut subscriber, temp_dir) = create_recovery_subscriber(
-            "recovery-both",
-            config,
-            mock_store,
-            |wal| {
+        let (mut subscriber, temp_dir) =
+            create_recovery_subscriber("recovery-both", config, mock_store, |wal| {
                 // Simulate: 2 entries committed (watermark=2), then 2 more uncommitted
                 let p1 = create_test_point_at("air-quality-Mqtt", ts1);
                 let p2 = create_test_point_at("air-quality-Mqtt", ts2);
@@ -1370,8 +1423,7 @@ mod tests {
                 wal.commit_to(2).unwrap(); // Snapshot committed first 2
                 wal.append_point(&p3).unwrap();
                 wal.append_point(&p4).unwrap();
-            },
-        );
+            });
 
         subscriber.recover().await.unwrap();
 
@@ -1395,25 +1447,23 @@ mod tests {
         mock_store
             .expect_query_raw()
             .times(1)
-            .returning(|_, _, _| {
-                Err(CoreError::Storage("Corrupted Parquet file".to_string()))
-            });
+            .returning(|_, _, _| Err(CoreError::Storage("Corrupted Parquet file".to_string())));
 
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
         let ts1 = today_start + chrono::Duration::hours(6);
         let ts2 = today_start + chrono::Duration::hours(7);
 
-        let (mut subscriber, temp_dir) = create_recovery_subscriber(
-            "recovery-fallback",
-            config,
-            mock_store,
-            |wal| {
+        let (mut subscriber, temp_dir) =
+            create_recovery_subscriber("recovery-fallback", config, mock_store, |wal| {
                 let p1 = create_test_point_at("air-quality-Mqtt", ts1);
                 let p2 = create_test_point_at("outdoor-weather-Http", ts2);
                 wal.append_point(&p1).unwrap();
                 wal.append_point(&p2).unwrap();
-            },
-        );
+            });
 
         // recover() should NOT return an error -- Parquet failure is non-fatal
         let result = subscriber.recover().await;
@@ -1435,16 +1485,18 @@ mod tests {
         config.snapshot_interval_secs = 3600; // Long interval -- no snapshot during test
         let mut mock_store = MockRawStore::new();
 
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
         let ts1 = today_start + chrono::Duration::hours(1);
 
         // Recovery: query_raw returns 1 point
         mock_store
             .expect_query_raw()
             .times(1)
-            .returning(move |_, _, _| {
-                Ok(vec![create_test_point_at("air-quality-Mqtt", ts1)])
-            });
+            .returning(move |_, _, _| Ok(vec![create_test_point_at("air-quality-Mqtt", ts1)]));
 
         // Final snapshot on shutdown writes accumulated data
         mock_store
@@ -1518,11 +1570,7 @@ mod integration_tests {
         }
         let mut count = 0;
         for entry in walkdir(dir) {
-            if entry
-                .extension()
-                .map(|e| e == "parquet")
-                .unwrap_or(false)
-            {
+            if entry.extension().map(|e| e == "parquet").unwrap_or(false) {
                 count += 1;
             }
         }
@@ -1578,14 +1626,9 @@ mod integration_tests {
             day_rollover_utc_hour: 0,
         };
 
-        let mut subscriber = BronzeSubscriber::new(
-            "int-test-01",
-            config,
-            store.clone(),
-            &wal_path,
-            &data_dir,
-        )
-        .unwrap();
+        let mut subscriber =
+            BronzeSubscriber::new("int-test-01", config, store.clone(), &wal_path, &data_dir)
+                .unwrap();
 
         let (tx, rx) = broadcast::channel::<Arc<RawDataPoint>>(200);
         let cancel_token = subscriber.cancellation_token.clone();
@@ -1661,14 +1704,9 @@ mod integration_tests {
                 day_rollover_utc_hour: 0,
             };
 
-            let mut subscriber = BronzeSubscriber::new(
-                "int-test-02",
-                config,
-                store.clone(),
-                &wal_path,
-                &data_dir,
-            )
-            .unwrap();
+            let mut subscriber =
+                BronzeSubscriber::new("int-test-02", config, store.clone(), &wal_path, &data_dir)
+                    .unwrap();
 
             // Feed 10 events directly via handle_point
             for i in 0..10 {
@@ -1767,14 +1805,9 @@ mod integration_tests {
             day_rollover_utc_hour: 0,
         };
 
-        let mut subscriber = BronzeSubscriber::new(
-            "int-test-03",
-            config,
-            store.clone(),
-            &wal_path,
-            &data_dir,
-        )
-        .unwrap();
+        let mut subscriber =
+            BronzeSubscriber::new("int-test-03", config, store.clone(), &wal_path, &data_dir)
+                .unwrap();
 
         // Feed 10 events
         for i in 0..10 {
@@ -1841,14 +1874,9 @@ mod integration_tests {
             day_rollover_utc_hour: 0,
         };
 
-        let mut subscriber = BronzeSubscriber::new(
-            "int-test-04",
-            config,
-            store.clone(),
-            &wal_path,
-            &data_dir,
-        )
-        .unwrap();
+        let mut subscriber =
+            BronzeSubscriber::new("int-test-04", config, store.clone(), &wal_path, &data_dir)
+                .unwrap();
 
         // Feed events from 3 different sources
         for i in 0..8 {
@@ -1919,11 +1947,7 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(aq_points.len(), 8, "air-quality should have 8 points");
-        assert_eq!(
-            ow_points.len(),
-            5,
-            "outdoor-weather should have 5 points"
-        );
+        assert_eq!(ow_points.len(), 5, "outdoor-weather should have 5 points");
         assert_eq!(nf_points.len(), 3, "nws-forecast should have 3 points");
 
         // Verify source_ids are correct in each result set

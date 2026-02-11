@@ -1,5 +1,6 @@
 pub mod config;
 pub mod coordinator;
+pub mod diagnostics;
 pub mod dimensions;
 pub mod error;
 pub mod event_bus;
@@ -91,3 +92,10 @@ pub use types::{
 // TimescaleDB dimension loading (DP-013, requires 'timescale' feature)
 #[cfg(feature = "timescale")]
 pub use dimensions::TimescaleDimensionLoader;
+
+// Memory diagnostics (ops-004, BUG-005)
+pub use diagnostics::{
+    format_opt_mib, parse_kb_value, parse_proc_smaps_summary, parse_proc_status_rss_bytes,
+    read_mallinfo2, read_proc_smaps_summary, read_proc_status_rss_bytes, read_process_rss_mib,
+    MallocStats, MemoryDiagnostics, MemoryTrend, SmapsSummary,
+};

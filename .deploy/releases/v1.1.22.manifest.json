@@ -1,0 +1,18 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.22",
+  "description": "Release v1.1.22: BUG-005 memory instrumentation — diagnostics module with mallinfo2 FFI, smaps parser, accumulator capacity tracking, enhanced heartbeat/snapshot logging",
+  "changes": [
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "build"
+    },
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "restart"
+    }
+  ]
+}

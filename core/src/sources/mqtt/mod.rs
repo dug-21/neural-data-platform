@@ -373,11 +373,7 @@ impl MqttSource {
                                 .or_else(|| ndp_id.clone());
                             let parse_context =
                                 ParseContext::new(effective_ndp_id_for_parse, context.clone());
-                            match parser.parse_with_context(
-                                &json,
-                                timestamp,
-                                &parse_context,
-                            ) {
+                            match parser.parse_with_context(&json, timestamp, &parse_context) {
                                 Ok(mut points) => {
                                     // Tag points with stream_id and topic
                                     for point in &mut points {
@@ -385,10 +381,9 @@ impl MqttSource {
                                             "stream_id".to_string(),
                                             route.stream_id.clone(),
                                         );
-                                        point.tags.insert(
-                                            "topic".to_string(),
-                                            publish.topic.clone(),
-                                        );
+                                        point
+                                            .tags
+                                            .insert("topic".to_string(), publish.topic.clone());
                                     }
                                     // Add to cache for fetch()
                                     let mut cache = cached_points.lock().await;

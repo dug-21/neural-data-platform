@@ -494,7 +494,11 @@ mod tests {
 
         let loader = MockConfigLoader::new().with_silver_config("air-quality", silver_config);
 
-        assert!(loader.silver_configs.read().unwrap().contains_key("air-quality"));
+        assert!(loader
+            .silver_configs
+            .read()
+            .unwrap()
+            .contains_key("air-quality"));
     }
 
     // ============================================================
@@ -549,8 +553,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_load_stream_config_connection_error() {
-        let loader = MockConfigLoader::new()
-            .with_error(ConfigLoaderError::ConnectionError("etcd unreachable".into()));
+        let loader = MockConfigLoader::new().with_error(ConfigLoaderError::ConnectionError(
+            "etcd unreachable".into(),
+        ));
 
         let result = loader.load_stream_config("any").await;
 
@@ -728,7 +733,10 @@ mod tests {
 
         // Verify silver config
         assert!(loader.load_silver_etl_config("air-quality").await.is_ok());
-        assert!(loader.load_silver_etl_config("outdoor-weather").await.is_err());
+        assert!(loader
+            .load_silver_etl_config("outdoor-weather")
+            .await
+            .is_err());
 
         // Verify source name
         assert_eq!(loader.source_name(), "mock");
@@ -743,7 +751,9 @@ mod tests {
         let loader = MockConfigLoader::new()
             .with_stream(create_test_stream_config("test"))
             .with_silver_config("test", create_test_silver_config())
-            .with_error(ConfigLoaderError::ConnectionError("simulated failure".into()));
+            .with_error(ConfigLoaderError::ConnectionError(
+                "simulated failure".into(),
+            ));
 
         // All methods should return the error
         assert!(matches!(

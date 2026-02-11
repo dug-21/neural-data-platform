@@ -1139,7 +1139,8 @@ mod tests {
             }
         }"#;
 
-        let config: StreamConfig = serde_json::from_str(json).expect("Should deserialize with silver_etl");
+        let config: StreamConfig =
+            serde_json::from_str(json).expect("Should deserialize with silver_etl");
         assert!(config.silver_etl.is_some());
         let etl = config.silver_etl.unwrap();
         assert!(etl.enabled);
@@ -1156,7 +1157,8 @@ mod tests {
             "sources": [{"type": "mqtt", "enabled": true}]
         }"#;
 
-        let config: StreamConfig = serde_json::from_str(json).expect("Should deserialize without silver_etl");
+        let config: StreamConfig =
+            serde_json::from_str(json).expect("Should deserialize without silver_etl");
         assert!(config.silver_etl.is_none());
     }
 
@@ -1186,7 +1188,10 @@ mod tests {
         };
 
         let json = serde_json::to_string(&config).unwrap();
-        assert!(!json.contains("silver_etl"), "silver_etl should not appear in JSON when None");
+        assert!(
+            !json.contains("silver_etl"),
+            "silver_etl should not appear in JSON when None"
+        );
     }
 
     #[test]
@@ -1217,8 +1222,14 @@ mod tests {
         };
 
         let json = serde_json::to_string(&config).unwrap();
-        assert!(json.contains("silver_etl"), "silver_etl should appear in JSON when Some");
-        assert!(json.contains("target_table"), "silver_etl fields should be serialized");
+        assert!(
+            json.contains("silver_etl"),
+            "silver_etl should appear in JSON when Some"
+        );
+        assert!(
+            json.contains("target_table"),
+            "silver_etl fields should be serialized"
+        );
     }
 
     #[test]
@@ -1256,7 +1267,8 @@ mod tests {
         let json = serde_json::to_string(&original).expect("Serialization should succeed");
 
         // Deserialize back
-        let restored: StreamConfig = serde_json::from_str(&json).expect("Deserialization should succeed");
+        let restored: StreamConfig =
+            serde_json::from_str(&json).expect("Deserialization should succeed");
 
         // Verify silver_etl survived
         assert!(restored.silver_etl.is_some());
@@ -1282,11 +1294,9 @@ mod tests {
             retention_days: 30,
             compression_after_days: 7,
             partitioning_strategy: "daily".to_string(),
-            fields: vec![
-                SchemaField::new("pm25".to_string(), FieldType::Float)
-                    .with_description("Fine particulate matter (2.5 micrometers)".to_string())
-                    .with_unit("ug/m3".to_string()),
-            ],
+            fields: vec![SchemaField::new("pm25".to_string(), FieldType::Float)
+                .with_description("Fine particulate matter (2.5 micrometers)".to_string())
+                .with_unit("ug/m3".to_string())],
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
@@ -1301,10 +1311,7 @@ mod tests {
 
         let desc = config.get_field_description("pm25");
         assert!(desc.is_some());
-        assert_eq!(
-            desc.unwrap(),
-            "Fine particulate matter (2.5 micrometers)"
-        );
+        assert_eq!(desc.unwrap(), "Fine particulate matter (2.5 micrometers)");
     }
 
     #[test]
@@ -1348,10 +1355,7 @@ mod tests {
 
         let desc = config.get_field_description("pm25");
         assert!(desc.is_some());
-        assert_eq!(
-            desc.unwrap(),
-            "PM2.5 concentration from legacy schema"
-        );
+        assert_eq!(desc.unwrap(), "PM2.5 concentration from legacy schema");
     }
 
     #[test]
@@ -1367,10 +1371,8 @@ mod tests {
             retention_days: 30,
             compression_after_days: 7,
             partitioning_strategy: "daily".to_string(),
-            fields: vec![
-                SchemaField::new("pm25".to_string(), FieldType::Float)
-                    .with_description("Primary description from v1.1".to_string()),
-            ],
+            fields: vec![SchemaField::new("pm25".to_string(), FieldType::Float)
+                .with_description("Primary description from v1.1".to_string())],
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
@@ -1397,7 +1399,7 @@ mod tests {
         assert!(desc.is_some());
         assert_eq!(
             desc.unwrap(),
-            "Primary description from v1.1"  // v1.1 wins
+            "Primary description from v1.1" // v1.1 wins
         );
     }
 
@@ -1413,9 +1415,7 @@ mod tests {
             retention_days: 30,
             compression_after_days: 7,
             partitioning_strategy: "daily".to_string(),
-            fields: vec![
-                SchemaField::new("pm25".to_string(), FieldType::Float),
-            ],
+            fields: vec![SchemaField::new("pm25".to_string(), FieldType::Float)],
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
                 enabled: true,
@@ -1496,7 +1496,7 @@ mod tests {
                 SchemaField::new("pm25".to_string(), FieldType::Float)
                     .with_description("PM2.5 from fields".to_string())
                     .with_unit("ug/m3".to_string()),
-                    // Note: no range on field
+                // Note: no range on field
             ],
             sources: vec![SourceConfig {
                 source_type: SourceType::Mqtt,
@@ -1513,9 +1513,9 @@ mod tests {
                 attributes: vec![EntitySchemaAttribute {
                     name: "pm25".to_string(),
                     description: Some("Ignored - v1.1 takes precedence".to_string()),
-                    device_class: Some("pm25".to_string()),  // Only in entity_schemas
-                    unit: Some("ignored_unit".to_string()),  // Should be ignored
-                    range: Some(vec![0.0, 500.0]),           // Should be filled from v1.0
+                    device_class: Some("pm25".to_string()), // Only in entity_schemas
+                    unit: Some("ignored_unit".to_string()), // Should be ignored
+                    range: Some(vec![0.0, 500.0]),          // Should be filled from v1.0
                 }],
             }]),
         };
@@ -1566,8 +1566,8 @@ mod tests {
             ]
         }"#;
 
-        let config: StreamConfig = serde_json::from_str(json)
-            .expect("Should deserialize with entity_schemas");
+        let config: StreamConfig =
+            serde_json::from_str(json).expect("Should deserialize with entity_schemas");
 
         assert!(config.entity_schemas.is_some());
         let schemas = config.entity_schemas.unwrap();

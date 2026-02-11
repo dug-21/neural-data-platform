@@ -198,7 +198,10 @@ fn test_schema_accepts_config_with_both_fields_and_entity_schemas() {
     let config = result.unwrap();
 
     // Fields should have enriched data
-    assert_eq!(config.fields[0].description, Some("Particulate matter 2.5um".to_string()));
+    assert_eq!(
+        config.fields[0].description,
+        Some("Particulate matter 2.5um".to_string())
+    );
 }
 
 // ============================================================================
@@ -223,7 +226,10 @@ fn test_schema_rejects_invalid_stream_id_uppercase() {
 
     // Act - Parse and validate
     let result: Result<platform_core::StreamConfig, _> = serde_json::from_value(config_json);
-    assert!(result.is_ok(), "Parsing should succeed, validation catches error");
+    assert!(
+        result.is_ok(),
+        "Parsing should succeed, validation catches error"
+    );
 
     let config = result.unwrap();
     let validation = config.validate();
@@ -319,7 +325,10 @@ fn test_schema_requires_at_least_one_field() {
 
     // Assert - Validation should fail with NoFields error
     assert!(validation.is_err());
-    assert_eq!(validation.unwrap_err(), platform_core::StreamConfigError::NoFields);
+    assert_eq!(
+        validation.unwrap_err(),
+        platform_core::StreamConfigError::NoFields
+    );
 }
 
 #[test]
@@ -343,7 +352,10 @@ fn test_schema_requires_at_least_one_source() {
 
     // Assert
     assert!(validation.is_err());
-    assert_eq!(validation.unwrap_err(), platform_core::StreamConfigError::NoSources);
+    assert_eq!(
+        validation.unwrap_err(),
+        platform_core::StreamConfigError::NoSources
+    );
 }
 
 // ============================================================================
@@ -495,14 +507,17 @@ fn test_serialization_skips_none_optional_fields() {
     // Arrange - Create config with minimal fields
     let config = platform_core::StreamConfig {
         stream_id: "test-stream".to_string(),
-        stream_type: None,  // FE-001: Optional for backward compatibility
+        stream_type: None, // FE-001: Optional for backward compatibility
         description: "Test".to_string(),
         version: "1.0.0".to_string(),
         enabled: true,
         retention_days: 0,
         compression_after_days: 0,
         partitioning_strategy: "daily".to_string(),
-        fields: vec![platform_core::SchemaField::new("value".to_string(), platform_core::FieldType::Float)],
+        fields: vec![platform_core::SchemaField::new(
+            "value".to_string(),
+            platform_core::FieldType::Float,
+        )],
         sources: vec![platform_core::SourceConfig {
             source_type: platform_core::SourceType::Mqtt,
             enabled: true,
@@ -527,11 +542,12 @@ fn test_serialization_skips_none_optional_fields() {
 #[test]
 fn test_serialization_includes_present_optional_fields() {
     // Arrange - Create field with all optional fields populated
-    let field = platform_core::SchemaField::new("pm25".to_string(), platform_core::FieldType::Float)
-        .with_description("PM2.5 concentration".to_string())
-        .with_unit("ug/m3".to_string())
-        .with_range(0.0, 500.0)
-        .with_precision(1);
+    let field =
+        platform_core::SchemaField::new("pm25".to_string(), platform_core::FieldType::Float)
+            .with_description("PM2.5 concentration".to_string())
+            .with_unit("ug/m3".to_string())
+            .with_range(0.0, 500.0)
+            .with_precision(1);
 
     // Act
     let json_str = serde_json::to_string(&field).unwrap();
@@ -552,20 +568,21 @@ fn test_json_roundtrip_preserves_all_data() {
     // Arrange
     let original = platform_core::StreamConfig {
         stream_id: "roundtrip-test".to_string(),
-        stream_type: None,  // FE-001: Optional for backward compatibility
+        stream_type: None, // FE-001: Optional for backward compatibility
         description: "Roundtrip test config".to_string(),
         version: "1.1.0".to_string(),
         enabled: true,
         retention_days: 365,
         compression_after_days: 7,
         partitioning_strategy: "daily".to_string(),
-        fields: vec![
-            platform_core::SchemaField::new("pm25".to_string(), platform_core::FieldType::Float)
-                .required()
-                .with_unit("ug/m3".to_string())
-                .with_description("PM2.5".to_string())
-                .with_range(0.0, 500.0),
-        ],
+        fields: vec![platform_core::SchemaField::new(
+            "pm25".to_string(),
+            platform_core::FieldType::Float,
+        )
+        .required()
+        .with_unit("ug/m3".to_string())
+        .with_description("PM2.5".to_string())
+        .with_range(0.0, 500.0)],
         sources: vec![platform_core::SourceConfig {
             source_type: platform_core::SourceType::Mqtt,
             enabled: true,

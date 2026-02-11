@@ -305,9 +305,7 @@ impl WriteAheadLog {
 
     /// Return the WAL file size in bytes (0 if file doesn't exist).
     pub fn file_size_bytes(&self) -> u64 {
-        std::fs::metadata(&self.path)
-            .map(|m| m.len())
-            .unwrap_or(0)
+        std::fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0)
     }
 }
 
@@ -710,7 +708,10 @@ mod tests {
         let legacy_entries = wal.replay().unwrap();
         for entry_bytes in &legacy_entries {
             let line = std::str::from_utf8(entry_bytes).unwrap();
-            assert!(!line.contains("__watermark"), "Legacy replay should skip watermark headers");
+            assert!(
+                !line.contains("__watermark"),
+                "Legacy replay should skip watermark headers"
+            );
         }
 
         let _ = fs::remove_file(&path);

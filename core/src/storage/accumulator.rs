@@ -86,8 +86,9 @@ impl Accumulator {
     }
 
     /// Clear all data, resetting count and timestamp bounds. Active date is preserved.
+    /// Replaces the inner HashMap to release allocated bucket capacity.
     pub fn clear(&mut self) {
-        self.points.clear();
+        self.points = HashMap::new();
         self.count = 0;
         self.earliest = None;
         self.latest = None;
@@ -150,23 +151,48 @@ impl Accumulator {
     /// serialized size estimates. This is a rough estimate for backpressure.
     pub fn memory_estimate_bytes(&self) -> usize {
         let hashmap_overhead = std::mem::size_of::<HashMap<String, Vec<RawDataPoint>>>();
-        let per_bucket_overhead = self.points.len() * (
-            std::mem::size_of::<String>()          // key
+        let per_bucket_overhead = self.points.len()
+            * (
+                std::mem::size_of::<String>()          // key
             + std::mem::size_of::<Vec<RawDataPoint>>() // value vec header
-            + 64  // HashMap bucket metadata estimate
-        );
+            + 64
+                // HashMap bucket metadata estimate
+            );
 
-        let per_point: usize = self.points.values().map(|pts| {
-            pts.iter().map(|p| {
-                std::mem::size_of::<RawDataPoint>()
-                    + p.source_id.len()
-                    + p.ndp_id.as_ref().map(|s| s.len()).unwrap_or(0)
-                    + p.raw_payload.to_string().len()
-                    + p.context.as_ref().map(|c| c.to_string().len()).unwrap_or(0)
-            }).sum::<usize>()
-        }).sum();
+        let per_point: usize = self
+            .points
+            .values()
+            .map(|pts| {
+                pts.iter()
+                    .map(|p| {
+                        std::mem::size_of::<RawDataPoint>()
+                            + p.source_id.len()
+                            + p.ndp_id.as_ref().map(|s| s.len()).unwrap_or(0)
+                            + p.raw_payload.to_string().len()
+                            + p.context.as_ref().map(|c| c.to_string().len()).unwrap_or(0)
+                    })
+                    .sum::<usize>()
+            })
+            .sum();
 
         hashmap_overhead + per_bucket_overhead + per_point
+    }
+
+    /// Number of allocated HashMap buckets (capacity, not len).
+    /// This reveals over-allocation from HashMap growth.
+    pub fn hash_capacity(&self) -> usize {
+        self.points.capacity()
+    }
+
+    /// Sum of capacity() across all inner Vecs.
+    /// Reveals allocation headroom that Vec::push reserves.
+    pub fn vec_capacity(&self) -> usize {
+        self.points.values().map(|v| v.capacity()).sum()
+    }
+
+    /// Sum of len() across all inner Vecs (should equal self.count).
+    pub fn vec_len(&self) -> usize {
+        self.points.values().map(|v| v.len()).sum()
     }
 
     /// Recompute count, earliest, and latest from current contents.
@@ -267,8 +293,14 @@ mod tests {
         let ts = Utc.with_ymd_and_hms(2026, 2, 8, 10, 0, 0).unwrap();
 
         acc.add(make_point("air-quality-Mqtt", ts));
-        acc.add(make_point("air-quality-Mqtt", ts + chrono::Duration::minutes(1)));
-        acc.add(make_point("outdoor-weather-Http", ts + chrono::Duration::minutes(2)));
+        acc.add(make_point(
+            "air-quality-Mqtt",
+            ts + chrono::Duration::minutes(1),
+        ));
+        acc.add(make_point(
+            "outdoor-weather-Http",
+            ts + chrono::Duration::minutes(2),
+        ));
 
         assert_eq!(acc.count(), 3);
         assert_eq!(acc.source_count(), 2);
@@ -334,7 +366,11 @@ mod tests {
         assert_eq!(acc.source_count(), 0);
         assert!(acc.earliest().is_none());
         assert!(acc.latest().is_none());
-        assert_eq!(acc.active_date(), today, "active_date should be preserved after clear");
+        assert_eq!(
+            acc.active_date(),
+            today,
+            "active_date should be preserved after clear"
+        );
     }
 
     // ========== TDD CYCLE 7: drain_for_date ==========
@@ -354,7 +390,10 @@ mod tests {
         // 2 points for yesterday
         let ts_yesterday = Utc.with_ymd_and_hms(2026, 2, 7, 22, 0, 0).unwrap();
         for i in 0..2 {
-            acc.add(make_point("src-a", ts_yesterday + chrono::Duration::hours(i)));
+            acc.add(make_point(
+                "src-a",
+                ts_yesterday + chrono::Duration::hours(i),
+            ));
         }
 
         assert_eq!(acc.count(), 5);
@@ -386,12 +425,18 @@ mod tests {
         // Source "A": 2 points yesterday only
         let ts_yesterday = Utc.with_ymd_and_hms(2026, 2, 7, 20, 0, 0).unwrap();
         acc.add(make_point("source-A", ts_yesterday));
-        acc.add(make_point("source-A", ts_yesterday + chrono::Duration::hours(1)));
+        acc.add(make_point(
+            "source-A",
+            ts_yesterday + chrono::Duration::hours(1),
+        ));
 
         // Source "B": 2 points today only
         let ts_today = Utc.with_ymd_and_hms(2026, 2, 8, 10, 0, 0).unwrap();
         acc.add(make_point("source-B", ts_today));
-        acc.add(make_point("source-B", ts_today + chrono::Duration::hours(1)));
+        acc.add(make_point(
+            "source-B",
+            ts_today + chrono::Duration::hours(1),
+        ));
 
         assert_eq!(acc.source_count(), 2);
 
@@ -528,5 +573,64 @@ mod tests {
         // Second access works
         let snapshot2 = acc.all_points_by_source();
         assert_eq!(snapshot2.len(), 2);
+    }
+
+    // ========== TDD CYCLE 14: Capacity introspection ==========
+
+    #[test]
+    fn test_hash_capacity_empty() {
+        let acc = Accumulator::new(Utc::now().date_naive());
+        assert_eq!(acc.hash_capacity(), 0);
+    }
+
+    #[test]
+    fn test_hash_capacity_grows_with_sources() {
+        let mut acc = Accumulator::new(Utc::now().date_naive());
+        let ts = Utc::now();
+        for i in 0..10 {
+            acc.add(make_point(&format!("source-{}", i), ts));
+        }
+        assert!(acc.hash_capacity() >= 10);
+    }
+
+    #[test]
+    fn test_vec_capacity_ge_vec_len() {
+        let mut acc = Accumulator::new(Utc::now().date_naive());
+        let ts = Utc::now();
+        for i in 0..50 {
+            acc.add(make_point("source-a", ts + chrono::Duration::seconds(i)));
+        }
+        assert_eq!(acc.vec_len(), 50);
+        assert!(acc.vec_capacity() >= 50);
+    }
+
+    #[test]
+    fn test_vec_capacity_multiple_sources() {
+        let mut acc = Accumulator::new(Utc::now().date_naive());
+        let ts = Utc::now();
+        for s in 0..3 {
+            for i in 0..10 {
+                acc.add(make_point(
+                    &format!("source-{}", s),
+                    ts + chrono::Duration::seconds(i),
+                ));
+            }
+        }
+        assert_eq!(acc.vec_len(), 30);
+        assert!(acc.vec_capacity() >= 30);
+    }
+
+    #[test]
+    fn test_vec_capacity_after_clear() {
+        let mut acc = Accumulator::new(Utc::now().date_naive());
+        let ts = Utc::now();
+        for i in 0..100 {
+            acc.add(make_point("src", ts + chrono::Duration::seconds(i)));
+        }
+        assert!(acc.vec_capacity() >= 100);
+        acc.clear();
+        assert_eq!(acc.vec_capacity(), 0);
+        assert_eq!(acc.vec_len(), 0);
+        assert_eq!(acc.hash_capacity(), 0);
     }
 }

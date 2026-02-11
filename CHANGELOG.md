@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.22] - 2026-02-11
+
+ops-004: Memory instrumentation for BUG-005 RSS drift investigation. Adds diagnostics module with glibc mallinfo2 FFI, /proc/self/smaps parser, accumulator capacity tracking, and enhanced heartbeat/snapshot logging to attribute the ~121 MiB unaccounted RSS gap observed during 13.5h production runs on Pi 5.
+
+### Added
+
+- **`core/src/diagnostics/mod.rs`** — new diagnostics module root with re-exports
+- **`core/src/diagnostics/memory.rs`** — central memory diagnostics:
+  - `MemoryDiagnostics` struct with `collect(&Accumulator)` for single-snapshot metrics
+  - `SmapsSummary` — RSS decomposition by mapping type (heap, stack, anonymous, file-backed)
+  - `MallocStats` — glibc mallinfo2 allocator statistics via `dlsym` FFI (runtime graceful degradation on glibc < 2.33)
+  - `MemoryTrend` — ring buffer for RSS growth rate computation (bytes/hour)
+  - Pure parse functions: `parse_kb_value`, `parse_proc_status_rss_bytes`, `parse_proc_smaps_summary`
+  - Read functions: `read_proc_status_rss_bytes`, `read_proc_smaps_summary`, `read_mallinfo2`
+  - Helper: `format_opt_mib` for "X.Y" MiB / "N/A" formatting
+- **Accumulator capacity methods**: `hash_capacity()`, `vec_capacity()`, `vec_len()` on `Accumulator` struct
+- **Enhanced heartbeat**: allocator stats (`arena_mib`, `fordblks_mib`, `hblkhd_mib`), smaps decomposition (`heap_rss_mib`, `anon_rss_mib`), accumulator capacity (`accum_hash_cap`, `accum_vec_cap`, `accum_vec_len`), unaccounted gap (`unaccounted_mib`)
+- **Enhanced snapshot**: allocator stats before/after writes, per-source RSS delta tracking (debug level), fordblks fragmentation delta
+- **Memory trend summary**: every 10 snapshots, logs RSS growth rate (MiB/hour) from ring buffer
+- **Subsystem memory attribution**: RSS delta > 1 MiB around `handle_point()` logged at debug level
+- 32 new unit tests (27 diagnostics + 5 accumulator capacity)
+
+### Changed
+
+- `read_process_rss_mib()` moved from `bronze.rs` to `diagnostics::memory` (consolidation)
+- `Accumulator::clear()` now uses `HashMap::new()` instead of `HashMap::clear()` to release bucket capacity (correct behavior for day rollover memory reclamation)
+- Heartbeat log line: all existing fields preserved (backward compatible), new fields appended
+
+### Technical Notes
+
+- No new crate dependencies — uses raw `extern "C"` FFI via `dlsym` for mallinfo2, `std::fs` for procfs
+- `#[cfg(target_os = "linux")]` guards with `None` fallback on non-Linux
+- 895 platform-core lib tests passing (32 new + 863 existing)
+- GitHub Issue #16 (BUG-005) tracks the investigation
+
 ## [1.1.21] - 2026-02-10
 
 air-018: Replace Polars with arrow-rs + parquet crate in Bronze write/read path. Fixes BUG-004 OOM — Polars DataFrame create/drop leaked ~4.5 MiB per 30-min snapshot cycle on Pi 5, exhausting the 512 MiB container within 24-36 hours. Alternative allocators (jemalloc, mimalloc) crash on Pi 5 / kernel 6.14+ / cgroup v2.

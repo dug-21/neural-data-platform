@@ -4,11 +4,11 @@ use crate::traits::{
     AggregatedPoint, AggregationType, HealthStatus, RawStore, Store, TimeSeriesPoint,
 };
 use crate::types::RawDataPoint;
-use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Utc};
 use arrow::array::{Array, ArrayRef, Float64Array, Int64Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
+use async_trait::async_trait;
+use chrono::{DateTime, Datelike, Utc};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
@@ -96,8 +96,8 @@ impl ParquetStore {
             Field::new("location_id", DataType::Utf8, false),
             Field::new("metric", DataType::Utf8, false),
             Field::new("value", DataType::Float64, false),
-            Field::new("ndp_id", DataType::Utf8, true),   // nullable
-            Field::new("context", DataType::Utf8, true),   // nullable
+            Field::new("ndp_id", DataType::Utf8, true), // nullable
+            Field::new("context", DataType::Utf8, true), // nullable
         ]))
     }
 
@@ -106,8 +106,8 @@ impl ParquetStore {
         Arc::new(Schema::new(vec![
             Field::new("timestamp", DataType::Int64, false),
             Field::new("source_id", DataType::Utf8, false),
-            Field::new("ndp_id", DataType::Utf8, true),     // nullable
-            Field::new("context", DataType::Utf8, true),     // nullable
+            Field::new("ndp_id", DataType::Utf8, true), // nullable
+            Field::new("context", DataType::Utf8, true), // nullable
             Field::new("raw_payload", DataType::Utf8, false),
         ]))
     }
@@ -159,12 +159,8 @@ impl ParquetStore {
 
             // -- Build Arrow arrays --
             let ts_array = Int64Array::from(timestamps);
-            let loc_array = StringArray::from(
-                location_ids.into_iter().collect::<Vec<&str>>(),
-            );
-            let metric_array = StringArray::from(
-                metrics.into_iter().collect::<Vec<&str>>(),
-            );
+            let loc_array = StringArray::from(location_ids.into_iter().collect::<Vec<&str>>());
+            let metric_array = StringArray::from(metrics.into_iter().collect::<Vec<&str>>());
             let val_array = Float64Array::from(values);
             // Nullable StringArray from Vec<Option<String>>:
             let ndp_id_array = StringArray::from(
@@ -181,14 +177,17 @@ impl ParquetStore {
             );
 
             // -- Build RecordBatch --
-            let batch = RecordBatch::try_new(schema.clone(), vec![
-                Arc::new(ts_array) as ArrayRef,
-                Arc::new(loc_array) as ArrayRef,
-                Arc::new(metric_array) as ArrayRef,
-                Arc::new(val_array) as ArrayRef,
-                Arc::new(ndp_id_array) as ArrayRef,
-                Arc::new(context_array) as ArrayRef,
-            ])
+            let batch = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(ts_array) as ArrayRef,
+                    Arc::new(loc_array) as ArrayRef,
+                    Arc::new(metric_array) as ArrayRef,
+                    Arc::new(val_array) as ArrayRef,
+                    Arc::new(ndp_id_array) as ArrayRef,
+                    Arc::new(context_array) as ArrayRef,
+                ],
+            )
             .map_err(|e| CoreError::Storage(format!("Failed to create RecordBatch: {}", e)))?;
 
             // -- Write Parquet with Snappy compression --
@@ -201,9 +200,9 @@ impl ParquetStore {
             writer
                 .write(&batch)
                 .map_err(|e| CoreError::Storage(format!("Failed to write Parquet: {}", e)))?;
-            writer
-                .close()
-                .map_err(|e| CoreError::Storage(format!("Failed to close Parquet writer: {}", e)))?;
+            writer.close().map_err(|e| {
+                CoreError::Storage(format!("Failed to close Parquet writer: {}", e))
+            })?;
 
             Ok::<_, CoreError>(())
         })
@@ -218,10 +217,12 @@ impl ParquetStore {
 
         if path.exists() {
             let file = std::fs::File::open(path)?;
-            let builder = ParquetRecordBatchReaderBuilder::try_new(file)
-                .map_err(|e| CoreError::Storage(format!("Failed to read existing Parquet: {}", e)))?;
-            let reader = builder.build()
-                .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file).map_err(|e| {
+                CoreError::Storage(format!("Failed to read existing Parquet: {}", e))
+            })?;
+            let reader = builder.build().map_err(|e| {
+                CoreError::Storage(format!("Failed to build Parquet reader: {}", e))
+            })?;
 
             for batch_result in reader {
                 let batch = batch_result
@@ -380,8 +381,9 @@ impl Store for ParquetStore {
                 let file = std::fs::File::open(&path)?;
                 let builder = ParquetRecordBatchReaderBuilder::try_new(file)
                     .map_err(|e| CoreError::Storage(format!("Failed to read Parquet: {}", e)))?;
-                let reader = builder.build()
-                    .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
+                let reader = builder.build().map_err(|e| {
+                    CoreError::Storage(format!("Failed to build Parquet reader: {}", e))
+                })?;
 
                 for batch_result in reader {
                     let batch = batch_result
@@ -399,10 +401,14 @@ impl Store for ParquetStore {
 
                     let location_ids = batch
                         .column_by_name("location_id")
-                        .ok_or_else(|| CoreError::Storage("Missing location_id column".to_string()))?
+                        .ok_or_else(|| {
+                            CoreError::Storage("Missing location_id column".to_string())
+                        })?
                         .as_any()
                         .downcast_ref::<StringArray>()
-                        .ok_or_else(|| CoreError::Storage("Invalid location_id type".to_string()))?;
+                        .ok_or_else(|| {
+                            CoreError::Storage("Invalid location_id type".to_string())
+                        })?;
 
                     let metrics_col = batch
                         .column_by_name("metric")
@@ -661,7 +667,11 @@ impl ParquetStore {
     ///
     /// Public for direct use by BronzeSubscriber snapshot writes (AIR-017),
     /// bypassing the read-modify-write path of append_to_raw_parquet.
-    pub async fn write_raw_parquet(&self, points: Vec<RawDataPoint>, path: &Path) -> CoreResult<()> {
+    pub async fn write_raw_parquet(
+        &self,
+        points: Vec<RawDataPoint>,
+        path: &Path,
+    ) -> CoreResult<()> {
         if points.is_empty() {
             return Ok(());
         }
@@ -696,9 +706,7 @@ impl ParquetStore {
 
             // -- Build Arrow arrays --
             let ts_array = Int64Array::from(timestamps);
-            let source_id_array = StringArray::from(
-                source_ids.into_iter().collect::<Vec<&str>>(),
-            );
+            let source_id_array = StringArray::from(source_ids.into_iter().collect::<Vec<&str>>());
             // Nullable arrays from Vec<Option<String>>
             let ndp_id_array = StringArray::from(
                 ndp_ids
@@ -713,17 +721,23 @@ impl ParquetStore {
                     .collect::<Vec<Option<&str>>>(),
             );
             let payload_array = StringArray::from(
-                raw_payloads.iter().map(|s| s.as_str()).collect::<Vec<&str>>(),
+                raw_payloads
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<&str>>(),
             );
 
             // -- Build RecordBatch --
-            let batch = RecordBatch::try_new(schema.clone(), vec![
-                Arc::new(ts_array) as ArrayRef,
-                Arc::new(source_id_array) as ArrayRef,
-                Arc::new(ndp_id_array) as ArrayRef,
-                Arc::new(context_array) as ArrayRef,
-                Arc::new(payload_array) as ArrayRef,
-            ])
+            let batch = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(ts_array) as ArrayRef,
+                    Arc::new(source_id_array) as ArrayRef,
+                    Arc::new(ndp_id_array) as ArrayRef,
+                    Arc::new(context_array) as ArrayRef,
+                    Arc::new(payload_array) as ArrayRef,
+                ],
+            )
             .map_err(|e| CoreError::Storage(format!("Failed to create RecordBatch: {}", e)))?;
 
             // -- Write Parquet with Snappy compression --
@@ -736,9 +750,9 @@ impl ParquetStore {
             writer
                 .write(&batch)
                 .map_err(|e| CoreError::Storage(format!("Failed to write Parquet: {}", e)))?;
-            writer
-                .close()
-                .map_err(|e| CoreError::Storage(format!("Failed to close Parquet writer: {}", e)))?;
+            writer.close().map_err(|e| {
+                CoreError::Storage(format!("Failed to close Parquet writer: {}", e))
+            })?;
 
             Ok::<_, CoreError>(())
         })
@@ -766,10 +780,12 @@ impl ParquetStore {
 
         if path.exists() {
             let file = std::fs::File::open(&path)?;
-            let builder = ParquetRecordBatchReaderBuilder::try_new(file)
-                .map_err(|e| CoreError::Storage(format!("Failed to read existing Parquet: {}", e)))?;
-            let reader = builder.build()
-                .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
+            let builder = ParquetRecordBatchReaderBuilder::try_new(file).map_err(|e| {
+                CoreError::Storage(format!("Failed to read existing Parquet: {}", e))
+            })?;
+            let reader = builder.build().map_err(|e| {
+                CoreError::Storage(format!("Failed to build Parquet reader: {}", e))
+            })?;
 
             for batch_result in reader {
                 let batch = batch_result
@@ -974,8 +990,9 @@ impl RawStore for ParquetStore {
             let file = std::fs::File::open(&path)?;
             let builder = ParquetRecordBatchReaderBuilder::try_new(file)
                 .map_err(|e| CoreError::Storage(format!("Failed to read Parquet: {}", e)))?;
-            let reader = builder.build()
-                .map_err(|e| CoreError::Storage(format!("Failed to build Parquet reader: {}", e)))?;
+            let reader = builder.build().map_err(|e| {
+                CoreError::Storage(format!("Failed to build Parquet reader: {}", e))
+            })?;
 
             for batch_result in reader {
                 let batch = batch_result
@@ -1906,26 +1923,76 @@ mod tests {
         let schema = builder.schema().clone();
 
         // Verify column count
-        assert_eq!(schema.fields().len(), 6, "TimeSeriesPoint schema should have exactly 6 columns");
+        assert_eq!(
+            schema.fields().len(),
+            6,
+            "TimeSeriesPoint schema should have exactly 6 columns"
+        );
 
         // Verify column names in order
-        let expected_names = ["timestamp", "location_id", "metric", "value", "ndp_id", "context"];
+        let expected_names = [
+            "timestamp",
+            "location_id",
+            "metric",
+            "value",
+            "ndp_id",
+            "context",
+        ];
         let actual_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
-        assert_eq!(actual_names, expected_names, "Column names must match in order");
+        assert_eq!(
+            actual_names, expected_names,
+            "Column names must match in order"
+        );
 
         // Verify column types
-        assert_eq!(*schema.field(0).data_type(), DataType::Int64, "timestamp should be Int64");
-        assert_eq!(*schema.field(1).data_type(), DataType::Utf8, "location_id should be Utf8");
-        assert_eq!(*schema.field(2).data_type(), DataType::Utf8, "metric should be Utf8");
-        assert_eq!(*schema.field(3).data_type(), DataType::Float64, "value should be Float64");
-        assert_eq!(*schema.field(4).data_type(), DataType::Utf8, "ndp_id should be Utf8");
-        assert_eq!(*schema.field(5).data_type(), DataType::Utf8, "context should be Utf8");
+        assert_eq!(
+            *schema.field(0).data_type(),
+            DataType::Int64,
+            "timestamp should be Int64"
+        );
+        assert_eq!(
+            *schema.field(1).data_type(),
+            DataType::Utf8,
+            "location_id should be Utf8"
+        );
+        assert_eq!(
+            *schema.field(2).data_type(),
+            DataType::Utf8,
+            "metric should be Utf8"
+        );
+        assert_eq!(
+            *schema.field(3).data_type(),
+            DataType::Float64,
+            "value should be Float64"
+        );
+        assert_eq!(
+            *schema.field(4).data_type(),
+            DataType::Utf8,
+            "ndp_id should be Utf8"
+        );
+        assert_eq!(
+            *schema.field(5).data_type(),
+            DataType::Utf8,
+            "context should be Utf8"
+        );
 
         // Verify nullable flags
-        assert!(!schema.field(0).is_nullable(), "timestamp should NOT be nullable");
-        assert!(!schema.field(1).is_nullable(), "location_id should NOT be nullable");
-        assert!(!schema.field(2).is_nullable(), "metric should NOT be nullable");
-        assert!(!schema.field(3).is_nullable(), "value should NOT be nullable");
+        assert!(
+            !schema.field(0).is_nullable(),
+            "timestamp should NOT be nullable"
+        );
+        assert!(
+            !schema.field(1).is_nullable(),
+            "location_id should NOT be nullable"
+        );
+        assert!(
+            !schema.field(2).is_nullable(),
+            "metric should NOT be nullable"
+        );
+        assert!(
+            !schema.field(3).is_nullable(),
+            "value should NOT be nullable"
+        );
         assert!(schema.field(4).is_nullable(), "ndp_id MUST be nullable");
         assert!(schema.field(5).is_nullable(), "context MUST be nullable");
 
@@ -1938,9 +2005,16 @@ mod tests {
         assert_eq!(metadata.file_metadata().num_rows(), 3, "Should have 3 rows");
 
         // Verify Snappy compression on every column in every row group
-        assert!(metadata.num_row_groups() > 0, "Should have at least one row group");
+        assert!(
+            metadata.num_row_groups() > 0,
+            "Should have at least one row group"
+        );
         let row_group = metadata.row_group(0);
-        assert_eq!(row_group.num_columns(), 6, "Row group should have 6 columns");
+        assert_eq!(
+            row_group.num_columns(),
+            6,
+            "Row group should have 6 columns"
+        );
         for col_idx in 0..row_group.num_columns() {
             let col_meta = row_group.column(col_idx);
             assert_eq!(
@@ -1963,15 +2037,24 @@ mod tests {
 
         // Arrange - write 3 RawDataPoints with varied nullable values
         let points = vec![
-            RawDataPoint::new("schema-test-Http", serde_json::json!({"sensor": "pm25", "value": 12.5}))
-                .with_timestamp(base_time)
-                .with_ndp_id("device-001")
-                .with_context(serde_json::json!({"room": "office"})),
-            RawDataPoint::new("schema-test-Http", serde_json::json!({"sensor": "co2", "value": 450}))
-                .with_timestamp(base_time + chrono::Duration::minutes(1)),
-            RawDataPoint::new("schema-test-Http", serde_json::json!({"sensor": "temp", "value": 23.1}))
-                .with_timestamp(base_time + chrono::Duration::minutes(2))
-                .with_ndp_id("device-003"),
+            RawDataPoint::new(
+                "schema-test-Http",
+                serde_json::json!({"sensor": "pm25", "value": 12.5}),
+            )
+            .with_timestamp(base_time)
+            .with_ndp_id("device-001")
+            .with_context(serde_json::json!({"room": "office"})),
+            RawDataPoint::new(
+                "schema-test-Http",
+                serde_json::json!({"sensor": "co2", "value": 450}),
+            )
+            .with_timestamp(base_time + chrono::Duration::minutes(1)),
+            RawDataPoint::new(
+                "schema-test-Http",
+                serde_json::json!({"sensor": "temp", "value": 23.1}),
+            )
+            .with_timestamp(base_time + chrono::Duration::minutes(2))
+            .with_ndp_id("device-003"),
         ];
 
         // Act
@@ -1986,26 +2069,62 @@ mod tests {
         let schema = builder.schema().clone();
 
         // Verify column count
-        assert_eq!(schema.fields().len(), 5, "RawDataPoint schema should have exactly 5 columns");
+        assert_eq!(
+            schema.fields().len(),
+            5,
+            "RawDataPoint schema should have exactly 5 columns"
+        );
 
         // Verify column names in order
         let expected_names = ["timestamp", "source_id", "ndp_id", "context", "raw_payload"];
         let actual_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
-        assert_eq!(actual_names, expected_names, "Column names must match in order");
+        assert_eq!(
+            actual_names, expected_names,
+            "Column names must match in order"
+        );
 
         // Verify column types
-        assert_eq!(*schema.field(0).data_type(), DataType::Int64, "timestamp should be Int64");
-        assert_eq!(*schema.field(1).data_type(), DataType::Utf8, "source_id should be Utf8");
-        assert_eq!(*schema.field(2).data_type(), DataType::Utf8, "ndp_id should be Utf8");
-        assert_eq!(*schema.field(3).data_type(), DataType::Utf8, "context should be Utf8");
-        assert_eq!(*schema.field(4).data_type(), DataType::Utf8, "raw_payload should be Utf8");
+        assert_eq!(
+            *schema.field(0).data_type(),
+            DataType::Int64,
+            "timestamp should be Int64"
+        );
+        assert_eq!(
+            *schema.field(1).data_type(),
+            DataType::Utf8,
+            "source_id should be Utf8"
+        );
+        assert_eq!(
+            *schema.field(2).data_type(),
+            DataType::Utf8,
+            "ndp_id should be Utf8"
+        );
+        assert_eq!(
+            *schema.field(3).data_type(),
+            DataType::Utf8,
+            "context should be Utf8"
+        );
+        assert_eq!(
+            *schema.field(4).data_type(),
+            DataType::Utf8,
+            "raw_payload should be Utf8"
+        );
 
         // Verify nullable flags
-        assert!(!schema.field(0).is_nullable(), "timestamp should NOT be nullable");
-        assert!(!schema.field(1).is_nullable(), "source_id should NOT be nullable");
+        assert!(
+            !schema.field(0).is_nullable(),
+            "timestamp should NOT be nullable"
+        );
+        assert!(
+            !schema.field(1).is_nullable(),
+            "source_id should NOT be nullable"
+        );
         assert!(schema.field(2).is_nullable(), "ndp_id MUST be nullable");
         assert!(schema.field(3).is_nullable(), "context MUST be nullable");
-        assert!(!schema.field(4).is_nullable(), "raw_payload should NOT be nullable");
+        assert!(
+            !schema.field(4).is_nullable(),
+            "raw_payload should NOT be nullable"
+        );
 
         // Assert - Snappy compression via SerializedFileReader
         let file2 = std::fs::File::open(&path).unwrap();
@@ -2016,9 +2135,16 @@ mod tests {
         assert_eq!(metadata.file_metadata().num_rows(), 3, "Should have 3 rows");
 
         // Verify Snappy compression on every column in every row group
-        assert!(metadata.num_row_groups() > 0, "Should have at least one row group");
+        assert!(
+            metadata.num_row_groups() > 0,
+            "Should have at least one row group"
+        );
         let row_group = metadata.row_group(0);
-        assert_eq!(row_group.num_columns(), 5, "Row group should have 5 columns");
+        assert_eq!(
+            row_group.num_columns(),
+            5,
+            "Row group should have 5 columns"
+        );
         for col_idx in 0..row_group.num_columns() {
             let col_meta = row_group.column(col_idx);
             assert_eq!(

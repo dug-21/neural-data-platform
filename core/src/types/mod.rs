@@ -28,8 +28,8 @@ pub use raw_data_point::RawDataPoint;
 // Re-export new multi-stream types
 // Note: FieldType and SourceType are re-exported from ndp-types above
 pub use stream_config::{
-    CsvSourceConfig, EntitySchema, EntitySchemaAttribute, OnError, SchemaField,
-    SourceConfig, StorageConfig, StreamConfig, StreamConfigError, TimestampFormat,
+    CsvSourceConfig, EntitySchema, EntitySchemaAttribute, OnError, SchemaField, SourceConfig,
+    StorageConfig, StreamConfig, StreamConfigError, TimestampFormat,
 };
 pub use stream_record::{RecordMetadata, StreamRecord};
 
