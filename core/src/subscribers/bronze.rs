@@ -26,8 +26,8 @@
 //! ```
 
 use crate::diagnostics::{
-    format_opt_mib, read_mallinfo2, read_proc_status_rss_bytes, read_process_rss_mib,
-    MemoryDiagnostics, MemoryTrend,
+    do_malloc_trim, format_opt_mib, read_mallinfo2, read_proc_status_rss_bytes,
+    read_process_rss_mib, MemoryDiagnostics, MemoryTrend,
 };
 use crate::error::CoreResult;
 use crate::storage::accumulator::Accumulator;
@@ -271,16 +271,8 @@ impl BronzeSubscriber {
         // BUG-005 diagnostic: memory state AFTER Parquet writes, BEFORE malloc_trim
         let rss_after_writes = read_proc_status_rss_bytes();
 
-        // BUG-004: Force glibc to return freed pages to OS after Polars/Arrow allocations.
-        // Polars DataFrames may not release memory back to the OS on drop (see:
-        // stephenskory.com/a-polars-memory-leak-trick.html). malloc_trim nudges glibc.
-        #[cfg(target_os = "linux")]
-        {
-            extern "C" {
-                fn malloc_trim(pad: usize) -> i32;
-            }
-            unsafe { malloc_trim(0) };
-        }
+        // BUG-005: Force glibc to return freed arena pages after Arrow allocations.
+        do_malloc_trim();
 
         let rss_after_trim = read_proc_status_rss_bytes();
         let alloc_after = read_mallinfo2();
@@ -481,6 +473,12 @@ impl Subscriber for BronzeSubscriber {
 
                 // Flush timer -- periodic memory diagnostics
                 _ = flush_timer.tick() => {
+                    // BUG-005 mitigation: nudge glibc to return freed arena pages
+                    // every heartbeat (30s), not just after snapshot. With
+                    // MALLOC_ARENA_MAX=2 this reclaims interior fragmentation
+                    // that malloc_trim(0) alone cannot reach at snapshot time.
+                    do_malloc_trim();
+
                     let diag = MemoryDiagnostics::collect(&self.accumulator);
 
                     // Record RSS for trend tracking

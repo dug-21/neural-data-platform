@@ -379,6 +379,44 @@ pub fn read_mallinfo2() -> Option<MallocStats> {
 }
 
 // ---------------------------------------------------------------------------
+// malloc_trim wrapper
+// ---------------------------------------------------------------------------
+
+/// Nudge glibc to return freed arena pages to the OS.
+///
+/// On Linux, calls `malloc_trim(0)` via dlsym. Returns `true` if memory was
+/// actually released. No-op (returns `false`) on non-Linux.
+#[cfg(target_os = "linux")]
+pub fn do_malloc_trim() -> bool {
+    const RTLD_DEFAULT: *mut std::ffi::c_void = std::ptr::null_mut();
+
+    extern "C" {
+        fn dlsym(
+            handle: *mut std::ffi::c_void,
+            symbol: *const std::ffi::c_char,
+        ) -> *mut std::ffi::c_void;
+    }
+
+    type MallocTrimFn = unsafe extern "C" fn(pad: usize) -> i32;
+
+    let symbol = b"malloc_trim\0";
+    let ptr = unsafe { dlsym(RTLD_DEFAULT, symbol.as_ptr() as *const std::ffi::c_char) };
+
+    if ptr.is_null() {
+        return false;
+    }
+
+    let trim_fn: MallocTrimFn = unsafe { std::mem::transmute(ptr) };
+    let result = unsafe { trim_fn(0) };
+    result != 0
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn do_malloc_trim() -> bool {
+    false
+}
+
+// ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
 

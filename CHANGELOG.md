@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.23] - 2026-02-12
+
+ops-004 Phase 2: BUG-005 mitigation — glibc arena tuning to reduce RSS fragmentation. Overnight v1.1.22 instrumentation confirmed glibc malloc fragmentation as root cause: `fordblks` at 97 MiB (freed-but-unreturned), `arena` at 195 MiB across up to 32 independent arenas on 4-core Pi 5. Alternative allocators (jemalloc, mimalloc) crash on Pi 5 / kernel 6.14+ / cgroup v2.
+
+### Changed
+
+- **`deploy/pi/docker-compose.yml`** — added glibc tuning env vars to air-quality-app:
+  - `MALLOC_ARENA_MAX=2` — reduce from 32 default arenas to 2, consolidating freed pages so `malloc_trim` can return them to OS
+  - `MALLOC_TRIM_THRESHOLD_=65536` — lower threshold (64 KiB vs 128 KiB default) for more aggressive page return
+- **`core/src/subscribers/bronze.rs`** — `malloc_trim(0)` now called every heartbeat (30s) via `do_malloc_trim()`, not just after hourly snapshot
+- **`core/src/subscribers/bronze.rs`** — snapshot `malloc_trim` replaced inline `extern "C"` with shared `do_malloc_trim()` function
+- **`core/src/diagnostics/memory.rs`** — new `do_malloc_trim()` function using `dlsym` pattern (consistent with `read_mallinfo2`)
+
+### Technical Notes
+
+- Zero new crate dependencies — `do_malloc_trim()` uses same `dlsym(RTLD_DEFAULT, ...)` pattern as existing `read_mallinfo2()`
+- `#[cfg(target_os = "linux")]` guard with no-op fallback on non-Linux
+- 895 platform-core lib tests passing, 1,617 total across workspace
+- GitHub Issue #16 updated with overnight instrumentation findings
+- 48h soak test required post-deploy to validate RSS plateau < 256 MiB
+
 ## [1.1.22] - 2026-02-11
 
 ops-004: Memory instrumentation for BUG-005 RSS drift investigation. Adds diagnostics module with glibc mallinfo2 FFI, /proc/self/smaps parser, accumulator capacity tracking, and enhanced heartbeat/snapshot logging to attribute the ~121 MiB unaccounted RSS gap observed during 13.5h production runs on Pi 5.

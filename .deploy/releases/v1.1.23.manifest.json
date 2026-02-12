@@ -1,0 +1,18 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.23",
+  "description": "Release v1.1.23: BUG-005 mitigation — glibc arena tuning (MALLOC_ARENA_MAX=2) + periodic malloc_trim on heartbeat to reduce RSS fragmentation",
+  "changes": [
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "build"
+    },
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "restart"
+    }
+  ]
+}

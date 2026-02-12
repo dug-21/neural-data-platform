@@ -79,6 +79,12 @@ services:
       - RUST_LOG=info
       - DATA_DIR=/data
       - ETCD_ENDPOINT=http://etcd:2379
+      # BUG-005: glibc malloc tuning to reduce arena fragmentation.
+      # Pi 5 has 4 cores; glibc defaults to 32 arenas (8×cores), each
+      # fragmenting independently. Reducing to 2 consolidates freed pages
+      # so malloc_trim(0) can return them to the OS.
+      - MALLOC_ARENA_MAX=2
+      - MALLOC_TRIM_THRESHOLD_=65536
       # MQTT Source (indoor air quality)
       - MQTT_BROKER_URL=mosquitto
       - MQTT_PORT=1883
