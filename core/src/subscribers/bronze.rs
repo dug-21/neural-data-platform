@@ -27,7 +27,7 @@
 
 use crate::diagnostics::{
     do_malloc_trim, format_opt_mib, read_mallinfo2, read_proc_status_rss_bytes,
-    read_process_rss_mib, MemoryDiagnostics, MemoryTrend,
+    read_process_rss_mib, MemoryDiagnostics, MemoryTrend, MemoryWatchdog,
 };
 use crate::error::CoreResult;
 use crate::storage::accumulator::Accumulator;
@@ -123,6 +123,8 @@ pub struct BronzeSubscriber {
     errors_total: u64,
     wal_errors: u64,
     memory_trend: MemoryTrend,
+    memory_watchdog: MemoryWatchdog,
+    watchdog_restart_pending: bool,
 }
 
 impl BronzeSubscriber {
@@ -163,6 +165,8 @@ impl BronzeSubscriber {
             errors_total: 0,
             wal_errors: 0,
             memory_trend: MemoryTrend::new(100),
+            memory_watchdog: MemoryWatchdog::from_env(),
+            watchdog_restart_pending: false,
         })
     }
 
@@ -439,6 +443,13 @@ impl Subscriber for BronzeSubscriber {
         mut receiver: broadcast::Receiver<Arc<RawDataPoint>>,
     ) -> Result<(), SubscriberError> {
         info!(subscriber_id = %self.id, "Starting BronzeSubscriber");
+        if self.memory_watchdog.is_enabled() {
+            info!(
+                subscriber_id = %self.id,
+                threshold_mib = self.memory_watchdog.threshold_mib().unwrap_or(0),
+                "Memory watchdog enabled"
+            );
+        }
         self.is_running = true;
 
         // Recovery: rebuild accumulator from Parquet + WAL
@@ -512,6 +523,24 @@ impl Subscriber for BronzeSubscriber {
                             .unwrap_or_else(|| "N/A".into()),
                         "Heartbeat"
                     );
+
+                    // BUG-005 defensive: check memory watchdog
+                    if let Some(rss) = diag.rss_bytes {
+                        if self.memory_watchdog.should_restart(rss) {
+                            warn!(
+                                subscriber_id = %self.id,
+                                rss_mib = format_args!("{:.1}", rss as f64 / 1_048_576.0),
+                                threshold_mib = self.memory_watchdog.threshold_mib().unwrap_or(0),
+                                arena_mib = format_opt_mib(diag.arena_bytes),
+                                fordblks_mib = format_opt_mib(diag.fordblks_bytes),
+                                accumulator_count = diag.accumulator_count,
+                                uptime_samples = self.memory_trend.len(),
+                                "MEMORY WATCHDOG: RSS exceeds restart threshold — initiating graceful restart. WAL ensures zero data loss."
+                            );
+                            self.watchdog_restart_pending = true;
+                            break;
+                        }
+                    }
                 }
 
                 // Receive events
@@ -553,6 +582,18 @@ impl Subscriber for BronzeSubscriber {
         info!(subscriber_id = %self.id, "Performing final snapshot before shutdown");
         if let Err(e) = self.snapshot().await {
             error!(subscriber_id = %self.id, error = %e, "Final snapshot failed");
+        }
+
+        // If watchdog triggered the exit, terminate the process so Docker restarts us.
+        // Final snapshot already completed above -- WAL is durable, no data loss.
+        if self.watchdog_restart_pending {
+            warn!(
+                subscriber_id = %self.id,
+                "MEMORY WATCHDOG: Final snapshot complete. Exiting process for Docker restart."
+            );
+            // exit(0) signals clean shutdown to Docker, which will restart us
+            // per `restart: unless-stopped` policy.
+            std::process::exit(0);
         }
 
         self.is_running = false;

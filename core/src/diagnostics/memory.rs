@@ -428,6 +428,65 @@ pub fn format_opt_mib(bytes: Option<u64>) -> String {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Memory Watchdog
+// ---------------------------------------------------------------------------
+
+/// Monitors RSS and triggers graceful process restart when memory exceeds
+/// a configurable threshold. This is the DEFENSIVE strategy for BUG-005:
+/// accept that memory may grow, but guarantee continued operations by
+/// restarting before OOM. WAL provides data durability across restarts.
+///
+/// Configuration via environment variable:
+/// - `NDP_MEMORY_RESTART_THRESHOLD_MIB`: RSS threshold in MiB (default: 400)
+///   Set to 0 to disable the watchdog entirely.
+#[derive(Debug, Clone)]
+pub struct MemoryWatchdog {
+    /// RSS threshold in bytes. When exceeded, triggers graceful restart.
+    /// None means watchdog is disabled (threshold was 0).
+    threshold_bytes: Option<u64>,
+}
+
+impl MemoryWatchdog {
+    /// Create a new watchdog by reading `NDP_MEMORY_RESTART_THRESHOLD_MIB` env var.
+    /// Default threshold: 400 MiB. Set to 0 to disable.
+    pub fn from_env() -> Self {
+        Self::from_threshold_mib(
+            std::env::var("NDP_MEMORY_RESTART_THRESHOLD_MIB")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(400),
+        )
+    }
+
+    /// Create a watchdog with an explicit MiB threshold.
+    /// A threshold of 0 disables the watchdog.
+    pub fn from_threshold_mib(mib: u64) -> Self {
+        Self {
+            threshold_bytes: if mib == 0 { None } else { Some(mib * 1_048_576) },
+        }
+    }
+
+    /// Check if RSS exceeds the threshold. Returns true if restart is needed.
+    /// Returns false if watchdog is disabled or RSS is below threshold.
+    pub fn should_restart(&self, rss_bytes: u64) -> bool {
+        match self.threshold_bytes {
+            Some(threshold) => rss_bytes >= threshold,
+            None => false,
+        }
+    }
+
+    /// Get the threshold in MiB for logging, or None if disabled.
+    pub fn threshold_mib(&self) -> Option<u64> {
+        self.threshold_bytes.map(|b| b / 1_048_576)
+    }
+
+    /// Returns true if the watchdog is enabled (threshold > 0).
+    pub fn is_enabled(&self) -> bool {
+        self.threshold_bytes.is_some()
+    }
+}
+
 // ===========================================================================
 // Tests
 // ===========================================================================
@@ -1024,5 +1083,125 @@ Rss:                  16 kB
             trend.growth_rate_bytes_per_hour().is_none(),
             "should return None for zero time span"
         );
+    }
+
+    // ====================================================================
+    // T-23: watchdog — default threshold is 400 MiB
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_default_threshold() {
+        // from_env with no env var set should use 400 MiB default
+        // We test via from_threshold_mib since env var testing is fragile
+        let wd = MemoryWatchdog::from_threshold_mib(400);
+        assert!(wd.is_enabled());
+        assert_eq!(wd.threshold_mib(), Some(400));
+    }
+
+    // ====================================================================
+    // T-24: watchdog — disabled when threshold is 0
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_disabled_at_zero() {
+        let wd = MemoryWatchdog::from_threshold_mib(0);
+        assert!(!wd.is_enabled());
+        assert_eq!(wd.threshold_mib(), None);
+        // Should never trigger restart when disabled
+        assert!(!wd.should_restart(u64::MAX));
+    }
+
+    // ====================================================================
+    // T-25: watchdog — below threshold does not restart
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_below_threshold_no_restart() {
+        let wd = MemoryWatchdog::from_threshold_mib(400);
+        // 399 MiB = below threshold
+        let rss = 399 * 1_048_576;
+        assert!(!wd.should_restart(rss));
+    }
+
+    // ====================================================================
+    // T-26: watchdog — at threshold triggers restart
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_at_threshold_triggers_restart() {
+        let wd = MemoryWatchdog::from_threshold_mib(400);
+        // Exactly 400 MiB = at threshold, should trigger
+        let rss = 400 * 1_048_576;
+        assert!(wd.should_restart(rss));
+    }
+
+    // ====================================================================
+    // T-27: watchdog — above threshold triggers restart
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_above_threshold_triggers_restart() {
+        let wd = MemoryWatchdog::from_threshold_mib(400);
+        // 450 MiB = above threshold
+        let rss = 450 * 1_048_576;
+        assert!(wd.should_restart(rss));
+    }
+
+    // ====================================================================
+    // T-28: watchdog — custom threshold
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_custom_threshold() {
+        let wd = MemoryWatchdog::from_threshold_mib(256);
+        assert!(wd.is_enabled());
+        assert_eq!(wd.threshold_mib(), Some(256));
+
+        assert!(!wd.should_restart(255 * 1_048_576));
+        assert!(wd.should_restart(256 * 1_048_576));
+        assert!(wd.should_restart(257 * 1_048_576));
+    }
+
+    // ====================================================================
+    // T-29: watchdog — from_env reads environment variable
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_from_env_reads_var() {
+        // Set the env var, create watchdog, then clean up
+        std::env::set_var("NDP_MEMORY_RESTART_THRESHOLD_MIB", "256");
+        let wd = MemoryWatchdog::from_env();
+        std::env::remove_var("NDP_MEMORY_RESTART_THRESHOLD_MIB");
+
+        assert!(wd.is_enabled());
+        assert_eq!(wd.threshold_mib(), Some(256));
+    }
+
+    // ====================================================================
+    // T-30: watchdog — from_env with invalid value uses default
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_from_env_invalid_uses_default() {
+        std::env::set_var("NDP_MEMORY_RESTART_THRESHOLD_MIB", "not_a_number");
+        let wd = MemoryWatchdog::from_env();
+        std::env::remove_var("NDP_MEMORY_RESTART_THRESHOLD_MIB");
+
+        assert!(wd.is_enabled());
+        assert_eq!(wd.threshold_mib(), Some(400)); // default
+    }
+
+    // ====================================================================
+    // T-31: watchdog — from_env with 0 disables
+    // ====================================================================
+
+    #[test]
+    fn test_watchdog_from_env_zero_disables() {
+        std::env::set_var("NDP_MEMORY_RESTART_THRESHOLD_MIB", "0");
+        let wd = MemoryWatchdog::from_env();
+        std::env::remove_var("NDP_MEMORY_RESTART_THRESHOLD_MIB");
+
+        assert!(!wd.is_enabled());
+        assert_eq!(wd.threshold_mib(), None);
     }
 }

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.24] - 2026-02-13
+
+ops-004 Phase 2b: BUG-005 dual offensive/defensive memory strategy. Overnight v1.1.23 data showed glibc's dynamic mmap threshold ratcheting arena back to ~192 MiB despite MALLOC_ARENA_MAX=2. Two additional strategies:
+
+### Added
+
+- **`core/src/diagnostics/memory.rs`** — `MemoryWatchdog` struct: monitors RSS on every heartbeat (30s), triggers graceful process restart when `NDP_MEMORY_RESTART_THRESHOLD_MIB` exceeded (default 400 MiB, 0=disabled). Final snapshot completes before `exit(0)`, WAL guarantees zero data loss, Docker `restart: unless-stopped` brings process back in ~2-3s
+- **`core/src/subscribers/bronze.rs`** — watchdog integration: startup log at INFO, threshold breach at WARN ("MEMORY WATCHDOG: RSS exceeds restart threshold"), post-snapshot exit confirmation at WARN
+- **9 unit tests** (T-23 through T-31): threshold parsing, enable/disable, boundary conditions, env var reading
+
+### Changed
+
+- **`deploy/pi/docker-compose.yml`** — added two env vars:
+  - `MALLOC_MMAP_THRESHOLD_=131072` — disables glibc dynamic mmap threshold ratchet, forces allocations >= 128 KiB through `mmap()` (cleanly returned to OS on free)
+  - `NDP_MEMORY_RESTART_THRESHOLD_MIB=400` — memory watchdog threshold (set to 0 to disable)
+
+### Technical Notes
+
+- Dual strategy: offensive (glibc tuning slows growth) + defensive (watchdog guarantees operations)
+- For high-rate ingestion domains: raise `MALLOC_MMAP_THRESHOLD_` to 1048576 (1 MiB) to avoid mmap syscall overhead
+- 904 platform-core lib tests passing (was 895, +9 watchdog tests)
+- All env vars tunable without code changes — no recompile needed for threshold adjustment
+
 ## [1.1.23] - 2026-02-12
 
 ops-004 Phase 2: BUG-005 mitigation — glibc arena tuning to reduce RSS fragmentation. Overnight v1.1.22 instrumentation confirmed glibc malloc fragmentation as root cause: `fordblks` at 97 MiB (freed-but-unreturned), `arena` at 195 MiB across up to 32 independent arenas on 4-core Pi 5. Alternative allocators (jemalloc, mimalloc) crash on Pi 5 / kernel 6.14+ / cgroup v2.

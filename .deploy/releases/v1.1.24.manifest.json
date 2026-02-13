@@ -1,0 +1,18 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.24",
+  "description": "Release v1.1.24: BUG-005 Phase 2b — MALLOC_MMAP_THRESHOLD_ (offensive) + MemoryWatchdog graceful restart (defensive)",
+  "changes": [
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "build"
+    },
+    {
+      "type": "container",
+      "target": "air-quality-app",
+      "action": "restart"
+    }
+  ]
+}
