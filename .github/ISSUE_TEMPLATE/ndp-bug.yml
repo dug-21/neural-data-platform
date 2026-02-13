@@ -1,0 +1,51 @@
+name: Bug Report
+description: Report a bug in NDP
+labels: ["bug"]
+body:
+  - type: input
+    id: feature-id
+    attributes:
+      label: Related Feature
+      description: "Feature where the bug was found"
+      placeholder: "dp-XXX or ops-XXX"
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Version where bug was observed"
+      placeholder: "v1.1.XX"
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical (system down)
+        - High (major feature broken)
+        - Medium (workaround exists)
+        - Low (cosmetic/minor)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened vs what was expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: How to reproduce (if known)
+  - type: textarea
+    id: root-cause
+    attributes:
+      label: Root Cause Analysis
+      description: Fill in during investigation (leave blank initially)
+  - type: textarea
+    id: sparc-docs
+    attributes:
+      label: SPARC Design Docs
+      description: "Link to product/features/ if complex bug needs design work"

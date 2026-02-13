@@ -20,6 +20,7 @@ Project-specific agents for the Neural Data Platform. These agents know the proj
 | Agent | Scope | When to Use |
 |-------|-------|-------------|
 | `ndp-scrum-master` | Broad | Feature lifecycle, SPARC phases, status tracking, GitHub workflow |
+| `ndp-vision-guardian` | Broad | Vision alignment review of SPARC artifacts against product vision |
 
 ### Core Team
 | Agent | Scope | When to Use |
@@ -133,12 +134,15 @@ Task("Design feature aggregations", "...", "ndp-feature-engineer")
 ├── ndp-feature-engineer.md         # Feature engineering
 ├── ndp-ml-engineer.md              # ML/ruv-FANN
 ├── ndp-grafana-dev.md              # Grafana dashboards
-└── ndp-alert-engineer.md           # Alerts/triggers
+├── ndp-alert-engineer.md           # Alerts/triggers
+└── ndp-vision-guardian.md          # Vision alignment reviewer
 
 .claude/skills/
 ├── ndp-github-workflow/      # Git conventions (branches, commits, PRs)
 ├── get-pattern/              # Pattern retrieval (BEFORE work)
 ├── reflexion/                # Pattern feedback (AFTER work)
 ├── save-pattern/             # Pattern storage (new discoveries)
-└── learner/                  # Auto-discovery (user-invoked)
+├── learner/                  # Auto-discovery (user-invoked)
+├── validate/                 # 3-tier validation (implementation sessions)
+└── align/                    # Vision alignment check (planning sessions)
 ```

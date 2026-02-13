@@ -82,16 +82,24 @@ Features follow `{phase}-{NNN}` pattern in `product/features/`:
 
 ```
 product/features/{phase}-{NNN}/
-├── SCOPE.md          # Human writes, agents never modify
-├── STATUS.md         # ndp-scrum-master maintains
-├── specification/    # SPARC S
-├── pseudocode/       # SPARC P
-├── architecture/     # SPARC A
-├── refinement/       # SPARC R
-├── completion/       # SPARC C
-├── bugs/             # BUG-{NNN}-{slug}.md
+├── SCOPE.md                    # Human writes, agents never modify
+├── IMPLEMENTATION-BRIEF.md     # Planning swarm output, implementation input
+├── ALIGNMENT-REPORT.md         # Vision guardian output
+├── specification/              # SPARC S
+├── pseudocode/                 # SPARC P
+├── architecture/               # SPARC A
+├── refinement/                 # SPARC R
+├── completion/                 # SPARC C
 └── reports/
 ```
+
+### Implementation Tracking
+
+New features and bugs are tracked via **GitHub Issues**, not in-repo STATUS.md files.
+
+- Implementation: `gh issue create --label "implementation,{phase}"`
+- Bugs: `gh issue create --label "bug,{phase}"`
+- Cross-reference: SCOPE.md `## Tracking` links to GH Issue; commits reference `(#NNN)`
 
 ---
 
@@ -111,6 +119,7 @@ See also: `docs/procedures/DEPLOYMENT-DECLARATIVES.md`, `.deploy/releases/TEMPLA
 ## Behavioral Rules
 
 - Be concise. Prefer short answers. Skip preamble, summaries, and repetition unless asked.
+- **Pattern workflow is mandatory**: `/get-pattern` before work. `/reflexion` (per pattern used) after work. A session without reflexion is incomplete.
 - Do what has been asked; nothing more, nothing less.
 - NEVER create files unless absolutely necessary. Prefer editing existing files.
 - NEVER proactively create documentation files unless explicitly requested.

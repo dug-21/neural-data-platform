@@ -1,0 +1,50 @@
+name: Implementation Tracking
+description: Track implementation of a planned feature
+labels: ["implementation"]
+body:
+  - type: input
+    id: feature-id
+    attributes:
+      label: Feature ID
+      description: "e.g., dp-021, ops-005, fe-003"
+      placeholder: "dp-XXX"
+    validations:
+      required: true
+  - type: input
+    id: sparc-path
+    attributes:
+      label: SPARC Docs Path
+      description: Path to planning artifacts in the repository
+      placeholder: "product/features/dp-XXX/"
+  - type: input
+    id: version
+    attributes:
+      label: Target Version
+      description: "Must be v1.1.x line"
+      placeholder: "v1.1.XX"
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: 2-3 sentence summary of what this implements
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What must be true for this to be done
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Implementation Tasks
+      description: Checklist of work items
+      value: |
+        - [ ] Read implementation brief
+        - [ ] Implement changes
+        - [ ] Unit tests passing
+        - [ ] Integration validation (if qualifying paths)
+        - [ ] /validate PASS
+        - [ ] /reflexion recorded

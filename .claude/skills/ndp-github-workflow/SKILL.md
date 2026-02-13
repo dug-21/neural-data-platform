@@ -155,9 +155,34 @@ git push
 ### Feature Progress
 
 Track progress via:
+- **GitHub Issue**: `gh issue list --label "implementation" --state open`
 - **Commit history**: `git log --oneline --grep="dp-001"`
-- **STATUS.md**: `product/features/dp-001/STATUS.md`
 - **Commit frequency**: Multiple small commits per day
+
+### GitHub Issue Integration
+
+Implementation and bug tracking use GitHub Issues (not in-repo STATUS.md):
+
+```bash
+# Create implementation issue for a feature
+gh issue create --title "{feature-id}: {description}" \
+  --label "implementation,{phase}" \
+  --body "SPARC docs: product/features/{id}/"
+
+# Create bug issue
+gh issue create --title "{description}" \
+  --label "bug,{phase}" \
+  --body "Related: {feature-id}, Version: {version}"
+
+# Reference issue in commits
+git commit -m "feat(dp-003): add new stream config (#42)"
+
+# Update issue progress
+gh issue comment 42 --body "Implementation complete. /validate PASS."
+
+# Close on completion
+gh issue close 42 --comment "Released in v1.1.XX"
+```
 
 ---
 

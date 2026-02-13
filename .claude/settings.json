@@ -66,6 +66,12 @@
             "command": "[ -n \"$TOOL_RESULT_agent_id\" ] && npx @claude-flow/cli@latest hooks post-task --task-id \"$TOOL_RESULT_agent_id\" --success \"${TOOL_SUCCESS:-true}\" 2>/dev/null || true",
             "timeout": 5000,
             "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": "echo '[REMINDER] Task agent complete. Record /reflexion for each pattern used. /save-pattern for new discoveries.'",
+            "timeout": 1000,
+            "continueOnError": true
           }
         ]
       }
@@ -105,7 +111,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"ok\": true}'",
+            "command": "echo '[SESSION END] Did you record /reflexion? /save-pattern for new discoveries?' && echo '{\"ok\": true}'",
             "timeout": 1000
           }
         ]
