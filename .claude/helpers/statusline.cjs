@@ -24,7 +24,7 @@ const CONFIG = {
   showPerformance: true,
   refreshInterval: 5000,
   maxAgents: 15,
-  topology: 'hierarchical',
+  topology: 'hierarchical-mesh',
 };
 
 // ANSI colors
@@ -131,99 +131,153 @@ function getUserInfo() {
   return { name, gitBranch, modelName };
 }
 
-// Get learning stats from memory database
+// Get learning stats from intelligence loop data (ADR-050)
 function getLearningStats() {
-  const memoryPaths = [
-    path.join(process.cwd(), '.swarm', 'memory.db'),
-    path.join(process.cwd(), '.claude-flow', 'memory.db'),
-    path.join(process.cwd(), '.claude', 'memory.db'),
-    path.join(process.cwd(), 'data', 'memory.db'),
-    path.join(process.cwd(), 'memory.db'),
-    path.join(process.cwd(), '.agentdb', 'memory.db'),
-  ];
-
   let patterns = 0;
   let sessions = 0;
   let trajectories = 0;
+  let edges = 0;
+  let confidenceMean = 0;
+  let accessedCount = 0;
+  let trend = 'STABLE';
 
-  // Try to read from sqlite database
-  for (const dbPath of memoryPaths) {
-    if (fs.existsSync(dbPath)) {
+  // PRIMARY: Read from intelligence loop data files
+  const dataDir = path.join(process.cwd(), '.claude-flow', 'data');
+
+  // 1. graph-state.json — authoritative node/edge counts
+  const graphPath = path.join(dataDir, 'graph-state.json');
+  if (fs.existsSync(graphPath)) {
+    try {
+      const graph = JSON.parse(fs.readFileSync(graphPath, 'utf-8'));
+      patterns = graph.nodes ? Object.keys(graph.nodes).length : 0;
+      edges = Array.isArray(graph.edges) ? graph.edges.length : 0;
+    } catch (e) { /* ignore */ }
+  }
+
+  // 2. ranked-context.json — confidence and access data
+  const rankedPath = path.join(dataDir, 'ranked-context.json');
+  if (fs.existsSync(rankedPath)) {
+    try {
+      const ranked = JSON.parse(fs.readFileSync(rankedPath, 'utf-8'));
+      if (ranked.entries && ranked.entries.length > 0) {
+        patterns = Math.max(patterns, ranked.entries.length);
+        let confSum = 0;
+        let accCount = 0;
+        for (let i = 0; i < ranked.entries.length; i++) {
+          confSum += (ranked.entries[i].confidence || 0);
+          if ((ranked.entries[i].accessCount || 0) > 0) accCount++;
+        }
+        confidenceMean = confSum / ranked.entries.length;
+        accessedCount = accCount;
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // 3. intelligence-snapshot.json — trend history
+  const snapshotPath = path.join(dataDir, 'intelligence-snapshot.json');
+  if (fs.existsSync(snapshotPath)) {
+    try {
+      const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
+      if (snapshot.history && snapshot.history.length >= 2) {
+        const first = snapshot.history[0];
+        const last = snapshot.history[snapshot.history.length - 1];
+        const confDrift = (last.confidenceMean || 0) - (first.confidenceMean || 0);
+        trend = confDrift > 0.01 ? 'IMPROVING' : confDrift < -0.01 ? 'DECLINING' : 'STABLE';
+        sessions = Math.max(sessions, snapshot.history.length);
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // 4. auto-memory-store.json — fallback entry count
+  if (patterns === 0) {
+    const autoMemPath = path.join(dataDir, 'auto-memory-store.json');
+    if (fs.existsSync(autoMemPath)) {
       try {
-        // Count entries in memory file (rough estimate from file size)
-        const stats = fs.statSync(dbPath);
-        const sizeKB = stats.size / 1024;
-        // Estimate: ~2KB per pattern on average
-        patterns = Math.floor(sizeKB / 2);
-        sessions = Math.max(1, Math.floor(patterns / 10));
-        trajectories = Math.floor(patterns / 5);
-        break;
-      } catch (e) {
-        // Ignore
+        const data = JSON.parse(fs.readFileSync(autoMemPath, 'utf-8'));
+        patterns = Array.isArray(data) ? data.length : (data.entries ? data.entries.length : 0);
+      } catch (e) { /* ignore */ }
+    }
+  }
+
+  // FALLBACK: Legacy memory.db file-size estimation
+  if (patterns === 0) {
+    const memoryPaths = [
+      path.join(process.cwd(), '.swarm', 'memory.db'),
+      path.join(process.cwd(), '.claude-flow', 'memory.db'),
+      path.join(process.cwd(), '.claude', 'memory.db'),
+      path.join(process.cwd(), 'data', 'memory.db'),
+      path.join(process.cwd(), 'memory.db'),
+      path.join(process.cwd(), '.agentdb', 'memory.db'),
+    ];
+    for (let j = 0; j < memoryPaths.length; j++) {
+      if (fs.existsSync(memoryPaths[j])) {
+        try {
+          const dbStats = fs.statSync(memoryPaths[j]);
+          patterns = Math.floor(dbStats.size / 1024 / 2);
+          break;
+        } catch (e) { /* ignore */ }
       }
     }
   }
 
-  // Also check for session files
+  // Session count from session files
   const sessionsPath = path.join(process.cwd(), '.claude', 'sessions');
   if (fs.existsSync(sessionsPath)) {
     try {
       const sessionFiles = fs.readdirSync(sessionsPath).filter(f => f.endsWith('.json'));
       sessions = Math.max(sessions, sessionFiles.length);
-    } catch (e) {
-      // Ignore
-    }
+    } catch (e) { /* ignore */ }
   }
 
-  return { patterns, sessions, trajectories };
+  trajectories = Math.floor(patterns / 5);
+
+  return { patterns, sessions, trajectories, edges, confidenceMean, accessedCount, trend };
 }
 
-// Get V3 progress from learning state (grows as system learns)
+// Get V3 progress from REAL metrics files
 function getV3Progress() {
   const learning = getLearningStats();
+  const totalDomains = 5;
 
-  // Check for metrics file first (created by init)
-  const metricsPath = path.join(process.cwd(), '.claude-flow', 'metrics', 'v3-progress.json');
-  if (fs.existsSync(metricsPath)) {
+  let dddProgress = 0;
+  let dddScore = 0;
+  let dddMaxScore = 100;
+  let moduleCount = 0;
+
+  // Check ddd-progress.json for REAL DDD analysis
+  const dddPath = path.join(process.cwd(), '.claude-flow', 'metrics', 'ddd-progress.json');
+  if (fs.existsSync(dddPath)) {
     try {
-      const data = JSON.parse(fs.readFileSync(metricsPath, 'utf-8'));
-      if (data.domains) {
-        const domainsCompleted = data.domains.completed || 0;
-        const totalDomains = data.domains.total || 5;
-        // Use ddd.progress if provided and > 0, otherwise calculate from domains
-        const dddProgress = (data.ddd?.progress > 0)
-          ? data.ddd.progress
-          : Math.min(100, Math.floor((domainsCompleted / totalDomains) * 100));
-        return {
-          domainsCompleted,
-          totalDomains,
-          dddProgress,
-          patternsLearned: data.learning?.patternsLearned || learning.patterns,
-          sessionsCompleted: data.learning?.sessionsCompleted || learning.sessions
-        };
-      }
+      const data = JSON.parse(fs.readFileSync(dddPath, 'utf-8'));
+      dddProgress = data.progress || 0;
+      dddScore = data.score || 0;
+      dddMaxScore = data.maxScore || 100;
+      moduleCount = data.modules ? Object.keys(data.modules).length : 0;
     } catch (e) {
-      // Fall through to pattern-based calculation
+      // Ignore - use fallback
     }
   }
 
-  // DDD progress based on actual learned patterns
-  // New install: 0 patterns = 0/5 domains, 0% DDD
-  // As patterns grow: 10+ patterns = 1 domain, 50+ = 2, 100+ = 3, 200+ = 4, 500+ = 5
-  let domainsCompleted = 0;
-  if (learning.patterns >= 500) domainsCompleted = 5;
-  else if (learning.patterns >= 200) domainsCompleted = 4;
-  else if (learning.patterns >= 100) domainsCompleted = 3;
-  else if (learning.patterns >= 50) domainsCompleted = 2;
-  else if (learning.patterns >= 10) domainsCompleted = 1;
+  // Calculate domains completed from DDD progress (each 20% = 1 domain)
+  let domainsCompleted = Math.min(5, Math.floor(dddProgress / 20));
 
-  const totalDomains = 5;
-  const dddProgress = Math.min(100, Math.floor((domainsCompleted / totalDomains) * 100));
+  // Fallback: if no DDD data, use pattern-based calculation
+  if (dddProgress === 0 && learning.patterns > 0) {
+    if (learning.patterns >= 500) domainsCompleted = 5;
+    else if (learning.patterns >= 200) domainsCompleted = 4;
+    else if (learning.patterns >= 100) domainsCompleted = 3;
+    else if (learning.patterns >= 50) domainsCompleted = 2;
+    else if (learning.patterns >= 10) domainsCompleted = 1;
+    dddProgress = Math.floor((domainsCompleted / totalDomains) * 100);
+  }
 
   return {
     domainsCompleted,
     totalDomains,
     dddProgress,
+    dddScore,
+    dddMaxScore,
+    moduleCount,
     patternsLearned: learning.patterns,
     sessionsCompleted: learning.sessions
   };
@@ -358,15 +412,16 @@ function getSystemMetrics() {
   let memoryMB = 0;
   let subAgents = 0;
 
-  // Check learning.json first (works on all platforms)
+  // Check learning.json first for REAL intelligence metrics
   const learningMetricsPath = path.join(process.cwd(), '.claude-flow', 'metrics', 'learning.json');
   let intelligenceFromFile = null;
   let contextFromFile = null;
   if (fs.existsSync(learningMetricsPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(learningMetricsPath, 'utf-8'));
-      if (data.routing?.accuracy !== undefined) {
-        intelligenceFromFile = Math.min(100, Math.floor(data.routing.accuracy));
+      // Use intelligence.score (the REAL metric) instead of routing.accuracy
+      if (data.intelligence?.score !== undefined) {
+        intelligenceFromFile = Math.min(100, Math.floor(data.intelligence.score));
       }
       if (data.sessions?.total !== undefined) {
         contextFromFile = Math.min(100, data.sessions.total * 5);
@@ -402,17 +457,31 @@ function getSystemMetrics() {
   // Also get AgentDB stats for fallback intelligence calculation
   const agentdbStats = getAgentDBStats();
 
-  // Intelligence % based on learned patterns, vectors, or project maturity
-  // Calculate all sources and take the maximum
+  // Intelligence % — priority chain (ADR-050):
+  // 1. Intelligence loop data (confidenceMean + accessRatio + density)
+  // 2. learning.json file metric
+  // 3. Pattern count / vector count fallback
+  // 4. Project maturity fallback (below)
   let intelligencePct = 0;
 
-  if (intelligenceFromFile !== null) {
+  // Priority 1: Intelligence loop real data
+  if (learning.confidenceMean > 0 || (learning.patterns > 0 && learning.accessedCount > 0)) {
+    const confScore = Math.min(100, Math.floor(learning.confidenceMean * 100));
+    const accessRatio = learning.patterns > 0 ? (learning.accessedCount / learning.patterns) : 0;
+    const accessScore = Math.min(100, Math.floor(accessRatio * 100));
+    const densityScore = Math.min(100, Math.floor(learning.patterns / 5));
+    intelligencePct = Math.floor(confScore * 0.4 + accessScore * 0.3 + densityScore * 0.3);
+  }
+
+  // Priority 2: learning.json file metric
+  if (intelligencePct === 0 && intelligenceFromFile !== null) {
     intelligencePct = intelligenceFromFile;
-  } else {
-    // Calculate from multiple sources and take the best
+  }
+
+  // Priority 3: Pattern/vector count fallback
+  if (intelligencePct === 0) {
     const fromPatterns = learning.patterns > 0 ? Math.min(100, Math.floor(learning.patterns / 10)) : 0;
     const fromVectors = agentdbStats.vectorCount > 0 ? Math.min(100, Math.floor(agentdbStats.vectorCount / 100)) : 0;
-
     intelligencePct = Math.max(fromPatterns, fromVectors);
   }
 
@@ -517,8 +586,29 @@ function getSystemMetrics() {
   };
 }
 
-// Get ADR (Architecture Decision Records) status
+// Get ADR (Architecture Decision Records) status from REAL compliance data
 function getADRStatus() {
+  let compliance = 0;
+  let totalChecks = 0;
+  let compliantChecks = 0;
+  let checks = {};
+
+  // Check adr-compliance.json for REAL compliance data
+  const compliancePath = path.join(process.cwd(), '.claude-flow', 'metrics', 'adr-compliance.json');
+  if (fs.existsSync(compliancePath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(compliancePath, 'utf-8'));
+      compliance = data.compliance || 0;
+      checks = data.checks || {};
+      totalChecks = Object.keys(checks).length;
+      compliantChecks = Object.values(checks).filter(c => c.compliant).length;
+      return { count: totalChecks, implemented: compliantChecks, compliance };
+    } catch (e) {
+      // Fall through to file-based detection
+    }
+  }
+
+  // Fallback: count ADR files directly
   const adrPaths = [
     path.join(process.cwd(), 'docs', 'adrs'),
     path.join(process.cwd(), 'docs', 'adr'),
@@ -540,7 +630,6 @@ function getADRStatus() {
         );
         count = files.length;
 
-        // Check for implemented status in ADR files
         for (const file of files) {
           try {
             const content = fs.readFileSync(path.join(adrPath, file), 'utf-8');
@@ -559,7 +648,8 @@ function getADRStatus() {
     }
   }
 
-  return { count, implemented };
+  compliance = count > 0 ? Math.floor((implemented / count) * 100) : 0;
+  return { count, implemented, compliance };
 }
 
 // Get hooks status (enabled/registered hooks)
@@ -1096,9 +1186,14 @@ function generateStatusline() {
   const vectorColor = agentdb.vectorCount > 0 ? c.brightGreen : c.dim;
   const testColor = tests.testFiles > 0 ? c.brightGreen : c.dim;
 
+  // Show ADR compliance % if from real data, otherwise show count
+  const adrDisplay = adrs.compliance > 0
+    ? `${adrColor}●${adrs.compliance}%${c.reset}`
+    : `${adrColor}●${adrs.implemented}/${adrs.count}${c.reset}`;
+
   lines.push(
     `${c.brightPurple}🔧 Architecture${c.reset}    ` +
-    `${c.cyan}ADRs${c.reset} ${adrColor}●${adrs.implemented}/${adrs.count}${c.reset}  ${c.dim}│${c.reset}  ` +
+    `${c.cyan}ADRs${c.reset} ${adrDisplay}  ${c.dim}│${c.reset}  ` +
     `${c.cyan}DDD${c.reset} ${dddColor}●${String(progress.dddProgress).padStart(3)}%${c.reset}  ${c.dim}│${c.reset}  ` +
     `${c.cyan}Security${c.reset} ${securityColor}●${security.status}${c.reset}`
   );
