@@ -67,6 +67,7 @@ pub fn create_three_stream_domain() -> DomainConfig {
             create_objective_config("healthy_pm25", "pm25", "<", 12.0),
         ],
         events: None,
+        intelligence: None,
     }
 }
 
@@ -101,6 +102,7 @@ pub fn create_two_stream_domain() -> DomainConfig {
         },
         objectives: vec![],
         events: None,
+        intelligence: None,
     }
 }
 
@@ -135,6 +137,7 @@ pub fn create_domain_with_forecast() -> DomainConfig {
         },
         objectives: vec![],
         events: None,
+        intelligence: None,
     }
 }
 

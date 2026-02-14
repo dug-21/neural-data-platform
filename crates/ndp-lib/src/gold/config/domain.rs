@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::gold::embeddings::config::IntelligenceConfig;
 use crate::gold::generators::events::EventsConfig;
 
 /// Domain configuration for cross-stream alignment
@@ -30,6 +31,10 @@ pub struct DomainConfig {
     /// Optional events infrastructure configuration
     #[serde(default)]
     pub events: Option<EventsConfig>,
+
+    /// Optional intelligence configuration (V1.2+)
+    #[serde(default)]
+    pub intelligence: Option<IntelligenceConfig>,
 }
 
 /// Reference to a stream within a domain
@@ -456,6 +461,70 @@ mod tests {
     #[test]
     fn test_dimension_type_is_metadata_role() {
         assert_eq!(StreamType::Dimension.correlation_role(), "metadata");
+    }
+
+    // ========== fe-003: Intelligence Config Integration Tests ==========
+
+    #[test]
+    fn test_domain_config_without_intelligence_defaults_to_none() {
+        let json = r#"{
+            "id": "indoor-air-quality",
+            "description": "Test domain",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "indoor", "role": "primary" }
+            ],
+            "alignment": {
+                "view_name": "test_aligned",
+                "granularity": "1 hour"
+            }
+        }"#;
+
+        let config: DomainConfig = serde_json::from_str(json).unwrap();
+        assert!(
+            config.intelligence.is_none(),
+            "DomainConfig without intelligence key should default to None"
+        );
+    }
+
+    #[test]
+    fn test_domain_config_with_intelligence_block() {
+        let json = r#"{
+            "id": "indoor-air-quality",
+            "description": "Test domain",
+            "streams": [
+                { "stream_id": "air-quality", "alias": "indoor", "role": "primary" }
+            ],
+            "alignment": {
+                "view_name": "test_aligned",
+                "granularity": "1 hour"
+            },
+            "intelligence": {
+                "enabled": true,
+                "embedding": {
+                    "type": "metric",
+                    "fields": {
+                        "temporal": ["hour_sin"],
+                        "direct": [
+                            {"field": "pm25_mean", "null_strategy": "zero"}
+                        ]
+                    }
+                },
+                "search": {
+                    "k": 10,
+                    "min_similarity": 0.85,
+                    "prediction_horizons": ["1 hour"]
+                }
+            }
+        }"#;
+
+        let config: DomainConfig = serde_json::from_str(json).unwrap();
+        assert!(
+            config.intelligence.is_some(),
+            "DomainConfig with intelligence key should be Some"
+        );
+        let intel = config.intelligence.unwrap();
+        assert!(intel.enabled);
+        assert_eq!(intel.search.k, 10);
     }
 
     // ========== v11-002: Null Handling Mapping Tests ==========

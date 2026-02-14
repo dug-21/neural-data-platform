@@ -16,6 +16,7 @@ pub mod continuous_aggregate;
 pub mod events;
 pub mod join_builder;
 pub mod null_handler;
+pub mod pgvector_schema;
 pub mod refresh_policy;
 pub mod state_transitions;
 
@@ -31,6 +32,7 @@ pub use join_builder::JoinBuilder;
 pub use null_handler::{
     CarryForwardNullHandler, InterpolateNullHandler, NullHandler, PreserveNullHandler,
 };
+pub use pgvector_schema::{PgVectorSchemaConfig, PgVectorSchemaGenerator};
 pub use refresh_policy::RefreshPolicyGenerator;
 pub use state_transitions::{
     DeviceTypeRule, ITransitionGenerator, StateTransitionGenerator, TransitionConfig,

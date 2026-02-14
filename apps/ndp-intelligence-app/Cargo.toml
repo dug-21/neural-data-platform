@@ -1,0 +1,17 @@
+[package]
+name = "ndp-intelligence-app"
+version = "0.1.0"
+edition = "2021"
+description = "NDP Intelligence application binary"
+
+[[bin]]
+name = "ndp-intelligence"
+path = "src/main.rs"
+
+[dependencies]
+ndp-intelligence = { path = "../../crates/ndp-intelligence" }
+ndp-lib = { path = "../../crates/ndp-lib" }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -221,6 +221,7 @@ fn test_single_stream_no_coalesce() {
         },
         objectives: vec![],
         events: None,
+        intelligence: None,
     };
 
     let generator = AlignedViewGenerator::new(loader);
@@ -475,6 +476,7 @@ fn test_primary_stream_first_in_from() {
         },
         objectives: vec![],
         events: None,
+        intelligence: None,
     };
 
     let generator = AlignedViewGenerator::new(loader);
@@ -540,6 +542,7 @@ fn test_no_primary_stream_error() {
         },
         objectives: vec![],
         events: None,
+        intelligence: None,
     };
 
     let generator = AlignedViewGenerator::new(loader);

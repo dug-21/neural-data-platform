@@ -10,7 +10,9 @@ members = [
     "apps/silver-etl",
     "tools/ndp-validate",
     "tools/ndp-gold-ddl",
-    "tools/ndp-cli"
+    "tools/ndp-cli",
+    "crates/ndp-intelligence",
+    "apps/ndp-intelligence-app"
 ]
 resolver = "2"
 

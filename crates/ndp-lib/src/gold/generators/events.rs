@@ -1331,6 +1331,7 @@ mod tests {
             },
             objectives: vec![],
             events: None,
+            intelligence: None,
         }
     }
 
@@ -1392,6 +1393,7 @@ mod tests {
                 },
             ],
             events: None,
+            intelligence: None,
         }
     }
 
@@ -2314,6 +2316,7 @@ mod tests {
             },
             objectives: vec![],
             events: Some(EventsConfig::new()),
+            intelligence: None,
         };
 
         let generator = EventsGenerator::from_domain_config(

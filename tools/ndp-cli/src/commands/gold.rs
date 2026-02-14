@@ -11,6 +11,25 @@
 use clap::{Args, Subcommand};
 use std::path::Path;
 
+/// Intelligence schema subcommands.
+#[derive(Subcommand)]
+pub enum IntelligenceCommands {
+    /// Generate intelligence schema DDL from domain config.
+    Schema {
+        /// Domain ID to generate intelligence schema for.
+        #[arg(long)]
+        domain: String,
+
+        /// Exclude graph tables (graph_nodes, graph_edges).
+        #[arg(long)]
+        no_graph: bool,
+
+        /// Exclude reasoning bank table.
+        #[arg(long)]
+        no_reasoning_bank: bool,
+    },
+}
+
 /// Gold layer DDL operations.
 #[derive(Args)]
 pub struct GoldArgs {
@@ -74,6 +93,12 @@ pub enum GoldCommands {
         no_validate: bool,
     },
 
+    /// Intelligence schema DDL operations.
+    Intelligence {
+        #[command(subcommand)]
+        command: IntelligenceCommands,
+    },
+
     /// Recreate Gold layer (drop and create).
     Recreate {
         /// Target stream ID.
@@ -114,6 +139,9 @@ pub async fn run(
     let loader = ndp_lib::gold::config::FileSystemConfigLoader::new(config_dir);
 
     match args.command {
+        GoldCommands::Intelligence { command } => {
+            run_intelligence(&loader, command).await
+        }
         GoldCommands::Generate {
             stream,
             domain,
@@ -343,6 +371,44 @@ async fn run_recreate(
     }
 
     Err("Must specify --stream or --domain".into())
+}
+
+/// Generate intelligence schema DDL for a domain.
+async fn run_intelligence(
+    loader: &ndp_lib::gold::config::FileSystemConfigLoader,
+    command: IntelligenceCommands,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match command {
+        IntelligenceCommands::Schema {
+            domain,
+            no_graph,
+            no_reasoning_bank,
+        } => {
+            use ndp_lib::gold::config::ConfigLoader;
+
+            let domain_config = ConfigLoader::load_domain_config(loader, &domain)?;
+            let intelligence = domain_config.intelligence.ok_or_else(|| {
+                format!(
+                    "Domain '{}' has no intelligence configuration. \
+                     Add an 'intelligence' block to domain.json.",
+                    domain
+                )
+            })?;
+
+            let schema_config =
+                ndp_lib::gold::generators::PgVectorSchemaConfig::new(intelligence)
+                    .with_graph_tables(!no_graph)
+                    .with_reasoning_bank(!no_reasoning_bank);
+
+            let ddl = ndp_lib::gold::generators::PgVectorSchemaGenerator::generate(
+                &schema_config,
+                ndp_lib::gold::config::Action::Sync,
+            );
+
+            println!("{ddl}");
+            Ok(())
+        }
+    }
 }
 
 /// Require a database URL, returning a user-friendly error if missing.

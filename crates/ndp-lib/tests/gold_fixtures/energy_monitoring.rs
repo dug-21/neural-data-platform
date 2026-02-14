@@ -132,6 +132,7 @@ pub fn create_energy_monitoring_domain() -> DomainConfig {
             detection_schedule: "15 minutes".to_string(),
             refresh_start_offset_days: 365,
         }),
+        intelligence: None,
     }
 }
 

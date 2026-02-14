@@ -541,6 +541,7 @@ mod tests {
             },
             objectives: vec![],
             events: None,
+            intelligence: None,
         }
     }
 

@@ -59,9 +59,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # TimescaleDB - Silver Layer Storage
+  # TimescaleDB - Silver Layer Storage + pgvector (intelligence layer)
   timescaledb:
-    image: timescale/timescaledb:latest-pg15
+    build:
+      context: .
+      dockerfile: docker/integration-timescaledb/Dockerfile
+    image: ndp/timescaledb-pgvector:integration
     container_name: integration-timescaledb
     ports:
       - "5432:5432"
