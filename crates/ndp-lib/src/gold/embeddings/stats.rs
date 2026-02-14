@@ -41,7 +41,15 @@ impl RunningStats {
     }
 
     /// Update statistics with a new observation.
+    ///
+    /// Non-finite values (NaN, Infinity) are silently skipped to prevent
+    /// corrupting the running statistics. A single NaN would permanently
+    /// poison mean and variance calculations.
     pub fn update(&mut self, value: f64) {
+        if !value.is_finite() {
+            return;
+        }
+
         self.count += 1;
 
         if self.count == 1 {
@@ -216,6 +224,45 @@ mod tests {
         assert!(
             stats.variance() > 0.0,
             "Variance should be positive for varying data"
+        );
+    }
+
+    #[test]
+    fn test_nan_is_skipped() {
+        let mut stats = RunningStats::new(0.01);
+        stats.update(5.0);
+        stats.update(f64::NAN);
+        assert_eq!(stats.count(), 1, "NaN should not increment count");
+        assert!(
+            (stats.mean() - 5.0).abs() < f64::EPSILON,
+            "NaN should not corrupt mean"
+        );
+    }
+
+    #[test]
+    fn test_infinity_is_skipped() {
+        let mut stats = RunningStats::new(0.01);
+        stats.update(5.0);
+        stats.update(f64::INFINITY);
+        stats.update(f64::NEG_INFINITY);
+        assert_eq!(stats.count(), 1, "Infinity should not increment count");
+        assert!(
+            (stats.mean() - 5.0).abs() < f64::EPSILON,
+            "Infinity should not corrupt mean"
+        );
+    }
+
+    #[test]
+    fn test_non_finite_does_not_corrupt_variance() {
+        let mut stats = RunningStats::new(0.1);
+        stats.update(10.0);
+        stats.update(20.0);
+        let variance_before = stats.variance();
+        stats.update(f64::NAN);
+        stats.update(f64::INFINITY);
+        assert!(
+            (stats.variance() - variance_before).abs() < f64::EPSILON,
+            "Non-finite values should not change variance"
         );
     }
 }

@@ -14,6 +14,27 @@ use super::stats::RunningStats;
 use super::{Embedder, Embedding, EmbeddingError, EmbeddingResult, GoldRow};
 
 /// Metric-based embedder that converts Gold rows to z-score normalized vectors.
+///
+/// # Thread Safety Lifecycle
+///
+/// `MetricEmbedder` has a two-phase lifecycle:
+///
+/// 1. **Warmup phase** (single-threaded): Call [`observe()`](Self::observe) repeatedly
+///    with historical data to build running statistics. This requires `&mut self`.
+///
+/// 2. **Embedding phase** (shareable): Once [`is_ready()`](Self::is_ready) returns `true`,
+///    the embedder can be wrapped in `Arc` and shared across threads. Only
+///    [`embed()`](Self::embed) (via the `Embedder` trait, `&self`) is called.
+///
+/// **Do not call `observe()` concurrently.** The warmup phase must complete
+/// on a single thread before the embedder is shared. In Phase 2's daemon,
+/// the expected pattern is:
+///
+/// ```ignore
+/// let mut embedder = MetricEmbedder::from_config(&config);
+/// for row in historical_rows { embedder.observe(&row); }
+/// let embedder = Arc::new(embedder); // now shareable
+/// ```
 pub struct MetricEmbedder {
     fields: Vec<EmbeddingField>,
     stats: HashMap<String, RunningStats>,

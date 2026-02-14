@@ -21,9 +21,20 @@ impl PostgresStorage {
     }
 
     /// Convert a Vec<f32> to pgvector text format: "[1.0,2.0,3.0]"
-    fn vec_to_pgvector(vec: &[f32]) -> String {
+    ///
+    /// Returns an error if any element is NaN or Infinity, which would
+    /// produce invalid pgvector data and corrupt similarity searches.
+    fn vec_to_pgvector(vec: &[f32]) -> Result<String, StorageError> {
+        for (i, v) in vec.iter().enumerate() {
+            if !v.is_finite() {
+                return Err(StorageError::Serialization(format!(
+                    "Non-finite value at index {}: {}",
+                    i, v
+                )));
+            }
+        }
         let elements: Vec<String> = vec.iter().map(|v| v.to_string()).collect();
-        format!("[{}]", elements.join(","))
+        Ok(format!("[{}]", elements.join(",")))
     }
 
     /// Parse pgvector text format back to Vec<f32>
@@ -46,7 +57,7 @@ impl PostgresStorage {
 #[async_trait::async_trait]
 impl StorageBackend for PostgresStorage {
     async fn store_embedding(&self, embedding: &StoredEmbedding) -> Result<(), StorageError> {
-        let vector_text = Self::vec_to_pgvector(&embedding.embedding);
+        let vector_text = Self::vec_to_pgvector(&embedding.embedding)?;
         self.client
             .execute(
                 "INSERT INTO gold.metric_embeddings (bucket, domain_id, embedding, dimensions, metadata, created_at)
@@ -224,8 +235,37 @@ mod tests {
 
     #[test]
     fn test_vec_to_pgvector() {
-        let result = PostgresStorage::vec_to_pgvector(&[1.0, 2.5, 3.0]);
+        let result = PostgresStorage::vec_to_pgvector(&[1.0, 2.5, 3.0]).unwrap();
         assert_eq!(result, "[1,2.5,3]");
+    }
+
+    #[test]
+    fn test_vec_to_pgvector_rejects_nan() {
+        let result = PostgresStorage::vec_to_pgvector(&[1.0, f32::NAN, 3.0]);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Non-finite"), "Error: {}", err);
+        assert!(err.to_string().contains("index 1"), "Error: {}", err);
+    }
+
+    #[test]
+    fn test_vec_to_pgvector_rejects_infinity() {
+        let result = PostgresStorage::vec_to_pgvector(&[f32::INFINITY, 2.0]);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Non-finite"), "Error: {}", err);
+    }
+
+    #[test]
+    fn test_vec_to_pgvector_rejects_neg_infinity() {
+        let result = PostgresStorage::vec_to_pgvector(&[1.0, f32::NEG_INFINITY]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_vec_to_pgvector_empty() {
+        let result = PostgresStorage::vec_to_pgvector(&[]).unwrap();
+        assert_eq!(result, "[]");
     }
 
     #[test]
@@ -244,46 +284,302 @@ mod tests {
     }
 
     #[test]
+    fn test_pgvector_to_vec_whitespace() {
+        let result = PostgresStorage::pgvector_to_vec("[ 1.0 , 2.0 , 3.0 ]").unwrap();
+        assert_eq!(result.len(), 3);
+        assert!((result[0] - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_pgvector_to_vec_invalid_element() {
+        let result = PostgresStorage::pgvector_to_vec("[1.0,abc,3.0]");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pgvector_round_trip() {
+        let original = vec![0.1_f32, -2.5, 100.0, 0.0, -0.001];
+        let text = PostgresStorage::vec_to_pgvector(&original).unwrap();
+        let parsed = PostgresStorage::pgvector_to_vec(&text).unwrap();
+        assert_eq!(original.len(), parsed.len());
+        for (a, b) in original.iter().zip(parsed.iter()) {
+            assert!((a - b).abs() < 1e-6, "Mismatch: {} vs {}", a, b);
+        }
+    }
+
+    #[test]
     fn test_postgres_storage_is_send_sync() {
         fn _assert_send_sync<T: Send + Sync>() {}
         _assert_send_sync::<PostgresStorage>();
     }
 
-    // Integration tests are #[ignore] because they need a running PostgreSQL with pgvector.
+    // ---- Integration tests ----
+    // Require a running PostgreSQL with pgvector extension.
+    // Run with: TIMESCALE_URL="host=localhost dbname=ndp user=ndp password=ndp" cargo test -p ndp-intelligence -- --ignored
+
+    async fn setup_integration_client() -> Arc<Client> {
+        let url = std::env::var("TIMESCALE_URL")
+            .unwrap_or_else(|_| "host=localhost dbname=ndp user=ndp password=ndp".to_string());
+        let (client, connection) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+            .await
+            .expect("Failed to connect to PostgreSQL");
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                eprintln!("connection error: {}", e);
+            }
+        });
+        let client = Arc::new(client);
+
+        // Ensure schema and tables exist
+        client
+            .batch_execute(
+                "CREATE EXTENSION IF NOT EXISTS vector;
+                 CREATE SCHEMA IF NOT EXISTS gold;
+                 CREATE TABLE IF NOT EXISTS gold.metric_embeddings (
+                     bucket TIMESTAMPTZ NOT NULL,
+                     domain_id TEXT NOT NULL,
+                     embedding vector,
+                     dimensions INTEGER NOT NULL,
+                     metadata JSONB DEFAULT '{}',
+                     created_at TIMESTAMPTZ DEFAULT NOW(),
+                     PRIMARY KEY (bucket, domain_id)
+                 );
+                 CREATE TABLE IF NOT EXISTS gold.predictions (
+                     id BIGSERIAL,
+                     bucket TIMESTAMPTZ NOT NULL,
+                     domain_id TEXT NOT NULL,
+                     metric TEXT NOT NULL,
+                     horizon INTERVAL NOT NULL,
+                     predicted_value DOUBLE PRECISION,
+                     predicted_breach BOOLEAN,
+                     confidence DOUBLE PRECISION,
+                     k_neighbors INTEGER,
+                     k_supporting INTEGER,
+                     actual_value DOUBLE PRECISION,
+                     actual_breach BOOLEAN,
+                     correct BOOLEAN,
+                     evaluated_at TIMESTAMPTZ,
+                     created_at TIMESTAMPTZ DEFAULT NOW(),
+                     PRIMARY KEY (id)
+                 );",
+            )
+            .await
+            .expect("Failed to create tables");
+
+        // Clean test data
+        client
+            .batch_execute(
+                "DELETE FROM gold.metric_embeddings WHERE domain_id LIKE 'test-%';
+                 DELETE FROM gold.predictions WHERE domain_id LIKE 'test-%';",
+            )
+            .await
+            .expect("Failed to clean test data");
+
+        client
+    }
 
     #[tokio::test]
     #[ignore]
     async fn test_store_and_load_embedding_round_trip() {
-        // Requires: PostgreSQL with gold.metric_embeddings table + pgvector
+        let client = setup_integration_client().await;
+        let storage = PostgresStorage::new(client);
+        let now = Utc::now();
+
+        let embedding = StoredEmbedding {
+            bucket: now,
+            domain_id: "test-roundtrip".to_string(),
+            embedding: vec![0.1, 0.2, 0.3, 0.4],
+            dimensions: 4,
+            metadata: serde_json::json!({"source": "test"}),
+            created_at: now,
+        };
+
+        storage.store_embedding(&embedding).await.unwrap();
+
+        let loaded = storage
+            .load_embeddings("test-roundtrip", None)
+            .await
+            .unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].domain_id, "test-roundtrip");
+        assert_eq!(loaded[0].dimensions, 4);
+        assert_eq!(loaded[0].embedding.len(), 4);
+        for (a, b) in embedding.embedding.iter().zip(loaded[0].embedding.iter()) {
+            assert!((a - b).abs() < 1e-6, "Vector mismatch: {} vs {}", a, b);
+        }
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_upsert_on_conflict() {
-        // Verifies single row after two inserts for same bucket
+        let client = setup_integration_client().await;
+        let storage = PostgresStorage::new(client.clone());
+        let now = Utc::now();
+
+        let emb1 = StoredEmbedding {
+            bucket: now,
+            domain_id: "test-upsert".to_string(),
+            embedding: vec![1.0, 2.0],
+            dimensions: 2,
+            metadata: serde_json::json!({"version": 1}),
+            created_at: now,
+        };
+
+        let emb2 = StoredEmbedding {
+            bucket: now,
+            domain_id: "test-upsert".to_string(),
+            embedding: vec![3.0, 4.0],
+            dimensions: 2,
+            metadata: serde_json::json!({"version": 2}),
+            created_at: now,
+        };
+
+        storage.store_embedding(&emb1).await.unwrap();
+        storage.store_embedding(&emb2).await.unwrap();
+
+        let loaded = storage.load_embeddings("test-upsert", None).await.unwrap();
+        assert_eq!(loaded.len(), 1, "Upsert should produce single row");
+        // Should have the second embedding's data
+        assert!((loaded[0].embedding[0] - 3.0).abs() < 1e-6);
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_load_with_since_filter() {
-        // Only returns newer records
+        let client = setup_integration_client().await;
+        let storage = PostgresStorage::new(client);
+
+        let old = chrono::Utc::now() - chrono::Duration::hours(2);
+        let recent = chrono::Utc::now() - chrono::Duration::minutes(30);
+        let cutoff = chrono::Utc::now() - chrono::Duration::hours(1);
+
+        for (bucket, suffix) in [(old, "old"), (recent, "recent")] {
+            let emb = StoredEmbedding {
+                bucket,
+                domain_id: "test-since".to_string(),
+                embedding: vec![1.0],
+                dimensions: 1,
+                metadata: serde_json::json!({"label": suffix}),
+                created_at: bucket,
+            };
+            storage.store_embedding(&emb).await.unwrap();
+        }
+
+        let filtered = storage
+            .load_embeddings("test-since", Some(cutoff))
+            .await
+            .unwrap();
+        assert_eq!(filtered.len(), 1, "Should only return records after cutoff");
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_store_prediction_returns_id() {
-        // ID > 0
+        let client = setup_integration_client().await;
+        let storage = PostgresStorage::new(client);
+
+        let prediction = Prediction {
+            id: None,
+            bucket: Utc::now(),
+            domain_id: "test-pred-id".to_string(),
+            metric: "pm25".to_string(),
+            horizon: "1 hour".to_string(),
+            predicted_value: Some(25.0),
+            predicted_breach: Some(false),
+            confidence: 0.85,
+            k_neighbors: 10,
+            k_supporting: 8,
+            actual_value: None,
+            actual_breach: None,
+            correct: None,
+            evaluated_at: None,
+        };
+
+        let id = storage.store_prediction(&prediction).await.unwrap();
+        assert!(id > 0, "Prediction ID should be positive, got {}", id);
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_get_pending_outcomes() {
-        // Returns predictions where actual_value IS NULL
+        let client = setup_integration_client().await;
+        let storage = PostgresStorage::new(client);
+
+        // Insert a prediction without actual_value
+        let prediction = Prediction {
+            id: None,
+            bucket: Utc::now(),
+            domain_id: "test-pending".to_string(),
+            metric: "co2".to_string(),
+            horizon: "1 hour".to_string(),
+            predicted_value: Some(400.0),
+            predicted_breach: Some(false),
+            confidence: 0.9,
+            k_neighbors: 5,
+            k_supporting: 4,
+            actual_value: None,
+            actual_breach: None,
+            correct: None,
+            evaluated_at: None,
+        };
+
+        storage.store_prediction(&prediction).await.unwrap();
+
+        let pending = storage
+            .get_pending_outcomes("test-pending")
+            .await
+            .unwrap();
+        assert!(
+            !pending.is_empty(),
+            "Should return at least one pending prediction"
+        );
+        assert!(
+            pending.iter().all(|p| p.actual_value.is_none()),
+            "All pending predictions should have actual_value IS NULL"
+        );
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_record_outcome() {
-        // Sets correct, actual_value, evaluated_at
+        let client = setup_integration_client().await;
+        let storage = PostgresStorage::new(client);
+
+        let prediction = Prediction {
+            id: None,
+            bucket: Utc::now(),
+            domain_id: "test-outcome".to_string(),
+            metric: "pm25".to_string(),
+            horizon: "1 hour".to_string(),
+            predicted_value: Some(30.0),
+            predicted_breach: Some(true),
+            confidence: 0.75,
+            k_neighbors: 10,
+            k_supporting: 7,
+            actual_value: None,
+            actual_breach: None,
+            correct: None,
+            evaluated_at: None,
+        };
+
+        let pred_id = storage.store_prediction(&prediction).await.unwrap();
+
+        let outcome = ActualOutcome {
+            actual_value: 32.0,
+            actual_breach: true,
+            evaluated_at: Utc::now(),
+        };
+
+        storage.record_outcome(pred_id, &outcome).await.unwrap();
+
+        // Verify the prediction is no longer pending
+        let pending = storage
+            .get_pending_outcomes("test-outcome")
+            .await
+            .unwrap();
+        assert!(
+            pending.iter().all(|p| p.id != Some(pred_id)),
+            "Recorded prediction should no longer be pending"
+        );
     }
 }
