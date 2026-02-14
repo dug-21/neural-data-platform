@@ -6,6 +6,18 @@ paths:
 
 # Swarm Orchestration Protocol
 
+Base protocol for all swarm operations. Extended by `implementation-protocol.md` (for coding) and `planning-protocol.md` (for SPARC planning).
+
+---
+
+## Execution Model
+
+Swarms use **coordinator delegation**: the primary agent spawns `ndp-scrum-master` as the single coordinator, who then spawns worker agents, monitors results, detects drift, and controls flow. Use **Task tool** (spawn-and-wait) at both levels. Do NOT use TeamCreate — Teams are for long-running collaborative work requiring inter-agent messaging.
+
+See `implementation-protocol.md` and `planning-protocol.md` for the specific delegation flows.
+
+---
+
 ## Two Memory Systems — Know the Difference
 
 | System | Tool | Persistence | Purpose | Example |
@@ -17,31 +29,47 @@ paths:
 
 ---
 
-## Swarm Launch Sequence (ONE message, all steps)
+## Swarm Launch: 3 Messages
 
-When a task qualifies for swarm (see complexity detection below), execute these steps in a SINGLE message:
+When a task qualifies for swarm (see complexity detection below), execute in 3 messages:
 
-### Step 1: Initialize swarm coordination
+### Message 1: Infrastructure
+
+Initialize the swarm coordination layer. ONE Bash call.
+
 ```bash
 claude-flow swarm init --topology hierarchical --max-agents 8 --strategy specialized
 ```
 
-### Step 2: Seed shared memory with task context
-```bash
-claude-flow memory store --key "{feature-id}-context" --value "{task description, goals, constraints}" --namespace {feature-id}
+### Message 2: Definition + Coordination
+
+Define ALL tasks and seed shared memory in ONE message. Batch all TaskCreate calls and all Bash memory commands together.
+
 ```
+TaskCreate("Task 1 subject", "description", "active form")
+TaskCreate("Task 2 subject", "description", "active form")
+...
+
+Bash: claude-flow memory store --key "{feature-id}-context" \
+  --value "{task description, goals, constraints}" \
+  --namespace {feature-id}
+```
+
 The namespace is the coordination channel. All agents will read/write to it.
 
-### Step 3: Spawn agents via Task tool (background)
+### Message 3: Execution
+
+Spawn ALL agents in ONE message via Task tool. Every Task call runs in parallel.
 
 Each agent prompt MUST include:
-1. The task description
+1. The task description (2-3 sentences)
 2. The namespace to coordinate through
 3. Explicit instruction to read/write shared memory
+4. Specific file paths
 
 Example agent prompt:
 ```
-You are working on {feature-id}.
+You are working on {feature-id}. Namespace: {feature-id}
 
 Read shared context: claude-flow memory retrieve --key "{feature-id}-context" --namespace {feature-id}
 
@@ -51,9 +79,32 @@ claude-flow memory store --key "{feature-id}-{your-role}-result" --value "{summa
 Your task: [specific work for this agent]
 ```
 
-### Step 4: Tell the user, then STOP
+After spawning: tell the user what agents are working on, then STOP.
 
-Report what agents are working on. Do not add more tool calls. Wait for agents to return results.
+---
+
+## Spawn and Wait Pattern
+
+After spawning agents:
+1. **TELL USER** what agents are working on
+2. **STOP** — no more tool calls
+3. **WAIT** — let agents complete
+4. **SYNTHESIZE** — review results, check shared memory for coordination notes
+
+DO NOT: poll TaskOutput repeatedly, check swarm status continuously, or add more tool calls after spawning.
+
+---
+
+## Multi-Wave Features
+
+For features with sequential waves (Wave 1 → Wave 2 → Wave 3):
+- Spawn ALL agents within a wave in ONE message (parallel)
+- Wait for the wave to complete
+- Mark completed tasks, update TaskList
+- Spawn the next wave's agents in a NEW message (parallel)
+- Repeat until all waves complete
+
+Do NOT spawn agents from different waves in the same message if Wave N+1 depends on Wave N outputs.
 
 ---
 
@@ -77,10 +128,10 @@ These run via `.claude/settings.json` without agent action:
 ## Anti-Drift Config
 
 ```bash
-# Small teams (6-8 agents) — tight control
+# Small swarms (6-8 agents) — tight control
 claude-flow swarm init --topology hierarchical --max-agents 8 --strategy specialized
 
-# Large teams (10-15 agents) — queen + peer communication
+# Large swarms (10-15 agents) — queen + peer communication
 claude-flow swarm init --topology hierarchical-mesh --max-agents 15 --strategy specialized
 ```
 
@@ -106,15 +157,3 @@ claude-flow hooks model-route --task "[task description]"
 **USE SWARM when**: 3+ files, new feature, cross-module refactor, API changes, security changes, performance work, schema changes.
 
 **SKIP SWARM for**: single file edits, 1-2 line fixes, documentation updates, config changes, questions/exploration.
-
----
-
-## Spawn and Wait Pattern
-
-After spawning background agents:
-1. **TELL USER** what agents are working on
-2. **STOP** — no more tool calls
-3. **WAIT** — let agents complete
-4. **SYNTHESIZE** — review results, check shared memory for coordination notes
-
-DO NOT: poll TaskOutput repeatedly, check swarm status continuously, or add more tool calls after spawning.

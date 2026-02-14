@@ -19,11 +19,11 @@ paths:
 
 | Code | Task | Agents | Topology |
 |------|------|--------|----------|
-| 1 | Bug Fix | coordinator, researcher, ndp-rust-dev, ndp-tester | hierarchical |
+| 1 | Bug Fix | ndp-scrum-master, researcher, ndp-rust-dev, ndp-tester | hierarchical |
 | 3 | Feature | ndp-scrum-master, ndp-architect, ndp-rust-dev, ndp-tester, reviewer | hierarchical |
-| 5 | Refactor | coordinator, ndp-architect, ndp-rust-dev, reviewer | hierarchical |
-| 7 | Performance | coordinator, perf-engineer, ndp-rust-dev | hierarchical |
-| 9 | Security | coordinator, security-architect, auditor | hierarchical |
+| 5 | Refactor | ndp-scrum-master, ndp-architect, ndp-rust-dev, reviewer | hierarchical |
+| 7 | Performance | ndp-scrum-master, perf-engineer, ndp-rust-dev | hierarchical |
+| 9 | Security | ndp-scrum-master, security-architect, auditor | hierarchical |
 | 11 | Docs | researcher, api-docs | mesh |
 
 ## Initiative-Based Team Formation
