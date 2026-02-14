@@ -1,15 +1,16 @@
 //! Bronze layer subscriber for raw data storage with Write-Ahead Log
 //!
 //! BronzeSubscriber consumes RawDataPoint events from the EventBus,
-//! durably logs them to a WAL, accumulates them in memory, and
-//! periodically snapshots full Parquet files.
+//! durably logs them to a WAL, and periodically snapshots full Parquet
+//! files by replaying the WAL from disk.
 //!
-//! # Design (AIR-017 Bronze Write-Ahead Architecture)
+//! # Design (BUG-004 WAL-Only Architecture)
 //!
-//! - WAL append on event receipt (durability before memory)
-//! - Accumulator holds in-memory data grouped by source_id
-//! - Snapshot timer writes full Parquet per source (overwrite, no read-modify-write)
-//! - WAL watermark advanced after successful snapshot
+//! - WAL append on event receipt (durability)
+//! - No in-memory accumulator — WAL on disk is the single source of truth
+//! - Snapshot timer replays WAL, groups by source_id, writes full Parquet
+//! - WAL is NOT truncated at snapshot time (next snapshot needs same data + new)
+//! - WAL is truncated at day rollover only
 //! - Graceful shutdown triggers final snapshot
 //!
 //! # Configuration
@@ -30,13 +31,12 @@ use crate::diagnostics::{
     read_process_rss_mib, MemoryDiagnostics, MemoryTrend, MemoryWatchdog,
 };
 use crate::error::CoreResult;
-use crate::storage::accumulator::Accumulator;
 use crate::storage::wal::WriteAheadLog;
 use crate::subscribers::{Subscriber, SubscriberError};
 use crate::traits::{HealthStatus, RawStore};
 use crate::types::RawDataPoint;
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -67,12 +67,12 @@ pub struct BronzeSubscriberConfig {
     pub stream_filter: Vec<String>,
 
     /// Parquet snapshot interval in seconds (default: 1800 = 30 minutes).
-    /// Controls how often the in-memory accumulator is flushed to Parquet.
+    /// Controls how often the WAL is replayed and written to Parquet.
     #[serde(default = "default_snapshot_interval_secs")]
     pub snapshot_interval_secs: u64,
 
     /// UTC hour for day rollover (default: 0 = midnight UTC).
-    /// Determines when the accumulator rotates to a new calendar day.
+    /// Determines when the WAL is truncated and a new calendar day begins.
     #[serde(default)]
     pub day_rollover_utc_hour: u8,
 }
@@ -106,13 +106,13 @@ impl Default for BronzeSubscriberConfig {
 /// Subscriber for Bronze layer (Parquet) storage with Write-Ahead Log
 ///
 /// Consumes RawDataPoint events from EventBus, durably logs them via WAL,
-/// accumulates in memory, and periodically snapshots full Parquet files.
+/// and periodically snapshots full Parquet files by replaying the WAL from disk.
+/// No in-memory accumulator — the WAL on disk is the single source of truth.
 pub struct BronzeSubscriber {
     id: String,
     config: BronzeSubscriberConfig,
     store: Arc<dyn RawStore>,
     wal: WriteAheadLog,
-    accumulator: Accumulator,
     data_dir: PathBuf,
     cancellation_token: CancellationToken,
     is_running: bool,
@@ -147,15 +147,12 @@ impl BronzeSubscriber {
         data_dir: impl AsRef<Path>,
     ) -> CoreResult<Self> {
         let wal = WriteAheadLog::new(wal_path)?;
-        let today = Utc::now().date_naive();
-        let accumulator = Accumulator::new(today);
 
         Ok(Self {
             id: id.into(),
             config,
             store,
             wal,
-            accumulator,
             data_dir: data_dir.as_ref().to_path_buf(),
             cancellation_token: CancellationToken::new(),
             is_running: false,
@@ -170,10 +167,9 @@ impl BronzeSubscriber {
         })
     }
 
-    /// Process a single data point: WAL append first, then accumulator.
+    /// Process a single data point: WAL append only.
     ///
-    /// If WAL append fails, the point is NOT added to the accumulator
-    /// (per Pseudocode ADR: durability before memory).
+    /// The WAL on disk is the single source of truth. No in-memory buffering.
     fn handle_point(&mut self, point: Arc<RawDataPoint>) {
         self.events_received += 1;
 
@@ -189,11 +185,10 @@ impl BronzeSubscriber {
 
         let owned_point = (*point).clone();
 
-        // WAL first -- durability before memory
         match self.wal.append_point(&owned_point) {
             Ok(_seq) => {
-                // Only add to accumulator if WAL succeeded
-                self.accumulator.add(owned_point);
+                // WAL is the single source of truth.
+                // No accumulator — data is durable on disk.
             }
             Err(e) => {
                 self.wal_errors += 1;
@@ -206,74 +201,87 @@ impl BronzeSubscriber {
         }
     }
 
-    /// Snapshot all accumulated data to Parquet, then advance WAL watermark.
+    /// Snapshot by replaying the WAL from disk.
     ///
-    /// Writes one Parquet file per source_id (full overwrite, no read-modify-write).
-    /// On success, commits the WAL up to the current sequence number.
+    /// Reads all WAL entries, groups by source_id, writes one Parquet file
+    /// per source (full overwrite). Data is moved (not cloned) into the
+    /// Parquet writer. WAL is NOT truncated — it stays intact because the
+    /// next snapshot needs the same data plus any new entries. WAL is only
+    /// cleared at day rollover.
     async fn snapshot(&mut self) -> Result<(), SubscriberError> {
-        if self.accumulator.count() == 0 {
+        let snapshot_start = std::time::Instant::now();
+
+        // Read WAL file size before replay for logging
+        let wal_file_size = self.wal.file_size_bytes();
+
+        // Replay all entries from WAL
+        let entries = match self.wal.replay_since(0) {
+            Ok(entries) => entries,
+            Err(e) => {
+                error!(
+                    subscriber_id = %self.id,
+                    error = %e,
+                    "Snapshot: WAL replay failed"
+                );
+                return Err(SubscriberError::StorageError(format!(
+                    "WAL replay failed: {}",
+                    e
+                )));
+            }
+        };
+
+        if entries.is_empty() {
             return Ok(());
         }
 
-        let points_by_source = self.accumulator.all_points_by_source();
-        let snapshot_time = self.accumulator.latest().unwrap_or_else(Utc::now);
-        let total_points = self.accumulator.count();
+        let entry_count = entries.len();
+
+        // Group by source_id (move semantics — no clone)
+        let mut points_by_source: HashMap<String, Vec<RawDataPoint>> = HashMap::new();
+        for entry in entries {
+            points_by_source
+                .entry(entry.source_id.clone())
+                .or_default()
+                .push(entry.point);
+        }
+
         let source_count = points_by_source.len();
+        let total_points: usize = points_by_source.values().map(|v| v.len()).sum();
+
+        // Determine snapshot_time from latest point timestamp
+        let snapshot_time = points_by_source
+            .values()
+            .flat_map(|pts| pts.iter())
+            .map(|p| p.timestamp)
+            .max()
+            .unwrap_or_else(Utc::now);
 
         // BUG-005 diagnostic: memory state BEFORE Parquet writes
-        let accum_bytes = self.accumulator.memory_estimate_bytes();
-        let wal_bytes = self.wal.file_size_bytes();
         let rss_before = read_proc_status_rss_bytes();
         let alloc_before = read_mallinfo2();
         info!(
             subscriber_id = %self.id,
-            accumulator_bytes = accum_bytes,
-            accumulator_mib = format_args!("{:.1}", accum_bytes as f64 / 1_048_576.0),
-            wal_bytes = wal_bytes,
-            wal_mib = format_args!("{:.1}", wal_bytes as f64 / 1_048_576.0),
+            wal_file_bytes = wal_file_size,
+            wal_mib = format_args!("{:.1}", wal_file_size as f64 / 1_048_576.0),
             rss_mib = format_opt_mib(rss_before),
             fordblks_mib = format_opt_mib(alloc_before.as_ref().map(|a| a.fordblks)),
             total_points = total_points,
             sources = source_count,
+            wal_entries_replayed = entry_count,
             "Snapshot starting — memory diagnostics"
         );
 
-        let mut per_source_deltas: Vec<(String, usize, Option<i64>)> = Vec::new();
-
+        // Write one Parquet file per source_id (move, not clone)
         for (source_id, points) in points_by_source {
-            let rss_pre = read_proc_status_rss_bytes();
-            let partition_path = self.partition_path(source_id, snapshot_time);
+            let partition_path = self.partition_path(&source_id, snapshot_time);
 
             self.store
-                .write_raw_snapshot(points.clone(), &partition_path)
+                .write_raw_snapshot(points, &partition_path)
                 .await
                 .map_err(|e| {
                     SubscriberError::StorageError(format!("Snapshot write failed: {}", e))
                 })?;
-
-            let rss_post = read_proc_status_rss_bytes();
-            let delta = match (rss_pre, rss_post) {
-                (Some(pre), Some(post)) => Some(post as i64 - pre as i64),
-                _ => None,
-            };
-            per_source_deltas.push((source_id.to_string(), points.len(), delta));
         }
-
-        // Log per-source deltas at debug level
-        for (source_id, count, delta) in &per_source_deltas {
-            debug!(
-                subscriber_id = %self.id,
-                source_id = %source_id,
-                points = count,
-                rss_delta_mib = delta
-                    .map(|d| format!("{:+.1}", d as f64 / 1_048_576.0))
-                    .unwrap_or_else(|| "N/A".into()),
-                "Snapshot per-source memory delta"
-            );
-        }
-
-        // BUG-005 diagnostic: memory state AFTER Parquet writes, BEFORE malloc_trim
-        let rss_after_writes = read_proc_status_rss_bytes();
 
         // BUG-005: Force glibc to return freed arena pages after Arrow allocations.
         do_malloc_trim();
@@ -281,43 +289,25 @@ impl BronzeSubscriber {
         let rss_after_trim = read_proc_status_rss_bytes();
         let alloc_after = read_mallinfo2();
 
-        info!(
-            subscriber_id = %self.id,
-            rss_before_mib = format_opt_mib(rss_before),
-            rss_after_writes_mib = format_opt_mib(rss_after_writes),
-            rss_after_trim_mib = format_opt_mib(rss_after_trim),
-            write_delta_mib = match (rss_before, rss_after_writes) {
-                (Some(b), Some(a)) => format!("{:+.1}", (a as i64 - b as i64) as f64 / 1_048_576.0),
-                _ => "N/A".into(),
-            },
-            trim_reclaimed_mib = match (rss_after_writes, rss_after_trim) {
-                (Some(b), Some(a)) => format!("{:+.1}", (b as i64 - a as i64) as f64 / 1_048_576.0),
-                _ => "N/A".into(),
-            },
-            net_delta_mib = match (rss_before, rss_after_trim) {
-                (Some(b), Some(a)) => format!("{:+.1}", (a as i64 - b as i64) as f64 / 1_048_576.0),
-                _ => "N/A".into(),
-            },
-            fordblks_before_mib = format_opt_mib(alloc_before.as_ref().map(|a| a.fordblks)),
-            fordblks_after_mib = format_opt_mib(alloc_after.as_ref().map(|a| a.fordblks)),
-            "Snapshot RSS — write_delta=writes-before, trim_reclaimed=writes-after_trim, net=after_trim-before"
-        );
-
-        // All writes succeeded -- advance WAL watermark
-        let max_seq = self.wal.next_sequence().saturating_sub(1);
-        if max_seq > 0 {
-            self.wal
-                .commit_to(max_seq)
-                .map_err(|e| SubscriberError::StorageError(format!("WAL commit failed: {}", e)))?;
-        }
+        // DO NOT truncate WAL here.
+        // The WAL stays intact because the next snapshot needs the same data
+        // plus any new entries. WAL is only cleared at day rollover.
 
         self.events_written = total_points as u64;
         self.snapshots_written += 1;
 
+        let elapsed = snapshot_start.elapsed();
         info!(
             subscriber_id = %self.id,
             sources = source_count,
             total_points = total_points,
+            wal_entries_replayed = entry_count,
+            wal_file_bytes = wal_file_size,
+            elapsed_ms = elapsed.as_millis(),
+            rss_before_mib = format_opt_mib(rss_before),
+            rss_after_trim_mib = format_opt_mib(rss_after_trim),
+            fordblks_before_mib = format_opt_mib(alloc_before.as_ref().map(|a| a.fordblks)),
+            fordblks_after_mib = format_opt_mib(alloc_after.as_ref().map(|a| a.fordblks)),
             "Snapshot complete"
         );
 
@@ -339,81 +329,83 @@ impl BronzeSubscriber {
         Ok(())
     }
 
-    /// Recover accumulator state from Parquet + WAL on startup.
+    /// Log WAL state on startup for observability.
     ///
-    /// Called at the start of `start()` before entering the `select!` loop.
-    /// Rebuilds in-memory state from:
-    /// 1. Today's existing Parquet data (via `store.query_raw`) -- seeds accumulator
-    /// 2. WAL entries after the watermark -- merged with dedup into accumulator
-    ///
-    /// Both steps are non-fatal: Parquet read failure warns and falls back to
-    /// WAL-only recovery; WAL replay failure warns and continues with whatever
-    /// was seeded from Parquet.
-    async fn recover(&mut self) -> Result<(), SubscriberError> {
-        let today = Utc::now().date_naive();
-
-        // Step 1: Seed from today's Parquet (if any)
-        let start_of_day = today.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let end_of_day = start_of_day + chrono::Duration::days(1);
-
-        match self.store.query_raw(start_of_day, end_of_day, None).await {
-            Ok(parquet_points) => {
-                if !parquet_points.is_empty() {
-                    let count = parquet_points.len();
-                    for point in parquet_points {
-                        self.accumulator.add(point);
-                    }
-                    info!(
-                        subscriber_id = %self.id,
-                        points = count,
-                        "Recovery: seeded accumulator from Parquet"
-                    );
-                }
-            }
-            Err(e) => {
-                // Parquet read failure is non-fatal for recovery --
-                // we can still replay WAL entries
-                warn!(
-                    subscriber_id = %self.id,
-                    error = %e,
-                    "Recovery: failed to read Parquet, continuing with WAL only"
-                );
-            }
-        }
-
-        // Step 2: Replay WAL entries since watermark
-        let watermark = self.wal.current_watermark();
-        match self.wal.replay_since(watermark) {
-            Ok(wal_entries) => {
-                if !wal_entries.is_empty() {
-                    let count = wal_entries.len();
-                    let points: Vec<RawDataPoint> =
-                        wal_entries.into_iter().map(|e| e.point).collect();
-                    self.accumulator.merge_wal_entries(points);
-                    info!(
-                        subscriber_id = %self.id,
-                        entries = count,
-                        watermark = watermark,
-                        "Recovery: replayed WAL entries"
-                    );
-                }
-            }
-            Err(e) => {
-                warn!(
-                    subscriber_id = %self.id,
-                    error = %e,
-                    "Recovery: failed to replay WAL"
-                );
-            }
-        }
-
+    /// No recovery step needed — the WAL is already on disk and the next
+    /// snapshot timer will read it and write Parquet.
+    fn log_startup_wal_state(&self) {
+        let wal_size = self.wal.file_size_bytes();
+        let wal_entries = self.wal.entry_count().unwrap_or(0);
         info!(
             subscriber_id = %self.id,
-            accumulator_count = self.accumulator.count(),
-            "Recovery complete"
+            wal_file_bytes = wal_size,
+            wal_entry_count = wal_entries,
+            "Startup: WAL state (no recovery needed — WAL is on disk)"
+        );
+    }
+
+    /// Compute the Duration from `now` until the next day rollover at the
+    /// configured `day_rollover_utc_hour`. If `now` is exactly the rollover
+    /// hour, the next rollover is 24 hours away (we just rolled).
+    fn duration_until_next_rollover(&self, now: DateTime<Utc>) -> Duration {
+        let rollover_hour = self.config.day_rollover_utc_hour as u32;
+        let current_hour = now.hour();
+
+        // Build today's rollover timestamp
+        let today_rollover = now
+            .date_naive()
+            .and_hms_opt(rollover_hour, 0, 0)
+            .unwrap()
+            .and_utc();
+
+        let next_rollover = if now < today_rollover {
+            // Rollover hasn't happened yet today
+            today_rollover
+        } else {
+            // Rollover already passed (or is right now) — next one is tomorrow
+            today_rollover + chrono::Duration::days(1)
+        };
+
+        let diff = next_rollover - now;
+        // Convert chrono::Duration to std::time::Duration (always positive)
+        Duration::from_secs(diff.num_seconds().max(1) as u64)
+    }
+
+    /// Perform day rollover: final snapshot for the ending day, then truncate WAL.
+    async fn day_rollover(&mut self) {
+        info!(
+            subscriber_id = %self.id,
+            wal_entry_count = self.wal.entry_count().unwrap_or(0),
+            wal_file_bytes = self.wal.file_size_bytes(),
+            "Day rollover: performing final snapshot for ending day"
         );
 
-        Ok(())
+        // Final snapshot captures all WAL entries into Parquet
+        if let Err(e) = self.snapshot().await {
+            error!(
+                subscriber_id = %self.id,
+                error = %e,
+                "Day rollover: final snapshot failed — WAL NOT truncated (data preserved)"
+            );
+            return; // Do NOT truncate if snapshot failed — data would be lost
+        }
+
+        // Truncate WAL: all entries are now safely in Parquet
+        match self.wal.truncate() {
+            Ok(()) => {
+                info!(
+                    subscriber_id = %self.id,
+                    "Day rollover: WAL truncated for new day"
+                );
+            }
+            Err(e) => {
+                error!(
+                    subscriber_id = %self.id,
+                    error = %e,
+                    "Day rollover: WAL truncate failed — next snapshot will still replay all entries"
+                );
+            }
+        }
     }
 
     /// Compute Parquet partition path for a given source_id and timestamp.
@@ -452,8 +444,8 @@ impl Subscriber for BronzeSubscriber {
         }
         self.is_running = true;
 
-        // Recovery: rebuild accumulator from Parquet + WAL
-        self.recover().await?;
+        // Log WAL state — no recovery needed, WAL is on disk
+        self.log_startup_wal_state();
 
         let snapshot_interval = Duration::from_secs(self.config.snapshot_interval_secs);
         let mut snapshot_timer = tokio::time::interval(snapshot_interval);
@@ -465,6 +457,20 @@ impl Subscriber for BronzeSubscriber {
         // First tick is immediate, skip it
         flush_timer.tick().await;
 
+        // Day rollover timer: fires once at the configured UTC hour, then every 24h.
+        // Computes delay from now until the next rollover hour.
+        let rollover_delay = self.duration_until_next_rollover(Utc::now());
+        info!(
+            subscriber_id = %self.id,
+            rollover_utc_hour = self.config.day_rollover_utc_hour,
+            next_rollover_secs = rollover_delay.as_secs(),
+            "Day rollover scheduled"
+        );
+        let mut rollover_timer = tokio::time::interval_at(
+            tokio::time::Instant::now() + rollover_delay,
+            Duration::from_secs(86400), // repeat every 24h
+        );
+
         loop {
             tokio::select! {
                 biased;
@@ -473,6 +479,11 @@ impl Subscriber for BronzeSubscriber {
                 _ = self.cancellation_token.cancelled() => {
                     info!(subscriber_id = %self.id, "Received cancellation signal");
                     break;
+                }
+
+                // Day rollover -- truncate WAL for new calendar day
+                _ = rollover_timer.tick() => {
+                    self.day_rollover().await;
                 }
 
                 // Snapshot timer -- periodic Parquet archival
@@ -485,12 +496,11 @@ impl Subscriber for BronzeSubscriber {
                 // Flush timer -- periodic memory diagnostics
                 _ = flush_timer.tick() => {
                     // BUG-005 mitigation: nudge glibc to return freed arena pages
-                    // every heartbeat (30s), not just after snapshot. With
-                    // MALLOC_ARENA_MAX=2 this reclaims interior fragmentation
-                    // that malloc_trim(0) alone cannot reach at snapshot time.
+                    // every heartbeat (30s), not just after snapshot.
                     do_malloc_trim();
 
-                    let diag = MemoryDiagnostics::collect(&self.accumulator);
+                    let wal_bytes = self.wal.file_size_bytes();
+                    let diag = MemoryDiagnostics::collect(wal_bytes);
 
                     // Record RSS for trend tracking
                     if let Some(rss) = diag.rss_bytes {
@@ -499,32 +509,26 @@ impl Subscriber for BronzeSubscriber {
 
                     info!(
                         subscriber_id = %self.id,
-                        // Existing fields (backward compatible)
-                        accumulator_count = diag.accumulator_count,
-                        accumulator_mib = format_args!("{:.1}", diag.accumulator_estimate_bytes as f64 / 1_048_576.0),
-                        wal_mib = format_args!("{:.1}", self.wal.file_size_bytes() as f64 / 1_048_576.0),
+                        wal_mib = format_args!("{:.1}", wal_bytes as f64 / 1_048_576.0),
+                        wal_file_bytes = wal_bytes,
                         rss_mib = diag.rss_mib_display(),
                         wal_errors = self.wal_errors,
                         events_received = self.events_received,
-                        // NEW: accumulator capacity fields
-                        accum_hash_cap = diag.accumulator_capacity,
-                        accum_vec_cap = diag.accumulator_vec_capacity_sum,
-                        accum_vec_len = diag.accumulator_vec_len_sum,
-                        // NEW: allocator fields
+                        // Allocator fields
                         arena_mib = format_opt_mib(diag.arena_bytes),
                         fordblks_mib = format_opt_mib(diag.fordblks_bytes),
                         hblkhd_mib = format_opt_mib(diag.hblkhd_bytes),
-                        // NEW: smaps fields
+                        // Smaps fields
                         heap_rss_mib = format_opt_mib(diag.heap_rss_bytes),
                         anon_rss_mib = format_opt_mib(diag.anon_rss_bytes),
-                        // NEW: unaccounted gap
+                        // Unaccounted gap
                         unaccounted_mib = diag.unaccounted_bytes()
                             .map(|b| format!("{:.1}", b as f64 / 1_048_576.0))
                             .unwrap_or_else(|| "N/A".into()),
                         "Heartbeat"
                     );
 
-                    // BUG-005 defensive: check memory watchdog
+                    // Memory watchdog: check for restart threshold
                     if let Some(rss) = diag.rss_bytes {
                         if self.memory_watchdog.should_restart(rss) {
                             warn!(
@@ -533,7 +537,6 @@ impl Subscriber for BronzeSubscriber {
                                 threshold_mib = self.memory_watchdog.threshold_mib().unwrap_or(0),
                                 arena_mib = format_opt_mib(diag.arena_bytes),
                                 fordblks_mib = format_opt_mib(diag.fordblks_bytes),
-                                accumulator_count = diag.accumulator_count,
                                 uptime_samples = self.memory_trend.len(),
                                 "MEMORY WATCHDOG: RSS exceeds restart threshold — initiating graceful restart. WAL ensures zero data loss."
                             );
@@ -547,20 +550,7 @@ impl Subscriber for BronzeSubscriber {
                 result = receiver.recv() => {
                     match result {
                         Ok(point) => {
-                            let rss_enter = read_proc_status_rss_bytes();
                             self.handle_point(point);
-                            let rss_exit = read_proc_status_rss_bytes();
-                            if let (Some(e), Some(x)) = (rss_enter, rss_exit) {
-                                let delta = x as i64 - e as i64;
-                                if delta.unsigned_abs() > 1_048_576 {
-                                    debug!(
-                                        subscriber_id = %self.id,
-                                        subsystem = "BronzeIngest",
-                                        rss_delta_mib = format!("{:+.1}", delta as f64 / 1_048_576.0),
-                                        "Subsystem memory delta > 1 MiB"
-                                    );
-                                }
-                            }
                         }
                         Err(RecvError::Lagged(n)) => {
                             warn!(
@@ -642,8 +632,8 @@ impl Subscriber for BronzeSubscriber {
         details.insert("errors_total".to_string(), self.errors_total.to_string());
         details.insert("wal_errors".to_string(), self.wal_errors.to_string());
         details.insert(
-            "accumulator_count".to_string(),
-            self.accumulator.count().to_string(),
+            "wal_file_bytes".to_string(),
+            self.wal.file_size_bytes().to_string(),
         );
         details.insert("is_running".to_string(), self.is_running.to_string());
 
@@ -681,7 +671,6 @@ mod tests {
     use chrono::Utc;
     use mockall::predicate::*;
     use serde_json::json;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::sync::broadcast;
 
     // ========== HELPER FUNCTIONS ==========
@@ -902,11 +891,11 @@ mod tests {
         assert!(!subscriber.accepts_stream("outdoor-weather-Http"));
     }
 
-    // ========== TDD CYCLE 3: handle_point WAL-first behavior ==========
+    // ========== TDD CYCLE 3: handle_point WAL-only behavior ==========
 
     #[test]
-    fn test_handle_point_wal_then_accumulator() {
-        // Behavior: WAL append happens first, then accumulator add
+    fn test_handle_point_wal_only() {
+        // Behavior: WAL append is the sole write path (no accumulator)
         let config = create_config(10, 5);
         let mock_store = MockRawStore::new();
         let mut subscriber = create_test_subscriber("bronze-test", config, mock_store);
@@ -914,8 +903,8 @@ mod tests {
         let point = Arc::new(create_test_point("air-quality-Mqtt"));
         subscriber.handle_point(point);
 
-        // Point should be in accumulator (WAL succeeded)
-        assert_eq!(subscriber.accumulator.count(), 1);
+        // WAL should have 1 entry
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 1);
         assert_eq!(subscriber.events_received, 1);
         assert_eq!(subscriber.wal_errors, 0);
 
@@ -933,14 +922,13 @@ mod tests {
         subscriber.handle_point(Arc::new(create_test_point("air-quality-Mqtt")));
         subscriber.handle_point(Arc::new(create_test_point("outdoor-weather-Http")));
 
-        assert_eq!(subscriber.accumulator.count(), 3);
-        assert_eq!(subscriber.accumulator.source_count(), 2);
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 3);
         assert_eq!(subscriber.wal.next_sequence(), 4);
     }
 
     #[test]
-    fn test_filtered_points_not_in_wal_or_accumulator() {
-        // Filtered points should not be written to WAL or accumulator
+    fn test_filtered_points_not_in_wal() {
+        // Filtered points should not be written to WAL
         let config = BronzeSubscriberConfig {
             batch_size: 10,
             stream_filter: vec!["air-quality".to_string()],
@@ -953,7 +941,7 @@ mod tests {
         let point = Arc::new(create_test_point("outdoor-weather-Http"));
         subscriber.handle_point(point);
 
-        assert_eq!(subscriber.accumulator.count(), 0);
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 0);
         assert_eq!(subscriber.events_received, 1); // Still counted as received
         assert_eq!(subscriber.wal.next_sequence(), 1); // WAL not advanced
     }
@@ -997,7 +985,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_snapshot_advances_wal_watermark() {
+    async fn test_snapshot_does_not_truncate_wal() {
+        // WAL-only architecture: snapshot replays WAL but does NOT truncate.
+        // WAL stays intact for the next snapshot. Only day rollover truncates.
         let config = create_config(10, 5);
         let mut mock_store = MockRawStore::new();
 
@@ -1014,13 +1004,14 @@ mod tests {
         }
 
         assert_eq!(subscriber.wal.next_sequence(), 4);
-        assert_eq!(subscriber.wal.current_watermark(), 0);
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 3);
 
         let result = subscriber.snapshot().await;
         assert!(result.is_ok());
 
-        // WAL watermark should advance to 3 (max_seq = next - 1)
-        assert_eq!(subscriber.wal.current_watermark(), 3);
+        // WAL should still have all 3 entries (no truncation at snapshot)
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 3);
+        assert_eq!(subscriber.wal.next_sequence(), 4);
     }
 
     #[tokio::test]
@@ -1107,7 +1098,7 @@ mod tests {
         assert!(health.details.contains_key("snapshots_written"));
         assert!(health.details.contains_key("errors_total"));
         assert!(health.details.contains_key("wal_errors"));
-        assert!(health.details.contains_key("accumulator_count"));
+        assert!(health.details.contains_key("wal_file_bytes"));
     }
 
     // ========== TDD CYCLE 7: Extract Stream ID Helper Tests ==========
@@ -1144,13 +1135,7 @@ mod tests {
         config.snapshot_interval_secs = 1; // 1 second snapshot timer
         let mut mock_store = MockRawStore::new();
 
-        // Recovery: no existing Parquet data
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(|_, _, _| Ok(vec![]));
-
-        // Expect snapshot write(s) for the accumulated points
+        // Expect snapshot write(s) for the WAL-replayed points
         mock_store
             .expect_write_raw_snapshot()
             .times(1..)
@@ -1190,12 +1175,6 @@ mod tests {
         let mut config = create_config(100, 60);
         config.snapshot_interval_secs = 1; // 1 second snapshot interval
         let mut mock_store = MockRawStore::new();
-
-        // Recovery: no existing Parquet data
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(|_, _, _| Ok(vec![]));
 
         // Expect at least one snapshot write from the timer
         mock_store
@@ -1254,12 +1233,6 @@ mod tests {
         let config = create_config(100, 60);
         let mut mock_store = MockRawStore::new();
 
-        // Recovery: no existing Parquet data
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(|_, _, _| Ok(vec![]));
-
         // Expect final snapshot on shutdown
         mock_store
             .expect_write_raw_snapshot()
@@ -1295,25 +1268,25 @@ mod tests {
         let _ = std::fs::remove_dir_all(&_temp_dir);
     }
 
-    // ========== TDD CYCLE 9: Startup Recovery Tests (P1-06) ==========
+    // ========== TDD CYCLE 9: WAL Startup State Tests ==========
 
-    /// Helper: create a test point with a specific timestamp for recovery tests.
+    /// Helper: create a test point with a specific timestamp.
     fn create_test_point_at(source_id: &str, ts: DateTime<Utc>) -> RawDataPoint {
         RawDataPoint::new(source_id, json!({"pm25": 12.5, "co2": 450}))
             .with_timestamp(ts)
             .with_ndp_id("test-device-001")
     }
 
-    /// Helper: create a subscriber with a pre-populated WAL for recovery testing.
-    /// Returns the subscriber AND the temp_dir (for WAL path access in multi-step tests).
-    fn create_recovery_subscriber(
+    /// Helper: create a subscriber with a pre-populated WAL.
+    /// Returns the subscriber AND the temp_dir path for cleanup.
+    fn create_subscriber_with_wal(
         id: &str,
         config: BronzeSubscriberConfig,
         mock_store: MockRawStore,
         wal_setup: impl FnOnce(&mut crate::storage::wal::WriteAheadLog),
     ) -> (BronzeSubscriber, PathBuf) {
         let temp_dir =
-            std::env::temp_dir().join(format!("bronze_recovery_{}_{}", id, uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("bronze_wal_{}_{}", id, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let wal_path = temp_dir.join("wal.log");
         let data_dir = temp_dir.join("data");
@@ -1331,71 +1304,24 @@ mod tests {
         (sub, temp_dir)
     }
 
-    #[tokio::test]
-    async fn test_recovery_empty_start() {
-        // Case: First run -- no Parquet, empty WAL -> accumulator stays empty
+    #[test]
+    fn test_startup_wal_state_empty() {
+        // First run -- empty WAL. log_startup_wal_state() should not panic.
         let config = create_config(10, 60);
-        let mut mock_store = MockRawStore::new();
+        let mock_store = MockRawStore::new();
+        let subscriber = create_test_subscriber("startup-empty", config, mock_store);
 
-        // query_raw returns empty (no Parquet data)
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(|_, _, _| Ok(vec![]));
-
-        let mut subscriber = create_test_subscriber("recovery-empty", config, mock_store);
-
-        subscriber.recover().await.unwrap();
-
-        assert_eq!(subscriber.accumulator.count(), 0);
-        assert_eq!(subscriber.accumulator.source_count(), 0);
+        // Should not panic; just logs
+        subscriber.log_startup_wal_state();
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 0);
     }
 
-    #[tokio::test]
-    async fn test_recovery_parquet_only() {
-        // Case: Clean shutdown after snapshot -- Parquet has data, WAL empty
+    #[test]
+    fn test_startup_wal_state_with_existing_entries() {
+        // Restart after crash -- WAL has durable entries on disk.
+        // New subscriber should see them via entry_count().
         let config = create_config(10, 60);
-        let mut mock_store = MockRawStore::new();
-
-        let today_start = Utc::now()
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
-        let ts1 = today_start + chrono::Duration::hours(1);
-        let ts2 = today_start + chrono::Duration::hours(2);
-        let ts3 = today_start + chrono::Duration::hours(3);
-
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(move |_, _, _| {
-                Ok(vec![
-                    create_test_point_at("air-quality-Mqtt", ts1),
-                    create_test_point_at("air-quality-Mqtt", ts2),
-                    create_test_point_at("outdoor-weather-Http", ts3),
-                ])
-            });
-
-        let mut subscriber = create_test_subscriber("recovery-parquet", config, mock_store);
-
-        subscriber.recover().await.unwrap();
-
-        assert_eq!(subscriber.accumulator.count(), 3);
-        assert_eq!(subscriber.accumulator.source_count(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_recovery_wal_only() {
-        // Case: Crash after events but before snapshot -- no Parquet, WAL has entries
-        let config = create_config(10, 60);
-        let mut mock_store = MockRawStore::new();
-
-        // query_raw returns empty (no Parquet)
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(|_, _, _| Ok(vec![]));
+        let mock_store = MockRawStore::new();
 
         let today_start = Utc::now()
             .date_naive()
@@ -1405,29 +1331,33 @@ mod tests {
         let ts1 = today_start + chrono::Duration::hours(4);
         let ts2 = today_start + chrono::Duration::hours(5);
 
-        let (mut subscriber, temp_dir) =
-            create_recovery_subscriber("recovery-wal", config, mock_store, |wal| {
-                // Append 2 entries to WAL (uncommitted -- watermark stays at 0)
+        let (subscriber, temp_dir) =
+            create_subscriber_with_wal("startup-existing", config, mock_store, |wal| {
                 let p1 = create_test_point_at("air-quality-Mqtt", ts1);
                 let p2 = create_test_point_at("outdoor-weather-Http", ts2);
                 wal.append_point(&p1).unwrap();
                 wal.append_point(&p2).unwrap();
             });
 
-        subscriber.recover().await.unwrap();
-
-        assert_eq!(subscriber.accumulator.count(), 2);
-        assert_eq!(subscriber.accumulator.source_count(), 2);
+        subscriber.log_startup_wal_state();
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 2);
+        assert!(subscriber.wal.file_size_bytes() > 0);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[tokio::test]
-    async fn test_recovery_parquet_plus_wal() {
-        // Case: Crash between snapshot and next snapshot
-        // Parquet has data from before snapshot, WAL has post-watermark entries
+    async fn test_wal_survives_restart_and_snapshot_writes_parquet() {
+        // Simulate crash: WAL has entries. New subscriber starts, snapshot
+        // replays WAL and writes Parquet. Verifies the WAL-only recovery model.
         let config = create_config(10, 60);
         let mut mock_store = MockRawStore::new();
+
+        // Expect snapshot to write Parquet from WAL replay
+        mock_store
+            .expect_write_raw_snapshot()
+            .times(1)
+            .returning(|_, _| Ok(()));
 
         let today_start = Utc::now()
             .date_naive()
@@ -1436,135 +1366,159 @@ mod tests {
             .and_utc();
         let ts1 = today_start + chrono::Duration::hours(1);
         let ts2 = today_start + chrono::Duration::hours(2);
-        let ts3 = today_start + chrono::Duration::hours(3); // WAL-only
-        let ts4 = today_start + chrono::Duration::hours(4); // WAL-only
-
-        // Parquet returns 2 points (from the last successful snapshot)
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(move |_, _, _| {
-                Ok(vec![
-                    create_test_point_at("air-quality-Mqtt", ts1),
-                    create_test_point_at("air-quality-Mqtt", ts2),
-                ])
-            });
 
         let (mut subscriber, temp_dir) =
-            create_recovery_subscriber("recovery-both", config, mock_store, |wal| {
-                // Simulate: 2 entries committed (watermark=2), then 2 more uncommitted
+            create_subscriber_with_wal("wal-restart", config, mock_store, |wal| {
                 let p1 = create_test_point_at("air-quality-Mqtt", ts1);
                 let p2 = create_test_point_at("air-quality-Mqtt", ts2);
-                let p3 = create_test_point_at("air-quality-Mqtt", ts3);
-                let p4 = create_test_point_at("outdoor-weather-Http", ts4);
                 wal.append_point(&p1).unwrap();
                 wal.append_point(&p2).unwrap();
-                wal.commit_to(2).unwrap(); // Snapshot committed first 2
-                wal.append_point(&p3).unwrap();
-                wal.append_point(&p4).unwrap();
             });
 
-        subscriber.recover().await.unwrap();
+        // WAL has 2 entries from before "crash"
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 2);
 
-        // Parquet seeds 2 points (ts1, ts2 from air-quality-Mqtt)
-        // WAL replays entries > watermark(2): seq 3 (ts3) and seq 4 (ts4)
-        // merge_wal_entries deduplicates: ts3 is new, ts4 is new
-        // Total: 2 (parquet) + 2 (WAL new) = 4
-        assert_eq!(subscriber.accumulator.count(), 4);
-        assert_eq!(subscriber.accumulator.source_count(), 2);
+        // Snapshot replays WAL -> writes Parquet
+        subscriber.snapshot().await.unwrap();
+        assert_eq!(subscriber.snapshots_written, 1);
+        assert_eq!(subscriber.events_written, 2);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
+    // ========== TDD CYCLE 10: Day Rollover Tests (Phase 2) ==========
+
+    #[test]
+    fn test_duration_until_next_rollover_before_hour() {
+        // If current time is before rollover hour, rollover is today
+        let config = BronzeSubscriberConfig {
+            day_rollover_utc_hour: 6,
+            ..Default::default()
+        };
+        let mock_store = MockRawStore::new();
+        let subscriber = create_test_subscriber("rollover-test", config, mock_store);
+
+        // 03:00 UTC -- rollover at 06:00 is 3 hours away
+        let now = chrono::TimeZone::with_ymd_and_hms(&Utc, 2026, 2, 14, 3, 0, 0).unwrap();
+        let delay = subscriber.duration_until_next_rollover(now);
+        assert_eq!(delay.as_secs(), 3 * 3600);
+    }
+
+    #[test]
+    fn test_duration_until_next_rollover_after_hour() {
+        // If current time is after rollover hour, rollover is tomorrow
+        let config = BronzeSubscriberConfig {
+            day_rollover_utc_hour: 6,
+            ..Default::default()
+        };
+        let mock_store = MockRawStore::new();
+        let subscriber = create_test_subscriber("rollover-test", config, mock_store);
+
+        // 10:00 UTC -- rollover at 06:00 tomorrow is 20 hours away
+        let now = chrono::TimeZone::with_ymd_and_hms(&Utc, 2026, 2, 14, 10, 0, 0).unwrap();
+        let delay = subscriber.duration_until_next_rollover(now);
+        assert_eq!(delay.as_secs(), 20 * 3600);
+    }
+
+    #[test]
+    fn test_duration_until_next_rollover_at_exact_hour() {
+        // If current time IS the rollover hour, next rollover is 24h away
+        let config = BronzeSubscriberConfig {
+            day_rollover_utc_hour: 6,
+            ..Default::default()
+        };
+        let mock_store = MockRawStore::new();
+        let subscriber = create_test_subscriber("rollover-test", config, mock_store);
+
+        // 06:00 UTC exactly -- next rollover is tomorrow at 06:00
+        let now = chrono::TimeZone::with_ymd_and_hms(&Utc, 2026, 2, 14, 6, 0, 0).unwrap();
+        let delay = subscriber.duration_until_next_rollover(now);
+        assert_eq!(delay.as_secs(), 24 * 3600);
+    }
+
+    #[test]
+    fn test_duration_until_next_rollover_midnight_default() {
+        // Default config: rollover at midnight (hour 0)
+        let config = BronzeSubscriberConfig::default();
+        let mock_store = MockRawStore::new();
+        let subscriber = create_test_subscriber("rollover-test", config, mock_store);
+
+        // 22:00 UTC -- rollover at 00:00 is 2 hours away
+        let now = chrono::TimeZone::with_ymd_and_hms(&Utc, 2026, 2, 14, 22, 0, 0).unwrap();
+        let delay = subscriber.duration_until_next_rollover(now);
+        assert_eq!(delay.as_secs(), 2 * 3600);
+    }
+
     #[tokio::test]
-    async fn test_recovery_parquet_failure_falls_back_to_wal() {
-        // Case: Parquet read fails (e.g., corrupted file) -- should still recover from WAL
+    async fn test_day_rollover_snapshots_then_truncates_wal() {
+        // Day rollover should: (1) snapshot all WAL entries, (2) truncate WAL
         let config = create_config(10, 60);
         let mut mock_store = MockRawStore::new();
 
-        // query_raw fails
+        // Expect snapshot write (1 source)
         mock_store
-            .expect_query_raw()
+            .expect_write_raw_snapshot()
             .times(1)
-            .returning(|_, _, _| Err(CoreError::Storage("Corrupted Parquet file".to_string())));
+            .returning(|_, _| Ok(()));
 
-        let today_start = Utc::now()
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
-        let ts1 = today_start + chrono::Duration::hours(6);
-        let ts2 = today_start + chrono::Duration::hours(7);
+        let mut subscriber = create_test_subscriber("rollover-test", config, mock_store);
 
-        let (mut subscriber, temp_dir) =
-            create_recovery_subscriber("recovery-fallback", config, mock_store, |wal| {
-                let p1 = create_test_point_at("air-quality-Mqtt", ts1);
-                let p2 = create_test_point_at("outdoor-weather-Http", ts2);
-                wal.append_point(&p1).unwrap();
-                wal.append_point(&p2).unwrap();
-            });
+        // Add some data
+        subscriber.handle_point(Arc::new(create_test_point("air-quality-Mqtt")));
+        subscriber.handle_point(Arc::new(create_test_point("air-quality-Mqtt")));
+        subscriber.handle_point(Arc::new(create_test_point("air-quality-Mqtt")));
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 3);
 
-        // recover() should NOT return an error -- Parquet failure is non-fatal
-        let result = subscriber.recover().await;
-        assert!(result.is_ok());
+        // Day rollover
+        subscriber.day_rollover().await;
 
-        // Accumulator should contain WAL data only
-        assert_eq!(subscriber.accumulator.count(), 2);
-        assert_eq!(subscriber.accumulator.source_count(), 2);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // WAL should be truncated (empty)
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 0);
+        assert_eq!(subscriber.snapshots_written, 1);
+        assert_eq!(subscriber.events_written, 3);
     }
 
     #[tokio::test]
-    async fn test_recovery_called_before_select_loop() {
-        // Integration test: verify that start() calls recover() before processing events.
-        // We seed Parquet with data; after start+shutdown the subscriber should have
-        // those points in the accumulator (proving recovery ran before event processing).
-        let mut config = create_config(100, 60);
-        config.snapshot_interval_secs = 3600; // Long interval -- no snapshot during test
+    async fn test_day_rollover_does_not_truncate_on_snapshot_failure() {
+        // If snapshot fails during day rollover, WAL must NOT be truncated
+        let config = create_config(10, 60);
         let mut mock_store = MockRawStore::new();
 
-        let today_start = Utc::now()
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
-        let ts1 = today_start + chrono::Duration::hours(1);
-
-        // Recovery: query_raw returns 1 point
-        mock_store
-            .expect_query_raw()
-            .times(1)
-            .returning(move |_, _, _| Ok(vec![create_test_point_at("air-quality-Mqtt", ts1)]));
-
-        // Final snapshot on shutdown writes accumulated data
+        // Snapshot will fail
         mock_store
             .expect_write_raw_snapshot()
-            .times(1..)
-            .returning(|_, _| Ok(()));
+            .times(1)
+            .returning(|_, _| Err(CoreError::Storage("Disk full".to_string())));
 
-        let (subscriber, temp_dir) =
-            create_test_subscriber_with_cleanup("recovery-integration", config, mock_store);
-        let mut subscriber = subscriber;
+        let mut subscriber = create_test_subscriber("rollover-fail", config, mock_store);
 
-        let (tx, rx) = broadcast::channel::<Arc<RawDataPoint>>(100);
+        subscriber.handle_point(Arc::new(create_test_point("air-quality-Mqtt")));
+        subscriber.handle_point(Arc::new(create_test_point("air-quality-Mqtt")));
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 2);
 
-        let cancel_token = subscriber.cancellation_token.clone();
-        let subscriber_handle = tokio::spawn(async move { subscriber.start(rx).await });
+        // Day rollover -- snapshot fails
+        subscriber.day_rollover().await;
 
-        // Give time for recovery + startup
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // WAL must still have all entries (NOT truncated)
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 2);
+        assert_eq!(subscriber.snapshots_written, 0);
+    }
 
-        // Immediately shutdown -- we only care that recovery ran
-        cancel_token.cancel();
+    #[tokio::test]
+    async fn test_day_rollover_empty_wal_is_noop() {
+        // Rollover with empty WAL should be a clean no-op
+        let config = create_config(10, 60);
+        let mock_store = MockRawStore::new();
+        // No expectations -- write_raw_snapshot should NOT be called
 
-        let result = subscriber_handle.await.unwrap();
-        assert!(result.is_ok());
+        let mut subscriber = create_test_subscriber("rollover-empty", config, mock_store);
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 0);
 
-        // The final snapshot write proves recovery seeded the accumulator
-        // (write_raw_snapshot was called, meaning accumulator had data)
-        drop(tx);
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        subscriber.day_rollover().await;
+
+        // WAL still empty, no snapshots
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 0);
+        assert_eq!(subscriber.snapshots_written, 0);
     }
 }
 
@@ -1716,11 +1670,11 @@ mod integration_tests {
         }
     }
 
-    // ========== TEST 2: Crash recovery (INT-04) ==========
+    // ========== TEST 2: WAL-only crash recovery (INT-04) ==========
     //
-    // Write events to WAL + accumulator, simulate crash (drop subscriber),
-    // create new subscriber on same directory, verify recovery rebuilds
-    // accumulator from Parquet + WAL.
+    // Write events via handle_point (WAL), snapshot (Parquet), add more events,
+    // then "crash" (drop). Create new subscriber on same directory — WAL has all
+    // entries, snapshot replays them to write correct Parquet.
 
     #[tokio::test]
     async fn test_integration_crash_recovery() {
@@ -1752,25 +1706,24 @@ mod integration_tests {
                 let point = gen_point("air-quality-Mqtt", base_time, i);
                 subscriber.handle_point(Arc::new(point));
             }
-            assert_eq!(subscriber.accumulator.count(), 10);
+            assert_eq!(subscriber.wal.entry_count().unwrap(), 10);
             assert_eq!(subscriber.wal.next_sequence(), 11);
 
-            // Snapshot the first 10
+            // Snapshot the first 10 (writes Parquet, WAL stays intact)
             subscriber.snapshot().await.unwrap();
             assert_eq!(subscriber.snapshots_written, 1);
 
-            // Feed 5 more events (these are in WAL but NOT yet in Parquet)
+            // Feed 5 more events (WAL now has 15 total)
             for i in 10..15 {
                 let point = gen_point("air-quality-Mqtt", base_time, i);
                 subscriber.handle_point(Arc::new(point));
             }
-            assert_eq!(subscriber.accumulator.count(), 15);
+            assert_eq!(subscriber.wal.entry_count().unwrap(), 15);
 
             // "Crash" -- drop subscriber without final snapshot
-            // (WAL entries 11-15 are uncommitted, Parquet has entries 1-10)
         }
 
-        // Phase 2: Create new subscriber on the same directory and recover
+        // Phase 2: Create new subscriber on the same directory
         {
             let store = Arc::new(ParquetStore::new(&data_dir).unwrap());
             let config = BronzeSubscriberConfig {
@@ -1791,23 +1744,14 @@ mod integration_tests {
             )
             .unwrap();
 
-            // Run recovery
-            subscriber.recover().await.unwrap();
-
-            // Verify: accumulator should have all 15 points
-            // (10 from Parquet seed + 5 from WAL replay, with dedup)
+            // WAL has all 15 entries from before "crash"
             assert_eq!(
-                subscriber.accumulator.count(),
+                subscriber.wal.entry_count().unwrap(),
                 15,
-                "Recovery should rebuild all 15 points (10 Parquet + 5 WAL)"
-            );
-            assert_eq!(
-                subscriber.accumulator.source_count(),
-                1,
-                "All points are from one source"
+                "WAL should have all 15 entries from pre-crash"
             );
 
-            // Take a snapshot to verify the recovered data writes correctly
+            // Snapshot replays WAL -> writes all 15 points to Parquet
             subscriber.snapshot().await.unwrap();
 
             // Query Parquet to verify all 15 points persisted
@@ -1815,7 +1759,7 @@ mod integration_tests {
             assert_eq!(
                 stored_points.len(),
                 15,
-                "Post-recovery snapshot should contain all 15 points"
+                "Post-crash snapshot should contain all 15 points from WAL"
             );
         }
     }
@@ -1823,7 +1767,7 @@ mod integration_tests {
     // ========== TEST 3: Snapshot overwrites previous (INT-02) ==========
     //
     // Take snapshot, add more events, take another snapshot, verify Parquet
-    // has ALL data (accumulator-based overwrite, not append).
+    // has ALL data (WAL-based overwrite, not append).
 
     #[tokio::test]
     async fn test_integration_snapshot_overwrites_previous() {
@@ -1854,7 +1798,7 @@ mod integration_tests {
             subscriber.handle_point(Arc::new(point));
         }
 
-        // First snapshot: writes 10 points to Parquet
+        // First snapshot: replays WAL (10 entries) -> writes 10 points to Parquet
         subscriber.snapshot().await.unwrap();
         let points_after_snap1 = query_all_raw(&store).await;
         assert_eq!(
@@ -1863,14 +1807,14 @@ mod integration_tests {
             "First snapshot should have 10 points"
         );
 
-        // Feed 10 more events
+        // Feed 10 more events (WAL now has 20 total)
         for i in 10..20 {
             let point = gen_point("air-quality-Mqtt", base_time, i);
             subscriber.handle_point(Arc::new(point));
         }
-        assert_eq!(subscriber.accumulator.count(), 20);
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 20);
 
-        // Second snapshot: overwrites Parquet with all 20 points from accumulator
+        // Second snapshot: replays entire WAL (20 entries) -> overwrites Parquet with all 20
         subscriber.snapshot().await.unwrap();
         let points_after_snap2 = query_all_raw(&store).await;
         assert_eq!(
@@ -1889,7 +1833,7 @@ mod integration_tests {
         assert_eq!(indices, expected, "All 20 point indices should be present");
     }
 
-    // ========== TEST 4: Multiple streams in same accumulator (INT-06) ==========
+    // ========== TEST 4: Multiple streams isolation via WAL (INT-06) ==========
     //
     // Feed events from different source_ids, verify each stream gets its own
     // Parquet file in the correct partition path.
@@ -1931,8 +1875,7 @@ mod integration_tests {
             subscriber.handle_point(Arc::new(point));
         }
 
-        assert_eq!(subscriber.accumulator.count(), 16);
-        assert_eq!(subscriber.accumulator.source_count(), 3);
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 16);
 
         // Snapshot all streams
         subscriber.snapshot().await.unwrap();

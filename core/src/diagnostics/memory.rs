@@ -8,7 +8,6 @@
 //! `read_*()` (reads the file). Linux-specific code is behind
 //! `#[cfg(target_os = "linux")]` with `None` fallback.
 
-use crate::storage::accumulator::Accumulator;
 use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 
@@ -116,6 +115,9 @@ impl MemoryTrend {
 // ---------------------------------------------------------------------------
 
 /// Central collection struct: one snapshot of all memory metrics.
+///
+/// Post-BUG-004: accumulator fields removed. WAL file size replaces
+/// accumulator memory estimate for the "unaccounted" gap calculation.
 #[derive(Debug, Clone)]
 pub struct MemoryDiagnostics {
     /// When this snapshot was taken.
@@ -136,18 +138,15 @@ pub struct MemoryDiagnostics {
     pub stack_rss_bytes: Option<u64>,
     pub anon_rss_bytes: Option<u64>,
 
-    // -- Accumulator --
-    pub accumulator_count: usize,
-    pub accumulator_source_count: usize,
-    pub accumulator_capacity: usize,
-    pub accumulator_vec_capacity_sum: usize,
-    pub accumulator_vec_len_sum: usize,
-    pub accumulator_estimate_bytes: usize,
+    // -- WAL (replaces accumulator metrics) --
+    pub wal_file_bytes: u64,
 }
 
 impl MemoryDiagnostics {
-    /// Collect a full snapshot from the running process and accumulator.
-    pub fn collect(accumulator: &Accumulator) -> Self {
+    /// Collect a full snapshot from the running process.
+    ///
+    /// `wal_file_bytes` is provided by the caller from `WriteAheadLog::file_size_bytes()`.
+    pub fn collect(wal_file_bytes: u64) -> Self {
         let rss_bytes = read_proc_status_rss_bytes();
 
         let malloc = read_mallinfo2();
@@ -168,12 +167,7 @@ impl MemoryDiagnostics {
             stack_rss_bytes: smaps.as_ref().map(|s| s.stack_rss_bytes),
             anon_rss_bytes: smaps.as_ref().map(|s| s.anon_rss_bytes),
 
-            accumulator_count: accumulator.count(),
-            accumulator_source_count: accumulator.source_count(),
-            accumulator_capacity: accumulator.hash_capacity(),
-            accumulator_vec_capacity_sum: accumulator.vec_capacity(),
-            accumulator_vec_len_sum: accumulator.vec_len(),
-            accumulator_estimate_bytes: accumulator.memory_estimate_bytes(),
+            wal_file_bytes,
         }
     }
 
@@ -185,13 +179,12 @@ impl MemoryDiagnostics {
         }
     }
 
-    /// Compute bytes not explained by the accumulator estimate.
+    /// Compute bytes not explained by WAL file size.
     ///
-    /// Returns `Some(rss - estimate)` when RSS is known.
-    /// Result can be negative if the estimate exceeds RSS.
+    /// Returns `Some(rss - wal_file_bytes)` when RSS is known.
     pub fn unaccounted_bytes(&self) -> Option<i64> {
         self.rss_bytes
-            .map(|rss| rss as i64 - self.accumulator_estimate_bytes as i64)
+            .map(|rss| rss as i64 - self.wal_file_bytes as i64)
     }
 }
 
@@ -494,30 +487,17 @@ impl MemoryWatchdog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::RawDataPoint;
     use chrono::{Duration, TimeZone};
-    use serde_json::json;
-
-    /// Helper: create a RawDataPoint with given source_id.
-    fn make_test_point(source_id: &str) -> RawDataPoint {
-        RawDataPoint::new(source_id, json!({"value": 42.0}))
-            .with_timestamp(Utc::now())
-            .with_ndp_id("test-device")
-    }
 
     // ====================================================================
-    // T-01: collect — empty accumulator
+    // T-01: collect — zero WAL bytes
     // ====================================================================
 
     #[test]
-    fn test_diagnostics_collect_empty_accumulator() {
-        let acc = Accumulator::new(Utc::now().date_naive());
-        let diag = MemoryDiagnostics::collect(&acc);
+    fn test_diagnostics_collect_zero_wal() {
+        let diag = MemoryDiagnostics::collect(0);
 
-        assert_eq!(diag.accumulator_count, 0);
-        assert_eq!(diag.accumulator_source_count, 0);
-        assert_eq!(diag.accumulator_vec_capacity_sum, 0);
-        assert_eq!(diag.accumulator_vec_len_sum, 0);
+        assert_eq!(diag.wal_file_bytes, 0);
 
         // sampled_at should be very recent (within 2 seconds)
         let elapsed = Utc::now() - diag.sampled_at;
@@ -529,36 +509,15 @@ mod tests {
     }
 
     // ====================================================================
-    // T-02: collect — populated accumulator (3 sources x 10 points)
+    // T-02: collect — with WAL bytes
     // ====================================================================
 
     #[test]
-    fn test_diagnostics_collect_populated_accumulator() {
-        let mut acc = Accumulator::new(Utc::now().date_naive());
+    fn test_diagnostics_collect_with_wal_bytes() {
+        let wal_bytes = 12_000_000; // ~12 MB
+        let diag = MemoryDiagnostics::collect(wal_bytes);
 
-        for src in &["source-a", "source-b", "source-c"] {
-            for _ in 0..10 {
-                acc.add(make_test_point(src));
-            }
-        }
-
-        let diag = MemoryDiagnostics::collect(&acc);
-
-        assert_eq!(diag.accumulator_count, 30);
-        assert_eq!(diag.accumulator_source_count, 3);
-        assert!(
-            diag.accumulator_estimate_bytes > 0,
-            "estimate should be positive for 30 points"
-        );
-        // vec_len should reflect 30 total entries
-        assert_eq!(diag.accumulator_vec_len_sum, 30);
-        // vec_capacity must be >= vec_len
-        assert!(
-            diag.accumulator_vec_capacity_sum >= diag.accumulator_vec_len_sum,
-            "capacity {} should be >= len {}",
-            diag.accumulator_vec_capacity_sum,
-            diag.accumulator_vec_len_sum
-        );
+        assert_eq!(diag.wal_file_bytes, 12_000_000);
     }
 
     // ====================================================================
@@ -578,12 +537,7 @@ mod tests {
             heap_rss_bytes: None,
             stack_rss_bytes: None,
             anon_rss_bytes: None,
-            accumulator_count: 0,
-            accumulator_source_count: 0,
-            accumulator_capacity: 0,
-            accumulator_vec_capacity_sum: 0,
-            accumulator_vec_len_sum: 0,
-            accumulator_estimate_bytes: 0,
+            wal_file_bytes: 0,
         };
 
         assert_eq!(diag.rss_mib_display(), "100.0");
@@ -606,12 +560,7 @@ mod tests {
             heap_rss_bytes: None,
             stack_rss_bytes: None,
             anon_rss_bytes: None,
-            accumulator_count: 0,
-            accumulator_source_count: 0,
-            accumulator_capacity: 0,
-            accumulator_vec_capacity_sum: 0,
-            accumulator_vec_len_sum: 0,
-            accumulator_estimate_bytes: 0,
+            wal_file_bytes: 0,
         };
 
         assert_eq!(diag.rss_mib_display(), "N/A");
@@ -634,16 +583,11 @@ mod tests {
             heap_rss_bytes: None,
             stack_rss_bytes: None,
             anon_rss_bytes: None,
-            accumulator_count: 0,
-            accumulator_source_count: 0,
-            accumulator_capacity: 0,
-            accumulator_vec_capacity_sum: 0,
-            accumulator_vec_len_sum: 0,
-            accumulator_estimate_bytes: 5 * 1_048_576, // 5 MiB
+            wal_file_bytes: 5 * 1_048_576, // 5 MiB
         };
 
         let unaccounted = diag.unaccounted_bytes().unwrap();
-        assert_eq!(unaccounted, 195 * 1_048_576);
+        assert_eq!(unaccounted, 195 * 1_048_576_i64);
     }
 
     // ====================================================================
@@ -663,19 +607,14 @@ mod tests {
             heap_rss_bytes: None,
             stack_rss_bytes: None,
             anon_rss_bytes: None,
-            accumulator_count: 0,
-            accumulator_source_count: 0,
-            accumulator_capacity: 0,
-            accumulator_vec_capacity_sum: 0,
-            accumulator_vec_len_sum: 0,
-            accumulator_estimate_bytes: 5_000_000,
+            wal_file_bytes: 5_000_000,
         };
 
         assert!(diag.unaccounted_bytes().is_none());
     }
 
     // ====================================================================
-    // T-04c: unaccounted_bytes — negative (estimate > RSS)
+    // T-04c: unaccounted_bytes — WAL > RSS
     // ====================================================================
 
     #[test]
@@ -691,12 +630,7 @@ mod tests {
             heap_rss_bytes: None,
             stack_rss_bytes: None,
             anon_rss_bytes: None,
-            accumulator_count: 0,
-            accumulator_source_count: 0,
-            accumulator_capacity: 0,
-            accumulator_vec_capacity_sum: 0,
-            accumulator_vec_len_sum: 0,
-            accumulator_estimate_bytes: 5_000_000,
+            wal_file_bytes: 5_000_000,
         };
 
         let unaccounted = diag.unaccounted_bytes().unwrap();

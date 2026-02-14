@@ -8,7 +8,8 @@ use config_client::{ConfigClient, StreamRegistry};
 use neural_core::ParquetStore;
 // DP-012: EventBus subscriber infrastructure
 use neural_core::{
-    BronzeSubscriber, BronzeSubscriberConfig, NoBronzeReader, Subscriber, SubscriberCoordinator,
+    BronzeSubscriber, BronzeSubscriberConfig, HybridBronzeReader, Subscriber,
+    SubscriberCoordinator,
 };
 // DP-012 Phase 4: SilverSubscriber for real-time Bronze-to-Silver ETL
 // DP-018: SilverEtlConfig removed - now accessed via StreamConfig.silver_etl from etcd
@@ -428,7 +429,14 @@ async fn initialize_multi_stream_coordinator(
 
     // DP-012: Create and register SilverSubscribers for real-time Bronze-to-Silver ETL
     let event_bus_for_silver = coordinator.event_bus();
-    match create_silver_subscribers(event_bus_for_silver, registry).await {
+    match create_silver_subscribers(
+        event_bus_for_silver,
+        registry,
+        store.clone(),
+        bronze_wal_path.clone(),
+    )
+    .await
+    {
         Ok(silver_subscribers) => {
             for silver_subscriber in silver_subscribers {
                 if let Err(e) = subscriber_coordinator.register(silver_subscriber) {
@@ -589,6 +597,8 @@ fn create_services_with_real_store(
 async fn create_silver_subscribers(
     _event_bus: Arc<neural_core::EventBus>,
     registry: Arc<StreamRegistry>,
+    bronze_store: Arc<neural_core::ParquetStore>,
+    bronze_wal_path: std::path::PathBuf,
 ) -> Result<Vec<Box<dyn Subscriber>>, Box<dyn std::error::Error + Send + Sync>> {
     let timescale_url = std::env::var("TIMESCALE_URL")
         .map_err(|_| "TIMESCALE_URL environment variable not set")?;
@@ -694,9 +704,15 @@ async fn create_silver_subscribers(
                             ..Default::default()
                         };
 
-                        // Use NoBronzeReader as we don't support catch-up yet
-                        let subscriber: SilverSubscriber<TimescaleOutput, NoBronzeReader> =
-                            SilverSubscriber::new(subscriber_config, timescale_output.clone());
+                        // ops-004: Enable Silver catch-up via HybridBronzeReader
+                        // Reads Parquet for historical days + WAL for today's data
+                        let bronze_reader = Arc::new(HybridBronzeReader::new(
+                            bronze_store.clone() as Arc<dyn neural_core::RawStore>,
+                            &bronze_wal_path,
+                        ));
+                        let subscriber: SilverSubscriber<TimescaleOutput, HybridBronzeReader> =
+                            SilverSubscriber::new(subscriber_config, timescale_output.clone())
+                                .with_bronze_reader(bronze_reader);
                         subscribers.push(Box::new(subscriber));
                     }
                 }

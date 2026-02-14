@@ -20,12 +20,14 @@
 //! - Error handling: log and continue, don't crash
 
 mod bronze;
+mod bronze_reader;
 pub mod coordinator;
 mod notifier;
 mod processor;
 mod silver;
 
 pub use bronze::{BronzeSubscriber, BronzeSubscriberConfig};
+pub use bronze_reader::{HybridBronzeReader, ParquetBronzeReader, WalBronzeReader};
 pub use coordinator::{CoordinatorHealth, CoordinatorState, SubscriberCoordinator};
 pub use notifier::{EventNotification, EventNotifier, EventNotifierConfig, EventNotifierState};
 pub use processor::{ProcessorSubscriber, ProcessorSubscriberConfig, ProcessorSubscriberState};

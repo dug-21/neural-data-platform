@@ -307,6 +307,24 @@ impl WriteAheadLog {
     pub fn file_size_bytes(&self) -> u64 {
         std::fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0)
     }
+
+    /// Return the count of entries currently in the WAL.
+    ///
+    /// This is O(file_size) — it replays the entire WAL to count entries.
+    /// Use sparingly (e.g., startup logging only). For hot-path checks,
+    /// prefer `file_size_bytes()` which is O(1).
+    pub fn entry_count(&self) -> CoreResult<usize> {
+        self.replay_since(0).map(|entries| entries.len())
+    }
+
+    /// Truncate the WAL: delete all entries and reset to a fresh state.
+    ///
+    /// This is semantically equivalent to `commit()` (legacy V1 API) but
+    /// named for clarity in the WAL-only architecture where truncation
+    /// happens at day rollover rather than after each snapshot.
+    pub fn truncate(&mut self) -> CoreResult<()> {
+        self.commit()
+    }
 }
 
 #[cfg(test)]
@@ -781,6 +799,96 @@ mod tests {
         let entries = wal.replay_since(0).unwrap();
         assert_eq!(entries[0].source_id, "air-quality-Mqtt");
         assert_eq!(entries[1].source_id, "outdoor-weather-Http");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    // ========== EXTRA: entry_count ==========
+
+    #[test]
+    fn test_wal_entry_count_empty() {
+        let path = temp_wal_path();
+        let wal = WriteAheadLog::new(&path).unwrap();
+
+        assert_eq!(wal.entry_count().unwrap(), 0);
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_wal_entry_count_with_entries() {
+        let path = temp_wal_path();
+        let mut wal = WriteAheadLog::new(&path).unwrap();
+
+        for i in 0..7 {
+            let point = make_test_point("src", (i + 1) as f64);
+            wal.append_point(&point).unwrap();
+        }
+
+        assert_eq!(wal.entry_count().unwrap(), 7);
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_wal_entry_count_after_commit_to() {
+        let path = temp_wal_path();
+        let mut wal = WriteAheadLog::new(&path).unwrap();
+
+        for i in 0..5 {
+            let point = make_test_point("src", (i + 1) as f64);
+            wal.append_point(&point).unwrap();
+        }
+
+        wal.commit_to(3).unwrap();
+
+        // Only entries 4 and 5 survive
+        assert_eq!(wal.entry_count().unwrap(), 2);
+
+        let _ = fs::remove_file(&path);
+    }
+
+    // ========== EXTRA: truncate ==========
+
+    #[test]
+    fn test_wal_truncate_clears_all() {
+        let path = temp_wal_path();
+        let mut wal = WriteAheadLog::new(&path).unwrap();
+
+        for i in 0..5 {
+            let point = make_test_point("src", (i + 1) as f64);
+            wal.append_point(&point).unwrap();
+        }
+
+        assert_eq!(wal.entry_count().unwrap(), 5);
+
+        wal.truncate().unwrap();
+
+        assert_eq!(wal.entry_count().unwrap(), 0);
+        assert_eq!(wal.next_sequence(), 1);
+        assert_eq!(wal.current_watermark(), 0);
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_wal_truncate_allows_new_appends() {
+        let path = temp_wal_path();
+        let mut wal = WriteAheadLog::new(&path).unwrap();
+
+        for i in 0..3 {
+            let point = make_test_point("src", (i + 1) as f64);
+            wal.append_point(&point).unwrap();
+        }
+
+        wal.truncate().unwrap();
+
+        // Append new entries after truncation
+        let point = make_test_point("src", 99.0);
+        let seq = wal.append_point(&point).unwrap();
+        assert_eq!(seq, 1); // Sequence resets after truncate
+
+        assert_eq!(wal.entry_count().unwrap(), 1);
 
         let _ = fs::remove_file(&path);
     }

@@ -27,7 +27,7 @@ pub use sources::{
 pub use storage::{ParquetStore, WriteAheadLog};
 pub use traits::{
     AggregatedPoint, AggregationType, Forecast, ForecastedPoint, HealthStatus, ModelMetrics,
-    RawSource, Source, Store, TimeSeriesPoint,
+    RawSource, RawStore, Source, Store, TimeSeriesPoint,
 };
 
 // Existing types (backward compatibility)
@@ -59,7 +59,8 @@ pub use event_bus::{EventBus, EventBusConfig, EventBusError, EventBusMetrics, Ov
 pub use subscribers::{
     BronzeReader, BronzeSubscriber, BronzeSubscriberConfig, CatchUpConfig, CoordinatorHealth,
     CoordinatorState, EventNotification, EventNotifier, EventNotifierConfig, EventNotifierState,
-    NoBronzeReader, ProcessorSubscriber, ProcessorSubscriberConfig, ProcessorSubscriberState,
+    HybridBronzeReader, NoBronzeReader, ParquetBronzeReader, ProcessorSubscriber,
+    ProcessorSubscriberConfig, ProcessorSubscriberState,
     SilverSubscriber, SilverSubscriberConfig, Subscriber, SubscriberCoordinator, SubscriberError,
     SubscriberState,
 };

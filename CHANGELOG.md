@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.25] - 2026-02-14
+
+BUG-004: WAL-only Bronze architecture — eliminate accumulator memory leak. Removes the in-memory Accumulator (636 lines), making WAL the single source of truth in the hot path. Parquet writes move from 48/day to 1/day via day rollover. HybridBronzeReader enables Silver catch-up from both Parquet (historical) and WAL (today). Projected RSS reduction from 467 MiB to ~75 MiB flat on Pi 5.
+
+### Removed
+
+- **`core/src/storage/accumulator.rs`** (636 lines) — in-memory HashMap that grew monotonically, cloned every 30-min snapshot, caused glibc arena fragmentation and RSS growth of ~7.6 MiB/hr. Root cause of BUG-005 (GH Issue #16)
+
+### Changed
+
+- **`core/src/subscribers/bronze.rs`** — complete rewrite of data flow:
+  - `handle_point()`: WAL append only (no accumulator staging)
+  - `snapshot()`: replays WAL from disk, groups by source_id with move semantics (no clone), writes Parquet per source
+  - `day_rollover()`: final snapshot then WAL truncate (safety: WAL NOT truncated if snapshot fails)
+  - `start()` select! loop: new day rollover timer branch alongside heartbeat and event processing
+  - `duration_until_next_rollover()`: computes time to next rollover based on `day_rollover_utc_hour` config
+- **`core/src/diagnostics/memory.rs`** — decoupled from Accumulator, uses `wal_file_bytes` for memory diagnostics
+- **`core/src/storage/mod.rs`** — removed `pub mod accumulator` and `pub use accumulator::Accumulator`
+- **`core/src/lib.rs`** — re-exported HybridBronzeReader, ParquetBronzeReader, RawStore
+- **`apps/air-quality-app/src/main.rs`** — replaced `NoBronzeReader` with `HybridBronzeReader` for real Silver catch-up
+
+### Added
+
+- **`core/src/subscribers/bronze_reader.rs`** — three BronzeReader implementations:
+  - `ParquetBronzeReader`: reads historical Parquet files for past days
+  - `WalBronzeReader`: opens read-only WAL instance, replays and filters by timestamp/stream
+  - `HybridBronzeReader`: combines Parquet + WAL with deduplication (WAL authoritative, keyed on source_id + timestamp)
+  - 15 unit tests covering all reader types and dedup logic
+- **`core/src/storage/wal.rs`** — `entry_count()` and `truncate()` methods (renamed from `commit()`)
+- **10 new bronze subscriber tests** replacing 6 removed accumulator-dependent recovery tests
+
+### Fixed
+
+- **BUG-004** (GH Issue #16): Accumulator memory leak causing RSS growth of ~7.6 MiB/hr from glibc arena fragmentation. Eliminated by removing Accumulator entirely — WAL is now the single source of truth
+- **Silver catch-up disabled**: `NoBronzeReader` was hardcoded in air-quality-app, meaning Silver could never recover from missed events. `HybridBronzeReader` now provides real catch-up from both Parquet and WAL
+
+### Technical Notes
+
+- 908 platform-core lib tests passing (was 904, +10 new bronze reader tests, -6 removed recovery tests)
+- WAL-only hot path: zero heap allocation per event beyond the WAL append
+- Parquet writes: 48/day (every 30 min) reduced to 1/day (at configurable `day_rollover_utc_hour`)
+- RawDataPoint is the universal type across EventBus, WAL, and Silver — zero format conversion
+- Net code change: -634 lines (530 added, 1164 removed)
+
 ## [1.1.24] - 2026-02-13
 
 ops-004 Phase 2b: BUG-005 dual offensive/defensive memory strategy. Overnight v1.1.23 data showed glibc's dynamic mmap threshold ratcheting arena back to ~192 MiB despite MALLOC_ARENA_MAX=2. Two additional strategies:
@@ -779,7 +823,20 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.12...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.25...HEAD
+[1.1.25]: https://github.com/dug-21/neural-data-platform/compare/v1.1.24...v1.1.25
+[1.1.24]: https://github.com/dug-21/neural-data-platform/compare/v1.1.23...v1.1.24
+[1.1.23]: https://github.com/dug-21/neural-data-platform/compare/v1.1.22...v1.1.23
+[1.1.22]: https://github.com/dug-21/neural-data-platform/compare/v1.1.21...v1.1.22
+[1.1.21]: https://github.com/dug-21/neural-data-platform/compare/v1.1.20...v1.1.21
+[1.1.20]: https://github.com/dug-21/neural-data-platform/compare/v1.1.19...v1.1.20
+[1.1.19]: https://github.com/dug-21/neural-data-platform/compare/v1.1.18...v1.1.19
+[1.1.18]: https://github.com/dug-21/neural-data-platform/compare/v1.1.17...v1.1.18
+[1.1.17]: https://github.com/dug-21/neural-data-platform/compare/v1.1.16...v1.1.17
+[1.1.16]: https://github.com/dug-21/neural-data-platform/compare/v1.1.15...v1.1.16
+[1.1.15]: https://github.com/dug-21/neural-data-platform/compare/v1.1.14...v1.1.15
+[1.1.14]: https://github.com/dug-21/neural-data-platform/compare/v1.1.13...v1.1.14
+[1.1.13]: https://github.com/dug-21/neural-data-platform/compare/v1.1.12...v1.1.13
 [1.1.12]: https://github.com/dug-21/neural-data-platform/compare/v1.1.11...v1.1.12
 [1.1.11]: https://github.com/dug-21/neural-data-platform/compare/v1.1.10...v1.1.11
 [1.1.10]: https://github.com/dug-21/neural-data-platform/compare/v1.1.9...v1.1.10
