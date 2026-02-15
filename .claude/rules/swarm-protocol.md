@@ -18,15 +18,15 @@ See `implementation-protocol.md` and `planning-protocol.md` for the specific del
 
 ---
 
-## Three Memory Systems — Know the Difference
+## Memory Systems — Know the Difference
 
 | System | Tool | Persistence | Purpose | Example |
 |--------|------|-------------|---------|---------|
 | **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` skills | **Permanent** | Architecture, conventions, procedures — project knowledge that outlives any session | "How do we add a new stream?" |
-| **Hive Memory** | MCP `hive-mind_memory(action="set/get/list")` | **Session** | Lightweight agent coordination — key-value shared state within the hive | "Agent-3 finished the schema" |
-| **General Memory** | MCP `memory_store`/`memory_search`/`memory_retrieve` | **Session** | Semantic search, compiled specs, complex queries — SQLite + HNSW vectors | "Find all decisions about retention policy" |
+| **Swarm Memory** | MCP `memory_store`/`memory_retrieve` with `namespace: "coordination"` | **Session** | Agent status/progress/results, shared context — all swarm coordination | "Agent-3 finished the schema" |
+| **Hive Metadata** | MCP `hive-mind_init`/`hive-mind_join`/`hive-mind_status` | **Session** | Agent registration and topology tracking — NOT for data exchange | "5 workers registered, topology: hierarchical" |
 
-**Rule**: Useful 6 months from now → AgentDB. Simple coordination during swarm → hive memory. Searchable content during swarm → general memory.
+**Rule**: Useful 6 months from now → AgentDB. Swarm coordination → `memory_store` with `namespace: "coordination"` and `swarm/*` key convention. Hive metadata → agent registration only.
 
 ---
 
@@ -49,16 +49,21 @@ Hive State                     Agent Store                    Claude Code Runtim
 
 Without `hive-mind_join`, agents are invisible to `hive-mind_status`. Without `agent_spawn`, `agent_update` and `agent_status` fail. Both registration steps MUST happen before the Task call.
 
-### Two Claude-Flow Memory Systems
+### Claude-Flow Memory
 
-| System | MCP Tool | Storage | Best For |
-|--------|----------|---------|----------|
-| **General Memory** | `memory_store`/`memory_search`/`memory_retrieve` | SQLite + HNSW vectors | Semantic search, spec-compile results, complex queries |
-| **Hive Memory** | `hive-mind_memory(action="set/get/list")` | JSON in `state.json` | Simple key-value coordination: agent results, wave status, shared context |
-
-Both are real and functional. Use hive memory for lightweight coordination (agent results, context seeds). Use general memory for searchable content (compiled specs, detailed summaries).
+Agents use `memory_store`/`memory_retrieve` with `namespace: "coordination"` for all swarm state. Key convention: `swarm/{agent-id}/{status|progress|complete}` for per-agent state, `swarm/shared/{feature}-context` for shared context. Storage is SQLite + HNSW vectors.
 
 Do NOT use `claude-flow swarm init` or `claude-flow agent spawn` CLI commands — they are cosmetic. Use MCP tools for coordination and the Task tool for agent processes.
+
+### Agent ID = Swarm Activation
+
+All NDP agent definitions (except ndp-scrum-master) contain a `## Swarm Coordination` section. This section is **dormant** unless the agent's spawn prompt includes `Your agent ID: <id>`. When present, the agent MUST:
+- Write `swarm/{id}/status` on start
+- Write `swarm/{id}/progress` after each major step
+- Write `swarm/{id}/complete` before returning
+- Read `swarm/shared/{feature}-context` for shared context
+
+The coordinator's only job is to **pass the agent ID**. The agent definition handles the rest. This means the coordinator prompt can be minimal — no need to repeat memory instructions.
 
 ---
 
@@ -84,11 +89,11 @@ mcp__claude-flow__agent_spawn(agentId: "agent-2-{role}", agentType: "{type}")
 mcp__claude-flow__hive-mind_join(agentId: "agent-2-{role}", role: "worker")
 # ... all agents
 
-# STEP 3: Seed hive shared context
-mcp__claude-flow__hive-mind_memory(
-  action: "set",
-  key: "{feature-id}-context",
-  value: "{task description, goals, constraints}"
+# STEP 3: Seed shared context (agents read this via memory_retrieve)
+mcp__claude-flow__memory_store(
+  key: "swarm/shared/{feature-id}-context",
+  value: "{task description, goals, constraints}",
+  namespace: "coordination"
 )
 
 # STEP 4: Define ALL tasks (batched)
@@ -104,43 +109,33 @@ Set task dependencies with TaskUpdate after creation. Verify with `hive-mind_sta
 Spawn ALL agents in ONE message via Task tool. Every Task call runs in parallel.
 
 Each agent prompt MUST include:
-1. The Level-1 summary (if feature work — from `/spec-compile`)
-2. The task description (2-3 sentences)
-3. Their agent ID for hive-mind registration
-4. Instructions to retrieve ADRs via `/get-pattern` (if feature work)
-5. Instructions to read/write hive shared memory
-6. Specific file paths
+1. `Your agent ID: {feature}-agent-N-{role}` — this activates the Swarm Coordination block in agent definitions
+2. The Level-1 summary (if feature work — from `/spec-compile`)
+3. The task description (2-3 sentences)
+4. Specific file paths
+
+The agent ID is the critical line. All NDP agent definitions (except ndp-scrum-master) contain a `## Swarm Coordination` section that activates when `Your agent ID:` is present. This section instructs agents to:
+- Write `swarm/{id}/status` on start
+- Write `swarm/{id}/progress` after each major step
+- Write `swarm/{id}/complete` before returning
+- Read `swarm/shared/{feature}-context` for shared state
+
+The coordinator does NOT need to repeat memory instructions in the prompt — the agent definition handles it.
 
 Example agent prompt:
 ```
 You are agent-N implementing {subtask} for {feature-id}.
-Your hive agent ID is: agent-N-{role}
+Your agent ID: {feature-id}-agent-N-{role}
 
 {Level-1 summary — objective, ADR list with pattern IDs, constraints, NOT in scope}
 
 YOUR SPECIFIC TASK: {subtask description}
 
+Files to read/modify: {paths from brief}
+
 BEFORE implementing:
   Use ToolSearch to find "agentdb pattern" tools, then call:
   mcp__agentdb__agentdb_pattern_search(task="adr:{feature-id}", k=10)
-
-READ SHARED CONTEXT:
-  Use ToolSearch to find "hive-mind memory" tools, then call:
-  mcp__claude-flow__hive-mind_memory(action="get", key="{feature-id}-context")
-
-SELF-CHECK (before returning results):
-  - [ ] All modified files are within the scope defined in the brief
-  - [ ] No todo!(), unimplemented!(), TODO, FIXME, or HACK in non-test code
-  - [ ] Tests pass (cargo test --workspace if Rust code modified)
-  - [ ] You called get-pattern before implementing
-  If any check fails, fix it before returning.
-
-AFTER completing:
-  Use ToolSearch to find "hive-mind memory" tools, then call:
-  mcp__claude-flow__hive-mind_memory(action="set", key="result-agent-N", value="<summary of work done>")
-
-  Use ToolSearch to find "claude-flow agent" tools, then call:
-  mcp__claude-flow__agent_update(agentId="agent-N-{role}", status="completed", taskCount=1)
 ```
 
 After spawning: tell the user what agents are working on, then STOP.

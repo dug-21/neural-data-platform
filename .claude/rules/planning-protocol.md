@@ -131,11 +131,11 @@ mcp__claude-flow__hive-mind_join(agentId: "agent-2-arch", role: "specialist")
 
 # ... register all agents before spawning any Task
 
-# 3. Seed hive shared context
-mcp__claude-flow__hive-mind_memory(
-  action: "set",
-  key: "{feature-id}-context",
-  value: "{scope summary, goals, constraints, pattern IDs}"
+# 3. Seed shared context (agents read this via memory_retrieve)
+mcp__claude-flow__memory_store(
+  key: "swarm/shared/{feature-id}-context",
+  value: "{scope summary, goals, constraints, pattern IDs}",
+  namespace: "coordination"
 )
 ```
 
@@ -165,7 +165,7 @@ Spawn ALL planning agents in ONE message (parallel).
 - [ ] hive-mind_init ran
 - [ ] Agents registered (agent_spawn + hive-mind_join for each)
 - [ ] Tasks defined
-- [ ] Hive memory seeded (hive-mind_memory action="set")
+- [ ] Shared context seeded (memory_store key="swarm/shared/{feature}-context")
 - [ ] SCOPE.md read
 - [ ] hive-mind_status shows all agents in workers array
 
@@ -174,11 +174,10 @@ Agent types for planning: `ndp-architect`, `specification`, `pseudocode`
 Do NOT spawn: `ndp-rust-dev`, `ndp-tester`, `coder`, `sparc-coder`.
 
 Each agent prompt MUST include:
-1. Task description (2-3 sentences)
-2. Their hive agent ID (for hive-mind_memory and agent_update calls)
+1. `Your agent ID: {feature}-agent-N-{role}` — activates the Swarm Coordination block in agent definitions
+2. Task description (2-3 sentences)
 3. Specific SPARC phase to produce
 4. The SCOPE.md path
-5. Instructions to read hive context via `hive-mind_memory(action="get")` and write results via `hive-mind_memory(action="set")`
 
 **Architecture agent (ndp-architect) MUST produce individual ADRs** in `product/features/{feature-id}/architecture/ARCHITECTURE.md` using this format:
 
@@ -352,7 +351,7 @@ PRIMARY AGENT:
   Message 3:  Review results + present variances + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + hive-mind_memory seed
+  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + memory_store seed
   Step 3b:  TaskCreate (batch ALL) — in SAME message as 3a
   Step 3c:  Task() spawn ALL planning agents (parallel, ONE message)
   Step 3d:  Task(ndp-vision-guardian) — alignment check
@@ -382,7 +381,7 @@ Do NOT paste full spec documents, source files, or cargo output into planning ag
 | System | Tool | Persistence | Purpose |
 |--------|------|-------------|---------|
 | **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` | Permanent | Architecture, conventions, procedures |
-| **Hive Memory** | `hive-mind_memory(action="set/get/list")` | Session | Lightweight agent coordination, results, context |
-| **General Memory** | `memory_store`/`memory_search`/`memory_retrieve` | Session | Semantic search, compiled specs, complex queries |
+| **Swarm Memory** | `memory_store`/`memory_retrieve` with `namespace: "coordination"` | Session | Agent status, progress, results, shared context |
+| **Hive Metadata** | `hive-mind_init`/`hive-mind_join`/`hive-mind_status` | Session | Agent registration, swarm topology tracking |
 
-Rule: Useful 6 months from now → AgentDB. Simple coordination during swarm → hive memory. Searchable content during swarm → general memory.
+Rule: Useful 6 months from now → AgentDB. Swarm coordination → `memory_store` with `namespace: "coordination"`. Hive metadata → registration only.

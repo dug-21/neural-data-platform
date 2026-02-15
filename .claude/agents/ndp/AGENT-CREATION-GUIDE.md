@@ -117,6 +117,16 @@ For CURRENT {specifics}, use `get-pattern` skill with domain "{domain}".
 
 {Agent-specific content - architecture diagrams, decision frameworks, etc.}
 
+## Swarm Coordination
+
+**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
+If no agent ID was provided, skip this section entirely.
+
+{Copy the standard Swarm Coordination block from any existing NDP agent.
+This enables agents to report status/progress/completion to shared memory
+when participating in a swarm. The coordinator passes agent IDs; agents
+handle the rest automatically. Do NOT include this section in ndp-scrum-master.}
+
 ## Related Agents
 
 - `ndp-{agent}` - {When to consult}

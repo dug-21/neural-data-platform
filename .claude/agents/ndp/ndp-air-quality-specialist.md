@@ -207,6 +207,51 @@ Recommend these DQ rules to `ndp-dq-engineer`:
 | 201-300 | Purple | #8F3F97 |
 | 301-500 | Maroon | #7E0023 |
 
+---
+
+## Swarm Coordination
+
+**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
+If no agent ID was provided, skip this section entirely.
+
+When part of a swarm, you MUST report status through shared memory:
+
+**ON START** — immediately after reading your task:
+```
+Use ToolSearch to find "claude-flow memory" tools, then:
+mcp__claude-flow__memory_store(
+  key: "swarm/<your-agent-id>/status",
+  value: '{"status":"task-received","task":"<brief task description>"}',
+  namespace: "coordination"
+)
+```
+
+**ON PROGRESS** — after each major step (file created, test written, section completed):
+```
+mcp__claude-flow__memory_store(
+  key: "swarm/<your-agent-id>/progress",
+  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>}',
+  namespace: "coordination"
+)
+```
+
+**ON COMPLETE** — before returning results:
+```
+mcp__claude-flow__memory_store(
+  key: "swarm/<your-agent-id>/complete",
+  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>"}',
+  namespace: "coordination"
+)
+```
+
+**READ SHARED CONTEXT** — at start, to get swarm-wide context:
+```
+mcp__claude-flow__memory_retrieve(
+  key: "swarm/shared/<feature-id>-context",
+  namespace: "coordination"
+)
+```
+
 ## Related Agents
 
 - `ndp-meteorologist` - Sibling domain specialist (weather)

@@ -157,7 +157,7 @@ Spawn ALL agents for the current wave in ONE message (parallel).
 - [ ] hive-mind_init ran
 - [ ] Agents registered (agent_spawn + hive-mind_join for each)
 - [ ] Tasks defined (TaskCreate completed)
-- [ ] Hive memory seeded (hive-mind_memory action="set")
+- [ ] Shared context seeded (memory_store key="swarm/shared/{feature}-context")
 - [ ] Brief read
 - [ ] `cargo build --workspace` passes (abort if fails — do not spawn agents on a broken workspace)
 - [ ] hive-mind_status shows all agents in workers array
@@ -167,12 +167,11 @@ If ANY item is unchecked, STOP. Complete the missing step first.
 Agent types for implementation: `ndp-rust-dev`, `ndp-tester`, `ndp-timescale-dev`, `ndp-parquet-dev`
 
 Each agent prompt MUST include:
-1. **Level-1 summary** from compiled spec (retrieve from hive memory or `memory_retrieve`)
-2. Task description (2-3 sentences)
-3. Their hive agent ID (for hive-mind_memory and agent_update calls)
+1. `Your agent ID: {feature}-agent-N-{role}` — activates the Swarm Coordination block in agent definitions
+2. **Level-1 summary** from compiled spec (retrieve from `memory_retrieve`)
+3. Task description (2-3 sentences)
 4. Specific file paths from the brief's "Files to Create/Modify" section
 5. Instructions to retrieve relevant ADRs before implementing — use `/get-pattern` (which calls `agentdb_pattern_search` internally)
-6. Instructions to read hive context via `hive-mind_memory(action="get")` and write results via `hive-mind_memory(action="set")`
 
 The Level-1 summary gives agents the objective (WHY), ADR list with pattern IDs (WHAT CONSTRAINS THEM), constraints, and scope exclusions (WHAT TO AVOID). Without it, agents have tunnel vision on their narrow subtask and drift from architectural decisions.
 
@@ -273,7 +272,7 @@ PRIMARY AGENT:
   Message 3:  Review results + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + hive-mind_memory seed
+  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + memory_store seed
   Step 3b:  TaskCreate (batch ALL) — in SAME message as 3a
   Step 3c:  Task() spawn ALL wave agents (parallel, ONE message)
   Step 3c.5: Per-wave AC check
@@ -319,7 +318,7 @@ cargo clippy --workspace -- -D warnings 2>&1 | head -30
 | System | Tool | Persistence | Purpose |
 |--------|------|-------------|---------|
 | **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` | Permanent | Architecture, conventions, procedures |
-| **Hive Memory** | `hive-mind_memory(action="set/get/list")` | Session | Lightweight agent coordination, results, context |
-| **General Memory** | `memory_store`/`memory_search`/`memory_retrieve` | Session | Semantic search, compiled specs, complex queries |
+| **Swarm Memory** | `memory_store`/`memory_retrieve` with `namespace: "coordination"` | Session | Agent status, progress, results, shared context |
+| **Hive Metadata** | `hive-mind_init`/`hive-mind_join`/`hive-mind_status` | Session | Agent registration, swarm topology tracking |
 
-Rule: Useful 6 months from now → AgentDB. Simple coordination during swarm → hive memory. Searchable content during swarm → general memory.
+Rule: Useful 6 months from now → AgentDB. Swarm coordination → `memory_store` with `namespace: "coordination"`. Hive metadata → registration only.
