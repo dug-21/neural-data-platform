@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-02-15
+
+Wire config-driven intelligence DDL generation into deployment pipeline. The `gold.metric_embeddings` and `gold.predictions` tables are now created automatically during `deploy.sh apply` using the existing `PgVectorSchemaGenerator` driven by domain config.
+
+### Added
+
+- **`deploy/pi/deploy.sh`** — `handle_domain()` now calls `ndp gold intelligence schema --domain <id>` after events DDL, generating and applying pgvector tables (metric_embeddings hypertable, predictions hypertable, graph tables, reasoning bank) from the domain's intelligence config block (#20)
+
+### Removed
+
+- **`deploy/pi/init-scripts/007_intelligence_tables.sql`** — deleted static SQL migration; intelligence DDL is config-driven via `PgVectorSchemaGenerator`, not static files
+
+### Technical Notes
+
+- Intelligence DDL uses `CREATE TABLE IF NOT EXISTS` (sync mode) — safe for repeated deploys
+- Vector dimensions derived from domain config `intelligence.embedding.fields`
+- GitHub Issue: #20
+
 ## [1.2.3] - 2026-02-15
 
 Fix domain config deployment — two issues preventing ndp-intelligence from starting on Pi.

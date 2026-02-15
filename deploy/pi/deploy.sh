@@ -2132,6 +2132,25 @@ handle_domain() {
         log "  Events not configured for domain $domain_id, skipping"
     fi
 
+    # Generate and apply intelligence DDL (if configured in domain.json)
+    log "  Generating intelligence DDL using $ndp_tool gold intelligence schema..."
+    local intel_ddl
+    intel_ddl=$("$ndp_tool" gold intelligence schema --domain "$domain_id" \
+        --config-dir "$REPO_ROOT/config/base" 2>&1)
+    local intel_exit_code=$?
+
+    if [ $intel_exit_code -eq 0 ] && [ -n "$intel_ddl" ]; then
+        log "  Applying intelligence DDL to TimescaleDB..."
+        if echo "$intel_ddl" | dcx timescaledb psql -U postgres -d ndp -v ON_ERROR_STOP=1; then
+            log "  Intelligence schema for domain $domain_id created/updated successfully"
+        else
+            error "Failed to apply intelligence DDL to TimescaleDB"
+            return 1
+        fi
+    else
+        log "  Intelligence not configured for domain $domain_id, skipping"
+    fi
+
     # Sync domain objectives to data dictionary
     log "  Syncing domain objectives to data dictionary..."
     sync_domains_to_data_dictionary
