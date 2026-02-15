@@ -14,10 +14,12 @@ Fix domain config deployment — two issues preventing ndp-intelligence from sta
 ### Fixed
 
 - **`deploy/pi/deploy.sh`** — pass domain config JSON as shell argument to `etcdctl put` instead of piping through stdin; `docker compose exec -T` does not reliably forward stdin pipes (#20)
-- **`config/schemas/domain.schema.json`** — add `intelligence` definition (embedding, search, anomaly sub-schemas) so `ndp validate --domain` accepts the fe-004 intelligence block (#20)
+- **`config/schemas/domain.schema.json`** — add `intelligence` definition (embedding, search, anomaly sub-schemas) so domain validation accepts the fe-004 intelligence block (#20)
+- **`tools/ndp-cli/src/commands/validate.rs`** — `ndp validate --domain` now loads schema from `config/schemas/domain.schema.json` on disk when available, falling back to embedded default only if file is missing. Previously always used the compiled-in embedded schema, which required a recompile to pick up schema changes (#20)
 
 ### Technical Notes
 
+- After this fix, domain schema changes only require `git pull` + recompile of `ndp` CLI on Pi — the schema file on disk is the source of truth
 - GitHub Issue: #20
 
 ## [1.2.2] - 2026-02-15

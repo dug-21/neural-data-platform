@@ -455,6 +455,8 @@ fn validate_domain_file(
     })?;
 
     // Layer 1: Schema validation
+    // When no explicit --domain-schema-path is given, try loading from disk first
+    // (config/schemas/domain.schema.json), falling back to the embedded default.
     let schema_validator = if let Some(ref schema_path) = args.domain_schema_path {
         if schema_path.exists() {
             DomainSchemaValidator::from_file(schema_path)?
@@ -462,7 +464,12 @@ fn validate_domain_file(
             DomainSchemaValidator::default_schema()?
         }
     } else {
-        DomainSchemaValidator::default_schema()?
+        let default_path = std::path::Path::new("config/schemas/domain.schema.json");
+        if default_path.exists() {
+            DomainSchemaValidator::from_file(default_path)?
+        } else {
+            DomainSchemaValidator::default_schema()?
+        }
     };
 
     let schema_errors = schema_validator.validate_schema(&value);
