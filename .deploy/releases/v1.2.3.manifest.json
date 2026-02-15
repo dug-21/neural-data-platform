@@ -2,8 +2,9 @@
   "$schema": "../../schemas/manifest.schema.json",
   "version": "1.0",
   "release_version": "1.2.3",
-  "description": "Fix domain config sync: pass JSON as argument instead of piping stdin through docker exec",
+  "description": "Fix domain config deployment: rebuild ndp-cli (schema from disk), fix etcd sync, add intelligence to domain schema",
   "changes": [
+    {"type": "tool", "id": "ndp-cli", "action": "build"},
     {"type": "domain", "domain_id": "indoor-air-quality", "action": "sync"},
     {"type": "container", "target": "ndp-intelligence", "action": "restart"}
   ]
