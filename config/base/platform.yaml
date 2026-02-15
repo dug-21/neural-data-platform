@@ -28,7 +28,6 @@ subscribers:
     enabled: true
     batch_size: 100
     flush_interval_secs: 30
-    snapshot_interval_secs: 1800  # Parquet snapshot interval (30 min)
     day_rollover_utc_hour: 0     # UTC hour for day rollover (midnight)
     max_retries: 3
 

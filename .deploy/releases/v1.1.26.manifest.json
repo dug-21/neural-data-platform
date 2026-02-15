@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.1.26",
+  "description": "Release v1.1.26: Remove vestigial periodic snapshot timer — Parquet only at day rollover",
+  "changes": [
+    {"type": "container", "target": "air-quality-app", "action": "build"},
+    {"type": "container", "target": "air-quality-app", "action": "restart"}
+  ]
+}

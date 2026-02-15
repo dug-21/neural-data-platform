@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.26] - 2026-02-15
+
+Remove vestigial periodic snapshot timer from Bronze subscriber. With the v1.1.25 WAL-only architecture, Parquet should only be written at day rollover (1/day). The old 30-minute snapshot timer was left in the select! loop, causing unnecessary 45 MiB RSS spikes, glibc arena ratcheting (~3.76 MiB/hr growth), and redundant I/O (Parquet overwritten 48x/day instead of 1x).
+
+### Removed
+
+- **`snapshot_interval_secs` config field** from `BronzeSubscriberConfig` — periodic Parquet snapshots are no longer needed in WAL-only design. Old configs with this field are silently ignored (serde backward compatibility)
+- **Periodic snapshot timer** from `start()` select! loop — the `snapshot_timer.tick()` arm that replayed the entire WAL into memory every 30 minutes. `snapshot()` method retained (called by `day_rollover()`)
+
+### Changed
+
+- **`core/src/subscribers/bronze.rs`** — removed `snapshot_interval_secs` field, `default_snapshot_interval_secs()` function, snapshot timer setup and select! arm
+- **`apps/air-quality-app/src/main.rs`** — removed `snapshot_interval_secs` from BronzeSubscriberConfig construction
+- **`config/base/platform.yaml`** — removed `snapshot_interval_secs: 1800` line
+- **Tests updated** — 3 tests reworked to test via `day_rollover()` and final-snapshot-on-shutdown instead of periodic timer. 1 backward-compatibility test added for old YAML with `snapshot_interval_secs`
+
+### Fixed
+
+- **RSS spikes every 30 min** — periodic snapshot replayed entire WAL into memory (45 MiB allocation), then wrote Parquet, but never truncated WAL. This allocation was pure overhead since day_rollover already handles Parquet writes
+- **glibc arena ratcheting** — repeated 45 MiB allocations every 30 min caused glibc to retain arena pages, growing RSS by ~3.76 MiB/hr even after malloc_trim
+- **Redundant Parquet I/O** — Parquet was overwritten 48x/day (every 30 min) instead of 1x/day (at day rollover)
+
+### Technical Notes
+
+- 908 platform-core lib tests passing (0 change in count -- 2 tests reworked, 1 renamed, 1 added)
+- Pure removal — no new features, no new code paths
+- Backward compatible — old platform.yaml and subscriber configs with `snapshot_interval_secs` are silently ignored
+
 ## [1.1.25] - 2026-02-14
 
 BUG-004: WAL-only Bronze architecture — eliminate accumulator memory leak. Removes the in-memory Accumulator (636 lines), making WAL the single source of truth in the hot path. Parquet writes move from 48/day to 1/day via day rollover. HybridBronzeReader enables Silver catch-up from both Parquet (historical) and WAL (today). Projected RSS reduction from 467 MiB to ~75 MiB flat on Pi 5.
@@ -823,7 +851,8 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.25...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.26...HEAD
+[1.1.26]: https://github.com/dug-21/neural-data-platform/compare/v1.1.25...v1.1.26
 [1.1.25]: https://github.com/dug-21/neural-data-platform/compare/v1.1.24...v1.1.25
 [1.1.24]: https://github.com/dug-21/neural-data-platform/compare/v1.1.23...v1.1.24
 [1.1.23]: https://github.com/dug-21/neural-data-platform/compare/v1.1.22...v1.1.23

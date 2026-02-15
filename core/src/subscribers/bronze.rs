@@ -8,7 +8,7 @@
 //!
 //! - WAL append on event receipt (durability)
 //! - No in-memory accumulator — WAL on disk is the single source of truth
-//! - Snapshot timer replays WAL, groups by source_id, writes full Parquet
+//! - Parquet written at day rollover only (1/day, not periodic)
 //! - WAL is NOT truncated at snapshot time (next snapshot needs same data + new)
 //! - WAL is truncated at day rollover only
 //! - Graceful shutdown triggers final snapshot
@@ -23,7 +23,6 @@
 //!       batch_size: 100
 //!       flush_interval_secs: 5
 //!       max_retries: 3
-//!       snapshot_interval_secs: 1800
 //! ```
 
 use crate::diagnostics::{
@@ -66,11 +65,6 @@ pub struct BronzeSubscriberConfig {
     #[serde(default)]
     pub stream_filter: Vec<String>,
 
-    /// Parquet snapshot interval in seconds (default: 1800 = 30 minutes).
-    /// Controls how often the WAL is replayed and written to Parquet.
-    #[serde(default = "default_snapshot_interval_secs")]
-    pub snapshot_interval_secs: u64,
-
     /// UTC hour for day rollover (default: 0 = midnight UTC).
     /// Determines when the WAL is truncated and a new calendar day begins.
     #[serde(default)]
@@ -86,9 +80,6 @@ fn default_flush_interval_secs() -> u64 {
 fn default_max_retries() -> u32 {
     3
 }
-fn default_snapshot_interval_secs() -> u64 {
-    1800
-}
 
 impl Default for BronzeSubscriberConfig {
     fn default() -> Self {
@@ -97,7 +88,6 @@ impl Default for BronzeSubscriberConfig {
             flush_interval_secs: default_flush_interval_secs(),
             max_retries: default_max_retries(),
             stream_filter: Vec::new(),
-            snapshot_interval_secs: default_snapshot_interval_secs(),
             day_rollover_utc_hour: 0,
         }
     }
@@ -332,7 +322,7 @@ impl BronzeSubscriber {
     /// Log WAL state on startup for observability.
     ///
     /// No recovery step needed — the WAL is already on disk and the next
-    /// snapshot timer will read it and write Parquet.
+    /// day rollover will read it and write Parquet.
     fn log_startup_wal_state(&self) {
         let wal_size = self.wal.file_size_bytes();
         let wal_entries = self.wal.entry_count().unwrap_or(0);
@@ -447,11 +437,6 @@ impl Subscriber for BronzeSubscriber {
         // Log WAL state — no recovery needed, WAL is on disk
         self.log_startup_wal_state();
 
-        let snapshot_interval = Duration::from_secs(self.config.snapshot_interval_secs);
-        let mut snapshot_timer = tokio::time::interval(snapshot_interval);
-        // First tick is immediate, skip it
-        snapshot_timer.tick().await;
-
         let flush_interval = Duration::from_secs(self.config.flush_interval_secs);
         let mut flush_timer = tokio::time::interval(flush_interval);
         // First tick is immediate, skip it
@@ -484,13 +469,6 @@ impl Subscriber for BronzeSubscriber {
                 // Day rollover -- truncate WAL for new calendar day
                 _ = rollover_timer.tick() => {
                     self.day_rollover().await;
-                }
-
-                // Snapshot timer -- periodic Parquet archival
-                _ = snapshot_timer.tick() => {
-                    if let Err(e) = self.snapshot().await {
-                        error!(subscriber_id = %self.id, error = %e, "Snapshot failed on timer");
-                    }
                 }
 
                 // Flush timer -- periodic memory diagnostics
@@ -687,7 +665,6 @@ mod tests {
             flush_interval_secs,
             max_retries: 3,
             stream_filter: Vec::new(),
-            snapshot_interval_secs: 1800,
             day_rollover_utc_hour: 0,
         }
     }
@@ -735,7 +712,6 @@ mod tests {
         assert_eq!(config.flush_interval_secs, 5);
         assert_eq!(config.max_retries, 3);
         assert!(config.stream_filter.is_empty());
-        assert_eq!(config.snapshot_interval_secs, 1800);
         assert_eq!(config.day_rollover_utc_hour, 0);
     }
 
@@ -748,7 +724,6 @@ mod tests {
         assert_eq!(config.batch_size, 50);
         assert_eq!(config.flush_interval_secs, 5); // default
         assert_eq!(config.max_retries, 3); // default
-        assert_eq!(config.snapshot_interval_secs, 1800); // default
         assert_eq!(config.day_rollover_utc_hour, 0); // default
     }
 
@@ -772,15 +747,18 @@ mod tests {
     // ========== AIR-017 Config Cycles C1-C4: New fields ==========
 
     #[test]
-    fn test_config_snapshot_interval_defaults_to_1800() {
-        // C1: Deserialize YAML without snapshot_interval_secs -> defaults to 1800
+    fn test_config_ignores_removed_snapshot_interval_secs() {
+        // Backward compatibility: old YAML with snapshot_interval_secs still parses
+        // (serde ignores unknown fields by default)
         let yaml = r#"
             batch_size: 100
             flush_interval_secs: 30
             max_retries: 3
+            snapshot_interval_secs: 1800
         "#;
         let config: BronzeSubscriberConfig = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(config.snapshot_interval_secs, 1800);
+        assert_eq!(config.batch_size, 100);
+        assert_eq!(config.flush_interval_secs, 30);
     }
 
     #[test]
@@ -794,17 +772,15 @@ mod tests {
     }
 
     #[test]
-    fn test_config_with_all_new_fields() {
-        // C3: YAML with explicit snapshot_interval_secs and day_rollover_utc_hour
+    fn test_config_with_day_rollover_field() {
+        // C3: YAML with explicit day_rollover_utc_hour
         let yaml = r#"
             batch_size: 100
             flush_interval_secs: 30
             max_retries: 3
-            snapshot_interval_secs: 900
             day_rollover_utc_hour: 6
         "#;
         let config: BronzeSubscriberConfig = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(config.snapshot_interval_secs, 900);
         assert_eq!(config.day_rollover_utc_hour, 6);
     }
 
@@ -824,7 +800,6 @@ mod tests {
         assert_eq!(config.max_retries, 3);
         assert_eq!(config.stream_filter, vec!["air-quality"]);
         // New fields get their defaults
-        assert_eq!(config.snapshot_interval_secs, 1800);
         assert_eq!(config.day_rollover_utc_hour, 0);
     }
 
@@ -1131,11 +1106,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscriber_receives_and_processes_events() {
-        let mut config = create_config(100, 60);
-        config.snapshot_interval_secs = 1; // 1 second snapshot timer
+        let config = create_config(100, 60);
         let mut mock_store = MockRawStore::new();
 
-        // Expect snapshot write(s) for the WAL-replayed points
+        // Expect final snapshot write(s) on shutdown for the WAL-replayed points
         mock_store
             .expect_write_raw_snapshot()
             .times(1..)
@@ -1148,6 +1122,9 @@ mod tests {
         // Create broadcast channel
         let (tx, rx) = broadcast::channel::<Arc<RawDataPoint>>(100);
 
+        // Get cancellation token before moving subscriber
+        let cancel_token = subscriber.cancellation_token.clone();
+
         // Spawn subscriber task
         let subscriber_handle = tokio::spawn(async move { subscriber.start(rx).await });
 
@@ -1157,11 +1134,11 @@ mod tests {
             tx.send(point).unwrap();
         }
 
-        // Wait for snapshot timer to fire (>1 second)
-        tokio::time::sleep(Duration::from_millis(1500)).await;
+        // Give time for events to be received
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Stop by closing channel
-        drop(tx);
+        // Trigger graceful shutdown — final snapshot writes WAL to Parquet
+        cancel_token.cancel();
 
         // Wait for subscriber to finish
         let result = subscriber_handle.await.unwrap();
@@ -1171,41 +1148,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_snapshot_timer_fires() {
-        let mut config = create_config(100, 60);
-        config.snapshot_interval_secs = 1; // 1 second snapshot interval
+    async fn test_day_rollover_triggers_snapshot_via_direct_call() {
+        // Parquet is now only written at day_rollover (not periodic timer).
+        // This test verifies day_rollover() calls snapshot() and truncates WAL.
+        let config = create_config(100, 60);
         let mut mock_store = MockRawStore::new();
 
-        // Expect at least one snapshot write from the timer
+        // Expect snapshot write from day_rollover
         mock_store
             .expect_write_raw_snapshot()
-            .times(1..)
+            .times(1)
             .returning(|_, _| Ok(()));
 
-        let (subscriber, _temp_dir) =
-            create_test_subscriber_with_cleanup("bronze-test", config, mock_store);
-        let mut subscriber = subscriber;
+        let mut subscriber = create_test_subscriber("day-rollover-snap", config, mock_store);
 
-        let (tx, rx) = broadcast::channel::<Arc<RawDataPoint>>(100);
-
-        let subscriber_handle = tokio::spawn(async move { subscriber.start(rx).await });
-
-        // Send 3 events
-        for i in 0..3 {
-            let point = Arc::new(create_test_point(&format!("source-{}-Mqtt", i)));
-            tx.send(point).unwrap();
+        // Send 3 events directly via handle_point
+        for _ in 0..3 {
+            let point = Arc::new(create_test_point("source-Mqtt"));
+            subscriber.handle_point(point);
         }
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 3);
 
-        // Wait for snapshot timer to fire (>1 second)
-        tokio::time::sleep(Duration::from_millis(1500)).await;
+        // Day rollover triggers snapshot then truncates WAL
+        subscriber.day_rollover().await;
 
-        // Stop
-        drop(tx);
-
-        let result = subscriber_handle.await.unwrap();
-        assert!(result.is_ok());
-
-        let _ = std::fs::remove_dir_all(&_temp_dir);
+        assert_eq!(subscriber.snapshots_written, 1);
+        assert_eq!(subscriber.events_written, 3);
+        assert_eq!(subscriber.wal.entry_count().unwrap(), 0); // WAL truncated
     }
 
     #[tokio::test]
@@ -1615,7 +1584,6 @@ mod integration_tests {
             flush_interval_secs: 60,
             max_retries: 3,
             stream_filter: Vec::new(),
-            snapshot_interval_secs: 1, // 1 second -- fast for testing
             day_rollover_utc_hour: 0,
         };
 
@@ -1635,10 +1603,10 @@ mod integration_tests {
             tx.send(Arc::new(point)).unwrap();
         }
 
-        // Wait for snapshot timer to fire (>1 second)
-        tokio::time::sleep(Duration::from_millis(1500)).await;
+        // Give time for events to be received
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Trigger graceful shutdown
+        // Trigger graceful shutdown — final snapshot writes WAL to Parquet
         cancel_token.cancel();
         let result = subscriber_handle.await.unwrap();
         assert!(result.is_ok(), "Subscriber should shut down cleanly");
@@ -1693,7 +1661,6 @@ mod integration_tests {
                 flush_interval_secs: 60,
                 max_retries: 3,
                 stream_filter: Vec::new(),
-                snapshot_interval_secs: 3600, // Long -- no auto snapshot
                 day_rollover_utc_hour: 0,
             };
 
@@ -1731,7 +1698,6 @@ mod integration_tests {
                 flush_interval_secs: 60,
                 max_retries: 3,
                 stream_filter: Vec::new(),
-                snapshot_interval_secs: 3600,
                 day_rollover_utc_hour: 0,
             };
 
@@ -1784,7 +1750,6 @@ mod integration_tests {
             flush_interval_secs: 60,
             max_retries: 3,
             stream_filter: Vec::new(),
-            snapshot_interval_secs: 3600,
             day_rollover_utc_hour: 0,
         };
 
@@ -1853,7 +1818,6 @@ mod integration_tests {
             flush_interval_secs: 60,
             max_retries: 3,
             stream_filter: Vec::new(),
-            snapshot_interval_secs: 3600,
             day_rollover_utc_hour: 0,
         };
 

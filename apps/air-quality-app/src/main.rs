@@ -402,8 +402,7 @@ async fn initialize_multi_stream_coordinator(
         flush_interval_secs: 30,
         max_retries: 3,
         stream_filter: Vec::new(), // Accept all streams
-        snapshot_interval_secs: 1800, // 30 min Parquet snapshot interval
-        day_rollover_utc_hour: 0,     // Midnight UTC rollover
+        day_rollover_utc_hour: 0,  // Midnight UTC rollover
     };
     let bronze_wal_path = store.base_path().join("bronze_wal.log");
     let bronze_data_dir = store.base_path().to_string_lossy().to_string();
