@@ -46,12 +46,12 @@ Use `get-pattern` skill with domain "architecture" to find existing ADRs before 
 ### Data Layer Architecture
 
 ```
-Bronze Layer (Current)     Silver Layer (Planned)     Gold Layer (Future)
+Bronze Layer (Current)     Silver Layer (Current)     Gold Layer (Current)
 ─────────────────────     ────────────────────────   ──────────────────
-Parquet files             TimescaleDB                Feature Store
-- Raw data                - Queryable data           - ML-ready features
-- Append-only             - Time-series optimized    - Aggregations
-- Daily partitioning      - Continuous aggregates    - Point-in-time
+Parquet + WAL             TimescaleDB                Generated DDL
+- WAL-only hot path       - Queryable data           - Materialized views
+- Day rollover Parquet    - Time-series optimized    - ndp-gold-ddl crate
+- HybridBronzeReader      - Continuous aggregates    - Aggregations
 ```
 
 ### Configuration Hierarchy
@@ -65,25 +65,19 @@ Priority 4: Code defaults
 
 ## When Creating ADRs
 
-Use this format:
+Use this format (matches planning-protocol.md convention):
 
 ```markdown
-# ADR-NNN: Title
+## ADR-NNN: Title
 
-## Status
-Proposed | Accepted | Deprecated | Superseded
-
-## Context
+### Context
 What is the issue we're seeing that motivates this decision?
 
-## Decision
+### Decision
 What is the change we're proposing?
 
-## Consequences
+### Consequences
 What becomes easier or harder as a result?
-
-## Alternatives Considered
-What other options were evaluated?
 ```
 
 After creating an ADR, use `save-pattern` skill with:
@@ -96,7 +90,7 @@ After creating an ADR, use `save-pattern` skill with:
 |-------|------------|--------|
 | Language | Rust | ✅ Current |
 | Bronze Storage | Apache Parquet | ✅ Current |
-| Silver Storage | TimescaleDB | 📋 Planned |
+| Silver Storage | TimescaleDB | ✅ Current |
 | Configuration | etcd | ✅ Current |
 | Message Broker | MQTT (Mosquitto) | ✅ Current |
 | ML Framework | ruv-FANN | 📋 Planned |
@@ -117,7 +111,7 @@ After creating an ADR, use `save-pattern` skill with:
 
 ### Resource Constraints
 - Target: Raspberry Pi 5
-- Memory budget: <1GB total
+- Memory budget: ~5.5GB typical (256MB per container, of 16GB total on Pi 5)
 - Design for edge deployment
 
 ## Related Agents
@@ -133,6 +127,23 @@ After creating an ADR, use `save-pattern` skill with:
 - `get-pattern` - Retrieve existing architecture patterns (REQUIRED)
 - `save-pattern` - Store new architecture patterns (REQUIRED)
 - `reflexion` - Record whether retrieved patterns helped (REQUIRED)
+
+---
+
+## SELF-CHECK (Run Before Returning Results)
+
+Before returning your work to the coordinator, verify:
+
+- [ ] All ADRs follow the standard format: `## ADR-NNN: Title` / `### Context` / `### Decision` / `### Consequences`
+- [ ] No references to deprecated approaches (DuckDB, Polars with streaming)
+- [ ] No references to deprecated pattern IDs (29, 32)
+- [ ] Technology status table reflects current reality (Silver=Current, Gold=Current)
+- [ ] Memory budget references are accurate (~5.5GB typical, not <1GB)
+- [ ] New patterns saved via `save-pattern` with feature tags
+- [ ] All modified files are within the scope defined in the brief
+- [ ] You called `get-pattern` before designing
+
+If any check fails, fix it before returning. Do not leave it for the coordinator.
 
 ---
 

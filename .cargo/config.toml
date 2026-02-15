@@ -1,20 +1,15 @@
-# Cargo configuration for neural-trader
+# Cargo configuration for neural-data-platform
 
 [build]
 # Optimize for the native CPU
 rustflags = ["-C", "target-cpu=native"]
 
 [target.x86_64-unknown-linux-gnu]
-# Enable source-based code coverage when using llvm-cov
-rustflags = ["-C", "instrument-coverage"]
+# Enable source-based code coverage only when NDP_COVERAGE=1
+# Usage: NDP_COVERAGE=1 cargo build
+# Without env var, no coverage instrumentation overhead
 
 [alias]
-# Convenience aliases for coverage commands
-cov = "llvm-cov"
-cov-html = "llvm-cov --html"
-cov-lcov = "llvm-cov --lcov --output-path=target/coverage/lcov.info"
-cov-phase1 = "llvm-cov --package autonomous-platform --features neural"
-
 # Test aliases
 test-unit = "test --lib"
 test-integration = "test --test '*'"

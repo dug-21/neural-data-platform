@@ -20,6 +20,12 @@
             "command": "[ -n \"$TOOL_INPUT_command\" ] && npx @claude-flow/cli@latest hooks pre-command --command \"$TOOL_INPUT_command\" 2>/dev/null || true",
             "timeout": 5000,
             "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": "echo \"$TOOL_INPUT_command\" | grep -q 'git commit' && bash .claude/hooks/pre-commit-gate.sh || true",
+            "timeout": 15000,
+            "continueOnError": false
           }
         ]
       },
@@ -71,6 +77,12 @@
             "type": "command",
             "command": "echo '[REMINDER] Task agent complete. Record /reflexion for each pattern used. /save-pattern for new discoveries.'",
             "timeout": 1000,
+            "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$TOOL_INPUT_prompt\" ] && bash .claude/hooks/post-task-check.sh \"$TOOL_INPUT_prompt\" 2>/dev/null || true",
+            "timeout": 5000,
             "continueOnError": true
           }
         ]

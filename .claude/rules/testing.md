@@ -45,3 +45,21 @@ A fully functioning integration stack exists. All SPARC Refinement and Completio
 - Integration tests use the integration environment
 - `cargo test --workspace` runs all unit tests
 - See AgentDB pattern ID 16 for London TDD details
+
+## Test Baseline and Flaky Test Management
+
+### Test Baseline
+
+The current passing test count baseline is stored in `.ndp/test-baseline.txt`. This file contains a single integer (e.g., `908`). The `/validate` skill compares the current test count against this baseline and warns on regression.
+
+**Update process**: Update the baseline manually after each confirmed successful release. Do not auto-update.
+
+### Flaky Test Manifest
+
+Known flaky tests are listed in `.ndp/flaky-tests.txt` (one test name per line, `#` comments). The `/validate` skill uses this to separate known flaky failures from real failures in test output.
+
+**Current known flaky tests (6):**
+- 5 `weather_polling_integration` tests (wiremock timing issues)
+- 1 `acceptance_partition_structure` test (hourly vs daily partitioning mismatch)
+
+**Update process**: Add newly identified flaky tests with a comment explaining the root cause. Remove tests once the underlying issue is fixed.

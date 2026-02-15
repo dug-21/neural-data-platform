@@ -185,6 +185,8 @@ Use this checklist for every release:
 - [ ] Create manifest: `.deploy/releases/v{X}.{Y}.{Z}.manifest.json`
 - [ ] Verify manifest: `cat .deploy/releases/vX.Y.Z.manifest.json | jq .`
 - [ ] Update CHANGELOG.md with release notes
+- [ ] Export trust snapshot: run `/trust-dashboard`, save output to `.deploy/trust/v{X}.{Y}.{Z}.json`
+- [ ] Update test baseline: update `.ndp/test-baseline.txt` with current passing count
 - [ ] Commit: `git commit -m "release: v{X}.{Y}.{Z}"`
 - [ ] Create tag: `git tag -a v{X}.{Y}.{Z} -m "Release v{X}.{Y}.{Z}: {description}"`
 - [ ] Push code: `git push`

@@ -9,162 +9,144 @@ description: "Auto-discover patterns from reflexion episodes. Run post-feature t
 
 Analyzes reflexion episodes to automatically discover:
 1. **Causal patterns** - What actions lead to successful outcomes
-2. **Reasoning patterns** - Stored via MCP `agentdb_pattern_store` (patterns table)
-3. **Skills** - Legacy table, use patterns for new knowledge
-4. **Patterns needing review** - Low-performing or conflicting patterns
+2. **Reusable patterns** - Stored to the **patterns table** via `agentdb_pattern_store`
+3. **Patterns needing review** - Low-performing or conflicting patterns
 
 **Run this AFTER completing a feature** to consolidate learnings.
 
-> **Note**: For manual pattern storage, use `save-pattern` skill with MCP tools.
-> The learner CLI uses the legacy skills table; for patterns table, use MCP tools directly.
+> **Note**: For manual pattern storage, use `save-pattern` skill.
+> This skill uses MCP tools exclusively. All discovered knowledge goes to the **patterns** table (searchable via `get-pattern`).
 
 ---
 
 ## Quick Reference
 
-```bash
+```
 # Discover causal patterns from episodes
-agentdb learner run 3 0.6 0.7
+mcp__agentdb__learner_discover(min_attempts=3, min_success_rate=0.6, min_confidence=0.7)
 
-# Consolidate skills from successful episodes
-agentdb skill consolidate 3 0.7 7 true
-
-# Prune old/low-quality data
-agentdb reflexion prune 90 0.5
+# Query causal edges
+mcp__agentdb__causal_query(min_confidence=0.5, limit=10)
 
 # View database statistics
-agentdb db stats
+mcp__agentdb__agentdb_stats(detailed=true)
+
+# Search discovered patterns
+mcp__agentdb__agentdb_pattern_search(task="feature-topic", k=5)
 ```
 
 ---
 
-## Primary Method: Discover Patterns
+## Step 1: Discover Causal Patterns
 
 Auto-discover causal patterns from reflexion episodes:
 
-```bash
-agentdb learner run 3 0.6 0.7
+```
+mcp__agentdb__learner_discover(
+  min_attempts=3,
+  min_success_rate=0.6,
+  min_confidence=0.7,
+  dry_run=false
+)
 ```
 
-### Parameters (positional)
+### Parameters
 
-| Position | Parameter | Default | Description |
-|----------|-----------|---------|-------------|
-| 1 | min-attempts | 3 | Minimum times pattern was tried |
-| 2 | min-success-rate | 0.6 | Minimum success rate |
-| 3 | min-confidence | 0.7 | Statistical confidence threshold |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `min_attempts` | number | 3 | Minimum times pattern was tried |
+| `min_success_rate` | number | 0.6 | Minimum success rate |
+| `min_confidence` | number | 0.7 | Statistical confidence threshold |
+| `dry_run` | boolean | false | Preview without storing |
 
 ### Examples
 
 **Standard discovery:**
-```bash
-agentdb learner run 3 0.6 0.7
+```
+mcp__agentdb__learner_discover(min_attempts=3, min_success_rate=0.6, min_confidence=0.7)
 ```
 
 **Aggressive (more patterns, lower thresholds):**
-```bash
-agentdb learner run 2 0.5 0.6
+```
+mcp__agentdb__learner_discover(min_attempts=2, min_success_rate=0.5, min_confidence=0.6)
 ```
 
 **Conservative (fewer, higher-confidence patterns):**
-```bash
-agentdb learner run 5 0.8 0.9
+```
+mcp__agentdb__learner_discover(min_attempts=5, min_success_rate=0.8, min_confidence=0.9)
 ```
 
 **Dry run (preview without storing):**
-```bash
-agentdb learner run 3 0.6 0.7 true
+```
+mcp__agentdb__learner_discover(min_attempts=3, min_success_rate=0.6, min_confidence=0.7, dry_run=true)
 ```
 
 ---
 
-## Consolidate Skills
+## Step 2: Store Discovered Patterns
 
-Automatically creates reusable skills from successful episodes:
+After `learner_discover` returns results, store high-value discoveries to the **patterns table** so `get-pattern` can find them:
 
-```bash
-agentdb skill consolidate 3 0.7 7 true
+```
+mcp__agentdb__agentdb_pattern_store(
+  taskType="learner:discovered-pattern-name",
+  approach="Description of the discovered pattern, including cause-effect relationship and how to apply it",
+  successRate=0.85,
+  tags=["learner", "auto-discovered", "topic"]
+)
 ```
 
-### Parameters (positional)
-
-| Position | Parameter | Default | Description |
-|----------|-----------|---------|-------------|
-| 1 | min-attempts | 3 | Pattern must appear 3+ times |
-| 2 | min-reward | 0.7 | Only high-success episodes |
-| 3 | time-window-days | 7 | Look back window |
-| 4 | extract-patterns | true | Use ML pattern extraction |
-
-### Examples
-
-**Standard consolidation:**
-```bash
-agentdb skill consolidate 3 0.7 7 true
-```
-
-**Higher thresholds, longer window:**
-```bash
-agentdb skill consolidate 5 0.8 14 true
-```
+This replaces the legacy `agentdb skill consolidate` command, which wrote to the skills table (orphaned from `get-pattern` searches).
 
 ---
 
-## Query Discovered Patterns
+## Step 3: Query What Was Learned
 
 ### View Causal Edges
 
-```bash
-agentdb causal query
+```
+mcp__agentdb__causal_query(min_confidence=0.5, limit=10)
 ```
 
 With filters:
-```bash
+```
 # Filter by cause
-agentdb causal query "Source trait" "" 0.7 0.1 20
+mcp__agentdb__causal_query(cause="Source trait", min_confidence=0.7, min_uplift=0.1, limit=20)
 
-# Filter by minimum confidence and uplift
-agentdb causal query "" "" 0.8 0.2 10
+# Filter by effect
+mcp__agentdb__causal_query(effect="data ingestion", min_confidence=0.8, limit=10)
 ```
 
-### Search Skills
+### Search Patterns (preferred)
 
-```bash
-agentdb skill search "data ingestion" 5
+```
+mcp__agentdb__agentdb_pattern_search(task="data ingestion", k=5)
+```
+
+### Search Legacy Skills (read-only)
+
+```
+mcp__agentdb__skill_search(task="data ingestion", k=5)
+```
+
+### View Database Stats
+
+```
+mcp__agentdb__agentdb_stats(detailed=true)
 ```
 
 ---
 
-## Prune Low-Quality Data
+## Prune Low-Quality Data (CLI Only)
 
-### Prune Old Episodes
+These operations have no MCP equivalent. Use CLI when needed:
 
 ```bash
 # Remove episodes older than 90 days with reward < 0.5
 agentdb reflexion prune 90 0.5
-```
 
-### Prune Low-Confidence Causal Edges
-
-```bash
-# Remove edges with confidence < 0.5, uplift < 0.05, older than 90 days
+# Remove low-confidence causal edges
 agentdb learner prune 0.5 0.05 90
-```
-
-### Prune Underperforming Skills
-
-```bash
-# Remove skills with < 3 uses, < 40% success rate, older than 60 days
-agentdb skill prune 3 0.4 60
-```
-
----
-
-## Memory Optimization
-
-Consolidate and compress pattern memory:
-
-```bash
-agentdb optimize-memory --compress true --consolidate-patterns true
 ```
 
 ---
@@ -173,27 +155,30 @@ agentdb optimize-memory --compress true --consolidate-patterns true
 
 Run after completing a feature:
 
-```bash
+```
 # 1. Discover causal patterns
-agentdb learner run 3 0.7 0.8
+mcp__agentdb__learner_discover(min_attempts=3, min_success_rate=0.7, min_confidence=0.8)
 
-# 2. Consolidate skills
-agentdb skill consolidate 3 0.7 7 true
+# 2. Review results, then store valuable patterns to patterns table
+mcp__agentdb__agentdb_pattern_store(
+  taskType="learner:pattern-name",
+  approach="What was discovered and how to apply it",
+  successRate=0.85,
+  tags=["learner", "auto-discovered"]
+)
 
 # 3. View what was learned
-agentdb db stats
+mcp__agentdb__agentdb_stats(detailed=true)
 
-# 4. (Optional) Search discovered skills
-agentdb skill search "feature-topic" 5
+# 4. Search patterns to verify they're findable
+mcp__agentdb__agentdb_pattern_search(task="feature-topic", k=5)
 ```
 
 ---
 
 ## Understanding Results
 
-### Causal Edges
-
-Learner creates cause-effect relationships:
+### Causal Edges (from learner_discover)
 
 ```
 Cause: "Using Source trait with health_check"
@@ -202,73 +187,35 @@ Uplift: 0.35 (35% improvement)
 Confidence: 0.92
 ```
 
-### Skills
-
-Consolidated from successful episodes:
+### Stored Patterns (from agentdb_pattern_store)
 
 ```
-Name: "http-source-implementation"
-Description: "Implement HTTP polling source with retry"
-Success Rate: 0.89
-Uses: 7
+taskType: "learner:http-source-reliability"
+approach: "Implementing health_check on Source trait leads to 35% more reliable ingestion..."
+successRate: 0.89
+tags: ["learner", "auto-discovered", "source-trait"]
 ```
 
 ---
 
 ## Thresholds Guide
 
-### For min-attempts
-
-| Value | Use Case |
-|-------|----------|
-| 2 | Aggressive learning, small dataset |
-| 3 | Standard (recommended) |
-| 5 | Conservative, high confidence needed |
-
-### For min-success-rate
-
-| Value | Use Case |
-|-------|----------|
-| 0.5 | Include partial successes |
-| 0.7 | Standard (recommended) |
-| 0.9 | Only proven patterns |
-
-### For min-confidence
-
-| Value | Use Case |
-|-------|----------|
-| 0.6 | Exploratory, more patterns |
-| 0.8 | Standard (recommended) |
-| 0.95 | Production-critical |
+| Parameter | Low (exploratory) | Standard | High (conservative) |
+|-----------|-------------------|----------|---------------------|
+| `min_attempts` | 2 | 3 | 5 |
+| `min_success_rate` | 0.5 | 0.7 | 0.9 |
+| `min_confidence` | 0.6 | 0.8 | 0.95 |
 
 ---
 
 ## Maintenance Schedule
 
-| Frequency | Action | Command |
-|-----------|--------|---------|
-| **Post-feature** | Discover patterns | `agentdb learner run` |
-| **Weekly** | Consolidate skills | `agentdb skill consolidate` |
-| **Monthly** | Review stats | `agentdb db stats` |
-| **Quarterly** | Prune stale data | `agentdb reflexion prune` |
-
----
-
-## Advanced: Causal Experiments
-
-For A/B testing approaches:
-
-```bash
-# Create experiment
-agentdb causal experiment create "batch-size-test" "batch_size_1000" "memory_usage"
-
-# Add observations
-agentdb causal experiment add-observation 1 true 0.15   # treatment
-agentdb causal experiment add-observation 1 false 0.45  # control
-
-# Calculate results
-agentdb causal experiment calculate 1
-```
+| Frequency | Action | Tool |
+|-----------|--------|------|
+| **Post-feature** | Discover patterns | `mcp__agentdb__learner_discover` |
+| **Post-feature** | Store to patterns table | `mcp__agentdb__agentdb_pattern_store` |
+| **Monthly** | Review stats | `mcp__agentdb__agentdb_stats` |
+| **Quarterly** | Prune stale data | `agentdb reflexion prune` (CLI) |
 
 ---
 

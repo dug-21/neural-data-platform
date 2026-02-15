@@ -131,6 +131,23 @@ Before submitting code:
 
 ---
 
+## SELF-CHECK (Run Before Returning Results)
+
+Before returning your work to the coordinator, verify:
+
+- [ ] `cargo build --workspace` passes (zero errors)
+- [ ] `cargo test --workspace` passes (no new failures)
+- [ ] No `todo!()`, `unimplemented!()`, `TODO`, `FIXME`, or `HACK` in non-test code
+- [ ] All modified files are within the scope defined in the brief
+- [ ] Error handling uses `CoreError` with context, not `.unwrap()` in non-test code
+- [ ] New structs have `#[derive(Debug)]` at minimum
+- [ ] New public items have doc comments
+- [ ] You called `get-pattern` before implementing
+
+If any check fails, fix it before returning. Do not leave it for the coordinator.
+
+---
+
 ## Pattern Integration (REQUIRED)
 
 ### BEFORE Implementation

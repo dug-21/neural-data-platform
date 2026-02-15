@@ -126,7 +126,7 @@ For large features (10+ tasks): use `topology: "mesh"` for peer communication.
 
 Define ALL tasks via TaskCreate and seed shared memory via MCP — in ONE message.
 
-If `/spec-compile` was run, retrieve the Level-1 summary first:
+Retrieve the Level-1 summary (spec-compile is REQUIRED for feature work):
 ```
 mcp__claude-flow__memory_retrieve(key="{feature}/summary", namespace="spec-{feature}")
 ```
@@ -155,19 +155,32 @@ Spawn ALL agents for the current wave in ONE message (parallel).
 - [ ] Tasks defined (TaskCreate completed)
 - [ ] Memory seeded (namespace confirmed)
 - [ ] Brief read
+- [ ] `cargo build --workspace` passes (abort if fails — do not spawn agents on a broken workspace)
 
 If ANY item is unchecked, STOP. Complete the missing step first.
 
 Agent types for implementation: `ndp-rust-dev`, `ndp-tester`, `ndp-timescale-dev`, `ndp-parquet-dev`
 
 Each agent prompt MUST include:
-1. **Level-1 summary** from compiled spec (if `/spec-compile` was run — retrieve from `memory_retrieve(key="{feature}/summary", namespace="spec-{feature}")`)
+1. **Level-1 summary** from compiled spec (retrieve from `memory_retrieve(key="{feature}/summary", namespace="spec-{feature}")`)
 2. Task description (2-3 sentences)
 3. Namespace for claude-flow memory coordination
 4. Specific file paths from the brief's "Files to Create/Modify" section
 5. Instructions to retrieve relevant ADRs before implementing — use `/get-pattern` (which calls `agentdb_pattern_search` internally)
 
 The Level-1 summary gives agents the objective (WHY), ADR list with pattern IDs (WHAT CONSTRAINS THEM), constraints, and scope exclusions (WHAT TO AVOID). Without it, agents have tunnel vision on their narrow subtask and drift from architectural decisions.
+
+#### Step 3c.5: Per-Wave Acceptance Check
+
+After agents return from each wave, map completed tasks to acceptance criteria:
+
+1. Read the ACCEPTANCE-MAP.md for the feature
+2. For each completed task, identify which AC-IDs it covers
+3. Run the verification method for each covered AC (file-check, grep, shell, test)
+4. Update AC status: PENDING -> IN_PROGRESS or PASS
+5. Report: "Wave N: X/Y ACs verified (list AC-IDs)"
+
+If an AC fails verification, either spawn a fix agent or flag it in the wave summary.
 
 #### Step 3d: Drift Check
 

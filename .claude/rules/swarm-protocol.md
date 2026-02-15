@@ -109,6 +109,13 @@ For spec details:
   Use ToolSearch to find "claude-flow memory" tools, then call:
   mcp__claude-flow__memory_search(query="your question", namespace="spec-{feature-id}")
 
+SELF-CHECK (before returning results):
+  - [ ] All modified files are within the scope defined in the brief
+  - [ ] No todo!(), unimplemented!(), TODO, FIXME, or HACK in non-test code
+  - [ ] Tests pass (cargo test --workspace if Rust code modified)
+  - [ ] You called get-pattern before implementing
+  If any check fails, fix it before returning.
+
 AFTER completing:
   mcp__claude-flow__memory_store(key="result-agent-N", value="<summary>", namespace="swarm-results")
 ```

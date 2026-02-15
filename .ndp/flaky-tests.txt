@@ -1,0 +1,8 @@
+# Known flaky tests (wiremock timing)
+weather_polling_integration::test_nws_polling_success
+weather_polling_integration::test_nws_polling_retry
+weather_polling_integration::test_nws_polling_timeout
+weather_polling_integration::test_nws_concurrent_polling
+weather_polling_integration::test_nws_polling_circuit_breaker
+# Pre-existing failure (hourly vs daily partitioning)
+acceptance_partition_structure

@@ -70,6 +70,17 @@ Note which pattern IDs were returned for reflexion later.
 
 Read `product/features/{feature-id}/SCOPE.md` — this defines what the planning swarm must produce.
 
+#### Scope Pre-Check (REQUIRED)
+
+Before spawning the coordinator, perform a quick alignment scan of SCOPE.md against `product/vision/ALIGNMENT-CRITERIA.md`. Check the 7 alignment principles at a surface level:
+
+1. Does the scope imply cloud-only dependencies? (Edge-Only violation)
+2. Does the scope require hardcoded values? (Config-Driven violation)
+3. Does the scope introduce banned dependencies? (Resource-Constrained violation)
+4. Does the scope target the correct version? (Version discipline)
+
+If any red flags are found, present them to the user BEFORE spawning the planning swarm. This prevents wasting a full planning cycle on a misaligned scope.
+
 ### Phase 2: Delegation (primary agent)
 
 Spawn `ndp-scrum-master` with the full context needed to run the planning swarm. ONE Task call.
@@ -203,9 +214,44 @@ The `/save-pattern` skill handles duplicate checking, embedding generation, and 
 
 Record the returned pattern IDs — they go into the IMPLEMENTATION-BRIEF.md's Resolved Decisions table so `/spec-compile` can reference them in the Level-1 summary.
 
-#### Step 3f: Generate Implementation Brief
+#### Step 3f: Generate Planning Deliverables
 
-Produce `product/features/{feature-id}/IMPLEMENTATION-BRIEF.md` (200-400 lines):
+Produce the following deliverables:
+
+**1. ACCEPTANCE-MAP.md** at `product/features/{feature-id}/ACCEPTANCE-MAP.md`:
+
+```markdown
+# {feature-id} Acceptance Criteria Map
+
+| AC-ID | Description | Verification Method | Verification Detail | Status |
+|-------|-------------|--------------------|--------------------|--------|
+| AC-01 | Description from SCOPE.md | test/manual/file-check/grep/shell | Specific verification command or procedure | PENDING |
+```
+
+Verification method types: `test` (cargo test function), `manual` (human check), `file-check` (file exists), `grep` (content match), `shell` (run command, check exit code). Every AC from SCOPE.md must appear.
+
+**2. LAUNCH-PROMPT.md** at `product/features/{feature-id}/LAUNCH-PROMPT.md`:
+
+```markdown
+# Implementation Launch Prompt: {feature-id}
+
+## Proposed Prompt
+> Implement {feature-id}: {title}
+> GitHub Issue: #{N}
+> Brief: product/features/{id}/IMPLEMENTATION-BRIEF.md
+> Pattern IDs from planning: {list}
+> Constraints: {key constraints}
+> Wave structure: {summary}
+
+## Reminders for User
+- Review ALIGNMENT-REPORT.md for any variances
+- Verify acceptance criteria in SCOPE.md
+
+## Gotchas Discovered During Planning
+- {gotcha 1}
+```
+
+**3. IMPLEMENTATION-BRIEF.md** at `product/features/{feature-id}/IMPLEMENTATION-BRIEF.md` (200-400 lines):
 
 - **SPARC artifact links table** (MUST include):
   ```
@@ -244,6 +290,17 @@ Then update SCOPE.md with the issue link:
 Add `## Tracking\n\n{issue-url}` to SCOPE.md (if not already present)
 ```
 
+#### Step 3h: Validate Planning Artifacts
+
+Run `/validate-plan {feature-id}` to verify planning output quality:
+- Required artifacts exist (IMPLEMENTATION-BRIEF.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, ALIGNMENT-REPORT.md, SPECIFICATION.md, ARCHITECTURE.md)
+- AC coverage: every AC-ID from SCOPE.md appears in ACCEPTANCE-MAP.md
+- ADR pattern IDs resolve in AgentDB
+- No stale references (deprecated pattern IDs, removed file paths)
+- Internal consistency: file paths in brief are valid, AC-IDs match SCOPE.md
+
+If validation fails, fix issues before returning to the primary agent. Report validation result in the summary.
+
 ### Phase 4: Completion (primary agent)
 
 After ndp-scrum-master returns:
@@ -273,8 +330,9 @@ NDP-SCRUM-MASTER (internal):
   Step 3c:  Task() spawn ALL planning agents (parallel)
   Step 3d:  Task(ndp-vision-guardian) — alignment check
   Step 3e:  Store each ADR in AgentDB via agentdb_pattern_store (permanent)
-  Step 3f:  Generate IMPLEMENTATION-BRIEF.md (include ADR pattern IDs)
+  Step 3f:  Generate ACCEPTANCE-MAP.md + LAUNCH-PROMPT.md + IMPLEMENTATION-BRIEF.md
   Step 3g:  gh issue create + update SCOPE.md
+  Step 3h:  /validate-plan {feature-id} — verify planning artifacts
 ```
 
 ---

@@ -161,6 +161,23 @@ Produce a report at `product/features/{feature-id}/ALIGNMENT-REPORT.md`:
 
 ---
 
+## SELF-CHECK (Run Before Returning Results)
+
+Before returning your work to the coordinator, verify:
+
+- [ ] ALIGNMENT-REPORT.md follows the template format exactly
+- [ ] All 7 alignment principles are evaluated (none skipped without N/A justification)
+- [ ] Every VARIANCE and FAIL includes: what, why it matters, recommendation
+- [ ] Scope gaps and scope additions are both checked
+- [ ] Technical constraints check is complete (ARM64, banned deps, TimescaleDB, config-driven, version target)
+- [ ] Evidence is quoted from specific spec sections, not vague references
+- [ ] Report path is correct: `product/features/{feature-id}/ALIGNMENT-REPORT.md`
+- [ ] You called `get-pattern` before reviewing
+
+If any check fails, fix it before returning. Do not leave it for the coordinator.
+
+---
+
 ## Pattern Integration (REQUIRED)
 
 ### BEFORE Alignment Review

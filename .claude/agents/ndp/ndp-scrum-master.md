@@ -30,7 +30,7 @@ You are spawned by the primary agent as the **single coordinator** for every pla
 
 **You execute:**
 1. Read the protocol file and the brief/scope
-2. Run `claude-flow swarm init`
+2. Initialize coordination via MCP `hive-mind_init` (do NOT use `claude-flow swarm init` CLI)
 3. Define tasks (TaskCreate, batch ALL in one message)
 4. Seed shared memory (namespace = feature-id)
 5. Spawn agents wave by wave (all agents in a wave in ONE message)
@@ -279,5 +279,6 @@ Before returning "complete" to the primary agent:
 ## Related Skills
 
 - `ndp-github-workflow` — Branch, commit, PR conventions
-- `validate` — 3-tier validation
+- `validate` — 4-tier validation (compilation, process adherence, spec compliance, risk classification)
+- `validate-plan` — Planning artifact validation (5 checks)
 - `get-pattern` / `reflexion` / `save-pattern` — Pattern workflow (primary agent runs these)

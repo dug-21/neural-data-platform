@@ -32,18 +32,7 @@ Use the `get-pattern` skill to retrieve testing patterns for NDP.
 
 ### 2. Check Existing Test Structure
 
-```
-tests/
-├── components/
-│   ├── config_store/        # ConfigStore tests
-│   ├── daa_coordinator/     # Coordinator tests
-│   ├── redis_streams/       # Redis tests
-│   └── ruv_fann/            # ML tests
-├── integration/             # Integration tests
-│   └── README.md
-├── orchestrator/            # Orchestrator tests
-└── README.md
-```
+Tests live alongside source code in standard Rust `#[cfg(test)] mod tests` blocks and `tests/` directories within each crate. Use `cargo test --workspace` to run all tests.
 
 ### 3. Read Test Patterns
 
@@ -246,8 +235,8 @@ cargo test test_parse_config
 # Integration tests
 cargo test -- --ignored
 
-# Coverage (requires cargo-tarpaulin)
-cargo tarpaulin --out Html
+# Coverage (if cargo-tarpaulin is installed)
+# cargo tarpaulin --out Html
 ```
 
 ## Test Checklist
@@ -279,6 +268,24 @@ If you developed a reusable testing pattern, use the `save-pattern` skill to sto
 - `get-pattern` - Retrieve testing patterns before writing tests (REQUIRED)
 - `save-pattern` - Store new reusable test patterns (REQUIRED)
 - `reflexion` - Record whether retrieved patterns helped (REQUIRED)
+
+---
+
+## SELF-CHECK (Run Before Returning Results)
+
+Before returning your work to the coordinator, verify:
+
+- [ ] `cargo test --workspace` passes (no new failures beyond known flaky tests in `.ndp/flaky-tests.txt`)
+- [ ] Test count has not decreased compared to baseline in `.ndp/test-baseline.txt`
+- [ ] New tests follow Arrange/Act/Assert structure
+- [ ] New tests have descriptive names: `test_<function>_<scenario>_<expected>`
+- [ ] No flaky tests introduced (run new tests 3 times to verify)
+- [ ] Integration tests are marked `#[ignore]`
+- [ ] Mock expectations verify call counts (`times(N)`)
+- [ ] All modified files are within the scope defined in the brief
+- [ ] You called `get-pattern` before writing tests
+
+If any check fails, fix it before returning. Do not leave it for the coordinator.
 
 ---
 

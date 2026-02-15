@@ -133,5 +133,9 @@ See also: `docs/procedures/DEPLOYMENT-DECLARATIVES.md`, `.deploy/releases/TEMPLA
 - **Pattern workflow (get-pattern/reflexion/save-pattern)**: `.claude/rules/pattern-workflow.md`
 - **Memory commands (claude-flow CLI)**: `.claude/rules/memory-commands.md`
 - **Testing, integration environment**: `.claude/rules/testing.md`
+- **Validation (implementation)**: `.claude/skills/validate/SKILL.md` -- 4-tier validation with glass box reports
+- **Validation (planning)**: `.claude/skills/validate-plan/SKILL.md` -- 5-check planning artifact validation
+- **Trust dashboard**: `.claude/skills/trust-dashboard/SKILL.md` -- Bayesian trust scores from AgentDB
+- **Shadow judge**: `.claude/skills/shadow-judge/SKILL.md` -- Human judgment recording
 - **Full CLI, hooks, agents, intelligence reference**: `.claude-flow/CAPABILITIES.md`
 - **Agent definitions**: `.claude/agents/ndp/README.md`
