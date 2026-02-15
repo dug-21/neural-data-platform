@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.3",
+  "description": "Fix domain config sync: pass JSON as argument instead of piping stdin through docker exec",
+  "changes": [
+    {"type": "domain", "domain_id": "indoor-air-quality", "action": "sync"},
+    {"type": "container", "target": "ndp-intelligence", "action": "restart"}
+  ]
+}

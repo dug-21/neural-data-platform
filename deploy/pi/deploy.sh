@@ -2070,7 +2070,9 @@ handle_domain() {
     # Sync domain config to etcd if available
     log "  Syncing domain config to etcd..."
     if dcx etcd etcdctl endpoint health >/dev/null 2>&1; then
-        if cat "$config_file" | dcx etcd etcdctl put "/domains/$domain_id/config" -; then
+        local config_json
+        config_json=$(cat "$config_file")
+        if dcx etcd etcdctl put "/domains/$domain_id/config" "$config_json"; then
             log "  Domain config synced to etcd at /domains/$domain_id/config"
         else
             warn "  Failed to sync domain config to etcd (non-fatal)"

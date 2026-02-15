@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-02-15
+
+Fix domain config sync to etcd — `deploy.sh handle_domain()` piped JSON through `docker compose exec -T` stdin to `etcdctl put ... -`, but stdin forwarding through container exec is unreliable. The literal string `-` was stored instead of the JSON content, causing ndp-intelligence to crash on startup.
+
+### Fixed
+
+- **`deploy/pi/deploy.sh`** — pass domain config JSON as shell argument to `etcdctl put` instead of piping through stdin (#20)
+
+### Technical Notes
+
+- `docker compose exec -T` does not reliably forward stdin pipes to the target process
+- GitHub Issue: #20
+
 ## [1.2.2] - 2026-02-15
 
 Fix intelligence Dockerfile: use rolling Rust base image (`rust:1-bookworm`) matching air-quality-app pattern instead of pinned `rust:1.82-bookworm`. Arrow 57.1.0 requires `edition2024` which needs Rust 1.85+. Also adds `curl` to runtime for healthcheck.
