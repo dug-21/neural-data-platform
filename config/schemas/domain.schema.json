@@ -264,6 +264,85 @@
       }
     },
 
+    "null_strategy": {
+      "type": "string",
+      "enum": ["zero", "last_known", "mean"]
+    },
+
+    "direct_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "null_strategy"],
+      "properties": {
+        "field": { "type": "string" },
+        "null_strategy": { "$ref": "#/definitions/null_strategy" }
+      }
+    },
+
+    "intelligence": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Intelligence layer configuration for similarity search and predictions.",
+      "required": ["enabled", "embedding", "search"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "embedding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "fields"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["metric"]
+            },
+            "fields": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "temporal": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "default": []
+                },
+                "direct": {
+                  "type": "array",
+                  "items": { "$ref": "#/definitions/direct_field" },
+                  "default": []
+                },
+                "derived": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "default": []
+                }
+              }
+            }
+          }
+        },
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["k", "min_similarity", "prediction_horizons"],
+          "properties": {
+            "k": { "type": "integer", "minimum": 1 },
+            "min_similarity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "prediction_horizons": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          }
+        },
+        "anomaly": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "distance_threshold_sigma": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+
     "domain_content": {
       "type": "object",
       "description": "Domain configuration content.",
@@ -304,6 +383,10 @@
             "retention": { "type": "string" },
             "detection_schedule": { "type": "string" }
           }
+        },
+        "intelligence": {
+          "$ref": "#/definitions/intelligence",
+          "description": "Intelligence layer configuration."
         },
         "constraints": {
           "type": "array",
@@ -352,6 +435,10 @@
         "retention": { "type": "string" },
         "detection_schedule": { "type": "string" }
       }
+    },
+    "intelligence": {
+      "$ref": "#/definitions/intelligence",
+      "description": "Intelligence layer configuration."
     },
     "constraints": {
       "type": "array",

@@ -9,15 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.3] - 2026-02-15
 
-Fix domain config sync to etcd — `deploy.sh handle_domain()` piped JSON through `docker compose exec -T` stdin to `etcdctl put ... -`, but stdin forwarding through container exec is unreliable. The literal string `-` was stored instead of the JSON content, causing ndp-intelligence to crash on startup.
+Fix domain config deployment — two issues preventing ndp-intelligence from starting on Pi.
 
 ### Fixed
 
-- **`deploy/pi/deploy.sh`** — pass domain config JSON as shell argument to `etcdctl put` instead of piping through stdin (#20)
+- **`deploy/pi/deploy.sh`** — pass domain config JSON as shell argument to `etcdctl put` instead of piping through stdin; `docker compose exec -T` does not reliably forward stdin pipes (#20)
+- **`config/schemas/domain.schema.json`** — add `intelligence` definition (embedding, search, anomaly sub-schemas) so `ndp validate --domain` accepts the fe-004 intelligence block (#20)
 
 ### Technical Notes
 
-- `docker compose exec -T` does not reliably forward stdin pipes to the target process
 - GitHub Issue: #20
 
 ## [1.2.2] - 2026-02-15
