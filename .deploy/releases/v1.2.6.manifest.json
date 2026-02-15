@@ -1,0 +1,7 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.6",
+  "description": "Fix container restart to use up -d instead of restart (picks up new images)",
+  "changes": []
+}

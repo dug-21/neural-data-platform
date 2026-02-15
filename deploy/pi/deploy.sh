@@ -2273,13 +2273,16 @@ handle_container_restart() {
 
     log "Container Restart: $target"
 
+    # IMPORTANT: Use `up -d` not `restart`. `docker compose restart` reuses the
+    # old container image — if a build happened earlier in this deploy, `restart`
+    # will NOT pick up the new image. `up -d` recreates with the latest image.
     case "$target" in
         air-quality-app)
-            dc restart air-quality-app
+            dc up -d air-quality-app
             wait_for_health air-quality-app 60
             ;;
         ndp-mcp-server)
-            dc restart ndp-mcp-server
+            dc up -d ndp-mcp-server
             wait_for_health ndp-mcp-server 60
             ;;
         silver-etl)
@@ -2287,11 +2290,11 @@ handle_container_restart() {
             warn "  silver-etl is not a persistent service, skipping restart"
             ;;
         grafana)
-            dc restart grafana
+            dc up -d grafana
             wait_for_health grafana 60
             ;;
         ndp-intelligence)
-            dc --profile intelligence restart ndp-intelligence
+            dc --profile intelligence up -d ndp-intelligence
             ;;
         *)
             error "Unknown container target: $target"

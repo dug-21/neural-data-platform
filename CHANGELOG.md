@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-02-15
+
+Fix container restart action: use `docker compose up -d` instead of `restart` so newly built images are picked up.
+
+### Fixed
+
+- **`deploy/pi/deploy.sh`** — `handle_container_restart()` now uses `dc up -d` instead of `dc restart` for all container targets. `docker compose restart` reuses the existing container with the old image, so builds followed by restarts in the same deploy would not pick up the new binary (#20)
+
+### Technical Notes
+
+- This was a known deployment lesson but was never fixed in deploy.sh
+- GitHub Issue: #20
+
 ## [1.2.5] - 2026-02-15
 
 Fix intelligence warmup: query aligned view directly instead of non-existent hourly continuous aggregate.
