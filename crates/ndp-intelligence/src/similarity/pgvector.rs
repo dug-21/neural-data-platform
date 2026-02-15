@@ -57,11 +57,11 @@ impl SimilarityEngine for PgVectorEngine {
             let rows = client
                 .query(
                     "SELECT bucket::text AS id,
-                            1.0 - (embedding <=> $1::vector) AS similarity,
+                            1.0 - (embedding <=> $1::text::vector) AS similarity,
                             metadata
                      FROM gold.metric_embeddings
                      WHERE domain_id = $2
-                     ORDER BY embedding <=> $1::vector
+                     ORDER BY embedding <=> $1::text::vector
                      LIMIT $3",
                     &[&vector_str, &self.domain_id, &(query.k as i64)],
                 )

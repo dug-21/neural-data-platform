@@ -61,7 +61,7 @@ impl StorageBackend for PostgresStorage {
         self.client
             .execute(
                 "INSERT INTO gold.metric_embeddings (bucket, domain_id, embedding, dimensions, metadata, created_at)
-                 VALUES ($1, $2, $3::vector, $4, $5, $6)
+                 VALUES ($1, $2, $3::text::vector, $4, $5, $6)
                  ON CONFLICT (bucket, domain_id) DO UPDATE SET
                      embedding = EXCLUDED.embedding,
                      dimensions = EXCLUDED.dimensions,

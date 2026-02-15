@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-02-15
+
+Fix pgvector parameter serialization: `tokio-postgres` cannot serialize a Rust `String` to the pgvector `vector` OID. Double-cast `::text::vector` forces PostgreSQL to accept a text parameter and cast server-side.
+
+### Fixed
+
+- **`crates/ndp-intelligence/src/storage/postgres.rs`** — `store_embedding()` INSERT changed `$3::vector` to `$3::text::vector`. Without the double-cast, PostgreSQL reports the parameter type as `vector` OID, but `String` only implements `ToSql` for text types, causing "error serializing parameter 2" on every embedding store
+- **`crates/ndp-intelligence/src/similarity/pgvector.rs`** — K-NN search query changed `$1::vector` to `$1::text::vector` (same root cause, would have failed once embeddings existed to search against)
+
+### Technical Notes
+
+- The bug affected all domains, not just indoor-air-quality — any `vector(N)` typed column triggers the same OID mismatch
+- Integration tests didn't catch this because they create `embedding vector` (untyped) while production DDL from `PgVectorSchemaGenerator` creates `embedding vector(7)` (typed with fixed dimensions)
+- GitHub Issue: #18
+
 ## [1.2.6] - 2026-02-15
 
 Fix container restart action: use `docker compose up -d` instead of `restart` so newly built images are picked up.
@@ -977,7 +992,8 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.1.26...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.2.7...HEAD
+[1.2.7]: https://github.com/dug-21/neural-data-platform/compare/v1.2.6...v1.2.7
 [1.1.26]: https://github.com/dug-21/neural-data-platform/compare/v1.1.25...v1.1.26
 [1.1.25]: https://github.com/dug-21/neural-data-platform/compare/v1.1.24...v1.1.25
 [1.1.24]: https://github.com/dug-21/neural-data-platform/compare/v1.1.23...v1.1.24

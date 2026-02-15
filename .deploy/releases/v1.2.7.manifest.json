@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.7",
+  "description": "Fix pgvector parameter serialization: double-cast text::vector for INSERT and search queries",
+  "changes": [
+    {"type": "container", "target": "ndp-intelligence", "action": "build"},
+    {"type": "container", "target": "ndp-intelligence", "action": "restart"}
+  ]
+}
