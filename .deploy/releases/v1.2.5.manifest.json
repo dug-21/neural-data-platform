@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.5",
+  "description": "Fix intelligence warmup: query aligned view not non-existent hourly CA",
+  "changes": [
+    {"type": "container", "target": "ndp-intelligence", "action": "build"},
+    {"type": "container", "target": "ndp-intelligence", "action": "restart"}
+  ]
+}

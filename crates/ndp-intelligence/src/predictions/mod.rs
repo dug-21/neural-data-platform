@@ -110,7 +110,7 @@ impl PredictionEngine {
             .await
             .map_err(|e| IntelligenceError::Database(format!("Pool error: {}", e)))?;
         let view_name = format!(
-            "gold.{}_aligned_hourly",
+            "gold.{}_aligned",
             domain_id.replace('-', "_")
         );
 

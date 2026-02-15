@@ -170,7 +170,7 @@ impl IntelligenceService {
 
         // Rebuild running stats by replaying Gold aligned view data
         let view_name = format!(
-            "gold.{}_aligned_hourly",
+            "gold.{}_aligned",
             app_config.domain_id.replace('-', "_")
         );
         let rows = client
@@ -266,7 +266,7 @@ impl IntelligenceService {
             .map_err(|e| IntelligenceError::Database(format!("Pool error: {}", e)))?;
 
         let view_name = format!(
-            "gold.{}_aligned_hourly",
+            "gold.{}_aligned",
             self.domain_id.replace('-', "_")
         );
 

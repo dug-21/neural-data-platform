@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-02-15
+
+Fix intelligence warmup: query aligned view directly instead of non-existent hourly continuous aggregate.
+
+### Fixed
+
+- **`crates/ndp-intelligence/src/service.rs`** — warmup and tick queries use `gold.<domain>_aligned` instead of `gold.<domain>_aligned_hourly` (the aligned view is a materialized view, not a hypertable — continuous aggregates cannot be built on it) (#20)
+- **`crates/ndp-intelligence/src/predictions/mod.rs`** — same fix for prediction queries
+- **`crates/ndp-intelligence/src/predictions/outcome.rs`** — same fix for outcome evaluation queries
+
+### Technical Notes
+
+- The Gold aligned view generator creates `MATERIALIZED VIEW`, not a hypertable, so `_hourly` CA was never possible
+- GitHub Issue: #20
+
 ## [1.2.4] - 2026-02-15
 
 Wire config-driven intelligence DDL generation into deployment pipeline. The `gold.metric_embeddings` and `gold.predictions` tables are now created automatically during `deploy.sh apply` using the existing `PgVectorSchemaGenerator` driven by domain config.
