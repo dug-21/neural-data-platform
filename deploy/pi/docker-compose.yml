@@ -235,6 +235,38 @@ services:
         limits:
           memory: 256M
 
+  # NDP Intelligence - Similarity Search & Prediction Daemon (fe-004)
+  # Embeds Gold aligned hourly data, searches for similar past conditions,
+  # and predicts objective breaches. Timer-based wake (20 min default),
+  # optional PG NOTIFY optimization. 168-hour warmup before predictions.
+  # Memory target: ~34MB runtime (256MB limit with buffer)
+  ndp-intelligence:
+    build:
+      context: ../..
+      dockerfile: docker/intelligence/Dockerfile
+    image: neural-data-platform/ndp-intelligence:latest
+    container_name: ndp-intelligence
+    environment:
+      - RUST_LOG=info,ndp_intelligence=debug
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-ndp_secure_password}@timescaledb:5432/ndp
+      - INTELLIGENCE_DOMAIN=indoor-air-quality
+      - ETCD_ENDPOINTS=http://etcd:2379
+      - INTELLIGENCE_POLL_INTERVAL_SECS=1200
+      - INTELLIGENCE_POOL_SIZE=2
+      - INTELLIGENCE_WARMUP_THRESHOLD=168
+    depends_on:
+      etcd:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    profiles:
+      - intelligence
+
   # Silver ETL - Bronze to Silver Layer Transformation (DP-006)
   # Reads Parquet files from Bronze, writes to TimescaleDB Silver layer
   # Memory target: <200MB runtime (256MB limit with buffer)

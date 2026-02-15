@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-02-15
+
+Fix Pi production deployment — v1.2.0 added ndp-intelligence to the root and integration compose files but missed the Pi production compose file (`deploy/pi/docker-compose.yml`), causing `no such service: ndp-intelligence` during `deploy.sh apply`.
+
+### Fixed
+
+- **`deploy/pi/docker-compose.yml`** — added `ndp-intelligence` service definition with correct production settings (intelligence profile, 256MB limit, etcd + timescaledb dependencies)
+
+### Technical Notes
+
+- Root cause: swarm implementation added service to `docker-compose.yml` (dev) and `docker-compose.integration.yml` (CI) but not the Pi-specific compose file
+- GitHub Issue: #18
+
 ## [1.2.0] - 2026-02-15
 
 First end-to-end intelligence cycle: similarity search, breach predictions, and outcome tracking as a running daemon on the Raspberry Pi. Builds on the fe-003 library foundation (traits, MetricEmbedder, PostgresStorage, pgvector DDL) by wiring real implementations to those traits. After a 168-hour warmup, the system generates hourly predictions: "Given conditions like now, what happened next in the past?"
