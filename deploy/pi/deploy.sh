@@ -45,6 +45,12 @@
 #   silver-daemon-logs   - View Silver ETL daemon logs (follows)
 #   silver-daemon-status - Check Silver ETL daemon status
 #
+# Intelligence Commands (fe-004):
+#   intelligence-start   - Start intelligence daemon (similarity + predictions)
+#   intelligence-stop    - Stop intelligence daemon
+#   intelligence-logs    - View intelligence daemon logs
+#   intelligence-status  - Check intelligence daemon status and stats
+#
 # Environment Variables:
 #   DEPLOY_ENV           - pi (default) or integration
 #   SILVER_ETL_INTERVAL  - Daemon ETL interval in seconds (default: 300)
@@ -1302,6 +1308,10 @@ status() {
     echo "  MCP Server:  $(curl -sf http://localhost:9100/health 2>/dev/null && echo 'Running' || echo 'Not running')"
     echo "  TimescaleDB: $(dcx timescaledb pg_isready -U postgres -d ndp 2>/dev/null && echo 'Running' || echo 'Not running')"
     echo "  Grafana:     $(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health 2>/dev/null || echo 'Not running')"
+    # Intelligence daemon (optional profile)
+    if docker ps -q -f name=ndp-intelligence 2>/dev/null | grep -q .; then
+        echo "  Intelligence: $(docker inspect --format='{{.State.Status}}' ndp-intelligence 2>/dev/null || echo 'Unknown')"
+    fi
     echo ""
 
     log "Silver Layer Status:"
@@ -1392,6 +1402,11 @@ update() {
             log "Rebuilding silver-etl only..."
             dc --profile silver build $no_cache --progress=plain silver-etl
             log "silver-etl rebuilt. Run './deploy.sh silver-migrate' or './deploy.sh silver-etl' to use it."
+            ;;
+        intelligence)
+            log "Rebuilding ndp-intelligence only..."
+            dc --profile intelligence build $no_cache --progress=plain ndp-intelligence
+            dc --profile intelligence up -d ndp-intelligence
             ;;
         all|*)
             log "Rebuilding all services..."
@@ -1777,6 +1792,9 @@ handle_container_build() {
             ;;
         grafana)
             dc build $build_args grafana
+            ;;
+        ndp-intelligence)
+            dc --profile intelligence build $build_args ndp-intelligence
             ;;
         *)
             error "Unknown container target: $target"
@@ -2251,6 +2269,9 @@ handle_container_restart() {
             dc restart grafana
             wait_for_health grafana 60
             ;;
+        ndp-intelligence)
+            dc --profile intelligence restart ndp-intelligence
+            ;;
         *)
             error "Unknown container target: $target"
             ;;
@@ -2535,7 +2556,7 @@ case "${1:-deploy}" in
         echo "Update Commands:"
         echo "  update [--no-cache] [target] - Pull latest from git and rebuild"
         echo "                    --no-cache: Force full rebuild (skip Docker cache)"
-        echo "                    Targets: app, mcp, silver, all (default)"
+        echo "                    Targets: app, mcp, silver, intelligence, all (default)"
         echo "  refresh         - Pull latest configs only (no rebuild, restarts Grafana)"
         echo ""
         echo "Configuration Commands:"
@@ -2581,6 +2602,12 @@ case "${1:-deploy}" in
         echo "  silver-daemon-stop   - Stop Silver ETL daemon"
         echo "  silver-daemon-logs   - View Silver ETL daemon logs (follows)"
         echo "  silver-daemon-status - Check Silver ETL daemon status"
+        echo ""
+        echo "Intelligence Commands (fe-004):"
+        echo "  intelligence-start   - Start intelligence daemon (similarity search + predictions)"
+        echo "  intelligence-stop    - Stop intelligence daemon"
+        echo "  intelligence-logs    - View intelligence daemon logs (follows)"
+        echo "  intelligence-status  - Check intelligence daemon status and stats"
         echo ""
         echo "Environment Variables:"
         echo "  DEPLOY_ENV              - pi (default) or integration"
@@ -2745,6 +2772,54 @@ case "${1:-deploy}" in
         else
             echo "  Status: Not running"
             echo "  Start with: ./deploy.sh silver-daemon"
+        fi
+        ;;
+    intelligence-start)
+        log "Starting intelligence daemon..."
+        # Ensure TimescaleDB and etcd are healthy
+        until dcx etcd etcdctl endpoint health >/dev/null 2>&1; do
+            warn "Waiting for etcd to be ready..."
+            sleep 2
+        done
+        until dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; do
+            warn "Waiting for TimescaleDB to be ready..."
+            sleep 2
+        done
+        dc --profile intelligence up -d ndp-intelligence
+        log "Intelligence daemon started"
+        log "View logs: ./deploy.sh intelligence-logs"
+        ;;
+    intelligence-stop)
+        log "Stopping intelligence daemon..."
+        dc --profile intelligence stop ndp-intelligence
+        dc --profile intelligence rm -f ndp-intelligence
+        log "Intelligence daemon stopped"
+        ;;
+    intelligence-logs)
+        log "Intelligence daemon logs:"
+        docker logs -f ndp-intelligence
+        ;;
+    intelligence-status)
+        log "Intelligence daemon status:"
+        if docker ps -q -f name=ndp-intelligence | grep -q .; then
+            echo "  Status: Running"
+            echo "  Memory: $(docker stats ndp-intelligence --no-stream --format '{{.MemUsage}}' 2>/dev/null || echo 'N/A')"
+            echo ""
+            # Query embedding and prediction counts from TimescaleDB
+            if dcx timescaledb pg_isready -U postgres -d ndp >/dev/null 2>&1; then
+                embed_count=$(dcx timescaledb psql -U postgres -d ndp -tAc \
+                    "SELECT count(*) FROM gold.metric_embeddings WHERE domain_id = 'indoor-air-quality'" 2>/dev/null || echo "0")
+                pred_count=$(dcx timescaledb psql -U postgres -d ndp -tAc \
+                    "SELECT count(*) FROM gold.predictions WHERE domain_id = 'indoor-air-quality'" 2>/dev/null || echo "0")
+                echo "  Embeddings: $embed_count"
+                echo "  Predictions: $pred_count"
+            fi
+            echo ""
+            log "Recent logs:"
+            docker logs --tail 20 ndp-intelligence 2>&1
+        else
+            echo "  Status: Not running"
+            echo "  Start with: ./deploy.sh intelligence-start"
         fi
         ;;
     version)

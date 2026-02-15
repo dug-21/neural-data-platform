@@ -11,7 +11,13 @@ path = "src/main.rs"
 [dependencies]
 ndp-intelligence = { path = "../../crates/ndp-intelligence" }
 ndp-lib = { path = "../../crates/ndp-lib" }
+config-client = { path = "../../config-client" }
 clap = { workspace = true }
 tokio = { workspace = true }
+tokio-postgres = { workspace = true }
+deadpool-postgres = "0.14"
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

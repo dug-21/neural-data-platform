@@ -111,22 +111,39 @@ The scrum-master executes the following steps autonomously.
 
 #### Step 3a: Initialize Coordination Layer (MCP)
 
-Use the tested swarm-run methodology — MCP tools for coordination, Task tool for agents. Do NOT use `claude-flow swarm init` CLI (it is cosmetic and creates no real state).
+Use MCP tools for coordination, Task tool for agents. Do NOT use `claude-flow swarm init` CLI (it is cosmetic).
 
 ```
 Use ToolSearch to find "claude-flow hive" tools, then call:
 
+# 1. Create the hive
 mcp__claude-flow__hive-mind_init(
   topology: "hierarchical",
   queenId: "planning-lead"
 )
+
+# 2. Register each planned agent in BOTH stores (repeat per agent)
+mcp__claude-flow__agent_spawn(agentId: "agent-1-spec", agentType: "specification")
+mcp__claude-flow__hive-mind_join(agentId: "agent-1-spec", role: "worker")
+
+mcp__claude-flow__agent_spawn(agentId: "agent-2-arch", agentType: "ndp-architect")
+mcp__claude-flow__hive-mind_join(agentId: "agent-2-arch", role: "specialist")
+
+# ... register all agents before spawning any Task
+
+# 3. Seed hive shared context
+mcp__claude-flow__hive-mind_memory(
+  action: "set",
+  key: "{feature-id}-context",
+  value: "{scope summary, goals, constraints, pattern IDs}"
+)
 ```
 
-This creates `.claude-flow/hive-mind/state.json` for shared coordination state.
+This creates `.claude-flow/hive-mind/state.json` with workers list and shared memory. Agents registered via `agent_spawn` + `hive-mind_join` are visible in `hive-mind_status` AND trackable via `agent_update`.
 
-#### Step 3b: Definition + Coordination
+#### Step 3b: Definition (batch with Step 3a)
 
-Define ALL tasks via TaskCreate and seed shared memory via MCP — in ONE message.
+Define ALL tasks in the SAME message as Step 3a. Batch all TaskCreate calls with the MCP calls above:
 
 ```
 TaskCreate("Specification artifact", "Produce SPECIFICATION.md for {feature}", "Writing specification")
@@ -136,12 +153,6 @@ TaskCreate("Pseudocode", "Produce PSEUDOCODE.md for {feature}", "Writing pseudoc
 TaskCreate("Vision alignment", "Produce ALIGNMENT-REPORT.md for {feature}", "Checking alignment")
 TaskCreate("Implementation brief", "Produce IMPLEMENTATION-BRIEF.md for {feature}", "Generating brief")
 TaskCreate("GH Issue creation", "Create GH Issue from brief", "Creating GH Issue")
-
-mcp__claude-flow__memory_store(
-  key: "{feature-id}-context",
-  value: "{scope summary, goals, constraints, pattern IDs}",
-  namespace: "{feature-id}"
-)
 ```
 
 Set task dependencies with TaskUpdate after creation.
@@ -151,10 +162,12 @@ Set task dependencies with TaskUpdate after creation.
 Spawn ALL planning agents in ONE message (parallel).
 
 **Pre-spawn checklist**:
-- [ ] swarm init ran
+- [ ] hive-mind_init ran
+- [ ] Agents registered (agent_spawn + hive-mind_join for each)
 - [ ] Tasks defined
-- [ ] Memory seeded
+- [ ] Hive memory seeded (hive-mind_memory action="set")
 - [ ] SCOPE.md read
+- [ ] hive-mind_status shows all agents in workers array
 
 Agent types for planning: `ndp-architect`, `specification`, `pseudocode`
 
@@ -162,9 +175,10 @@ Do NOT spawn: `ndp-rust-dev`, `ndp-tester`, `coder`, `sparc-coder`.
 
 Each agent prompt MUST include:
 1. Task description (2-3 sentences)
-2. Namespace for coordination
+2. Their hive agent ID (for hive-mind_memory and agent_update calls)
 3. Specific SPARC phase to produce
 4. The SCOPE.md path
+5. Instructions to read hive context via `hive-mind_memory(action="get")` and write results via `hive-mind_memory(action="set")`
 
 **Architecture agent (ndp-architect) MUST produce individual ADRs** in `product/features/{feature-id}/architecture/ARCHITECTURE.md` using this format:
 
@@ -325,9 +339,9 @@ PRIMARY AGENT:
   Message 3:  Review results + present variances + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  MCP: hive-mind_init (coordination layer)
-  Step 3b:  TaskCreate (batch ALL) + MCP: memory_store (shared context)
-  Step 3c:  Task() spawn ALL planning agents (parallel)
+  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + hive-mind_memory seed
+  Step 3b:  TaskCreate (batch ALL) — in SAME message as 3a
+  Step 3c:  Task() spawn ALL planning agents (parallel, ONE message)
   Step 3d:  Task(ndp-vision-guardian) — alignment check
   Step 3e:  Store each ADR in AgentDB via agentdb_pattern_store (permanent)
   Step 3f:  Generate ACCEPTANCE-MAP.md + LAUNCH-PROMPT.md + IMPLEMENTATION-BRIEF.md
@@ -350,11 +364,12 @@ Do NOT paste full spec documents, source files, or cargo output into planning ag
 
 ---
 
-## Two Memory Systems
+## Three Memory Systems
 
-| System | Tool | Purpose |
-|--------|------|---------|
-| **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` | Permanent project knowledge |
-| **Claude-Flow Memory** | `claude-flow memory` CLI via Bash | Transient swarm coordination |
+| System | Tool | Persistence | Purpose |
+|--------|------|-------------|---------|
+| **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` | Permanent | Architecture, conventions, procedures |
+| **Hive Memory** | `hive-mind_memory(action="set/get/list")` | Session | Lightweight agent coordination, results, context |
+| **General Memory** | `memory_store`/`memory_search`/`memory_retrieve` | Session | Semantic search, compiled specs, complex queries |
 
-If it's useful 6 months from now → AgentDB. If it's only useful during this swarm → claude-flow memory.
+Rule: Useful 6 months from now → AgentDB. Simple coordination during swarm → hive memory. Searchable content during swarm → general memory.

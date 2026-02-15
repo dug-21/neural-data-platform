@@ -20,7 +20,10 @@
 
 pub mod error;
 pub mod graph;
+pub mod notify;
 pub mod populator;
+pub mod predictions;
+pub mod service;
 pub mod similarity;
 pub mod storage;
 

@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-15
+
+First end-to-end intelligence cycle: similarity search, breach predictions, and outcome tracking as a running daemon on the Raspberry Pi. Builds on the fe-003 library foundation (traits, MetricEmbedder, PostgresStorage, pgvector DDL) by wiring real implementations to those traits. After a 168-hour warmup, the system generates hourly predictions: "Given conditions like now, what happened next in the past?"
+
+### Added
+
+- **HnswEngine** (`crates/ndp-intelligence/src/similarity/hnsw.rs`) — ruvector-core HNSW wrapper, feature-gated behind `#[cfg(feature = "ruvector")]`
+- **PgVectorEngine** (`crates/ndp-intelligence/src/similarity/pgvector.rs`) — SQL K-NN search fallback using pgvector `<=>` cosine distance operator
+- **DualSimilarityEngine** (`crates/ndp-intelligence/src/similarity/dual.rs`) — HNSW wrapper for fast search with StorageBackend for durable pgvector writes
+- **Factory function** (`create_similarity_engine`) — dispatches HNSW or pgvector based on feature flags
+- **PredictionEngine** (`crates/ndp-intelligence/src/predictions/mod.rs`) — K-NN neighbor outcome lookup with confidence scoring (confidence = k_supporting / k_total)
+- **OutcomeTracker** (`crates/ndp-intelligence/src/predictions/outcome.rs`) — evaluates pending predictions against Gold aligned view actual values
+- **IntelligenceService** (`crates/ndp-intelligence/src/service.rs`) — full observe-embed-store-search-predict-evaluate orchestration cycle
+- **PG NOTIFY listener** (`crates/ndp-intelligence/src/notify.rs`) — optional optimization wake with exponential backoff reconnection (1s-60s)
+- **App modes** — daemon (timer + NOTIFY + graceful shutdown), one-shot (single cycle, exit 0), backfill (historical embed-only, batch 100), status
+- **AppConfig** (`apps/ndp-intelligence-app/src/config.rs`) — domain config loaded from etcd via config-client; runtime config from environment variables
+- **Intelligence config block** in `config/domains/indoor-air-quality/domain.json` — embedding fields, search K, prediction horizons
+- **Docker container** (`docker/intelligence/Dockerfile`) — multi-stage build (rust:1.82 builder, debian:bookworm-slim runtime), 256MB memory limit
+- **docker-compose service** (`ndp-intelligence`) — intelligence profile, depends on timescaledb + etcd
+- **deploy.sh integration** — `intelligence-start`, `intelligence-stop`, `intelligence-logs`, `intelligence-status` commands; declarative `apply` support for `ndp-intelligence` container target
+- **72 new tests** — 61 in ndp-intelligence (11 integration `#[ignore]`), 11 in ndp-intelligence-app
+
+### Changed
+
+- **`crates/ndp-intelligence/Cargo.toml`** — added deadpool-postgres dependency for connection pooling
+- **`crates/ndp-intelligence/src/error.rs`** — added `Database` and `Shutdown` error variants
+- **`apps/ndp-intelligence-app/Cargo.toml`** — added config-client, deadpool-postgres, tokio-postgres, chrono, serde, serde_json dependencies
+- **`docs/procedures/DEPLOYMENT-DECLARATIVES.md`** — added `ndp-intelligence` to valid container targets
+
+### Technical Notes
+
+- Timer (20 min default) is the primary wake mechanism; PG NOTIFY is an optimization (continuous aggregates cannot have triggers)
+- Backfill mode never generates predictions (embed-only)
+- Observation count persisted by querying `gold.metric_embeddings` count on restart
+- SimilarityEngine trait is synchronous; PgVectorEngine uses `block_on` internally
+- 908 platform-core tests unchanged; 72 new intelligence tests added
+- GitHub Issue: #18
+
 ## [1.1.26] - 2026-02-15
 
 Remove vestigial periodic snapshot timer from Bronze subscriber. With the v1.1.25 WAL-only architecture, Parquet should only be written at day rollover (1/day). The old 30-minute snapshot timer was left in the select! loop, causing unnecessary 45 MiB RSS spikes, glibc arena ratcheting (~3.76 MiB/hr growth), and redundant I/O (Parquet overwritten 48x/day instead of 1x).

@@ -351,6 +351,7 @@ Builds or restarts Docker containers.
 | `ndp-mcp-server` | MCP Server | AI agent integration server |
 | `silver-etl` | Silver ETL | Bronze → Silver ETL processor |
 | `grafana` | Grafana | Dashboard and visualization |
+| `ndp-intelligence` | Intelligence | Similarity search and prediction daemon |
 
 **Notes:**
 - Container builds run in **Phase 2** (early, so new code is available)

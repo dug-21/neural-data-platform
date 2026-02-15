@@ -1,7 +1,20 @@
 //! Similarity engine trait and types
 //!
 //! Defines the `SimilarityEngine` trait for vector similarity search.
-//! Phase 1 defines the trait only -- implementations come in Phase 2.
+//! Implementations: HnswEngine (ruvector, feature-gated), PgVectorEngine (SQL fallback),
+//! DualSimilarityEngine (HNSW wrapper, feature-gated).
+
+pub mod dual;
+pub mod hnsw;
+pub mod pgvector;
+
+use std::sync::Arc;
+
+use deadpool_postgres::Pool;
+use tracing::info;
+
+use crate::storage::StorageBackend;
+use ndp_lib::gold::embeddings::config::IntelligenceConfig;
 
 /// A vector entry stored in the similarity index.
 #[derive(Debug, Clone)]
@@ -128,5 +141,42 @@ mod tests {
     fn test_similarity_engine_is_object_safe() {
         // This test verifies the trait can be used as a trait object
         fn _accept_engine(_engine: &dyn SimilarityEngine) {}
+    }
+}
+
+/// Create the appropriate SimilarityEngine based on feature flags and configuration.
+///
+/// When the `ruvector` feature is enabled, creates a DualSimilarityEngine that
+/// wraps HNSW for fast search, rebuilding the index from stored embeddings.
+/// When `ruvector` is not available, falls back to PgVectorEngine for SQL K-NN.
+pub async fn create_similarity_engine(
+    _config: &IntelligenceConfig,
+    storage: Arc<dyn StorageBackend>,
+    pool: Arc<Pool>,
+    dimensions: usize,
+    domain_id: &str,
+) -> Result<Box<dyn SimilarityEngine>, SimilarityError> {
+    #[cfg(feature = "ruvector")]
+    {
+        let mut hnsw_engine =
+            hnsw::HnswEngine::new(dimensions)?;
+        let count = hnsw_engine
+            .rebuild_from_storage(storage.as_ref(), domain_id)
+            .await?;
+        info!(
+            "Using DualSimilarityEngine (HNSW with {} vectors)",
+            count
+        );
+        Ok(Box::new(dual::DualSimilarityEngine::new(hnsw_engine)))
+    }
+    #[cfg(not(feature = "ruvector"))]
+    {
+        let _ = storage; // unused without ruvector
+        info!("Using PgVectorEngine (ruvector feature not enabled)");
+        Ok(Box::new(pgvector::PgVectorEngine::new(
+            pool,
+            dimensions,
+            domain_id.to_string(),
+        )))
     }
 }

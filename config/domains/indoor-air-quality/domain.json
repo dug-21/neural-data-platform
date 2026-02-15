@@ -35,6 +35,27 @@
     "retention": "1 year",
     "detection_schedule": "15 minutes"
   },
+  "intelligence": {
+    "enabled": true,
+    "embedding": {
+      "type": "metric",
+      "fields": {
+        "temporal": ["hour_sin", "hour_cos", "is_weekend"],
+        "direct": [
+          {"field": "pm25_mean", "null_strategy": "zero"},
+          {"field": "co2_mean", "null_strategy": "last_known"},
+          {"field": "temperature_c_mean", "null_strategy": "mean"},
+          {"field": "humidity_pct_mean", "null_strategy": "mean"}
+        ],
+        "derived": []
+      }
+    },
+    "search": {
+      "k": 10,
+      "min_similarity": 0.85,
+      "prediction_horizons": ["1 hour", "6 hours", "24 hours"]
+    }
+  },
   "objectives": [
     {
       "id": "healthy_co2",

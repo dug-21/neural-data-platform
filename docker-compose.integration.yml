@@ -164,6 +164,35 @@ services:
       retries: 3
       start_period: 15s
 
+  # Intelligence Daemon - similarity search and prediction
+  ndp-intelligence:
+    build:
+      context: .
+      dockerfile: docker/intelligence/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: ndp/intelligence:integration
+    container_name: integration-intelligence
+    environment:
+      - RUST_LOG=info,ndp_intelligence=debug
+      - DATABASE_URL=host=timescaledb dbname=ndp user=postgres password=postgres
+      - INTELLIGENCE_DOMAIN=indoor-air-quality
+      - ETCD_ENDPOINTS=http://etcd:2379
+      - INTELLIGENCE_POLL_INTERVAL_SECS=1200
+      - INTELLIGENCE_POOL_SIZE=2
+      - INTELLIGENCE_WARMUP_THRESHOLD=168
+    depends_on:
+      etcd:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    profiles:
+      - intelligence
+
   # Grafana - Data Visualization
   grafana:
     image: grafana/grafana:latest-ubuntu

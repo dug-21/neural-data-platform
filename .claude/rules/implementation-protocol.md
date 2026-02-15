@@ -107,41 +107,44 @@ The scrum-master executes the following steps autonomously. These details are he
 
 #### Step 3a: Initialize Coordination Layer (MCP)
 
-Use the tested swarm-run methodology — MCP tools for coordination, Task tool for agents. Do NOT use `claude-flow swarm init` CLI (it is cosmetic and creates no real state).
+Use MCP tools for coordination, Task tool for agents. Do NOT use `claude-flow swarm init` CLI (it is cosmetic).
 
 ```
 Use ToolSearch to find "claude-flow hive" tools, then call:
 
+# 1. Create the hive
 mcp__claude-flow__hive-mind_init(
   topology: "hierarchical",
   queenId: "impl-lead"
 )
+
+# 2. Register each planned agent in BOTH stores (repeat per agent)
+mcp__claude-flow__agent_spawn(agentId: "agent-1-{role}", agentType: "{ndp-agent-type}")
+mcp__claude-flow__hive-mind_join(agentId: "agent-1-{role}", role: "worker")
+
+# ... register all agents for the first wave before spawning any Task
+
+# 3. Verify: hive-mind_status(verbose=true) should show all agents in workers array
 ```
 
-This creates `.claude-flow/hive-mind/state.json` for shared coordination state.
+This creates `.claude-flow/hive-mind/state.json` with workers list and shared memory. Agents registered via `agent_spawn` + `hive-mind_join` are visible in `hive-mind_status` AND trackable via `agent_update`.
 
 For large features (10+ tasks): use `topology: "mesh"` for peer communication.
 
-#### Step 3b: Definition + Coordination
+#### Step 3b: Definition (batch with Step 3a)
 
-Define ALL tasks via TaskCreate and seed shared memory via MCP — in ONE message.
+Define ALL tasks in the SAME message as Step 3a. Batch aggressively.
 
 Retrieve the Level-1 summary (spec-compile is REQUIRED for feature work):
 ```
 mcp__claude-flow__memory_retrieve(key="{feature}/summary", namespace="spec-{feature}")
 ```
 
-Then define tasks and store context:
+Then batch task creation with the MCP calls from Step 3a:
 ```
 TaskCreate("Task 1 subject", "Task 1 description", "Active form 1")
 TaskCreate("Task 2 subject", "Task 2 description", "Active form 2")
 ... (5-10+ tasks, with dependencies set via TaskUpdate)
-
-mcp__claude-flow__memory_store(
-  key: "{feature-id}-context",
-  value: "{Level-1 summary + task descriptions + pattern IDs}",
-  namespace: "{feature-id}"
-)
 ```
 
 Set task dependencies with TaskUpdate after creation.
@@ -151,22 +154,25 @@ Set task dependencies with TaskUpdate after creation.
 Spawn ALL agents for the current wave in ONE message (parallel).
 
 **Pre-spawn checklist** (verify before ANY Task call):
-- [ ] swarm init ran (Bash output confirmed)
+- [ ] hive-mind_init ran
+- [ ] Agents registered (agent_spawn + hive-mind_join for each)
 - [ ] Tasks defined (TaskCreate completed)
-- [ ] Memory seeded (namespace confirmed)
+- [ ] Hive memory seeded (hive-mind_memory action="set")
 - [ ] Brief read
 - [ ] `cargo build --workspace` passes (abort if fails — do not spawn agents on a broken workspace)
+- [ ] hive-mind_status shows all agents in workers array
 
 If ANY item is unchecked, STOP. Complete the missing step first.
 
 Agent types for implementation: `ndp-rust-dev`, `ndp-tester`, `ndp-timescale-dev`, `ndp-parquet-dev`
 
 Each agent prompt MUST include:
-1. **Level-1 summary** from compiled spec (retrieve from `memory_retrieve(key="{feature}/summary", namespace="spec-{feature}")`)
+1. **Level-1 summary** from compiled spec (retrieve from hive memory or `memory_retrieve`)
 2. Task description (2-3 sentences)
-3. Namespace for claude-flow memory coordination
+3. Their hive agent ID (for hive-mind_memory and agent_update calls)
 4. Specific file paths from the brief's "Files to Create/Modify" section
 5. Instructions to retrieve relevant ADRs before implementing — use `/get-pattern` (which calls `agentdb_pattern_search` internally)
+6. Instructions to read hive context via `hive-mind_memory(action="get")` and write results via `hive-mind_memory(action="set")`
 
 The Level-1 summary gives agents the objective (WHY), ADR list with pattern IDs (WHAT CONSTRAINS THEM), constraints, and scope exclusions (WHAT TO AVOID). Without it, agents have tunnel vision on their narrow subtask and drift from architectural decisions.
 
@@ -291,9 +297,10 @@ PRIMARY AGENT:
   Message 3:  Review results + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  MCP: hive-mind_init (coordination layer)
-  Step 3b:  TaskCreate (batch ALL) + MCP: memory_store (Level-1 summary + context)
-  Step 3c:  Task() spawn ALL wave agents (parallel)
+  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + hive-mind_memory seed
+  Step 3b:  TaskCreate (batch ALL) — in SAME message as 3a
+  Step 3c:  Task() spawn ALL wave agents (parallel, ONE message)
+  Step 3c.5: Per-wave AC check
   Step 3d:  Drift check
   Step 3e:  Validate (Tier 1 + 2 + 3 as applicable)
   Step 3f:  gh issue comment
@@ -331,9 +338,12 @@ cargo clippy --workspace -- -D warnings 2>&1 | head -30
 
 ---
 
-## Two Memory Systems
+## Three Memory Systems
 
-| System | Tool | Purpose |
-|--------|------|---------|
-| **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` | Permanent project knowledge |
-| **Claude-Flow Memory** | `claude-flow memory` CLI via Bash | Transient swarm coordination |
+| System | Tool | Persistence | Purpose |
+|--------|------|-------------|---------|
+| **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` | Permanent | Architecture, conventions, procedures |
+| **Hive Memory** | `hive-mind_memory(action="set/get/list")` | Session | Lightweight agent coordination, results, context |
+| **General Memory** | `memory_store`/`memory_search`/`memory_retrieve` | Session | Semantic search, compiled specs, complex queries |
+
+Rule: Useful 6 months from now → AgentDB. Simple coordination during swarm → hive memory. Searchable content during swarm → general memory.

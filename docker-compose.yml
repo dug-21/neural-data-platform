@@ -80,6 +80,33 @@ services:
       retries: 3
       start_period: 10s
 
+  # Intelligence Daemon (Phase 2) - similarity search and prediction
+  ndp-intelligence:
+    build:
+      context: .
+      dockerfile: docker/intelligence/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: ndp-intelligence
+    environment:
+      - RUST_LOG=info,ndp_intelligence=debug
+      - DATABASE_URL=host=timescaledb dbname=ndp user=postgres password=postgres
+      - INTELLIGENCE_DOMAIN=indoor-air-quality
+      - ETCD_ENDPOINTS=http://etcd:2379
+      - INTELLIGENCE_POLL_INTERVAL_SECS=1200
+      - INTELLIGENCE_POOL_SIZE=2
+      - INTELLIGENCE_WARMUP_THRESHOLD=168
+    depends_on:
+      etcd:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    profiles:
+      - intelligence
+
   # Prometheus (Optional - for metrics monitoring)
   prometheus:
     image: prom/prometheus:latest

@@ -22,6 +22,14 @@ pub enum IntelligenceError {
     /// Configuration error
     #[error("Configuration error: {message}")]
     Config { message: String },
+
+    /// Raw database error (connection, query failures)
+    #[error("Database error: {0}")]
+    Database(String),
+
+    /// Graceful shutdown signal received
+    #[error("Shutdown signal received")]
+    Shutdown,
 }
 
 /// Convenience result type for intelligence operations.
@@ -37,6 +45,18 @@ mod tests {
             message: "missing field".to_string(),
         };
         assert_eq!(err.to_string(), "Configuration error: missing field");
+    }
+
+    #[test]
+    fn test_database_error_display() {
+        let err = IntelligenceError::Database("connection refused".to_string());
+        assert_eq!(err.to_string(), "Database error: connection refused");
+    }
+
+    #[test]
+    fn test_shutdown_error_display() {
+        let err = IntelligenceError::Shutdown;
+        assert_eq!(err.to_string(), "Shutdown signal received");
     }
 
     #[test]

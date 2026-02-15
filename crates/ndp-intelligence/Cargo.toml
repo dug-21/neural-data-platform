@@ -19,6 +19,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
+deadpool-postgres = "0.14"
 
 # Optional ruvector dependencies (feature-gated)
 ruvector-core = { version = "2.0", optional = true }

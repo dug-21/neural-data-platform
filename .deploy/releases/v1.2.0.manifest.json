@@ -1,0 +1,11 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.0",
+  "description": "Release v1.2.0: Similarity Intelligence — first end-to-end intelligence cycle",
+  "changes": [
+    {"type": "container", "target": "ndp-intelligence", "action": "build", "no_cache": true},
+    {"type": "domain", "domain_id": "indoor-air-quality", "action": "sync"},
+    {"type": "container", "target": "ndp-intelligence", "action": "restart"}
+  ]
+}
