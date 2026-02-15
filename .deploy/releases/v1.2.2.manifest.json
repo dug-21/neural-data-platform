@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.2",
+  "description": "Fix intelligence Dockerfile: rolling Rust image + curl for healthcheck",
+  "changes": [
+    {"type": "container", "target": "ndp-intelligence", "action": "build", "no_cache": true},
+    {"type": "container", "target": "ndp-intelligence", "action": "restart"}
+  ]
+}

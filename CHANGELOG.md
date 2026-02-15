@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-02-15
+
+Fix intelligence Dockerfile: use rolling Rust base image (`rust:1-bookworm`) matching air-quality-app pattern instead of pinned `rust:1.82-bookworm`. Arrow 57.1.0 requires `edition2024` which needs Rust 1.85+. Also adds `curl` to runtime for healthcheck.
+
+### Fixed
+
+- **`docker/intelligence/Dockerfile`** — `rust:1.82-bookworm` → `rust:1-bookworm` (resolves `edition2024` build failure from arrow-string 57.1.0)
+- **`docker/intelligence/Dockerfile`** — added `curl` to runtime dependencies (required by compose healthcheck)
+
+### Technical Notes
+
+- All NDP containers use `rust:1-bookworm` (rolling latest) — never pin a specific Rust version
+- GitHub Issue: #18
+
 ## [1.2.1] - 2026-02-15
 
 Fix Pi production deployment — v1.2.0 added ndp-intelligence to the root and integration compose files but missed the Pi production compose file (`deploy/pi/docker-compose.yml`), causing `no such service: ndp-intelligence` during `deploy.sh apply`.

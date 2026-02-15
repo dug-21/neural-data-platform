@@ -6,7 +6,7 @@
 # Build (no cache): docker build --no-cache -f docker/intelligence/Dockerfile -t ndp/intelligence .
 
 # Stage 1: Builder - compile with cached dependencies
-FROM rust:1.82-bookworm AS builder
+FROM rust:1-bookworm AS builder
 WORKDIR /app
 
 # Install build dependencies
@@ -36,7 +36,7 @@ FROM debian:bookworm-slim AS runtime
 
 # Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y ca-certificates libssl3 && \
+    apt-get install -y ca-certificates curl libssl3 && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
