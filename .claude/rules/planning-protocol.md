@@ -98,13 +98,24 @@ After spawning: tell the user that the scrum-master is coordinating, then STOP.
 
 The scrum-master executes the following steps autonomously.
 
-#### Step 3a: Infrastructure
+#### Step 3a: Initialize Coordination Layer (MCP)
 
-```bash
-claude-flow swarm init --topology hierarchical --max-agents 8 --strategy specialized
+Use the tested swarm-run methodology — MCP tools for coordination, Task tool for agents. Do NOT use `claude-flow swarm init` CLI (it is cosmetic and creates no real state).
+
+```
+Use ToolSearch to find "claude-flow hive" tools, then call:
+
+mcp__claude-flow__hive-mind_init(
+  topology: "hierarchical",
+  queenId: "planning-lead"
+)
 ```
 
+This creates `.claude-flow/hive-mind/state.json` for shared coordination state.
+
 #### Step 3b: Definition + Coordination
+
+Define ALL tasks via TaskCreate and seed shared memory via MCP — in ONE message.
 
 ```
 TaskCreate("Specification artifact", "Produce SPECIFICATION.md for {feature}", "Writing specification")
@@ -115,9 +126,11 @@ TaskCreate("Vision alignment", "Produce ALIGNMENT-REPORT.md for {feature}", "Che
 TaskCreate("Implementation brief", "Produce IMPLEMENTATION-BRIEF.md for {feature}", "Generating brief")
 TaskCreate("GH Issue creation", "Create GH Issue from brief", "Creating GH Issue")
 
-Bash: claude-flow memory store --key "{feature-id}-context" \
-  --value "{scope summary, goals, constraints, pattern IDs}" \
-  --namespace {feature-id}
+mcp__claude-flow__memory_store(
+  key: "{feature-id}-context",
+  value: "{scope summary, goals, constraints, pattern IDs}",
+  namespace: "{feature-id}"
+)
 ```
 
 Set task dependencies with TaskUpdate after creation.
@@ -142,6 +155,23 @@ Each agent prompt MUST include:
 3. Specific SPARC phase to produce
 4. The SCOPE.md path
 
+**Architecture agent (ndp-architect) MUST produce individual ADRs** in `product/features/{feature-id}/architecture/ARCHITECTURE.md` using this format:
+
+```markdown
+## ADR-NNN: {Title}
+
+### Context
+{Why this decision is needed — the forces at play}
+
+### Decision
+{What was decided — concrete implementation approach with code examples}
+
+### Consequences
+{Tradeoffs — what this enables, what it costs, what it rules out}
+```
+
+Each ADR must cover a distinct architectural choice (not a grab-bag). Good ADR scoping: one decision per ADR, with cross-references between related ADRs.
+
 #### Step 3d: Vision Alignment
 
 After planning agents complete, spawn `ndp-vision-guardian`:
@@ -156,7 +186,24 @@ Save to `product/features/{feature-id}/ALIGNMENT-REPORT.md`.
 
 Include variances in the return summary. The primary agent will present them to the user.
 
-#### Step 3e: Generate Implementation Brief
+#### Step 3e: Store ADRs in AgentDB via /save-pattern (permanent knowledge)
+
+After the architecture agent completes, store each ADR as a permanent AgentDB pattern using `/save-pattern`. This is how implementation agents later access architectural decisions via `/get-pattern`.
+
+For EACH `## ADR-NNN:` in the ARCHITECTURE.md, use `/save-pattern`:
+
+```
+taskType: "adr:{feature-id}-{nnn}"
+approach: "{full ADR text verbatim — Context + Decision + Consequences}"
+successRate: 1.0
+tags: ["adr", "{feature-id}", "architecture", "{title-slug}"]
+```
+
+The `/save-pattern` skill handles duplicate checking, embedding generation, and storage. See that skill for best practices.
+
+Record the returned pattern IDs — they go into the IMPLEMENTATION-BRIEF.md's Resolved Decisions table so `/spec-compile` can reference them in the Level-1 summary.
+
+#### Step 3f: Generate Implementation Brief
 
 Produce `product/features/{feature-id}/IMPLEMENTATION-BRIEF.md` (200-400 lines):
 
@@ -171,8 +218,9 @@ Produce `product/features/{feature-id}/IMPLEMENTATION-BRIEF.md` (200-400 lines):
   | Pseudocode | product/features/{feature-id}/pseudocode/PSEUDOCODE.md |
   | Alignment Report | product/features/{feature-id}/ALIGNMENT-REPORT.md |
   ```
-- Goal (2-3 sentences)
-- GitHub Issue link (added in Step 3f)
+- Goal (2-3 sentences — the full objective, not a 1-liner)
+- Resolved Decisions table: `| Decision | Resolution | Source | Pattern ID |` — include the AgentDB pattern ID from Step 3e so spec-compile can reference it
+- GitHub Issue link (added in Step 3g)
 - Files to create/modify (paths + 1-line summaries)
 - Data structures (actual Rust code)
 - Function signatures (actual Rust code)
@@ -182,7 +230,7 @@ Produce `product/features/{feature-id}/IMPLEMENTATION-BRIEF.md` (200-400 lines):
 - NOT in scope
 - Alignment status (from ALIGNMENT-REPORT.md)
 
-#### Step 3f: Create GitHub Issue
+#### Step 3g: Create GitHub Issue
 
 ```bash
 gh issue create \
@@ -220,12 +268,13 @@ PRIMARY AGENT:
   Message 3:  Review results + present variances + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  Bash: claude-flow swarm init
-  Step 3b:  TaskCreate (batch ALL) + Bash: claude-flow memory store
+  Step 3a:  MCP: hive-mind_init (coordination layer)
+  Step 3b:  TaskCreate (batch ALL) + MCP: memory_store (shared context)
   Step 3c:  Task() spawn ALL planning agents (parallel)
   Step 3d:  Task(ndp-vision-guardian) — alignment check
-  Step 3e:  Generate IMPLEMENTATION-BRIEF.md
-  Step 3f:  gh issue create + update SCOPE.md
+  Step 3e:  Store each ADR in AgentDB via agentdb_pattern_store (permanent)
+  Step 3f:  Generate IMPLEMENTATION-BRIEF.md (include ADR pattern IDs)
+  Step 3g:  gh issue create + update SCOPE.md
 ```
 
 ---

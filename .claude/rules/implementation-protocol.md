@@ -105,28 +105,43 @@ After spawning: tell the user that the scrum-master is coordinating, then STOP. 
 
 The scrum-master executes the following steps autonomously. These details are here so the scrum-master can read this file and follow them.
 
-#### Step 3a: Infrastructure
+#### Step 3a: Initialize Coordination Layer (MCP)
 
-Initialize the swarm coordination layer. ONE Bash call.
+Use the tested swarm-run methodology — MCP tools for coordination, Task tool for agents. Do NOT use `claude-flow swarm init` CLI (it is cosmetic and creates no real state).
 
-```bash
-claude-flow swarm init --topology hierarchical --max-agents 8 --strategy specialized
+```
+Use ToolSearch to find "claude-flow hive" tools, then call:
+
+mcp__claude-flow__hive-mind_init(
+  topology: "hierarchical",
+  queenId: "impl-lead"
+)
 ```
 
-For large features (10+ tasks): use `--topology hierarchical-mesh --max-agents 15`.
+This creates `.claude-flow/hive-mind/state.json` for shared coordination state.
+
+For large features (10+ tasks): use `topology: "mesh"` for peer communication.
 
 #### Step 3b: Definition + Coordination
 
-Define ALL tasks and seed shared memory in ONE message.
+Define ALL tasks via TaskCreate and seed shared memory via MCP — in ONE message.
 
+If `/spec-compile` was run, retrieve the Level-1 summary first:
+```
+mcp__claude-flow__memory_retrieve(key="{feature}/summary", namespace="spec-{feature}")
+```
+
+Then define tasks and store context:
 ```
 TaskCreate("Task 1 subject", "Task 1 description", "Active form 1")
 TaskCreate("Task 2 subject", "Task 2 description", "Active form 2")
 ... (5-10+ tasks, with dependencies set via TaskUpdate)
 
-Bash: claude-flow memory store --key "{feature-id}-context" \
-  --value "{task description, goals, constraints, pattern IDs}" \
-  --namespace {feature-id}
+mcp__claude-flow__memory_store(
+  key: "{feature-id}-context",
+  value: "{Level-1 summary + task descriptions + pattern IDs}",
+  namespace: "{feature-id}"
+)
 ```
 
 Set task dependencies with TaskUpdate after creation.
@@ -146,10 +161,13 @@ If ANY item is unchecked, STOP. Complete the missing step first.
 Agent types for implementation: `ndp-rust-dev`, `ndp-tester`, `ndp-timescale-dev`, `ndp-parquet-dev`
 
 Each agent prompt MUST include:
-1. Task description (2-3 sentences)
-2. Namespace for claude-flow memory coordination
-3. Specific file paths from the brief's "Files to Create/Modify" section
-4. Relevant AgentDB pattern IDs (not full pattern text)
+1. **Level-1 summary** from compiled spec (if `/spec-compile` was run — retrieve from `memory_retrieve(key="{feature}/summary", namespace="spec-{feature}")`)
+2. Task description (2-3 sentences)
+3. Namespace for claude-flow memory coordination
+4. Specific file paths from the brief's "Files to Create/Modify" section
+5. Instructions to retrieve relevant ADRs before implementing — use `/get-pattern` (which calls `agentdb_pattern_search` internally)
+
+The Level-1 summary gives agents the objective (WHY), ADR list with pattern IDs (WHAT CONSTRAINS THEM), constraints, and scope exclusions (WHAT TO AVOID). Without it, agents have tunnel vision on their narrow subtask and drift from architectural decisions.
 
 #### Step 3d: Drift Check
 
@@ -260,8 +278,8 @@ PRIMARY AGENT:
   Message 3:  Review results + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  Bash: claude-flow swarm init
-  Step 3b:  TaskCreate (batch ALL) + Bash: claude-flow memory store
+  Step 3a:  MCP: hive-mind_init (coordination layer)
+  Step 3b:  TaskCreate (batch ALL) + MCP: memory_store (Level-1 summary + context)
   Step 3c:  Task() spawn ALL wave agents (parallel)
   Step 3d:  Drift check
   Step 3e:  Validate (Tier 1 + 2 + 3 as applicable)

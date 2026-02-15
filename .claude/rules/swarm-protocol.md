@@ -23,9 +23,28 @@ See `implementation-protocol.md` and `planning-protocol.md` for the specific del
 | System | Tool | Persistence | Purpose | Example |
 |--------|------|-------------|---------|---------|
 | **AgentDB** | `/get-pattern`, `/save-pattern`, `/reflexion` skills | **Permanent** | Architecture, conventions, procedures — project knowledge that outlives any session | "How do we add a new stream?" |
-| **Claude-Flow Memory** | `claude-flow memory` CLI via Bash | **Transient** | Coordination, task status, agent handoffs — dies when the work is done | "Agent-3 finished the schema, Agent-4 can start tests" |
+| **Claude-Flow Memory** | MCP `memory_store`/`memory_search`/`memory_retrieve` | **Transient** | Coordination, task status, agent handoffs — dies when the work is done | "Agent-3 finished the schema, Agent-4 can start tests" |
 
 **Rule**: If it's useful to an agent 6 months from now → AgentDB. If it's only useful during this swarm session → claude-flow memory.
+
+---
+
+## Swarm Architecture: Two Layers
+
+```
+Claude-Flow MCP Layer          Claude Code Runtime Layer
+(state, memory, tracking)      (actual agent processes)
+
+  hive-mind/init  ──────────>  TaskCreate + Task tool spawns
+  memory/store    <──────────  Agents write findings back
+  task/create     <──────────  Agents update task status
+  hive-mind/status ─────────>  Orchestrator checks progress
+```
+
+**claude-flow MCP = coordination backbone** (state, memory, tasks)
+**Claude Code Task tool = agent runtime** (actual processing)
+
+Do NOT use `claude-flow swarm init` or `claude-flow agent spawn` CLI commands — they are cosmetic and create no real state. Use MCP tools for coordination and the Task tool for agent processes. See `/swarm-run` skill for the tested, working implementation.
 
 ---
 
@@ -35,24 +54,29 @@ When a task qualifies for swarm (see complexity detection below), execute in 3 m
 
 ### Message 1: Infrastructure
 
-Initialize the swarm coordination layer. ONE Bash call.
+Initialize the coordination layer via MCP tools. Use ToolSearch to find "claude-flow hive" tools first.
 
-```bash
-claude-flow swarm init --topology hierarchical --max-agents 8 --strategy specialized
+```
+mcp__claude-flow__hive-mind_init(
+  topology: "hierarchical",
+  queenId: "swarm-lead"
+)
 ```
 
 ### Message 2: Definition + Coordination
 
-Define ALL tasks and seed shared memory in ONE message. Batch all TaskCreate calls and all Bash memory commands together.
+Define ALL tasks and seed shared memory in ONE message. Batch all TaskCreate calls and MCP memory_store calls together.
 
 ```
 TaskCreate("Task 1 subject", "description", "active form")
 TaskCreate("Task 2 subject", "description", "active form")
 ...
 
-Bash: claude-flow memory store --key "{feature-id}-context" \
-  --value "{task description, goals, constraints}" \
-  --namespace {feature-id}
+mcp__claude-flow__memory_store(
+  key: "{feature-id}-context",
+  value: "{task description, goals, constraints}",
+  namespace: "{feature-id}"
+)
 ```
 
 The namespace is the coordination channel. All agents will read/write to it.
@@ -62,21 +86,31 @@ The namespace is the coordination channel. All agents will read/write to it.
 Spawn ALL agents in ONE message via Task tool. Every Task call runs in parallel.
 
 Each agent prompt MUST include:
-1. The task description (2-3 sentences)
-2. The namespace to coordinate through
-3. Explicit instruction to read/write shared memory
-4. Specific file paths
+1. The Level-1 summary (if feature work — from `/spec-compile`)
+2. The task description (2-3 sentences)
+3. The namespace to coordinate through
+4. Instructions to retrieve ADRs via `/get-pattern` (if feature work)
+5. Instructions to read/write shared memory via MCP tools
+6. Specific file paths
 
 Example agent prompt:
 ```
-You are working on {feature-id}. Namespace: {feature-id}
+You are agent-N implementing {subtask} for {feature-id}.
 
-Read shared context: claude-flow memory retrieve --key "{feature-id}-context" --namespace {feature-id}
+{Level-1 summary — objective, ADR list with pattern IDs, constraints, NOT in scope}
 
-When you complete your work, store results:
-claude-flow memory store --key "{feature-id}-{your-role}-result" --value "{summary}" --namespace {feature-id}
+YOUR SPECIFIC TASK: {subtask description}
 
-Your task: [specific work for this agent]
+BEFORE implementing:
+  Use ToolSearch to find "agentdb pattern" tools, then call:
+  mcp__agentdb__agentdb_pattern_search(task="adr:{feature-id}", k=10)
+
+For spec details:
+  Use ToolSearch to find "claude-flow memory" tools, then call:
+  mcp__claude-flow__memory_search(query="your question", namespace="spec-{feature-id}")
+
+AFTER completing:
+  mcp__claude-flow__memory_store(key="result-agent-N", value="<summary>", namespace="swarm-results")
 ```
 
 After spawning: tell the user what agents are working on, then STOP.
@@ -127,13 +161,15 @@ These run via `.claude/settings.json` without agent action:
 
 ## Anti-Drift Config
 
-```bash
-# Small swarms (6-8 agents) — tight control
-claude-flow swarm init --topology hierarchical --max-agents 8 --strategy specialized
-
-# Large swarms (10-15 agents) — queen + peer communication
-claude-flow swarm init --topology hierarchical-mesh --max-agents 15 --strategy specialized
 ```
+# Small swarms (6-8 agents) — tight control
+mcp__claude-flow__hive-mind_init(topology: "hierarchical", queenId: "swarm-lead")
+
+# Large swarms (10-15 agents) — peer communication
+mcp__claude-flow__hive-mind_init(topology: "mesh", queenId: "swarm-lead")
+```
+
+Plus: every agent gets the Level-1 summary (objective + ADR pattern IDs + constraints + NOT-in-scope) in its prompt. This is the primary anti-drift mechanism.
 
 ---
 
