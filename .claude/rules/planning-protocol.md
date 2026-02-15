@@ -304,16 +304,29 @@ Then update SCOPE.md with the issue link:
 Add `## Tracking\n\n{issue-url}` to SCOPE.md (if not already present)
 ```
 
-#### Step 3h: Validate Planning Artifacts
+#### Step 3h: Validate Planning Artifacts (spawn ndp-validator)
 
-Run `/validate-plan {feature-id}` to verify planning output quality:
-- Required artifacts exist (IMPLEMENTATION-BRIEF.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, ALIGNMENT-REPORT.md, SPECIFICATION.md, ARCHITECTURE.md)
-- AC coverage: every AC-ID from SCOPE.md appears in ACCEPTANCE-MAP.md
-- ADR pattern IDs resolve in AgentDB
-- No stale references (deprecated pattern IDs, removed file paths)
-- Internal consistency: file paths in brief are valid, AC-IDs match SCOPE.md
+Spawn `ndp-validator` as a dedicated agent. Do NOT run validation inline.
 
-If validation fails, fix issues before returning to the primary agent. Report validation result in the summary.
+```
+Task(
+  subagent_type: "ndp-validator",
+  prompt: "You are validating the planning swarm for {feature-id}.
+
+    Swarm type: planning
+    Feature: {feature-id}
+
+    Read your agent definition: .claude/agents/ndp/ndp-validator.md
+    Run the full /validate-plan skill (5 checks).
+    Write glass box report.
+    Record ALL trust entries in AgentDB.
+    Return: PASS/WARN/FAIL, report path, confidence score, issues."
+)
+```
+
+The validator checks artifact existence, AC coverage, ADR pattern IDs, stale references, and internal consistency. See `.claude/agents/ndp/ndp-validator.md` for the full procedure.
+
+**Do NOT proceed to Phase 4 until the validator returns.** If the validator returns FAIL, fix issues before returning to the primary agent.
 
 ### Phase 4: Completion (primary agent)
 
@@ -346,7 +359,7 @@ NDP-SCRUM-MASTER (internal):
   Step 3e:  Store each ADR in AgentDB via agentdb_pattern_store (permanent)
   Step 3f:  Generate ACCEPTANCE-MAP.md + LAUNCH-PROMPT.md + IMPLEMENTATION-BRIEF.md
   Step 3g:  gh issue create + update SCOPE.md
-  Step 3h:  /validate-plan {feature-id} — verify planning artifacts
+  Step 3h:  Task(ndp-validator) — 5-check planning validation + trust recording
 ```
 
 ---

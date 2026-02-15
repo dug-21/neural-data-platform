@@ -14,16 +14,17 @@ paths:
 | `system-architect` | `ndp-architect` | Knows Domain Adapter pattern, ADRs |
 | `tester` | `ndp-tester` | Knows test patterns, mocking approach |
 | `planner` | `ndp-scrum-master` | Knows feature lifecycle, SPARC phases |
+| `reviewer` | `ndp-validator` | Runs /validate or /validate-plan, produces glass box reports, records trust |
 
 ## Task Type Routing
 
 | Code | Task | Agents | Topology |
 |------|------|--------|----------|
-| 1 | Bug Fix | ndp-scrum-master, researcher, ndp-rust-dev, ndp-tester | hierarchical |
-| 3 | Feature | ndp-scrum-master, ndp-architect, ndp-rust-dev, ndp-tester, reviewer | hierarchical |
-| 5 | Refactor | ndp-scrum-master, ndp-architect, ndp-rust-dev, reviewer | hierarchical |
-| 7 | Performance | ndp-scrum-master, perf-engineer, ndp-rust-dev | hierarchical |
-| 9 | Security | ndp-scrum-master, security-architect, auditor | hierarchical |
+| 1 | Bug Fix | ndp-scrum-master, researcher, ndp-rust-dev, ndp-tester, **ndp-validator** | hierarchical |
+| 3 | Feature | ndp-scrum-master, ndp-architect, ndp-rust-dev, ndp-tester, **ndp-validator** | hierarchical |
+| 5 | Refactor | ndp-scrum-master, ndp-architect, ndp-rust-dev, **ndp-validator** | hierarchical |
+| 7 | Performance | ndp-scrum-master, perf-engineer, ndp-rust-dev, **ndp-validator** | hierarchical |
+| 9 | Security | ndp-scrum-master, security-architect, auditor, **ndp-validator** | hierarchical |
 | 11 | Docs | researcher, api-docs | mesh |
 
 ## Initiative-Based Team Formation

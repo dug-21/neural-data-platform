@@ -201,54 +201,30 @@ After agents return, check results against the brief:
 
 Max 2 corrective iterations per wave. If drift persists, return to primary agent.
 
-#### Step 3e: Validation
+#### Step 3e: Validation (spawn ndp-validator)
 
-Run validation. Three tiers:
+Spawn `ndp-validator` as a dedicated agent. Do NOT run validation inline.
 
-**Tier 1 — Unit (always)**
-```bash
-cargo build --workspace 2>&1 | head -50
-cargo test --workspace 2>&1 | tail -30
 ```
-Plus anti-stub scan and deploy.sh integrity check.
+Task(
+  subagent_type: "ndp-validator",
+  prompt: "You are validating the implementation swarm for {feature-id}.
 
-**Tier 2 — Lint (always for new code)**
-```bash
-cargo clippy --workspace -- -D warnings 2>&1 | head -30
-```
+    Swarm type: implementation
+    Feature: {feature-id}
+    Wave: {N}
 
-**Tier 3 — Integration (for qualifying changes)**
-
-Path A — Full release test via deploy.sh (binary, config, ETL changes):
-```bash
-DEPLOY_ENV=integration ./deploy/pi/deploy.sh build
-DEPLOY_ENV=integration ./deploy/pi/deploy.sh deploy
-DEPLOY_ENV=integration ./deploy/pi/deploy.sh status
-DEPLOY_ENV=integration ./deploy/pi/deploy.sh stop
+    Read your agent definition: .claude/agents/ndp/ndp-validator.md
+    Run the full /validate skill (4-tier).
+    Write glass box report.
+    Record ALL trust entries in AgentDB.
+    Return: PASS/WARN/FAIL, report path, confidence score, issues."
+)
 ```
 
-Path B — docker-compose only (schema DDL, Grafana, MCP changes):
-```bash
-docker compose -f docker-compose.integration.yml up -d
-# Run targeted checks
-docker compose -f docker-compose.integration.yml down -v
-```
+The validator runs Tiers 1-4 (compilation, process adherence, spec compliance, risk), writes the glass box report, and records trust entries. See `.claude/agents/ndp/ndp-validator.md` for the full procedure.
 
-| Changed Paths | Tier 3 Path |
-|---------------|-------------|
-| `core/`, `apps/`, `crates/` (Rust binary) | A (deploy.sh) |
-| `config/base/streams/`, `config/integration/` | A (deploy.sh) |
-| `apps/silver-etl/`, `crates/ndp-lib/src/silver/` | A (deploy.sh) |
-| `tools/ndp-gold-ddl/`, `deploy/pi/init-scripts/` | B (compose) |
-| `config/grafana/` | B (compose) |
-| `core/ndp-mcp-server/` | B (compose) |
-
-If no qualifying paths touched, skip Tier 3.
-
-**Validation iteration cap:**
-- Iteration 1: Fix the FIRST error only. Re-validate.
-- Iteration 2: If still failing, STOP iterating.
-  Report: "Validation failed after 2 attempts. Remaining errors: [summary]"
+**Do NOT proceed to Step 3f until the validator returns.** If the validator returns FAIL, spawn a fix agent (max 2 iterations) then re-spawn the validator.
 
 #### Step 3f: GH Issue Update
 
@@ -302,7 +278,7 @@ NDP-SCRUM-MASTER (internal):
   Step 3c:  Task() spawn ALL wave agents (parallel, ONE message)
   Step 3c.5: Per-wave AC check
   Step 3d:  Drift check
-  Step 3e:  Validate (Tier 1 + 2 + 3 as applicable)
+  Step 3e:  Task(ndp-validator) — 4-tier validation + trust recording
   Step 3f:  gh issue comment
   (repeat 3c-3f for multi-wave)
 ```

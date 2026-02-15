@@ -21,6 +21,7 @@ Project-specific agents for the Neural Data Platform. These agents know the proj
 |-------|-------|-------------|
 | `ndp-scrum-master` | Broad | Feature lifecycle, SPARC phases, status tracking, GitHub workflow |
 | `ndp-vision-guardian` | Broad | Vision alignment review of SPARC artifacts against product vision |
+| `ndp-validator` | Broad | Validation gate — runs /validate or /validate-plan based on swarm type, produces glass box reports, records trust entries. Spawned at end of every wave. |
 
 ### Core Team
 | Agent | Scope | When to Use |
@@ -135,7 +136,8 @@ Task("Design feature aggregations", "...", "ndp-feature-engineer")
 ├── ndp-ml-engineer.md              # ML/ruv-FANN
 ├── ndp-grafana-dev.md              # Grafana dashboards
 ├── ndp-alert-engineer.md           # Alerts/triggers
-└── ndp-vision-guardian.md          # Vision alignment reviewer
+├── ndp-vision-guardian.md          # Vision alignment reviewer
+└── ndp-validator.md               # Validation gate (planning + implementation)
 
 .claude/skills/
 ├── ndp-github-workflow/      # Git conventions (branches, commits, PRs)
@@ -143,6 +145,9 @@ Task("Design feature aggregations", "...", "ndp-feature-engineer")
 ├── reflexion/                # Pattern feedback (AFTER work)
 ├── save-pattern/             # Pattern storage (new discoveries)
 ├── learner/                  # Auto-discovery (user-invoked)
-├── validate/                 # 3-tier validation (implementation sessions)
+├── validate/                 # 4-tier validation (used by ndp-validator for impl)
+├── validate-plan/            # 5-check validation (used by ndp-validator for planning)
+├── trust-dashboard/          # Bayesian trust scores (reads ndp-validator entries)
+├── shadow-judge/             # Human judgment calibration
 └── align/                    # Vision alignment check (planning sessions)
 ```
