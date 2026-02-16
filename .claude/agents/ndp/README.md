@@ -6,22 +6,22 @@ Project-specific agents for the Neural Data Platform. These agents know the proj
 
 ## When to Use NDP Agents
 
-**ALWAYS use NDP agents instead of generic agents for this project.**
-
-| Generic Agent | Use Instead | Why |
-|---------------|-------------|-----|
-| `coder` | `ndp-rust-dev` | Knows Rust patterns, project structure |
-| `system-architect` | `ndp-architect` | Knows Domain Adapter pattern, ADRs |
-| `tester` | `ndp-tester` | Knows test patterns, integration approach |
+**ALWAYS use NDP agents instead of generic agents for this project.** See `.claude/rules/agent-routing.md` for swarm composition templates and full routing tables.
 
 ## Agent Roster
 
-### Coordination
+### Mandatory (every swarm)
+| Agent | Role | What It Does |
+|-------|------|-------------|
+| `ndp-scrum-master` | Coordinator (queen) | Reads protocol, spawns workers with Agent IDs, manages waves, updates GH Issues |
+| `ndp-validator` | Validation gate | Discovers completions from shared memory, runs validation tiers, records trust entries |
+
+No swarm runs without these two.
+
+### Alignment (planning swarms only)
 | Agent | Scope | When to Use |
 |-------|-------|-------------|
-| `ndp-scrum-master` | Broad | Feature lifecycle, SPARC phases, status tracking, GitHub workflow |
-| `ndp-vision-guardian` | Broad | Vision alignment review of SPARC artifacts against product vision |
-| `ndp-validator` | Broad | Validation gate — runs /validate or /validate-plan based on swarm type, produces glass box reports, records trust entries. Spawned at end of every wave. |
+| `ndp-vision-guardian` | Broad | After planning agents complete, checks SPARC artifacts against product vision |
 
 ### Core Team
 | Agent | Scope | When to Use |
@@ -99,11 +99,12 @@ Agents should know these patterns exist (use get-pattern for details):
 
 ## Spawning NDP Agents
 
-```javascript
-// Example: Spawn data engineering agents for Silver layer work
-Task("Create TimescaleDB schema", "...", "ndp-timescale-dev")
-Task("Build Parquet to TimescaleDB ETL", "...", "ndp-parquet-dev")
-Task("Design feature aggregations", "...", "ndp-feature-engineer")
+Agents are spawned by `ndp-scrum-master` (the coordinator) with an Agent ID that activates their `## Swarm Coordination` block. See `.claude/rules/agent-routing.md` for composition templates.
+
+```
+# The scrum-master spawns workers with Agent IDs — agents self-coordinate via shared memory
+Task(subagent_type="ndp-timescale-dev", prompt="Your agent ID: dp-004-agent-1-silver\n...")
+Task(subagent_type="ndp-parquet-dev", prompt="Your agent ID: dp-004-agent-2-bronze\n...")
 ```
 
 ## Related Skills
