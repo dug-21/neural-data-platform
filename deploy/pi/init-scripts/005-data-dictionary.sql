@@ -1,8 +1,7 @@
--- Data Dictionary Schema for DP-002
--- Executed on container first start
-
--- Create schema
-CREATE SCHEMA IF NOT EXISTS data_dictionary;
+-- ops-008: Layer 0 Foundation — Core Data Dictionary Tables
+-- Source: deploy/pi/init-scripts/01-create-data-dictionary.sql (tables only, views in 009)
+-- Run order: 5th (depends on data_dictionary schema)
+-- Idempotent: Yes (IF NOT EXISTS)
 
 -- 1. Streams table
 CREATE TABLE IF NOT EXISTS data_dictionary.streams (
@@ -50,7 +49,7 @@ CREATE TABLE IF NOT EXISTS data_dictionary.sources (
     UNIQUE(stream_id, source_id)
 );
 
--- 4. Entity schemas table (for data dictionary)
+-- 4. Entity schemas table
 CREATE TABLE IF NOT EXISTS data_dictionary.entity_schemas (
     id                  SERIAL PRIMARY KEY,
     stream_id           TEXT NOT NULL REFERENCES data_dictionary.streams(stream_id) ON DELETE CASCADE,
@@ -98,46 +97,6 @@ CREATE INDEX IF NOT EXISTS idx_sources_stream_id ON data_dictionary.sources(stre
 CREATE INDEX IF NOT EXISTS idx_entity_schemas_stream_id ON data_dictionary.entity_schemas(stream_id);
 CREATE INDEX IF NOT EXISTS idx_entity_schema_attrs_schema_id ON data_dictionary.entity_schema_attributes(schema_id);
 
--- Views
-CREATE OR REPLACE VIEW data_dictionary.v_data_dictionary AS
-SELECT
-    s.stream_id,
-    es.schema_name,
-    es.description AS schema_description,
-    es.device_class,
-    esa.attribute_name,
-    esa.attribute_type,
-    esa.unit,
-    esa.description AS attribute_description,
-    esa.nullable,
-    esa.range_min,
-    esa.range_max
-FROM data_dictionary.streams s
-JOIN data_dictionary.entity_schemas es ON s.stream_id = es.stream_id
-JOIN data_dictionary.entity_schema_attributes esa ON es.id = esa.schema_id
-ORDER BY s.stream_id, es.schema_name, esa.sort_order;
-
-CREATE OR REPLACE VIEW data_dictionary.stream_overview AS
-SELECT
-    s.stream_id,
-    s.description,
-    s.version,
-    s.enabled,
-    s.retention_days,
-    COUNT(DISTINCT f.id) AS field_count,
-    COUNT(DISTINCT src.id) AS source_count,
-    COUNT(DISTINCT es.id) AS schema_count,
-    s.created_at,
-    s.updated_at
-FROM data_dictionary.streams s
-LEFT JOIN data_dictionary.fields f ON s.stream_id = f.stream_id
-LEFT JOIN data_dictionary.sources src ON s.stream_id = src.stream_id
-LEFT JOIN data_dictionary.entity_schemas es ON s.stream_id = es.stream_id
-GROUP BY s.stream_id, s.description, s.version, s.enabled,
-         s.retention_days, s.created_at, s.updated_at;
-
--- Success message
-DO $$
-BEGIN
-    RAISE NOTICE 'Data Dictionary schema created successfully';
+DO $$ BEGIN
+  RAISE NOTICE 'NDP init [005]: Data dictionary tables created — streams, fields, sources, entity_schemas, entity_schema_attributes, sync_status';
 END $$;

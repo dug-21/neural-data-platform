@@ -1,0 +1,20 @@
+# ops-008 Acceptance Criteria Map
+
+| AC-ID | Description | Verification Method | Verification Detail | Status |
+|-------|-------------|--------------------|--------------------|--------|
+| AC-01 | docker compose integration down -v && up -d succeeds with zero errors in TimescaleDB init logs | shell | `docker compose -f docker-compose.integration.yml down -v && docker compose -f docker-compose.integration.yml up -d && sleep 10 && docker compose -f docker-compose.integration.yml logs timescaledb 2>&1 \| grep -ci ERROR` -- expected: 0 | PENDING |
+| AC-02 | All 10 old init-scripts removed from deploy/pi/init-scripts/ | file-check | Verify absence of: 00-create-extensions.sql, 002_state_events_schema.sql, 003_silver_data_dictionary.sql, 004_stream_classification.sql, 005_domain_objectives.sql, 006_pgvector_extension.sql, 01-create-data-dictionary.sql, 02-create-users.sql, 03-add-computed-columns.sql, 04-dimension-tables.sql | PENDING |
+| AC-03 | 9 new init-scripts present with correct NNN-description.sql naming | file-check | `ls deploy/pi/init-scripts/` shows exactly: 001-extensions.sql, 002-schemas.sql, 003-silver-functions.sql, 004-roles.sql, 005-data-dictionary.sql, 006-silver-dictionary.sql, 007-classification.sql, 008-domain-objectives.sql, 009-dictionary-views.sql | PENDING |
+| AC-04 | C locale sort order matches numeric order 001 < 002 < ... < 009 | shell | `LC_ALL=C ls deploy/pi/init-scripts/` output matches numeric order | PENDING |
+| AC-05 | Init-scripts create data_dictionary, silver, gold schemas | shell | `psql -U postgres -d ndp -c "SELECT nspname FROM pg_namespace WHERE nspname IN ('data_dictionary','silver','gold','analytics') ORDER BY 1;"` returns all 4 | PENDING |
+| AC-06 | Init-scripts create ndp_app and grafana_reader roles | shell | `psql -U postgres -d ndp -c "SELECT rolname FROM pg_roles WHERE rolname IN ('ndp_app','grafana_reader');"` returns both | PENDING |
+| AC-07 | All 16 data_dictionary tables exist after init | shell | `psql -U postgres -d ndp -c "SELECT table_name FROM information_schema.tables WHERE table_schema='data_dictionary' ORDER BY 1;"` returns: constraints, domain_streams, domains, entity_schema_attributes, entity_schemas, fields, gold_tables, objectives, silver_columns, silver_dq_rules, silver_lineage, silver_tables, sources, stream_classification, streams, sync_status | PENDING |
+| AC-08 | Silver utility functions exist | shell | `psql -U postgres -d ndp -c "SELECT proname FROM pg_proc WHERE pronamespace=(SELECT oid FROM pg_namespace WHERE nspname='silver') AND proname IN ('linear_interpolate','calculate_aqi_pm25','calculate_mold_risk') ORDER BY 1;"` returns all 3 | PENDING |
+| AC-09 | No init-script creates Silver hypertables or Gold CAs | grep | `grep -rn 'create_hypertable\|add_compression_policy\|add_retention_policy\|CREATE TABLE silver\.' deploy/pi/init-scripts/` returns only function-related hits (003-silver-functions.sql), no hypertable creation | PENDING |
+| AC-10 | No init-script references 001_silver_schema.sql | grep | `grep -rn '001_silver_schema' deploy/pi/init-scripts/` returns empty | PENDING |
+| AC-11 | deploy.sh apply succeeds after fresh init | shell | `DEPLOY_ENV=integration ./deploy/pi/deploy.sh apply <manifest>` exits 0 | PENDING |
+| AC-12 | 03-add-computed-columns.sql removed | file-check | `test ! -f deploy/pi/init-scripts/03-add-computed-columns.sql` | PENDING |
+| AC-13 | 002_state_events_schema.sql removed | file-check | `test ! -f deploy/pi/init-scripts/002_state_events_schema.sql` | PENDING |
+| AC-14 | Re-running init-scripts on existing DB produces no errors | shell | For each .sql in init-scripts: `psql -U postgres -d ndp -f <file>` exits 0 | PENDING |
+| AC-15 | Grafana reader has SELECT on data_dictionary schema | shell | `psql -U postgres -d ndp -c "SELECT has_schema_privilege('grafana_reader','data_dictionary','USAGE');"` returns t | PENDING |
+| AC-16 | Integration smoke test passes end-to-end | shell | `./tests/integration/run-testbed.sh smoke` exits 0 | PENDING |

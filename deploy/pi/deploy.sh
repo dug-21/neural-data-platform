@@ -922,6 +922,36 @@ sync_domains_to_data_dictionary() {
 
         if $ndp_tool $ndp_args; then
             log "Domain objectives sync successful (Rust CLI)"
+
+            # Also sync domain configs to etcd (ops-007: AC-03)
+            # handle_domain() syncs individual domains during manifest apply,
+            # but sync-domains needs to push ALL domains to etcd too
+            if dcx etcd etcdctl endpoint health >/dev/null 2>&1; then
+                log "Syncing domain configs to etcd..."
+                for domain_dir in "$CONFIG_DOMAINS_DIR"/*/; do
+                    [ -d "$domain_dir" ] || continue
+                    local domain_id
+                    domain_id=$(basename "$domain_dir")
+                    local domain_config=""
+                    if [ -f "$domain_dir/domain.json" ]; then
+                        domain_config="$domain_dir/domain.json"
+                    elif [ -f "$domain_dir/domain.yaml" ]; then
+                        domain_config="$domain_dir/domain.yaml"
+                    fi
+                    if [ -n "$domain_config" ]; then
+                        local config_json
+                        config_json=$(cat "$domain_config")
+                        if dcx etcd etcdctl put "/domains/$domain_id/config" "$config_json"; then
+                            log "  Domain $domain_id synced to etcd"
+                        else
+                            warn "  Failed to sync domain $domain_id to etcd (non-fatal)"
+                        fi
+                    fi
+                done
+            else
+                warn "etcd not available, skipping domain config etcd sync"
+            fi
+
             return 0
         else
             error "Domain objectives sync failed (Rust CLI)"
@@ -1973,7 +2003,7 @@ handle_gold_table() {
     log "  Generating Gold DDL using $ndp_tool gold $action (with DB check)..."
     local ddl
     ddl=$("$ndp_tool" gold "$action" --stream "$stream_id" \
-        --config-dir "$REPO_ROOT/config/base" \
+        --config-dir "$(dirname "$CONFIG_STREAMS_DIR")" \
         --db-url "$db_url" \
         --db-timeout 10 2>&1)
     local exit_code=$?
@@ -2091,7 +2121,7 @@ handle_domain() {
     log "  Generating aligned view DDL using $ndp_tool gold $gold_verb..."
     local ddl
     ddl=$("$ndp_tool" gold "$gold_verb" --domain "$domain_id" \
-        --config-dir "$REPO_ROOT/config/base" 2>&1)
+        --config-dir "$(dirname "$CONFIG_STREAMS_DIR")" 2>&1)
     local exit_code=$?
 
     if [ $exit_code -ne 0 ]; then
@@ -2117,7 +2147,7 @@ handle_domain() {
     log "  Generating events DDL using $ndp_tool gold generate --events..."
     local events_ddl
     events_ddl=$("$ndp_tool" gold generate --domain "$domain_id" --events \
-        --config-dir "$REPO_ROOT/config/base" 2>&1)
+        --config-dir "$(dirname "$CONFIG_STREAMS_DIR")" 2>&1)
     local events_exit_code=$?
 
     if [ $events_exit_code -eq 0 ] && [ -n "$events_ddl" ]; then
@@ -2136,7 +2166,7 @@ handle_domain() {
     log "  Generating intelligence DDL using $ndp_tool gold intelligence schema..."
     local intel_ddl
     intel_ddl=$("$ndp_tool" gold intelligence schema --domain "$domain_id" \
-        --config-dir "$REPO_ROOT/config/base" 2>&1)
+        --config-dir "$(dirname "$CONFIG_STREAMS_DIR")" 2>&1)
     local intel_exit_code=$?
 
     if [ $intel_exit_code -eq 0 ] && [ -n "$intel_ddl" ]; then
@@ -2398,6 +2428,24 @@ apply() {
         done
     fi
 
+    # Phase 4.5: Auto-Migrations (ops-008)
+    # Run all SQL files from deploy/pi/migrations/ in sorted order.
+    # These are idempotent migrations that depend on Silver tables existing (Phase 4).
+    # Includes: analytics views, dq_events hypertable.
+    local migrations_dir="$SCRIPT_DIR/migrations"
+    if [ -d "$migrations_dir" ]; then
+        local auto_migration_files=("$migrations_dir"/*.sql)
+        if [ -f "${auto_migration_files[0]}" ] 2>/dev/null; then
+            log ""
+            log "Phase 4.5: Auto-Migrations (${#auto_migration_files[@]} files)"
+            log "-------------------"
+            for migration_file in "${auto_migration_files[@]}"; do
+                log "  Applying: $(basename "$migration_file")"
+                cat "$migration_file" | dcx timescaledb psql -U postgres -d ndp -f -
+            done
+        fi
+    fi
+
     # Phase 5: Gold Tables (fe-001)
     # Parse gold-tables from both .changes array and .declarations format (for backwards compat)
     local gold_tables_changes=$(jq -c '[(.changes // [])[] | select(.type == "gold-tables")]' "$manifest_file" 2>/dev/null || echo "[]")
@@ -2597,6 +2645,7 @@ case "${1:-deploy}" in
         echo "                      2. Container Builds"
         echo "                      3. Migrations"
         echo "                      4. Silver Tables"
+        echo "                      4.5 Auto-Migrations (ops-008)"
         echo "                      5. Gold Tables (fe-001)"
         echo "                      6. Domains (fe-001)"
         echo "                      7. Streams"
