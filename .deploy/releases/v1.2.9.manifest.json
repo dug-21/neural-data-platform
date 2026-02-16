@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.9",
+  "description": "Fix search result ID format: output Unix epoch to match parse_bucket_from_id expectation",
+  "changes": [
+    {"type": "container", "target": "ndp-intelligence", "action": "build"},
+    {"type": "container", "target": "ndp-intelligence", "action": "restart"}
+  ]
+}

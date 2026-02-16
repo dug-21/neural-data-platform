@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-02-16
+
+Fix search result ID format mismatch: PgVectorEngine search returned `bucket::text` (e.g., `2026-01-18 17:00:00+00`) but `parse_bucket_from_id()` expects a Unix epoch integer string. All neighbors were skipped with "invalid digit found in string", producing 0 predictions.
+
+### Fixed
+
+- **`crates/ndp-intelligence/src/similarity/pgvector.rs`** — search query changed `bucket::text` to `EXTRACT(EPOCH FROM bucket)::bigint::text`, matching the Unix epoch format used by the store path (`gold_row.bucket.timestamp()`)
+
+### Technical Notes
+
+- The store path writes VectorEntry IDs as Unix epoch (`format!("{}", bucket.timestamp())`)
+- The search path was returning PostgreSQL timestamp text format, which `parse_bucket_from_id` couldn't parse
+- GitHub Issue: #18
+
 ## [1.2.8] - 2026-02-16
 
 Fix `PgVectorEngine::search()` panic: `block_on` called from within the tokio async runtime. This was a latent bug hidden by the v1.2.7 serialization fix — search was never reached before because no embeddings were stored.
@@ -1005,7 +1019,8 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.2.8...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/dug-21/neural-data-platform/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/dug-21/neural-data-platform/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/dug-21/neural-data-platform/compare/v1.2.6...v1.2.7
 [1.1.26]: https://github.com/dug-21/neural-data-platform/compare/v1.1.25...v1.1.26

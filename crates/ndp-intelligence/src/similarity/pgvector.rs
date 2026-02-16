@@ -57,7 +57,7 @@ impl SimilarityEngine for PgVectorEngine {
                 let vector_str = format_pgvector(&query.vector);
                 let rows = client
                     .query(
-                        "SELECT bucket::text AS id,
+                        "SELECT EXTRACT(EPOCH FROM bucket)::bigint::text AS id,
                                 1.0 - (embedding <=> $1::text::vector) AS similarity,
                                 metadata
                          FROM gold.metric_embeddings
