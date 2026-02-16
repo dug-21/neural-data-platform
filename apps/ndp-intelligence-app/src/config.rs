@@ -59,7 +59,11 @@ pub struct ObjectiveTarget {
 pub async fn load_intelligence_config(
     app_config: &AppConfig,
 ) -> Result<(IntelligenceConfig, Vec<ObjectiveMetric>, String), IntelligenceError> {
-    let endpoints: Vec<&str> = app_config.etcd_endpoints.iter().map(|s| s.as_str()).collect();
+    let endpoints: Vec<&str> = app_config
+        .etcd_endpoints
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
     let config_client = config_client::ConfigClient::new(&endpoints)
         .await
         .map_err(|e| IntelligenceError::Config {

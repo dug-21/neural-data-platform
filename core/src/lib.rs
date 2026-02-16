@@ -60,9 +60,8 @@ pub use subscribers::{
     BronzeReader, BronzeSubscriber, BronzeSubscriberConfig, CatchUpConfig, CoordinatorHealth,
     CoordinatorState, EventNotification, EventNotifier, EventNotifierConfig, EventNotifierState,
     HybridBronzeReader, NoBronzeReader, ParquetBronzeReader, ProcessorSubscriber,
-    ProcessorSubscriberConfig, ProcessorSubscriberState,
-    SilverSubscriber, SilverSubscriberConfig, Subscriber, SubscriberCoordinator, SubscriberError,
-    SubscriberState,
+    ProcessorSubscriberConfig, ProcessorSubscriberState, SilverSubscriber, SilverSubscriberConfig,
+    Subscriber, SubscriberCoordinator, SubscriberError, SubscriberState,
 };
 
 // Processors (DP-012 Phase 3)

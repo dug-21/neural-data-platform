@@ -81,9 +81,8 @@ impl ConfigWatcher {
 
                 if let Some(stream_id) = stream_id {
                     // Parse the config value
-                    let config: Option<StreamConfig> = value.and_then(|v| {
-                        serde_json::from_value(v).ok()
-                    });
+                    let config: Option<StreamConfig> =
+                        value.and_then(|v| serde_json::from_value(v).ok());
 
                     debug!(
                         key = %key,

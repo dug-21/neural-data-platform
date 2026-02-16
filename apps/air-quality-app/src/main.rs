@@ -1,15 +1,16 @@
 use air_quality_app::{
     api::create_router,
     config::AppConfig,
-    coordinator::{ConfigWatchHandle, ConfigWatcher, IngestionCoordinator, IngestionRouter, SourceManager},
+    coordinator::{
+        ConfigWatchHandle, ConfigWatcher, IngestionCoordinator, IngestionRouter, SourceManager,
+    },
     stream_integration::load_from_stream_config,
 };
 use config_client::{ConfigClient, StreamRegistry};
 use neural_core::ParquetStore;
 // DP-012: EventBus subscriber infrastructure
 use neural_core::{
-    BronzeSubscriber, BronzeSubscriberConfig, HybridBronzeReader, Subscriber,
-    SubscriberCoordinator,
+    BronzeSubscriber, BronzeSubscriberConfig, HybridBronzeReader, Subscriber, SubscriberCoordinator,
 };
 // DP-012 Phase 4: SilverSubscriber for real-time Bronze-to-Silver ETL
 // DP-018: SilverEtlConfig removed - now accessed via StreamConfig.silver_etl from etcd
@@ -445,7 +446,10 @@ async fn initialize_multi_stream_coordinator(
             tracing::info!("SilverSubscribers registered for real-time Silver ETL");
         }
         Err(e) => {
-            tracing::warn!("SilverSubscriber setup skipped: {} (Silver layer will use batch ETL)", e);
+            tracing::warn!(
+                "SilverSubscriber setup skipped: {} (Silver layer will use batch ETL)",
+                e
+            );
         }
     }
 
@@ -505,7 +509,12 @@ async fn initialize_multi_stream_coordinator(
         }
     });
 
-    Ok((coordinator, source_manager_for_watcher, monitor_task, subscriber_task))
+    Ok((
+        coordinator,
+        source_manager_for_watcher,
+        monitor_task,
+        subscriber_task,
+    ))
 }
 
 /// Create services with real ParquetStore
@@ -599,8 +608,8 @@ async fn create_silver_subscribers(
     bronze_store: Arc<neural_core::ParquetStore>,
     bronze_wal_path: std::path::PathBuf,
 ) -> Result<Vec<Box<dyn Subscriber>>, Box<dyn std::error::Error + Send + Sync>> {
-    let timescale_url = std::env::var("TIMESCALE_URL")
-        .map_err(|_| "TIMESCALE_URL environment variable not set")?;
+    let timescale_url =
+        std::env::var("TIMESCALE_URL").map_err(|_| "TIMESCALE_URL environment variable not set")?;
 
     // DP-018: Load stream configs from etcd via StreamRegistry (single source of truth)
     // This mirrors Bronze layer config loading - both use registry.load_stream()
@@ -647,7 +656,9 @@ async fn create_silver_subscribers(
     }
 
     if table_mapping.is_empty() {
-        tracing::warn!("No streams with silver_etl config found - Silver ETL will not process any data");
+        tracing::warn!(
+            "No streams with silver_etl config found - Silver ETL will not process any data"
+        );
     } else {
         tracing::info!(
             "Built table_mapping from {} stream configs: {:?}",
@@ -659,9 +670,13 @@ async fn create_silver_subscribers(
     let timescale_config = TimescaleConfig {
         connection_string: timescale_url,
         max_connections: std::env::var("TIMESCALE_MAX_CONNECTIONS")
-            .ok().and_then(|s| s.parse().ok()).unwrap_or(5),
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5),
         connection_timeout_secs: std::env::var("TIMESCALE_TIMEOUT_SECS")
-            .ok().and_then(|s| s.parse().ok()).unwrap_or(10),
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10),
         default_table: "silver.observations".to_string(),
         table_mapping,
         timestamp_column: "observation_time".to_string(),
@@ -669,17 +684,16 @@ async fn create_silver_subscribers(
     };
 
     tracing::info!("Attempting to connect to TimescaleDB for Silver layer");
-    let timescale_output: Arc<TimescaleOutput> = match TimescaleOutput::new(timescale_config).await {
-        Ok(output) => {
-            match output.health_check().await {
-                Ok(true) => {
-                    tracing::info!("TimescaleDB connection established successfully");
-                    Arc::new(output)
-                }
-                Ok(false) => return Err("TimescaleDB health check failed".into()),
-                Err(e) => return Err(format!("TimescaleDB health check error: {}", e).into()),
+    let timescale_output: Arc<TimescaleOutput> = match TimescaleOutput::new(timescale_config).await
+    {
+        Ok(output) => match output.health_check().await {
+            Ok(true) => {
+                tracing::info!("TimescaleDB connection established successfully");
+                Arc::new(output)
             }
-        }
+            Ok(false) => return Err("TimescaleDB health check failed".into()),
+            Err(e) => return Err(format!("TimescaleDB health check error: {}", e).into()),
+        },
         Err(e) => return Err(format!("Failed to create TimescaleDB connection: {}", e).into()),
     };
 

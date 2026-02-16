@@ -187,11 +187,7 @@ impl MetricEmbedder {
         self.observations
     }
 
-    fn compute_value(
-        &self,
-        field: &EmbeddingField,
-        row: &GoldRow,
-    ) -> EmbeddingResult<f32> {
+    fn compute_value(&self, field: &EmbeddingField, row: &GoldRow) -> EmbeddingResult<f32> {
         match &field.source {
             FieldSource::Temporal(encoding) => Ok(self.compute_temporal(encoding, row)),
             FieldSource::Direct(field_name) => {
@@ -218,12 +214,8 @@ impl MetricEmbedder {
     fn compute_temporal(&self, encoding: &TemporalEncoding, row: &GoldRow) -> f32 {
         let hour = row.bucket.hour() as f64;
         match encoding {
-            TemporalEncoding::HourSin => {
-                (2.0 * std::f64::consts::PI * hour / 24.0).sin() as f32
-            }
-            TemporalEncoding::HourCos => {
-                (2.0 * std::f64::consts::PI * hour / 24.0).cos() as f32
-            }
+            TemporalEncoding::HourSin => (2.0 * std::f64::consts::PI * hour / 24.0).sin() as f32,
+            TemporalEncoding::HourCos => (2.0 * std::f64::consts::PI * hour / 24.0).cos() as f32,
             TemporalEncoding::IsWeekend => {
                 let weekday = row.bucket.weekday();
                 if weekday == chrono::Weekday::Sat || weekday == chrono::Weekday::Sun {
@@ -294,8 +286,8 @@ impl Embedder for MetricEmbedder {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::config::DirectFieldConfig;
+    use super::*;
     use chrono::TimeZone;
     use std::collections::BTreeMap;
 
@@ -389,11 +381,16 @@ mod tests {
         let config = test_fields_config();
         let mut embedder = MetricEmbedder::from_fields_config(&config).with_warmup(1);
 
-        let row = make_row(0, 10, vec![  // Feb 10, 2026 is a Tuesday
-            ("pm25_mean", Some(25.0)),
-            ("co2_mean", Some(400.0)),
-            ("temperature_c_mean", Some(22.0)),
-        ]);
+        let row = make_row(
+            0,
+            10,
+            vec![
+                // Feb 10, 2026 is a Tuesday
+                ("pm25_mean", Some(25.0)),
+                ("co2_mean", Some(400.0)),
+                ("temperature_c_mean", Some(22.0)),
+            ],
+        );
         embedder.observe(&row);
 
         let embedding = embedder.embed(&row).unwrap();
@@ -417,11 +414,15 @@ mod tests {
         let config = test_fields_config();
         let mut embedder = MetricEmbedder::from_fields_config(&config).with_warmup(1);
 
-        let row = make_row(6, 10, vec![
-            ("pm25_mean", Some(25.0)),
-            ("co2_mean", Some(400.0)),
-            ("temperature_c_mean", Some(22.0)),
-        ]);
+        let row = make_row(
+            6,
+            10,
+            vec![
+                ("pm25_mean", Some(25.0)),
+                ("co2_mean", Some(400.0)),
+                ("temperature_c_mean", Some(22.0)),
+            ],
+        );
         embedder.observe(&row);
 
         let embedding = embedder.embed(&row).unwrap();
@@ -443,11 +444,15 @@ mod tests {
         let mut embedder = MetricEmbedder::from_fields_config(&config).with_warmup(1);
 
         // Feb 14, 2026 is a Saturday
-        let saturday_row = make_row(12, 14, vec![
-            ("pm25_mean", Some(25.0)),
-            ("co2_mean", Some(400.0)),
-            ("temperature_c_mean", Some(22.0)),
-        ]);
+        let saturday_row = make_row(
+            12,
+            14,
+            vec![
+                ("pm25_mean", Some(25.0)),
+                ("co2_mean", Some(400.0)),
+                ("temperature_c_mean", Some(22.0)),
+            ],
+        );
         embedder.observe(&saturday_row);
         let emb = embedder.embed(&saturday_row).unwrap();
         assert!(
@@ -457,11 +462,15 @@ mod tests {
         );
 
         // Feb 9, 2026 is a Monday
-        let monday_row = make_row(12, 9, vec![
-            ("pm25_mean", Some(25.0)),
-            ("co2_mean", Some(400.0)),
-            ("temperature_c_mean", Some(22.0)),
-        ]);
+        let monday_row = make_row(
+            12,
+            9,
+            vec![
+                ("pm25_mean", Some(25.0)),
+                ("co2_mean", Some(400.0)),
+                ("temperature_c_mean", Some(22.0)),
+            ],
+        );
         let emb = embedder.embed(&monday_row).unwrap();
         assert!(
             emb.vector[2].abs() < f32::EPSILON,
@@ -598,11 +607,15 @@ mod tests {
         let mut embedder = MetricEmbedder::from_fields_config(&config);
         assert_eq!(embedder.observation_count(), 0);
 
-        embedder.observe(&make_row(12, 10, vec![
-            ("pm25_mean", Some(25.0)),
-            ("co2_mean", Some(400.0)),
-            ("temperature_c_mean", Some(22.0)),
-        ]));
+        embedder.observe(&make_row(
+            12,
+            10,
+            vec![
+                ("pm25_mean", Some(25.0)),
+                ("co2_mean", Some(400.0)),
+                ("temperature_c_mean", Some(22.0)),
+            ],
+        ));
         assert_eq!(embedder.observation_count(), 1);
     }
 
@@ -611,11 +624,15 @@ mod tests {
         let config = test_fields_config();
         let mut embedder = MetricEmbedder::from_fields_config(&config).with_warmup(1);
 
-        let row = make_row(12, 10, vec![
-            ("pm25_mean", Some(25.0)),
-            ("co2_mean", Some(400.0)),
-            ("temperature_c_mean", Some(22.0)),
-        ]);
+        let row = make_row(
+            12,
+            10,
+            vec![
+                ("pm25_mean", Some(25.0)),
+                ("co2_mean", Some(400.0)),
+                ("temperature_c_mean", Some(22.0)),
+            ],
+        );
         embedder.observe(&row);
 
         let emb = embedder.embed(&row).unwrap();

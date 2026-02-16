@@ -287,6 +287,23 @@ pub struct SilverEtlConfig {
     /// Timestamp field configuration
     #[serde(default)]
     pub timestamp: Option<TimestampConfig>,
+
+    /// Field mappings from Bronze source paths to Silver column names.
+    /// Gold aggregates reference Silver columns, so these mappings are
+    /// needed for accurate field name resolution during validation.
+    #[serde(default)]
+    pub field_mappings: Vec<SilverFieldMapping>,
+}
+
+/// A single Bronze-to-Silver field mapping
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SilverFieldMapping {
+    /// Source path in Bronze layer (e.g., "raw_payload.rco2")
+    #[serde(default)]
+    pub source_path: String,
+
+    /// Target column name in Silver layer (e.g., "co2")
+    pub target_column: String,
 }
 
 /// Timestamp field configuration

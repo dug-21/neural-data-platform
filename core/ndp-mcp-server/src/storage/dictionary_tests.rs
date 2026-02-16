@@ -92,7 +92,9 @@ async fn test_dictionary_fallback_to_entity_schemas_v1_0() {
                 "temperature",
                 "number",
             )
-            .with_description("Temperature in Celsius from entity_schemas")])
+            .with_description(
+                "Temperature in Celsius from entity_schemas",
+            )])
         });
 
     let results = mock.search("temperature", None).await.unwrap();
@@ -117,12 +119,17 @@ async fn test_fields_description_takes_precedence_over_entity_schemas() {
         .times(1)
         .returning(|_, _| {
             // This returns the v1.1 description, not the entity_schemas one
-            Ok(ColumnDescription::new("bronze", "air-quality", "humidity", "number")
-                .with_description("Relative humidity percentage (v1.1 description)")
-                .with_unit("percent"))
+            Ok(
+                ColumnDescription::new("bronze", "air-quality", "humidity", "number")
+                    .with_description("Relative humidity percentage (v1.1 description)")
+                    .with_unit("percent"),
+            )
         });
 
-    let result = mock.describe_column("air-quality", "humidity").await.unwrap();
+    let result = mock
+        .describe_column("air-quality", "humidity")
+        .await
+        .unwrap();
 
     // Assert the v1.1 description is used
     assert_eq!(
@@ -172,9 +179,11 @@ async fn test_dictionary_loads_unit_from_fields_v1_1() {
         .withf(|table, col| table == "air-quality" && col == "pm10")
         .times(1)
         .returning(|_, _| {
-            Ok(ColumnDescription::new("bronze", "air-quality", "pm10", "number")
-                .with_unit("ug/m3")
-                .with_description("PM10 particulate matter"))
+            Ok(
+                ColumnDescription::new("bronze", "air-quality", "pm10", "number")
+                    .with_unit("ug/m3")
+                    .with_description("PM10 particulate matter"),
+            )
         });
 
     let result = mock.describe_column("air-quality", "pm10").await.unwrap();
@@ -191,8 +200,10 @@ async fn test_dictionary_loads_validation_range_from_fields_v1_1() {
         .withf(|table, col| table == "air-quality" && col == "pm25")
         .times(1)
         .returning(|_, _| {
-            Ok(ColumnDescription::new("bronze", "air-quality", "pm25", "number")
-                .with_validation_range(ValidationRange::bounded(0.0, 500.0)))
+            Ok(
+                ColumnDescription::new("bronze", "air-quality", "pm25", "number")
+                    .with_validation_range(ValidationRange::bounded(0.0, 500.0)),
+            )
         });
 
     let result = mock.describe_column("air-quality", "pm25").await.unwrap();
@@ -216,13 +227,19 @@ async fn test_dictionary_search_bronze_layer_only() {
         .withf(|query, layer| query == "pm25" && layer.as_deref() == Some("bronze"))
         .times(1)
         .returning(|_, _| {
-            Ok(vec![
-                DictionaryEntry::new("bronze", "air-quality", "pm25", "number")
-                    .with_unit("ug/m3"),
-            ])
+            Ok(vec![DictionaryEntry::new(
+                "bronze",
+                "air-quality",
+                "pm25",
+                "number",
+            )
+            .with_unit("ug/m3")])
         });
 
-    let results = mock.search("pm25", Some("bronze".to_string())).await.unwrap();
+    let results = mock
+        .search("pm25", Some("bronze".to_string()))
+        .await
+        .unwrap();
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].layer, "bronze");
@@ -247,7 +264,10 @@ async fn test_dictionary_search_silver_layer_only() {
             .with_description("PM2.5 concentration")])
         });
 
-    let results = mock.search("pm25", Some("silver".to_string())).await.unwrap();
+    let results = mock
+        .search("pm25", Some("silver".to_string()))
+        .await
+        .unwrap();
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].layer, "silver");
@@ -325,8 +345,10 @@ async fn test_dictionary_bronze_field_has_no_source() {
         .withf(|table, col| table == "air-quality" && col == "pm25")
         .times(1)
         .returning(|_, _| {
-            Ok(ColumnDescription::new("bronze", "air-quality", "pm25", "number")
-                .with_description("PM2.5 from sensor"))
+            Ok(
+                ColumnDescription::new("bronze", "air-quality", "pm25", "number")
+                    .with_description("PM2.5 from sensor"),
+            )
         });
 
     let result = mock.describe_column("air-quality", "pm25").await.unwrap();
@@ -408,8 +430,8 @@ async fn test_dictionary_describe_unknown_column_returns_error() {
 /// Test complete dictionary workflow: search -> describe -> lineage
 #[tokio::test]
 async fn test_dictionary_complete_workflow() {
-    use crate::storage::types::{DqRuleInfo, LineageSource, LineageTrace};
     use crate::storage::traits::MockDictionaryStore;
+    use crate::storage::types::{DqRuleInfo, LineageSource, LineageTrace};
     use mockall::Sequence;
 
     let mut mock = MockDictionaryStore::new();
@@ -516,10 +538,12 @@ async fn test_v1_1_config_full_fields() {
         .withf(|table, col| table == "air-quality" && col == "pm25")
         .times(1)
         .returning(|_, _| {
-            Ok(ColumnDescription::new("bronze", "air-quality", "pm25", "number")
-                .with_description("PM2.5 particulate matter concentration")
-                .with_unit("ug/m3")
-                .with_validation_range(ValidationRange::bounded(0.0, 500.0)))
+            Ok(
+                ColumnDescription::new("bronze", "air-quality", "pm25", "number")
+                    .with_description("PM2.5 particulate matter concentration")
+                    .with_unit("ug/m3")
+                    .with_validation_range(ValidationRange::bounded(0.0, 500.0)),
+            )
         });
 
     let result = mock.describe_column("air-quality", "pm25").await.unwrap();
@@ -552,11 +576,16 @@ fn test_dictionary_entry_builder() {
 /// Test ColumnDescription builder pattern
 #[test]
 fn test_column_description_builder() {
-    let desc = ColumnDescription::new("silver", "air_quality_observations", "pm25", "DOUBLE PRECISION")
-        .with_unit("ug/m3")
-        .with_description("PM2.5 particulate matter")
-        .with_nullable(false)
-        .with_validation_range(ValidationRange::bounded(0.0, 1000.0));
+    let desc = ColumnDescription::new(
+        "silver",
+        "air_quality_observations",
+        "pm25",
+        "DOUBLE PRECISION",
+    )
+    .with_unit("ug/m3")
+    .with_description("PM2.5 particulate matter")
+    .with_nullable(false)
+    .with_validation_range(ValidationRange::bounded(0.0, 1000.0));
 
     assert_eq!(desc.layer, "silver");
     assert_eq!(desc.column_name, "pm25");

@@ -67,12 +67,18 @@ async fn main() {
 }
 
 /// Create a deadpool-postgres connection pool.
-fn create_pool(app_config: &AppConfig) -> Result<Arc<deadpool_postgres::Pool>, ndp_intelligence::error::IntelligenceError> {
-    let pg_config: tokio_postgres::Config = app_config.database_url.parse().map_err(|e: tokio_postgres::Error| {
-        ndp_intelligence::error::IntelligenceError::Config {
-            message: format!("Invalid DATABASE_URL: {}", e),
-        }
-    })?;
+fn create_pool(
+    app_config: &AppConfig,
+) -> Result<Arc<deadpool_postgres::Pool>, ndp_intelligence::error::IntelligenceError> {
+    let pg_config: tokio_postgres::Config =
+        app_config
+            .database_url
+            .parse()
+            .map_err(|e: tokio_postgres::Error| {
+                ndp_intelligence::error::IntelligenceError::Config {
+                    message: format!("Invalid DATABASE_URL: {}", e),
+                }
+            })?;
 
     let mgr_config = deadpool_postgres::ManagerConfig {
         recycling_method: deadpool_postgres::RecyclingMethod::Fast,
@@ -97,9 +103,12 @@ async fn create_storage_client(
 ) -> Result<Arc<tokio_postgres::Client>, ndp_intelligence::error::IntelligenceError> {
     let (client, connection) = tokio_postgres::connect(database_url, tokio_postgres::NoTls)
         .await
-        .map_err(|e| ndp_intelligence::error::IntelligenceError::Database(
-            format!("Failed to connect to PostgreSQL: {}", e),
-        ))?;
+        .map_err(|e| {
+            ndp_intelligence::error::IntelligenceError::Database(format!(
+                "Failed to connect to PostgreSQL: {}",
+                e
+            ))
+        })?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
@@ -126,22 +135,28 @@ async fn run_daemon() -> Result<(), ndp_intelligence::error::IntelligenceError> 
 
     // Create intelligence service
     let mut service = IntelligenceService::new(
-        &app_config, &intel_config, objectives, pool.clone(), storage, primary_alias,
+        &app_config,
+        &intel_config,
+        objectives,
+        pool.clone(),
+        storage,
+        primary_alias,
     )
     .await?;
 
     // Start NOTIFY listener (optional, non-fatal if fails)
-    let notify_listener = ndp_intelligence::notify::NotifyListener::new(
-        &app_config.database_url,
-        "gold_refresh",
-    );
+    let notify_listener =
+        ndp_intelligence::notify::NotifyListener::new(&app_config.database_url, "gold_refresh");
     let mut notify_rx = match notify_listener.listen().await {
         Ok(rx) => {
             info!("PG NOTIFY listener started");
             Some(rx)
         }
         Err(e) => {
-            warn!("PG NOTIFY listener failed to start: {}. Using timer only.", e);
+            warn!(
+                "PG NOTIFY listener failed to start: {}. Using timer only.",
+                e
+            );
             None
         }
     };
@@ -187,7 +202,9 @@ async fn run_daemon() -> Result<(), ndp_intelligence::error::IntelligenceError> 
 }
 
 /// Run a single intelligence cycle and exit.
-async fn run_one_shot(domain_override: Option<String>) -> Result<(), ndp_intelligence::error::IntelligenceError> {
+async fn run_one_shot(
+    domain_override: Option<String>,
+) -> Result<(), ndp_intelligence::error::IntelligenceError> {
     let mut app_config = AppConfig::from_env()?;
     if let Some(domain) = domain_override {
         app_config.domain_id = domain;
@@ -202,7 +219,12 @@ async fn run_one_shot(domain_override: Option<String>) -> Result<(), ndp_intelli
     ));
 
     let mut service = IntelligenceService::new(
-        &app_config, &intel_config, objectives, pool, storage, primary_alias,
+        &app_config,
+        &intel_config,
+        objectives,
+        pool,
+        storage,
+        primary_alias,
     )
     .await?;
 
@@ -230,17 +252,22 @@ async fn run_backfill(
     ));
 
     let mut service = IntelligenceService::new(
-        &app_config, &intel_config, objectives, pool, storage, primary_alias,
+        &app_config,
+        &intel_config,
+        objectives,
+        pool,
+        storage,
+        primary_alias,
     )
     .await?;
     service.set_backfill_mode(true);
 
     if let Some(since_str) = since {
-        let since_dt = since_str.parse::<chrono::DateTime<chrono::Utc>>().map_err(|e| {
-            ndp_intelligence::error::IntelligenceError::Config {
+        let since_dt = since_str
+            .parse::<chrono::DateTime<chrono::Utc>>()
+            .map_err(|e| ndp_intelligence::error::IntelligenceError::Config {
                 message: format!("Invalid --since timestamp '{}': {}", since_str, e),
-            }
-        })?;
+            })?;
         service.set_last_processed(Some(since_dt - chrono::Duration::seconds(1)));
     }
 
@@ -272,7 +299,9 @@ async fn run_status() -> Result<(), ndp_intelligence::error::IntelligenceError> 
             &[&app_config.domain_id],
         )
         .await
-        .map_err(|e| ndp_intelligence::error::IntelligenceError::Database(format!("Query error: {}", e)))?;
+        .map_err(|e| {
+            ndp_intelligence::error::IntelligenceError::Database(format!("Query error: {}", e))
+        })?;
     let embedding_count: i64 = emb_count.get(0);
 
     // Query prediction stats
@@ -286,7 +315,9 @@ async fn run_status() -> Result<(), ndp_intelligence::error::IntelligenceError> 
             &[&app_config.domain_id],
         )
         .await
-        .map_err(|e| ndp_intelligence::error::IntelligenceError::Database(format!("Query error: {}", e)))?;
+        .map_err(|e| {
+            ndp_intelligence::error::IntelligenceError::Database(format!("Query error: {}", e))
+        })?;
 
     let total_preds: i64 = pred_stats.get(0);
     let evaluated: i64 = pred_stats.get(1);
@@ -298,7 +329,10 @@ async fn run_status() -> Result<(), ndp_intelligence::error::IntelligenceError> 
         "  Warmed up: {}",
         embedding_count >= app_config.warmup_threshold as i64
     );
-    println!("  Predictions: {} total, {} evaluated", total_preds, evaluated);
+    println!(
+        "  Predictions: {} total, {} evaluated",
+        total_preds, evaluated
+    );
     if evaluated > 0 {
         let accuracy = correct as f64 / evaluated as f64 * 100.0;
         println!("  Accuracy: {:.1}% ({}/{})", accuracy, correct, evaluated);

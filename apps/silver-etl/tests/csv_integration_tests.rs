@@ -172,7 +172,10 @@ mod fixture_verification_tests {
         let header = lines[0];
         assert!(header.contains("timestamp"), "Should have timestamp column");
         assert!(header.contains("sensor_id"), "Should have sensor_id column");
-        assert!(header.contains("temperature"), "Should have temperature column");
+        assert!(
+            header.contains("temperature"),
+            "Should have temperature column"
+        );
         assert!(header.contains("humidity"), "Should have humidity column");
 
         // Verify data rows exist
@@ -190,7 +193,10 @@ mod fixture_verification_tests {
         let header = lines[0];
         assert!(header.contains("ndp_id"), "Should have ndp_id column");
         assert!(header.contains("category"), "Should have category column");
-        assert!(header.contains("friendly_name"), "Should have friendly_name column");
+        assert!(
+            header.contains("friendly_name"),
+            "Should have friendly_name column"
+        );
 
         // Verify data rows
         assert!(lines.len() > 1, "Should have data rows");
@@ -252,7 +258,10 @@ mod csv_parsing_integration_tests {
     fn test_parse_headers_valid_timeseries() {
         let path = csv_fixture("valid_timeseries.csv");
         let headers = parse_csv_headers(&path);
-        assert_eq!(headers, vec!["timestamp", "sensor_id", "temperature", "humidity"]);
+        assert_eq!(
+            headers,
+            vec!["timestamp", "sensor_id", "temperature", "humidity"]
+        );
     }
 
     #[test]
@@ -266,7 +275,10 @@ mod csv_parsing_integration_tests {
             .split(';')
             .map(|s| s.trim())
             .collect();
-        assert_eq!(headers, vec!["timestamp", "sensor_id", "temperature", "humidity"]);
+        assert_eq!(
+            headers,
+            vec!["timestamp", "sensor_id", "temperature", "humidity"]
+        );
     }
 
     #[test]
@@ -584,12 +596,18 @@ mod config_loading_tests {
         let content = fs::read_to_string(path).expect("Should read config");
 
         // Basic YAML parsing validation
-        let value: serde_yaml::Value = serde_yaml::from_str(&content)
-            .expect("Config should be valid YAML");
+        let value: serde_yaml::Value =
+            serde_yaml::from_str(&content).expect("Config should be valid YAML");
 
         assert!(value.is_mapping(), "Config should be a mapping");
-        assert!(value.get("enabled").is_some(), "Should have 'enabled' field");
-        assert!(value.get("target_table").is_some(), "Should have 'target_table' field");
+        assert!(
+            value.get("enabled").is_some(),
+            "Should have 'enabled' field"
+        );
+        assert!(
+            value.get("target_table").is_some(),
+            "Should have 'target_table' field"
+        );
     }
 
     #[test]
@@ -597,8 +615,8 @@ mod config_loading_tests {
         let path = config_fixture("weather_config.yaml");
         let content = fs::read_to_string(path).expect("Should read config");
 
-        let value: serde_yaml::Value = serde_yaml::from_str(&content)
-            .expect("Config should be valid YAML");
+        let value: serde_yaml::Value =
+            serde_yaml::from_str(&content).expect("Config should be valid YAML");
 
         assert!(value.is_mapping(), "Config should be a mapping");
     }
@@ -630,8 +648,7 @@ mod cli_integration_tests {
     /// Helper to check if ndp binary exists
     fn ndp_binary_exists() -> bool {
         // Check common locations
-        Path::new("target/debug/ndp").exists()
-            || Path::new("target/release/ndp").exists()
+        Path::new("target/debug/ndp").exists() || Path::new("target/release/ndp").exists()
     }
 
     #[test]
@@ -699,7 +716,12 @@ mod performance_tests {
 
         writeln!(file, "timestamp,sensor_id,value")?;
         for i in 0..rows {
-            let ts = format!("2026-01-{:02}T{:02}:{:02}:00Z", (i / 1440) % 28 + 1, (i / 60) % 24, i % 60);
+            let ts = format!(
+                "2026-01-{:02}T{:02}:{:02}:00Z",
+                (i / 1440) % 28 + 1,
+                (i / 60) % 24,
+                i % 60
+            );
             writeln!(file, "{},sensor_{:03},{:.2}", ts, i % 100, (i as f64) * 0.1)?;
         }
         Ok(())
@@ -745,7 +767,8 @@ mod performance_tests {
             let mut file = fs::File::create(&csv_path).expect("Create file");
             writeln!(file, "ndp_id,category,name").expect("Write header");
             for i in 0..10_000 {
-                writeln!(file, "sensor_{:05},category_{},Sensor {}", i, i % 10, i).expect("Write row");
+                writeln!(file, "sensor_{:05},category_{},Sensor {}", i, i % 10, i)
+                    .expect("Write row");
             }
         }
 

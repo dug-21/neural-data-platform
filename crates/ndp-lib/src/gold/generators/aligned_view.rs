@@ -470,6 +470,7 @@ mod tests {
                 silver_etl: Some(crate::gold::config::SilverEtlConfig {
                     target_table: format!("silver.{}_observations", stream_id.replace('-', "_")),
                     timestamp: None,
+                    field_mappings: vec![],
                 }),
                 gold_etl: if gold_enabled {
                     Some(crate::gold::config::GoldEtlConfig {

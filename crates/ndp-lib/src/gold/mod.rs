@@ -358,6 +358,7 @@ mod tests {
             silver_etl: Some(SilverEtlConfig {
                 target_table: "silver.test_observations".to_string(),
                 timestamp: None,
+                field_mappings: vec![],
             }),
             gold_etl: Some(GoldEtlConfig {
                 enabled: true,

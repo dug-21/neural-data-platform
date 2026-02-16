@@ -113,10 +113,7 @@ impl PgVectorSchemaGenerator {
         ddl.push_str("CREATE TABLE IF NOT EXISTS gold.metric_embeddings (\n");
         ddl.push_str("    bucket          TIMESTAMPTZ NOT NULL,\n");
         ddl.push_str("    domain_id       TEXT NOT NULL,\n");
-        ddl.push_str(&format!(
-            "    embedding       vector({}),\n",
-            dimensions
-        ));
+        ddl.push_str(&format!("    embedding       vector({}),\n", dimensions));
         ddl.push_str("    dimensions      INTEGER NOT NULL,\n");
         ddl.push_str("    metadata        JSONB DEFAULT '{}',\n");
         ddl.push_str("    created_at      TIMESTAMPTZ DEFAULT NOW(),\n");

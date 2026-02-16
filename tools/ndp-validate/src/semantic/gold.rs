@@ -56,7 +56,7 @@ pub fn validate_gold_etl(config: &Value) -> Vec<ValidationError> {
         return errors;
     }
 
-    // Extract field names from config.fields[]
+    // Extract field names (prefer Silver mappings, fallback to Bronze fields)
     let field_names: HashSet<String> = extract_field_names(config);
 
     // Get stream_type if present
@@ -83,8 +83,28 @@ pub fn validate_gold_etl(config: &Value) -> Vec<ValidationError> {
     errors
 }
 
-/// Extract field names from config.fields[]
+/// Extract field names for Gold validation.
+/// Prefers Silver column names (from silver_etl.field_mappings[].target_column)
+/// since Gold aggregates reference Silver columns. Falls back to raw Bronze
+/// field names (fields[].name) when no Silver mappings exist.
 fn extract_field_names(config: &Value) -> HashSet<String> {
+    // Prefer Silver column names (Gold references Silver, not Bronze)
+    if let Some(silver_names) = config
+        .get("silver_etl")
+        .and_then(|s| s.get("field_mappings"))
+        .and_then(|v| v.as_array())
+    {
+        let names: HashSet<String> = silver_names
+            .iter()
+            .filter_map(|m| m.get("target_column").and_then(|t| t.as_str()))
+            .map(|s| s.to_string())
+            .collect();
+        if !names.is_empty() {
+            return names;
+        }
+    }
+
+    // Fallback: raw Bronze field names (for streams without Silver ETL)
     config
         .get("fields")
         .and_then(|v| v.as_array())
@@ -490,17 +510,24 @@ mod tests {
     use serde_json::json;
 
     // =========================================================================
-    // Test 1: Valid gold_etl configuration passes
+    // Test 1: Valid gold_etl configuration passes (with Silver mappings)
     // =========================================================================
     #[test]
     fn test_gold_field_validation_passes_for_valid() {
         let config = json!({
             "stream_id": "air-quality",
             "fields": [
-                { "name": "pm25", "type": "float" },
-                { "name": "co2", "type": "int" },
-                { "name": "temperature", "type": "float" }
+                { "name": "pm02", "type": "float" },
+                { "name": "rco2", "type": "int" },
+                { "name": "atmp", "type": "float" }
             ],
+            "silver_etl": {
+                "field_mappings": [
+                    { "source_field": "pm02", "target_column": "pm25" },
+                    { "source_field": "rco2", "target_column": "co2" },
+                    { "source_field": "atmp", "target_column": "temperature" }
+                ]
+            },
             "gold_etl": {
                 "enabled": true,
                 "aggregates": {
@@ -877,6 +904,95 @@ mod tests {
                 .map_or(false, |s| s.contains("pm25")),
             "Should suggest 'pm25', got: {:?}",
             errors[0].suggestion
+        );
+    }
+
+    // =========================================================================
+    // Test 15: Silver field mapping chain - Gold references Silver target_column
+    // =========================================================================
+    #[test]
+    fn test_silver_field_mapping_chain() {
+        // Bronze raw names differ from Silver target columns.
+        // Gold aggregates must reference Silver target_column names.
+        let config = json!({
+            "stream_id": "airgradient",
+            "fields": [
+                { "name": "rco2", "type": "int" },
+                { "name": "atmp", "type": "float" },
+                { "name": "pm02Compensated", "type": "float" }
+            ],
+            "silver_etl": {
+                "field_mappings": [
+                    { "source_field": "rco2", "target_column": "co2" },
+                    { "source_field": "atmp", "target_column": "temperature_c" },
+                    { "source_field": "pm02Compensated", "target_column": "pm25" }
+                ]
+            },
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"],
+                    "default_metrics": ["mean", "std"],
+                    "fields": {
+                        "co2": { "metrics": ["mean", "max"] },
+                        "temperature_c": { "metrics": ["mean", "min", "max"] },
+                        "pm25": { "metrics": ["mean", "p95"] }
+                    }
+                },
+                "features": {
+                    "lag": {
+                        "enabled": true,
+                        "lags_hours": [1, 6],
+                        "fields": ["co2", "pm25"]
+                    },
+                    "rolling": {
+                        "enabled": true,
+                        "windows": ["4 hours"],
+                        "stats": ["mean", "std"],
+                        "fields": ["temperature_c"]
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            errors.is_empty(),
+            "Gold should resolve fields via Silver target_column, got errors: {:?}",
+            errors
+        );
+    }
+
+    // =========================================================================
+    // Test 16: Fallback to Bronze fields when no silver_etl present
+    // =========================================================================
+    #[test]
+    fn test_fallback_to_bronze_fields_without_silver_etl() {
+        // Config has fields[] but NO silver_etl section.
+        // Gold references Bronze field names directly (backwards compatibility).
+        let config = json!({
+            "stream_id": "simple-sensor",
+            "fields": [
+                { "name": "temperature", "type": "float" },
+                { "name": "humidity", "type": "float" }
+            ],
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"],
+                    "fields": {
+                        "temperature": { "metrics": ["mean", "min", "max"] },
+                        "humidity": { "metrics": ["mean"] }
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            errors.is_empty(),
+            "Should fall back to Bronze field names when no silver_etl, got errors: {:?}",
+            errors
         );
     }
 }

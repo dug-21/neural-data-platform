@@ -313,9 +313,7 @@ mod tests {
 
     // ========== WalBronzeReader Tests ==========
 
-    fn create_wal_with_entries(
-        entries: &[(&str, u32)],
-    ) -> (tempfile::TempDir, std::path::PathBuf) {
+    fn create_wal_with_entries(entries: &[(&str, u32)]) -> (tempfile::TempDir, std::path::PathBuf) {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let wal_path = temp_dir.path().join("wal.log");
         let mut wal = WriteAheadLog::new(&wal_path).unwrap();
@@ -369,10 +367,7 @@ mod tests {
 
         let reader = WalBronzeReader::new(&wal_path);
         let since = Utc.with_ymd_and_hms(2026, 2, 14, 0, 0, 0).unwrap();
-        let result = reader
-            .read_since(since, Some("air-quality"))
-            .await
-            .unwrap();
+        let result = reader.read_since(since, Some("air-quality")).await.unwrap();
 
         assert_eq!(result.len(), 2);
         for p in &result {
@@ -396,10 +391,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_wal_reader_get_latest_timestamp() {
-        let (_temp_dir, wal_path) = create_wal_with_entries(&[
-            ("air-quality-Mqtt", 10),
-            ("air-quality-Mqtt", 15),
-        ]);
+        let (_temp_dir, wal_path) =
+            create_wal_with_entries(&[("air-quality-Mqtt", 10), ("air-quality-Mqtt", 15)]);
 
         let reader = WalBronzeReader::new(&wal_path);
         let ts = reader.get_latest_timestamp(None).await.unwrap();
@@ -423,10 +416,8 @@ mod tests {
             .returning(move |_, _, _| Ok(vec![p1.clone(), p2.clone()]));
 
         // WAL has today's data (hour 14, 15)
-        let (_temp_dir, wal_path) = create_wal_with_entries(&[
-            ("air-quality-Mqtt", 14),
-            ("air-quality-Mqtt", 15),
-        ]);
+        let (_temp_dir, wal_path) =
+            create_wal_with_entries(&[("air-quality-Mqtt", 14), ("air-quality-Mqtt", 15)]);
 
         let reader = HybridBronzeReader::new(Arc::new(mock_store), &wal_path);
         let since = Utc.with_ymd_and_hms(2026, 2, 14, 0, 0, 0).unwrap();
@@ -451,10 +442,8 @@ mod tests {
             .returning(move |_, _, _| Ok(vec![p1.clone()]));
 
         // WAL also has data at hour 10 (not yet truncated)
-        let (_temp_dir, wal_path) = create_wal_with_entries(&[
-            ("air-quality-Mqtt", 10),
-            ("air-quality-Mqtt", 11),
-        ]);
+        let (_temp_dir, wal_path) =
+            create_wal_with_entries(&[("air-quality-Mqtt", 10), ("air-quality-Mqtt", 11)]);
 
         let reader = HybridBronzeReader::new(Arc::new(mock_store), &wal_path);
         let since = Utc.with_ymd_and_hms(2026, 2, 14, 0, 0, 0).unwrap();
@@ -494,9 +483,7 @@ mod tests {
             .times(1)
             .returning(|_, _, _| Ok(vec![]));
 
-        let (_temp_dir, wal_path) = create_wal_with_entries(&[
-            ("air-quality-Mqtt", 14),
-        ]);
+        let (_temp_dir, wal_path) = create_wal_with_entries(&[("air-quality-Mqtt", 14)]);
 
         let reader = HybridBronzeReader::new(Arc::new(mock_store), &wal_path);
         let since = Utc.with_ymd_and_hms(2026, 2, 14, 0, 0, 0).unwrap();
@@ -517,9 +504,7 @@ mod tests {
             .returning(move |_, _, _| Ok(vec![p1.clone()]));
 
         // WAL latest: hour 15
-        let (_temp_dir, wal_path) = create_wal_with_entries(&[
-            ("air-quality-Mqtt", 15),
-        ]);
+        let (_temp_dir, wal_path) = create_wal_with_entries(&[("air-quality-Mqtt", 15)]);
 
         let reader = HybridBronzeReader::new(Arc::new(mock_store), &wal_path);
         let ts = reader.get_latest_timestamp(None).await.unwrap();

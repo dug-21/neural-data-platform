@@ -132,8 +132,7 @@ mod tests {
 
     #[test]
     fn test_full_json_deserialization() {
-        let config: IntelligenceConfig =
-            serde_json::from_str(sample_config_json()).unwrap();
+        let config: IntelligenceConfig = serde_json::from_str(sample_config_json()).unwrap();
         assert!(config.enabled);
         assert_eq!(config.embedding.embedding_type, EmbeddingType::Metric);
         assert_eq!(config.embedding.fields.temporal.len(), 3);
@@ -172,8 +171,7 @@ mod tests {
 
     #[test]
     fn test_round_trip_serialize_deserialize() {
-        let config: IntelligenceConfig =
-            serde_json::from_str(sample_config_json()).unwrap();
+        let config: IntelligenceConfig = serde_json::from_str(sample_config_json()).unwrap();
         let serialized = serde_json::to_string(&config).unwrap();
         let deserialized: IntelligenceConfig = serde_json::from_str(&serialized).unwrap();
 
@@ -187,10 +185,7 @@ mod tests {
             config.embedding.fields.temporal.len()
         );
         assert_eq!(deserialized.search.k, config.search.k);
-        assert_eq!(
-            deserialized.anomaly.is_some(),
-            config.anomaly.is_some()
-        );
+        assert_eq!(deserialized.anomaly.is_some(), config.anomaly.is_some());
     }
 
     #[test]
@@ -227,7 +222,11 @@ mod tests {
     #[test]
     fn test_total_dimensions() {
         let fields = EmbeddingFieldsConfig {
-            temporal: vec!["hour_sin".to_string(), "hour_cos".to_string(), "is_weekend".to_string()],
+            temporal: vec![
+                "hour_sin".to_string(),
+                "hour_cos".to_string(),
+                "is_weekend".to_string(),
+            ],
             direct: vec![
                 DirectFieldConfig {
                     field: "pm25".to_string(),

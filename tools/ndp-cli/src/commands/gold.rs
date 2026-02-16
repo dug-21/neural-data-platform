@@ -139,9 +139,7 @@ pub async fn run(
     let loader = ndp_lib::gold::config::FileSystemConfigLoader::new(config_dir);
 
     match args.command {
-        GoldCommands::Intelligence { command } => {
-            run_intelligence(&loader, command).await
-        }
+        GoldCommands::Intelligence { command } => run_intelligence(&loader, command).await,
         GoldCommands::Generate {
             stream,
             domain,
@@ -257,7 +255,10 @@ async fn run_validate_only(
                     blocking.len()
                 );
                 for err in &blocking {
-                    msg.push_str(&format!("  - [{}] {}: {}\n", err.code, err.path, err.message));
+                    msg.push_str(&format!(
+                        "  - [{}] {}: {}\n",
+                        err.code, err.path, err.message
+                    ));
                 }
                 return Err(msg.into());
             }
@@ -395,10 +396,9 @@ async fn run_intelligence(
                 )
             })?;
 
-            let schema_config =
-                ndp_lib::gold::generators::PgVectorSchemaConfig::new(intelligence)
-                    .with_graph_tables(!no_graph)
-                    .with_reasoning_bank(!no_reasoning_bank);
+            let schema_config = ndp_lib::gold::generators::PgVectorSchemaConfig::new(intelligence)
+                .with_graph_tables(!no_graph)
+                .with_reasoning_bank(!no_reasoning_bank);
 
             let ddl = ndp_lib::gold::generators::PgVectorSchemaGenerator::generate(
                 &schema_config,

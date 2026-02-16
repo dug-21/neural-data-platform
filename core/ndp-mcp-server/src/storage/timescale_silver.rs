@@ -365,7 +365,9 @@ impl SilverStorage for TimescaleSilverStorage {
             WHERE c.table_name = $1 OR c.table_name = $2
             ORDER BY c.sort_order, c.column_name
         "#;
-        let column_rows = conn.query(columns_query, &[&table_name, &dict_table_name]).await;
+        let column_rows = conn
+            .query(columns_query, &[&table_name, &dict_table_name])
+            .await;
 
         let columns: Vec<SilverColumnInfo> = match column_rows {
             Ok(rows) if !rows.is_empty() => rows

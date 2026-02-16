@@ -1120,6 +1120,7 @@ mod tests {
                     silver_etl: Some(SilverEtlConfig {
                         target_table: "silver.air_quality".to_string(),
                         timestamp: None,
+                        field_mappings: vec![],
                     }),
                     gold_etl: Some(GoldEtlConfig {
                         enabled: true,
@@ -1164,6 +1165,7 @@ mod tests {
                     silver_etl: Some(SilverEtlConfig {
                         target_table: "silver.state_events".to_string(),
                         timestamp: None,
+                        field_mappings: vec![],
                     }),
                     gold_etl: Some(GoldEtlConfig {
                         enabled: true,
@@ -1193,6 +1195,7 @@ mod tests {
                     silver_etl: Some(SilverEtlConfig {
                         target_table: "silver.outdoor_aqi".to_string(),
                         timestamp: None,
+                        field_mappings: vec![],
                     }),
                     gold_etl: Some(GoldEtlConfig {
                         enabled: true,

@@ -20,10 +20,10 @@ pub use ndp_lib::validate::semantic;
 
 // Re-export commonly used types at crate root for backward compatibility
 pub use ndp_lib::validate::{
-    BatchSummary, BatchValidationResult, DomainSchemaValidator, ErrorCode, OutputFormat,
-    SchemaValidator, SchemaValidatorError, SemanticValidator, Severity, ValidationError,
-    ValidationLayer, ValidationResult, ValidationSummary, ValidateOptions,
     determine_batch_exit_code, determine_exit_code, exit_codes, output_human, output_human_batch,
-    output_json, output_json_batch, validate_domain_config, validate_domain_file,
-    validate_all_domains, validate_stream, validate_stream_file, validate_all_streams,
+    output_json, output_json_batch, validate_all_domains, validate_all_streams,
+    validate_domain_config, validate_domain_file, validate_stream, validate_stream_file,
+    BatchSummary, BatchValidationResult, DomainSchemaValidator, ErrorCode, OutputFormat,
+    SchemaValidator, SchemaValidatorError, SemanticValidator, Severity, ValidateOptions,
+    ValidationError, ValidationLayer, ValidationResult, ValidationSummary,
 };

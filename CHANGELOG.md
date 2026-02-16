@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-02-16
+
+Fix Gold validator resolving field names from raw Bronze `fields[].name` instead of Silver `silver_etl.field_mappings[].target_column`. Gold aggregates reference Silver column names by design, so the validator must check against the same names. This caused 9 false `INVALID_GOLD_FIELD` errors when running `ndp gold sync --stream air-quality`.
+
+### Fixed
+
+- **`crates/ndp-lib/src/validate/semantic/gold.rs`** — `extract_field_names()` now prefers `silver_etl.field_mappings[].target_column` with fallback to `fields[].name` for streams without Silver ETL
+- **`tools/ndp-validate/src/semantic/gold.rs`** — mirror fix for consistency
+- **`crates/ndp-lib/src/gold/config/types.rs`** — added `field_mappings` to `SilverEtlConfig` so Silver mappings survive the JSON-struct-JSON roundtrip in ndp-cli
+
+### Technical Notes
+
+- Root cause: `extract_field_names()` read `config.fields[].name` (Bronze raw names: `rco2`, `atmp`, `pm02`) but Gold ETL fields reference Silver column names (`co2`, `temperature_c`, `pm25`)
+- `SilverEtlConfig` was missing `field_mappings`, so ndp-cli's serialize-deserialize roundtrip silently dropped them
+- Discovered during ops-007 regression testbed run
+- GitHub Issue: #24
+
 ## [1.2.11] - 2026-02-16
 
 Fix `numeric` type deserialization panic in prediction queries. PostgreSQL `avg(smallint)` returns `numeric`, which tokio-postgres cannot deserialize as `f64` — causing a thread panic at `predictions/mod.rs:163`. Same issue silently dropped co2/tvoc/nox values in embeddings.

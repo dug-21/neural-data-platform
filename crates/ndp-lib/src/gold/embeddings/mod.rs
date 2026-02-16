@@ -174,8 +174,7 @@ mod tests {
 
     #[test]
     fn test_embedding_with_dimensions_ok() {
-        let emb =
-            Embedding::with_dimensions(vec![1.0, 2.0, 3.0], 3, HashMap::new()).unwrap();
+        let emb = Embedding::with_dimensions(vec![1.0, 2.0, 3.0], 3, HashMap::new()).unwrap();
         assert_eq!(emb.dimensions, 3);
     }
 

@@ -183,7 +183,9 @@ async fn test_source_manager_uses_ingestion_sender() {
     let mut manager = SourceManager::new(registry);
 
     // DP-012: Set up EventBus (replaces mpsc channel)
-    let event_bus = Arc::new(neural_core::EventBus::new(neural_core::EventBusConfig::default()));
+    let event_bus = Arc::new(neural_core::EventBus::new(
+        neural_core::EventBusConfig::default(),
+    ));
     manager.set_event_bus(event_bus);
 
     // THEN: Manager should have EventBus configured
@@ -314,8 +316,8 @@ async fn test_main_uses_bronze_subscriber() {
     );
 
     // DP-012: Verify the BronzeSubscriber is registered with SubscriberCoordinator
-    let bronze_subscriber_registered =
-        main_rs.contains("BronzeSubscriber::new") && main_rs.contains("subscriber_coordinator.register");
+    let bronze_subscriber_registered = main_rs.contains("BronzeSubscriber::new")
+        && main_rs.contains("subscriber_coordinator.register");
 
     assert!(
         bronze_subscriber_registered,

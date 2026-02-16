@@ -1,0 +1,15 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.12",
+  "description": "Fix Gold validator checking raw Bronze field names instead of Silver column names (#24)",
+  "changes": [
+    {"type": "tool", "id": "ndp-cli", "action": "build"},
+    {"type": "tool", "id": "ndp-validate", "action": "build"},
+    {"type": "tool", "id": "ndp-gold-ddl", "action": "build"},
+    {"type": "gold-tables", "stream_id": "air-quality", "action": "sync"},
+    {"type": "gold-tables", "stream_id": "outdoor-weather", "action": "sync"},
+    {"type": "gold-tables", "stream_id": "outdoor-air-quality", "action": "sync"},
+    {"type": "gold-tables", "stream_id": "home-assistant-state", "action": "sync"}
+  ]
+}

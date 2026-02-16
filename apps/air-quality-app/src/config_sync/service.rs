@@ -329,20 +329,16 @@ impl ConfigSyncService {
                         }
                         Err(e) => {
                             // dp-018 Task 1.7: ERROR level for sync failures
-                            error!(
-                                "[sync] Failed to save stream {}: {}",
-                                config.stream_id, e
-                            );
-                            report.failed.push((config.stream_id.clone(), e.to_string()));
+                            error!("[sync] Failed to save stream {}: {}", config.stream_id, e);
+                            report
+                                .failed
+                                .push((config.stream_id.clone(), e.to_string()));
                         }
                     }
                 }
                 Err(e) => {
                     // dp-018 Task 1.7: ERROR level for load failures
-                    error!(
-                        "[sync] Failed to load config from {:?}: {}",
-                        path, e
-                    );
+                    error!("[sync] Failed to load config from {:?}: {}", path, e);
                     report.failed.push((stream_id_from_path, e.to_string()));
                 }
             }
@@ -1516,7 +1512,11 @@ sources:
         let result = service.load_json_config(&temp_file).await;
 
         // Assert
-        assert!(result.is_ok(), "Failed to load JSON config: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to load JSON config: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
         assert_eq!(config.stream_id, "test-stream");
         assert_eq!(config.fields.len(), 1);
@@ -1571,10 +1571,17 @@ sources:
         let result = service.load_json_config(&temp_file).await;
 
         // Assert: silver_etl MUST be preserved
-        assert!(result.is_ok(), "Failed to load JSON config: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to load JSON config: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
 
-        assert!(config.silver_etl.is_some(), "silver_etl must be preserved after loading!");
+        assert!(
+            config.silver_etl.is_some(),
+            "silver_etl must be preserved after loading!"
+        );
         let etl = config.silver_etl.unwrap();
         assert!(etl.enabled, "silver_etl.enabled should be true");
         assert_eq!(etl.target_table, "silver.air_quality_observations");
@@ -1670,7 +1677,11 @@ sources:
         let result = service.load_config(&json_file).await;
 
         // Assert
-        assert!(result.is_ok(), "Failed to auto-detect JSON format: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to auto-detect JSON format: {:?}",
+            result.err()
+        );
         let config = result.unwrap();
         assert_eq!(config.stream_id, "auto-detect");
 

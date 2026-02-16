@@ -55,10 +55,7 @@ impl StreamRegistry {
         }
 
         // dp-018 Task 1.6: Log config source for observability
-        info!(
-            "config loaded from etcd: /streams/{}/config",
-            stream_id
-        );
+        info!("config loaded from etcd: /streams/{}/config", stream_id);
         Ok(config)
     }
 

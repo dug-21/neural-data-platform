@@ -440,7 +440,9 @@ impl DictionaryStore for TimescaleDictionaryStore {
         // Build query based on filters
         // Note: Use qualified table name for data_dictionary lookup
         let (query, params): (&str, Vec<&(dyn tokio_postgres::types::ToSql + Sync)>) = match (
-            &table, &qualified_table, &column,
+            &table,
+            &qualified_table,
+            &column,
         ) {
             (None, _, None) => (
                 r#"

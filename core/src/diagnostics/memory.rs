@@ -456,7 +456,11 @@ impl MemoryWatchdog {
     /// A threshold of 0 disables the watchdog.
     pub fn from_threshold_mib(mib: u64) -> Self {
         Self {
-            threshold_bytes: if mib == 0 { None } else { Some(mib * 1_048_576) },
+            threshold_bytes: if mib == 0 {
+                None
+            } else {
+                Some(mib * 1_048_576)
+            },
         }
     }
 

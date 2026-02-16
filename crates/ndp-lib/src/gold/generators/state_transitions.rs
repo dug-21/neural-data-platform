@@ -510,6 +510,7 @@ mod tests {
                 timestamp: Some(TimestampConfig {
                     target_field: "event_time".to_string(),
                 }),
+                field_mappings: vec![],
             }),
             gold_etl: Some(GoldEtlConfig {
                 enabled: true,

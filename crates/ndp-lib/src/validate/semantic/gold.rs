@@ -48,7 +48,7 @@ pub fn validate_gold_etl(config: &Value) -> Vec<ValidationError> {
         return errors;
     }
 
-    // Extract field names from config.fields[]
+    // Extract field names (prefer Silver mappings, fallback to Bronze fields)
     let field_names: HashSet<String> = extract_field_names(config);
 
     // Get stream_type if present
@@ -75,8 +75,28 @@ pub fn validate_gold_etl(config: &Value) -> Vec<ValidationError> {
     errors
 }
 
-/// Extract field names from config.fields[]
+/// Extract field names for Gold validation.
+/// Prefers Silver column names (from silver_etl.field_mappings[].target_column)
+/// since Gold aggregates reference Silver columns. Falls back to raw Bronze
+/// field names (fields[].name) when no Silver mappings exist.
 fn extract_field_names(config: &Value) -> HashSet<String> {
+    // Prefer Silver column names (Gold references Silver, not Bronze)
+    if let Some(silver_names) = config
+        .get("silver_etl")
+        .and_then(|s| s.get("field_mappings"))
+        .and_then(|v| v.as_array())
+    {
+        let names: HashSet<String> = silver_names
+            .iter()
+            .filter_map(|m| m.get("target_column").and_then(|t| t.as_str()))
+            .map(|s| s.to_string())
+            .collect();
+        if !names.is_empty() {
+            return names;
+        }
+    }
+
+    // Fallback: raw Bronze field names (for streams without Silver ETL)
     config
         .get("fields")
         .and_then(|v| v.as_array())
@@ -224,14 +244,8 @@ fn validate_features(features: &Value, field_names: &HashSet<String>) -> Vec<Val
                                 errors.push(ValidationError {
                                     layer: ValidationLayer::Semantic,
                                     code: ErrorCode::InvalidFeatureType,
-                                    path: format!(
-                                        "$.gold_etl.features.lag.lags_hours[{}]",
-                                        idx
-                                    ),
-                                    message: format!(
-                                        "Lag hours must be >= 1, got {}",
-                                        h
-                                    ),
+                                    path: format!("$.gold_etl.features.lag.lags_hours[{}]", idx),
+                                    message: format!("Lag hours must be >= 1, got {}", h),
                                     severity: Severity::Error,
                                     suggestion: None,
                                     context: None,
@@ -545,17 +559,25 @@ mod tests {
     use serde_json::json;
 
     // =========================================================================
-    // Test 1: Valid gold_etl configuration passes
+    // Test 1: Valid gold_etl configuration passes (Silver mappings present)
     // =========================================================================
     #[test]
     fn test_gold_field_validation_passes_for_valid() {
         let config = json!({
             "stream_id": "air-quality",
             "fields": [
-                { "name": "pm25", "type": "float" },
-                { "name": "co2", "type": "int" },
-                { "name": "temperature", "type": "float" }
+                { "name": "pm02", "type": "float" },
+                { "name": "rco2", "type": "int" },
+                { "name": "atmp", "type": "float" }
             ],
+            "silver_etl": {
+                "target_table": "silver.air_quality_observations",
+                "field_mappings": [
+                    { "source_path": "raw_payload.pm02Compensated", "target_column": "pm25" },
+                    { "source_path": "raw_payload.rco2", "target_column": "co2" },
+                    { "source_path": "raw_payload.atmpCompensated", "target_column": "temperature" }
+                ]
+            },
             "gold_etl": {
                 "enabled": true,
                 "aggregates": {
@@ -1105,6 +1127,82 @@ mod tests {
                 .map_or(false, |s| s.contains("pm25")),
             "Should suggest 'pm25', got: {:?}",
             errors[0].suggestion
+        );
+    }
+
+    // =========================================================================
+    // Test 19: Silver field mapping chain — Bronze→Silver→Gold
+    // =========================================================================
+    #[test]
+    fn test_silver_field_mapping_chain() {
+        // Bronze fields have raw sensor names; Silver maps them to canonical
+        // names; Gold aggregates reference the Silver column names.
+        let config = json!({
+            "stream_id": "air-quality",
+            "fields": [
+                { "name": "rco2", "type": "float" },
+                { "name": "atmp", "type": "float" },
+                { "name": "pm02Compensated", "type": "float" }
+            ],
+            "silver_etl": {
+                "target_table": "silver.air_quality_observations",
+                "field_mappings": [
+                    { "source_path": "raw_payload.rco2", "target_column": "co2" },
+                    { "source_path": "raw_payload.atmpCompensated", "target_column": "temperature_c" },
+                    { "source_path": "raw_payload.pm02Compensated", "target_column": "pm25" }
+                ]
+            },
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"],
+                    "fields": {
+                        "co2": { "metrics": ["mean", "max"] },
+                        "temperature_c": { "metrics": ["mean", "min", "max"] },
+                        "pm25": { "metrics": ["mean", "std", "p95"] }
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            errors.is_empty(),
+            "Silver field mapping chain should resolve all Gold fields, got: {:?}",
+            errors
+        );
+    }
+
+    // =========================================================================
+    // Test 20: Fallback to Bronze fields when no Silver ETL
+    // =========================================================================
+    #[test]
+    fn test_fallback_to_bronze_fields_without_silver_etl() {
+        // Config has fields[] but no silver_etl — Gold should validate
+        // against Bronze field names directly (backwards compatibility).
+        let config = json!({
+            "stream_id": "simple-stream",
+            "fields": [
+                { "name": "voltage", "type": "float" },
+                { "name": "current", "type": "float" }
+            ],
+            "gold_etl": {
+                "enabled": true,
+                "aggregates": {
+                    "granularities": ["1 hour"],
+                    "fields": {
+                        "voltage": { "metrics": ["mean", "max"] },
+                        "current": { "metrics": ["mean"] }
+                    }
+                }
+            }
+        });
+
+        let errors = validate_gold_etl(&config);
+        assert!(
+            errors.is_empty(),
+            "Fallback to Bronze fields should pass when no Silver ETL, got: {:?}",
+            errors
         );
     }
 }
