@@ -41,7 +41,7 @@ Do NOT use TeamCreate. Planning swarms are coordinator-driven via Task tool spaw
 Each message batches ALL related operations of the same type:
 
 - ALWAYS batch ALL TaskCreate calls in ONE message
-- ALWAYS spawn ALL agents in ONE message via Task tool
+- ALWAYS spawn all agents WITHIN each wave in ONE message via Task tool
 - ALWAYS batch ALL file reads/writes/edits in ONE message
 - ALWAYS batch ALL Bash commands in ONE message
 - ALWAYS batch ALL memory store/retrieve operations in ONE message
@@ -50,7 +50,7 @@ Each message batches ALL related operations of the same type:
 
 - Output goes to `product/features/{feature-id}/{phase}/` ONLY
 - NO code changes. NO file edits outside `product/features/`
-- NO launching implementation agents (ndp-rust-dev, ndp-tester)
+- NO launching implementation agents (ndp-rust-dev, sparc-coder)
 - Each planning agent gets: SCOPE.md + relevant existing SPARC artifacts + relevant AgentDB patterns
 - Agents return: artifact paths + key decisions + open questions (NOT full file contents)
 
@@ -129,6 +129,12 @@ mcp__claude-flow__hive-mind_join(agentId: "agent-1-spec", role: "worker")
 mcp__claude-flow__agent_spawn(agentId: "agent-2-arch", agentType: "ndp-architect")
 mcp__claude-flow__hive-mind_join(agentId: "agent-2-arch", role: "specialist")
 
+mcp__claude-flow__agent_spawn(agentId: "agent-3-pseudo", agentType: "ndp-pseudocode")
+mcp__claude-flow__hive-mind_join(agentId: "agent-3-pseudo", role: "worker")
+
+mcp__claude-flow__agent_spawn(agentId: "agent-4-testplan", agentType: "ndp-tester")
+mcp__claude-flow__hive-mind_join(agentId: "agent-4-testplan", role: "worker")
+
 # ... register all agents before spawning any Task
 
 # 3. Seed shared context (agents read this via memory_retrieve)
@@ -146,38 +152,53 @@ This creates `.claude-flow/hive-mind/state.json` with workers list and shared me
 Define ALL tasks in the SAME message as Step 3a. Batch all TaskCreate calls with the MCP calls above:
 
 ```
+# Wave 1 — parallel (no dependencies)
 TaskCreate("Specification artifact", "Produce SPECIFICATION.md for {feature}", "Writing specification")
 TaskCreate("Task decomposition", "Produce TASK-DECOMPOSITION.md for {feature}", "Decomposing tasks")
-TaskCreate("Architecture ADRs", "Produce ARCHITECTURE.md for {feature}", "Designing architecture")
-TaskCreate("Pseudocode", "Produce PSEUDOCODE.md for {feature}", "Writing pseudocode")
+TaskCreate("Architecture ADRs", "Produce ARCHITECTURE.md with codebase-consulted ADRs for {feature}", "Designing architecture")
+
+# Wave 2 — parallel, BLOCKED BY Wave 1 (spec + arch must complete first)
+TaskCreate("Pseudocode (per-component)", "Produce pseudocode/OVERVIEW.md + per-component pseudocode files for {feature}", "Writing component pseudocode")
+TaskCreate("Test plan (per-component)", "Produce test-plan/OVERVIEW.md + per-component test plan files for {feature}", "Writing test plans")
+
+# Wave 3 — sequential, BLOCKED BY Wave 2
 TaskCreate("Vision alignment", "Produce ALIGNMENT-REPORT.md for {feature}", "Checking alignment")
 TaskCreate("Implementation brief", "Produce IMPLEMENTATION-BRIEF.md for {feature}", "Generating brief")
 TaskCreate("GH Issue creation", "Create GH Issue from brief", "Creating GH Issue")
 ```
 
-Set task dependencies with TaskUpdate after creation.
+Set task dependencies with TaskUpdate after creation:
+- Wave 2 tasks (pseudocode, test-plan) are `addBlockedBy` Wave 1 tasks (spec, arch)
+- Wave 3 tasks (alignment, brief, issue) are `addBlockedBy` Wave 2 tasks (pseudocode, test-plan)
 
-#### Step 3c: Agent Spawning
+#### Step 3c: Agent Spawning (3 Waves)
 
-Spawn ALL planning agents in ONE message (parallel).
+Agents are spawned in three waves. Each wave must complete before the next begins. This is required because pseudocode and test plans depend on architecture output (exact view names, column types, integration surfaces).
 
-**Pre-spawn checklist**:
+**Pre-spawn checklist** (verify before Wave 1):
 - [ ] hive-mind_init ran
 - [ ] Agents registered (agent_spawn + hive-mind_join for each)
-- [ ] Tasks defined
+- [ ] Tasks defined with wave dependencies set
 - [ ] Shared context seeded (memory_store key="swarm/shared/{feature}-context")
 - [ ] SCOPE.md read
 - [ ] hive-mind_status shows all agents in workers array
 
-Agent types for planning: `ndp-architect`, `specification`, `pseudocode`
+Agent types for planning: `ndp-architect`, `specification`, `ndp-pseudocode`, `ndp-tester`
 
-Do NOT spawn: `ndp-rust-dev`, `ndp-tester`, `coder`, `sparc-coder`.
+Do NOT spawn: `ndp-rust-dev`, `coder`, `sparc-coder`.
 
 Each agent prompt MUST include:
 1. `Your agent ID: {feature}-agent-N-{role}` — activates the Swarm Coordination block in agent definitions
 2. Task description (2-3 sentences)
 3. Specific SPARC phase to produce
 4. The SCOPE.md path
+
+##### Wave 1: Specification + Architecture (parallel, ONE message)
+
+Spawn in ONE message:
+
+- **Specification agent** (`specification`): produces `specification/SPECIFICATION.md` and `specification/TASK-DECOMPOSITION.md`
+- **Architecture agent** (`ndp-architect`): performs codebase consultation (reads actual Gold DDL generators, existing schemas, cargo workspace structure), then produces `architecture/ARCHITECTURE.md` with exact view names, column prefixes, PostgreSQL types, and integration surface details
 
 **Architecture agent (ndp-architect) MUST produce individual ADRs** in `product/features/{feature-id}/architecture/ARCHITECTURE.md` using this format:
 
@@ -195,6 +216,40 @@ Each agent prompt MUST include:
 ```
 
 Each ADR must cover a distinct architectural choice (not a grab-bag). Good ADR scoping: one decision per ADR, with cross-references between related ADRs.
+
+Wait for BOTH Wave 1 agents to complete before proceeding to Wave 2.
+
+##### Wave 2: Pseudocode + Test Plan (parallel, ONE message, AFTER Wave 1)
+
+Spawn in ONE message:
+
+- **Pseudocode agent** (`ndp-pseudocode`): reads spec + architecture output, produces per-component pseudocode files:
+  ```
+  pseudocode/
+    OVERVIEW.md           -- how components interact, data flow between them
+    {component-1}.md      -- e.g., ndp-intelligence.md, ndp-lib.md, deploy-sh.md
+    {component-2}.md
+  ```
+  Components map to cargo workspace members and deployment artifacts (e.g., ndp-intelligence, ndp-lib, air-quality-app, deploy-sh, ndp-cli). The pseudocode agent determines which components the feature touches from the specification.
+
+- **Test plan agent** (`ndp-tester`): reads spec + architecture output, produces per-component test plan files:
+  ```
+  test-plan/
+    OVERVIEW.md           -- overall test strategy, integration surface, testbed design
+    {component-1}.md      -- component-specific test expectations, assertions
+    {component-2}.md
+  ```
+  The test plan agent identifies integration surfaces from the architecture and writes per-component test expectations including unit tests, integration tests, and validation commands.
+
+Each Wave 2 agent prompt MUST additionally include:
+5. Paths to Wave 1 outputs: `specification/SPECIFICATION.md` and `architecture/ARCHITECTURE.md`
+6. Instruction to read those artifacts before producing output
+
+Wait for BOTH Wave 2 agents to complete before proceeding to Wave 3.
+
+##### Wave 3: Vision Alignment, Brief, GH Issue, Validation (sequential, AFTER Wave 2)
+
+Wave 3 steps run sequentially (each depends on the previous). See Steps 3d through 3h below.
 
 #### Step 3d: Vision Alignment
 
@@ -274,9 +329,22 @@ Verification method types: `test` (cargo test function), `manual` (human check),
   | Specification | product/features/{feature-id}/specification/SPECIFICATION.md |
   | Task Decomposition | product/features/{feature-id}/specification/TASK-DECOMPOSITION.md |
   | Architecture (ADRs) | product/features/{feature-id}/architecture/ARCHITECTURE.md |
-  | Pseudocode | product/features/{feature-id}/pseudocode/PSEUDOCODE.md |
+  | Pseudocode Overview | product/features/{feature-id}/pseudocode/OVERVIEW.md |
+  | Pseudocode Components | product/features/{feature-id}/pseudocode/{component}.md (per component) |
+  | Test Plan Overview | product/features/{feature-id}/test-plan/OVERVIEW.md |
+  | Test Plan Components | product/features/{feature-id}/test-plan/{component}.md (per component) |
   | Alignment Report | product/features/{feature-id}/ALIGNMENT-REPORT.md |
   ```
+- **Component Map** (MUST include — maps components to their pseudocode and test plan files):
+  ```markdown
+  ## Component Map
+
+  | Component | Pseudocode | Test Plan |
+  |-----------|-----------|-----------|
+  | {component-1} | pseudocode/{component-1}.md | test-plan/{component-1}.md |
+  | {component-2} | pseudocode/{component-2}.md | test-plan/{component-2}.md |
+  ```
+  Components are determined by the pseudocode and test plan agents from the specification. They map to cargo workspace members and deployment artifacts (e.g., ndp-intelligence, ndp-lib, air-quality-app, deploy-sh, ndp-cli).
 - Goal (2-3 sentences — the full objective, not a 1-liner)
 - Resolved Decisions table: `| Decision | Resolution | Source | Pattern ID |` — include the AgentDB pattern ID from Step 3e so spec-compile can reference it
 - GitHub Issue link (added in Step 3g)
@@ -325,6 +393,18 @@ Task(
 
 The validator checks artifact existence, AC coverage, ADR pattern IDs, stale references, and internal consistency. See `.claude/agents/ndp/ndp-validator.md` for the full procedure.
 
+**Expected artifacts for existence check:**
+
+| Artifact | Path |
+|----------|------|
+| Specification | product/features/{feature-id}/specification/SPECIFICATION.md |
+| Architecture | product/features/{feature-id}/architecture/ARCHITECTURE.md |
+| Pseudocode Overview | product/features/{feature-id}/pseudocode/OVERVIEW.md |
+| Pseudocode Components | product/features/{feature-id}/pseudocode/{component}.md (1+ files) |
+| Test Plan Overview | product/features/{feature-id}/test-plan/OVERVIEW.md |
+| Test Plan Components | product/features/{feature-id}/test-plan/{component}.md (1+ files) |
+| Testbed | product/features/{feature-id}/testbed/ (if qualifying feature) |
+
 **Do NOT proceed to Phase 4 until the validator returns.** If the validator returns FAIL, fix issues before returning to the primary agent.
 
 ### Phase 4: Completion (primary agent)
@@ -352,8 +432,12 @@ PRIMARY AGENT:
 
 NDP-SCRUM-MASTER (internal):
   Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + memory_store seed
-  Step 3b:  TaskCreate (batch ALL) — in SAME message as 3a
-  Step 3c:  Task() spawn ALL planning agents (parallel, ONE message)
+  Step 3b:  TaskCreate (batch ALL with wave deps) — in SAME message as 3a
+  Step 3c:  Wave 1: Task(specification) + Task(ndp-architect) — parallel, ONE message
+            ...wait for Wave 1...
+            Wave 2: Task(ndp-pseudocode) + Task(ndp-tester) — parallel, ONE message
+            ...wait for Wave 2...
+            Wave 3 (Steps 3d-3h, sequential):
   Step 3d:  Task(ndp-vision-guardian) — alignment check
   Step 3e:  Store each ADR in AgentDB via agentdb_pattern_store (permanent)
   Step 3f:  Generate ACCEPTANCE-MAP.md + LAUNCH-PROMPT.md + IMPLEMENTATION-BRIEF.md

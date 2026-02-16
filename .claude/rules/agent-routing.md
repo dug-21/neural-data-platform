@@ -40,15 +40,16 @@ These are non-negotiable. No swarm runs without a coordinator and no swarm compl
 | `ndp-scrum-master` | coordinator | Reads protocol file, inits hive, spawns workers with Agent IDs, drift checks, GH Issue lifecycle |
 | `ndp-validator` | gate | Memory-driven discovery of agent completions, 4-tier impl validation OR 5-check plan validation, trust recording |
 
-### Planning (3 agents — planning swarms only)
+### Planning (4 agents — planning swarms only, wave-ordered)
 
-| Agent | Type | What It Produces |
-|-------|------|-----------------|
-| `ndp-architect` | specialist | ARCHITECTURE.md with individual ADRs, stored as AgentDB patterns |
-| `specification` | generic | SPECIFICATION.md, TASK-DECOMPOSITION.md |
-| `pseudocode` | generic | PSEUDOCODE.md |
+| Agent | Type | Wave | What It Produces |
+|-------|------|------|-----------------|
+| `ndp-architect` | specialist | 1 | ARCHITECTURE.md with ADRs + Integration Surface table, stored as AgentDB patterns |
+| `specification` | generic | 1 | SPECIFICATION.md, TASK-DECOMPOSITION.md |
+| `ndp-pseudocode` | specialist | 2 | pseudocode/OVERVIEW.md + per-component pseudocode files (reads Wave 1 output) |
+| `ndp-tester` | specialist | 2 | test-plan/OVERVIEW.md + per-component test plan files (reads Wave 1 output) |
 
-Plus `ndp-vision-guardian` for alignment check (spawned after planning agents complete).
+Wave 1 (spec + arch) runs first; Wave 2 (pseudocode + test plan) runs after Wave 1 completes. Plus `ndp-vision-guardian` for alignment check (Wave 3, after planning agents complete).
 
 ### Core Implementation (2 agents — most implementation swarms)
 
@@ -93,7 +94,7 @@ Plus `ndp-vision-guardian` for alignment check (spawned after planning agents co
 |-------|------|----------------|
 | `ndp-vision-guardian` | specialist | After planning agents complete, before generating brief |
 
-**Total: 16 agents** (2 coordination + 3 planning + 11 implementation/specialist)
+**Total: 17 agents** (2 coordination + 4 planning + 11 implementation/specialist)
 
 ---
 
@@ -105,11 +106,12 @@ Use these as starting points. Add/remove specialists based on the specific task.
 
 ```
 Coordinator:  ndp-scrum-master
-Workers:      ndp-architect, specification, pseudocode
-Post-wave:    ndp-vision-guardian (alignment), ndp-validator (5-check)
+Wave 1:       ndp-architect, specification              (parallel)
+Wave 2:       ndp-pseudocode, ndp-tester                (parallel, after Wave 1)
+Wave 3:       ndp-vision-guardian (alignment), ndp-validator (5-check)  (sequential)
 ```
 
-Produces: SPECIFICATION.md, TASK-DECOMPOSITION.md, ARCHITECTURE.md, PSEUDOCODE.md, ALIGNMENT-REPORT.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, IMPLEMENTATION-BRIEF.md, GH Issue.
+Produces: SPECIFICATION.md, TASK-DECOMPOSITION.md, ARCHITECTURE.md (with Integration Surface), pseudocode/OVERVIEW.md + per-component pseudocode, test-plan/OVERVIEW.md + per-component test plans, ALIGNMENT-REPORT.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, IMPLEMENTATION-BRIEF.md (with Component Map), GH Issue.
 
 ### Feature Implementation (General Rust)
 

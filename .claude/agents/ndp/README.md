@@ -18,9 +18,10 @@ Project-specific agents for the Neural Data Platform. These agents know the proj
 
 No swarm runs without these two.
 
-### Alignment (planning swarms only)
+### Planning (planning swarms only)
 | Agent | Scope | When to Use |
 |-------|-------|-------------|
+| `ndp-pseudocode` | Specialized | Per-component pseudocode with Rust/SQL/scripting knowledge, integration surface awareness |
 | `ndp-vision-guardian` | Broad | After planning agents complete, checks SPARC artifacts against product vision |
 
 ### Core Team
@@ -137,6 +138,7 @@ Task(subagent_type="ndp-parquet-dev", prompt="Your agent ID: dp-004-agent-2-bron
 ├── ndp-ml-engineer.md              # ML/ruv-FANN
 ├── ndp-grafana-dev.md              # Grafana dashboards
 ├── ndp-alert-engineer.md           # Alerts/triggers
+├── ndp-pseudocode.md              # Per-component pseudocode (planning phase)
 ├── ndp-vision-guardian.md          # Vision alignment reviewer
 └── ndp-validator.md               # Validation gate (planning + implementation)
 

@@ -79,9 +79,31 @@ git diff --name-only HEAD 2>/dev/null | grep -q 'deploy.sh' && bash -n deploy/pi
 
 Report: PASS/SKIP. Catches syntax errors in the deployment script.
 
-### 1e. Integration (qualifying changes only)
+### 1e. Integration Testbed
 
-Check which paths were modified, then use the trigger table:
+For features with a testbed directory at `product/features/{id}/testbed/`:
+
+```bash
+./tests/integration/run-testbed.sh feature --path product/features/{id}/testbed
+```
+
+With `--intelligence` flag if the feature involves the intelligence service:
+
+```bash
+./tests/integration/run-testbed.sh feature --path product/features/{id}/testbed --intelligence
+```
+
+If no feature testbed exists, fall back to smoke test:
+
+```bash
+./tests/integration/run-testbed.sh smoke
+```
+
+If the feature does not qualify for a testbed (library-only changes, no runtime artifact), skip Tier 1e.
+
+Report the testbed results (pass/fail counts from `assert_summary`) in the glass box report.
+
+**Legacy trigger table** (used when no testbed exists and smoke test is insufficient):
 
 | Changed Paths | Integration Path |
 |---------------|------------------|
@@ -330,7 +352,7 @@ Confidence: {score}/100
 | Test | PASS/FAIL | {X passed, Y failed (Z known flaky)} |
 | Anti-stub | PASS/WARN | {match count} |
 | deploy.sh | PASS/SKIP | {syntax check result} |
-| Integration | PASS/FAIL/SKIP | {path A/B result or "no qualifying changes"} |
+| Integration | PASS/FAIL/SKIP | {testbed pass/fail counts, smoke result, or "library-only, skipped"} |
 
 ## Tier 2: Process Adherence
 

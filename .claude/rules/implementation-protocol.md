@@ -74,9 +74,19 @@ Pattern search and brief reading happen BEFORE spawning the coordinator.
 
 Note which pattern IDs were returned for reflexion later.
 
-**Read the implementation brief from the GitHub Issue body** (`gh issue view <N> --json body`). The GH Issue is the single source of truth. Do NOT read full SPARC specification/pseudocode/architecture directories — the brief contains everything agents need.
+**Read the implementation brief from the GitHub Issue body** (`gh issue view <N> --json body`). The GH Issue is the single source of truth.
 
 If the GH Issue body does not contain a brief, check `product/features/{feature-id}/IMPLEMENTATION-BRIEF.md` as fallback. If neither exists, ask the user: "No implementation brief found. Should I read the full SPARC specs, or generate a brief first?"
+
+Worker agents SHOULD read their component-specific SPARC artifacts. The scrum master's spawn prompt provides the specific file paths. Workers read:
+1. IMPLEMENTATION-BRIEF.md — orchestration context, component map, constraints
+2. architecture/ARCHITECTURE.md — ADRs, integration surface findings
+3. pseudocode/OVERVIEW.md — how their component connects to others
+4. pseudocode/{component}.md — implementation detail for their specific component
+5. test-plan/OVERVIEW.md — overall test strategy
+6. test-plan/{component}.md — test expectations for their component
+
+The scrum master determines which component files each agent needs based on the Component Map in the brief.
 
 ### Phase 2: Delegation (primary agent)
 
@@ -171,9 +181,32 @@ Each agent prompt MUST include:
 2. **Level-1 summary** from compiled spec (retrieve from `memory_retrieve`)
 3. Task description (2-3 sentences)
 4. Specific file paths from the brief's "Files to Create/Modify" section
-5. Instructions to retrieve relevant ADRs before implementing — use `/get-pattern` (which calls `agentdb_pattern_search` internally)
+5. **Component-specific SPARC artifact paths** (see template below)
+6. Instructions to retrieve relevant ADRs before implementing — use `/get-pattern` (which calls `agentdb_pattern_search` internally)
 
 The Level-1 summary gives agents the objective (WHY), ADR list with pattern IDs (WHAT CONSTRAINS THEM), constraints, and scope exclusions (WHAT TO AVOID). Without it, agents have tunnel vision on their narrow subtask and drift from architectural decisions.
+
+**Agent spawn prompt template:**
+```
+Task(
+  subagent_type: "{ndp-agent-type}",
+  prompt: "You are implementing {subtask} for {feature-id}.
+    Your agent ID: {feature-id}-agent-N-{role}
+
+    Read these files before starting:
+    - product/features/{feature-id}/IMPLEMENTATION-BRIEF.md
+    - product/features/{feature-id}/architecture/ARCHITECTURE.md
+    - product/features/{feature-id}/pseudocode/OVERVIEW.md
+    - product/features/{feature-id}/pseudocode/{component}.md
+    - product/features/{feature-id}/test-plan/OVERVIEW.md
+    - product/features/{feature-id}/test-plan/{component}.md
+
+    YOUR TASK: {description}
+    Files to create/modify: {paths}"
+)
+```
+
+The scrum master populates `{component}` from the Component Map in the IMPLEMENTATION-BRIEF.md. If an agent's work spans multiple components, include ALL relevant component files.
 
 #### Step 3c.5: Per-Wave Acceptance Check
 
@@ -262,6 +295,23 @@ After ndp-scrum-master returns:
 
 ---
 
+## Feature Testbed Requirement
+
+For features that touch integration boundaries (SQL queries, container services, cross-layer data flow, database schemas), the implementation MUST include a feature testbed at `product/features/{id}/testbed/`. The testbed validates end-to-end behavior across integration surfaces before the feature is declared complete.
+
+**Qualifying features**: any feature that produces a runtime artifact interacting with external services (TimescaleDB, Docker containers, etcd, the Bronze/Silver/Gold data pipeline).
+
+**Exempt features**: library-only features (no runtime artifact, e.g., fe-003 ndp-intelligence crate) and documentation-only features.
+
+**Testbed execution**: the testbed must pass via:
+```bash
+./tests/integration/run-testbed.sh feature --path product/features/{id}/testbed
+```
+
+The scrum master is responsible for ensuring testbed validation runs after implementation agents complete (see Step 3e or spawn ndp-tester/ndp-validator). A feature with a failing testbed CANNOT pass the Exit Gate.
+
+---
+
 ## Quick Reference: Message Map
 
 ```
@@ -290,9 +340,10 @@ Each spawned implementation agent should receive:
 - Task description (2-3 sentences)
 - Namespace for claude-flow memory coordination
 - Specific file paths to read and modify
+- Component-specific SPARC artifact paths (brief, architecture, pseudocode/{component}, test-plan/{component})
 - Relevant AgentDB pattern IDs (not full pattern text)
 
-Do NOT paste: full spec documents, full source files, full cargo output, or implementation brief contents into agent prompts. Agents should read files themselves.
+Do NOT paste: full spec documents, full source files, full cargo output, or implementation brief contents into agent prompts. Agents read files themselves. The scrum master routes ONLY the component-specific paths each agent needs — not every pseudocode or test-plan file in the feature.
 
 ---
 

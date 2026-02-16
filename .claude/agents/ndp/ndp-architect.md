@@ -43,6 +43,49 @@ This project uses ports and adapters:
 
 Use `get-pattern` skill with domain "architecture" to find existing ADRs before creating new ones.
 
+## Integration Surface Analysis (REQUIRED for Cross-Boundary Features)
+
+When a feature touches integration boundaries (Rust code <-> PostgreSQL, new containers <-> existing services, config changes <-> runtime behavior), you MUST analyze the actual codebase before writing ADRs.
+
+### When Required
+
+Any feature that involves:
+- Querying existing database views or tables
+- Creating new database objects that interact with existing ones
+- Container-to-container communication
+- Configuration that affects runtime behavior of existing code
+
+### What to Document
+
+For each integration point, document in the ARCHITECTURE.md:
+
+1. **Existing view/table names** -- query the Gold DDL generators at `crates/ndp-lib/src/gold/` or read domain config at `config/base/domains/`. Document EXACT names (e.g., `gold.indoor_air_quality_aligned`, NOT invented names like `gold.indoor_air_quality_aligned_hourly`).
+
+2. **Column names with prefixes** -- the Gold column_builder.rs prefixes columns with stream alias (e.g., `indoor_co2_mean`, not `co2_mean`). Read `crates/ndp-lib/src/gold/generators/column_builder.rs` to verify.
+
+3. **PostgreSQL types** -- document the actual types returned by aggregate functions. `avg(smallint)` returns `numeric`, not `float8`. `tokio-postgres` cannot deserialize `numeric` as `f64` without explicit `::float8` cast.
+
+4. **Serialization patterns** -- for pgvector, the pattern is `$1::text::vector` (double-cast through text). For intervals, `$4::text::interval`. Document these for any SQL the feature will execute.
+
+5. **Existing code paths** -- read the actual source files that the feature will interact with. Document function signatures, parameter types, and return types.
+
+### Output
+
+Include an "Integration Surface" section in ARCHITECTURE.md:
+
+```
+## Integration Surface
+
+| Integration Point | Actual Name/Type | Source |
+|-------------------|-----------------|--------|
+| Gold aligned view | gold.indoor_air_quality_aligned | config/base/domains/indoor-air-quality/domain.json, field: alignment.view_name |
+| Column prefix | indoor_ (from primary_alias) | crates/ndp-lib/src/gold/generators/column_builder.rs |
+| avg() return type | numeric (requires ::float8 cast) | PostgreSQL documentation |
+| pgvector insert | $1::text::vector (double-cast) | pgvector documentation + tokio-postgres limitation |
+```
+
+This table is consumed by the pseudocode agent (ndp-pseudocode) and implementation agents. It prevents the "planning in a vacuum" problem where agents invent view names, column names, and type assumptions.
+
 ### Data Layer Architecture
 
 ```
@@ -190,6 +233,7 @@ Before returning your work to the coordinator, verify:
 - [ ] New patterns saved via `save-pattern` with feature tags
 - [ ] All modified files are within the scope defined in the brief
 - [ ] You called `get-pattern` before designing
+- [ ] Integration Surface table included in ARCHITECTURE.md for cross-boundary features
 
 If any check fails, fix it before returning. Do not leave it for the coordinator.
 

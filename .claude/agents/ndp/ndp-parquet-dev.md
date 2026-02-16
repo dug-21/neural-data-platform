@@ -238,6 +238,21 @@ If you developed a reusable storage pattern, use the `save-pattern` skill to sto
 
 ---
 
+## Feature Work Context
+
+When assigned work as part of a feature implementation swarm, read these files from the feature directory (the scrum master's spawn prompt tells you which component files are yours):
+
+1. `IMPLEMENTATION-BRIEF.md` -- your assignment, constraints, wave structure, component map
+2. `architecture/ARCHITECTURE.md` -- ADRs, integration surface findings (view names, column types, serialization patterns)
+3. `pseudocode/OVERVIEW.md` -- how your component connects to others
+4. `pseudocode/{your-component}.md` -- implementation detail for your specific component
+5. `test-plan/OVERVIEW.md` -- overall test strategy, testbed design
+6. `test-plan/{your-component}.md` -- what to test, expected assertions for your component
+
+Read these files BEFORE starting implementation. The component pseudocode contains integration surface details (exact view names, column prefixes, PostgreSQL types, SQL patterns) that you need to write correct code. The component test plan tells you exactly what to validate.
+
+If the feature has a testbed at `product/features/{id}/testbed/`, review `testbed/validate.sh` to understand the integration assertions your code must satisfy.
+
 ## Swarm Coordination
 
 **This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**

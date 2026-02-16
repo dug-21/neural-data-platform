@@ -256,6 +256,84 @@ Before marking tests complete:
 
 If you developed a reusable testing pattern, use the `save-pattern` skill to store it.
 
+## Per-Component Test Plans (Planning Phase)
+
+When part of a planning swarm (Wave 2), the tester produces per-component test plan files:
+
+```
+test-plan/
+  OVERVIEW.md           -- overall test strategy, integration surface, testbed design
+  {component-1}.md      -- component-specific test expectations
+  {component-2}.md
+```
+
+OVERVIEW.md (~50-100 lines) covers:
+- Overall test strategy (unit, integration, testbed)
+- Integration surface summary (from architecture's Integration Surface table)
+- Testbed design: which assertions, what data to inject, what to validate
+- Cross-component test dependencies
+
+Component files (~30-80 lines each) cover:
+- Unit test expectations for this component
+- Integration test expectations
+- Specific assertions (reference `tests/integration/lib/assert.sh` functions)
+- Expected column types, view names, container behavior (from architecture)
+
+## Integration Testbed Framework
+
+The NDP has a composable integration testbed at `tests/integration/`:
+- Entry point: `./tests/integration/run-testbed.sh <type> [options]`
+- Types: smoke (< 2 min), regression (~10 min), stress (30 min), feature (variable)
+- Assertion library: `tests/integration/lib/assert.sh`
+
+Available assertions:
+
+| Function | What it checks |
+|----------|---------------|
+| `assert_service_healthy <container>` | Docker health status = "healthy" |
+| `assert_etcd_key <key>` | etcd key exists with non-empty value |
+| `assert_silver_rows <table> <min>` | Silver table has >= N rows |
+| `assert_bronze_wal_exists <stream>` | WAL directory exists for stream |
+| `assert_embedding_exists <domain>` | Intelligence embeddings table has rows |
+| `assert_container_rss_below <container> <mb>` | Container RSS < threshold |
+| `assert_gold_object_exists <name>` | Gold table/materialized view exists |
+| `assert_summary` | Prints totals, returns exit 0 (all pass) or 1 (any fail) |
+
+## Feature Testbed Authoring
+
+When a feature qualifies for a testbed (touches SQL, containers, cross-layer data flow):
+
+```
+product/features/{id}/testbed/
+  manifest.json           -- what to deploy (same format as .deploy/releases/)
+  compose-override.yml    -- environment overrides for test timing
+  data/                   -- feature-specific MQTT fixtures or SQL seeds
+  validate.sh             -- feature-specific assertions (source lib/assert.sh)
+```
+
+Guidance for writing validate.sh:
+1. Source the assertion library: `source "${SCRIPT_DIR}/../../../../tests/integration/lib/assert.sh"`
+2. Check prerequisites first (service health, dependent data exists)
+3. Check feature-specific assertions (the integration points from architecture)
+4. End with `assert_summary`
+
+When a feature does NOT need a testbed: library-only changes (no runtime artifact), documentation, SPARC artifacts only.
+
+Run with: `./tests/integration/run-testbed.sh feature --path product/features/{id}/testbed [--intelligence]`
+
+## Feature Work Context
+
+When assigned work as part of a feature implementation swarm, read these files from the feature directory (the scrum master's spawn prompt tells you which component files are yours):
+
+1. `IMPLEMENTATION-BRIEF.md` -- your assignment, constraints, wave structure, component map
+2. `architecture/ARCHITECTURE.md` -- ADRs, integration surface findings
+3. `pseudocode/OVERVIEW.md` -- how your component connects to others
+4. `pseudocode/{your-component}.md` -- implementation detail for your component
+5. `test-plan/OVERVIEW.md` -- overall test strategy, testbed design
+6. `test-plan/{your-component}.md` -- what to test, expected assertions
+
+Read these files BEFORE starting implementation. The component pseudocode and test plan contain the integration surface details (view names, column types, SQL patterns, assertions) needed to write correct code and tests.
+
 ---
 
 ## Swarm Coordination

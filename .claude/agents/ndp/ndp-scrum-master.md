@@ -66,6 +66,50 @@ Every agent you spawn gets `Your agent ID: {feature}-agent-N-{role}` in its prom
 
 ---
 
+## Component Map Routing
+
+When constructing implementation agent spawn prompts, you route context surgically based on the IMPLEMENTATION-BRIEF.md Component Map. Do NOT dump every pseudocode and test-plan file into every agent's prompt. Route only what each agent needs.
+
+**Routing procedure:**
+
+1. Read the Component Map table from `product/features/{id}/IMPLEMENTATION-BRIEF.md`
+2. For each agent assignment, identify which component(s) the agent's work touches
+3. Include the relevant pseudocode and test-plan file paths in the agent's spawn prompt
+4. Always include for every agent:
+   - `product/features/{id}/IMPLEMENTATION-BRIEF.md`
+   - `product/features/{id}/architecture/ARCHITECTURE.md`
+   - `product/features/{id}/pseudocode/OVERVIEW.md`
+   - `product/features/{id}/test-plan/OVERVIEW.md`
+5. Add component-specific files per agent:
+   - `product/features/{id}/pseudocode/{component}.md`
+   - `product/features/{id}/test-plan/{component}.md`
+
+If an agent's work spans multiple components (e.g., ndp-intelligence + ndp-lib), include ALL relevant component files for that agent.
+
+The restriction "don't dump everything" applies to YOU as the scrum master. Route surgically based on the component map so each agent gets focused context rather than the entire specification tree.
+
+**Spawn prompt template:**
+```
+Task(
+  subagent_type: "ndp-rust-dev",
+  prompt: "You are implementing {subtask} for {feature-id}.
+    Your agent ID: {feature-id}-agent-N-{role}
+
+    Read these files before starting:
+    - product/features/{id}/IMPLEMENTATION-BRIEF.md (your assignment, wave, constraints)
+    - product/features/{id}/architecture/ARCHITECTURE.md (ADRs, integration surface)
+    - product/features/{id}/pseudocode/OVERVIEW.md (component connections)
+    - product/features/{id}/pseudocode/{component}.md (your component's pseudocode)
+    - product/features/{id}/test-plan/OVERVIEW.md (test strategy)
+    - product/features/{id}/test-plan/{component}.md (your component's test expectations)
+
+    YOUR TASK: {description}
+    Files to create/modify: {paths}"
+)
+```
+
+---
+
 ## GitHub Issue Lifecycle
 
 This is YOUR unique responsibility — no other file covers the full lifecycle.
@@ -99,8 +143,22 @@ Before returning "complete" to the primary agent, verify:
 - [ ] No TODOs or stubs in code
 - [ ] GH Issue updated
 - [ ] Pattern IDs distributed to agents (from primary agent's get-pattern)
+- [ ] Feature testbed passes (if applicable — see below)
 
 If anything fails the gate, report the specific failure — do not improvise fixes beyond the protocol's 2-iteration drift budget.
+
+### Testbed Validation
+
+For qualifying features (those that touch integration boundaries: SQL queries, container services, cross-layer data flow, database schemas), a testbed directory exists at `product/features/{id}/testbed/`. After implementation agents complete:
+
+1. Check if `product/features/{id}/testbed/` exists
+2. If it exists, spawn `ndp-tester` or `ndp-validator` to run the testbed:
+   ```bash
+   ./tests/integration/run-testbed.sh feature --path product/features/{id}/testbed
+   ```
+3. A failing testbed blocks the Exit Gate — the feature cannot be declared complete
+
+Library-only features (no runtime artifact) and documentation-only features are exempt from testbed requirements.
 
 ---
 
