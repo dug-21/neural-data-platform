@@ -32,18 +32,28 @@ mcp__claude-flow__memory_retrieve(
 
 This tells you the feature, goals, constraints, and what was planned.
 
-### Step 2: Search for Completed Agents
+### Step 2: List and Retrieve Completed Agents
+
+**IMPORTANT**: Use `memory_list` + `memory_retrieve`, NOT `memory_search`. Semantic search has poor recall for short JSON payloads (20-80% hit rate). Exact-key lookup is 100% reliable.
 
 ```
-mcp__claude-flow__memory_search(
-  query: "swarm complete deliverables",
+# Step 2a: List all keys in the coordination namespace
+mcp__claude-flow__memory_list(
   namespace: "coordination",
-  limit: 20
+  limit: 50
+)
+
+# Step 2b: Filter keys matching pattern swarm/*/complete
+# For each matching key, retrieve the value:
+mcp__claude-flow__memory_retrieve(
+  key: "swarm/<agent-id>/complete",
+  namespace: "coordination"
 )
 ```
 
-This finds all `swarm/*/complete` entries. Each entry contains:
+Each `swarm/*/complete` entry contains:
 - `status: "complete"` — agent finished
+- `feature: "<feature-id>"` — which feature this agent worked on
 - `deliverables: [...]` — files created/modified
 - `test_results: "..."` — any test output
 
@@ -247,8 +257,9 @@ When part of a swarm, you MUST report status through shared memory:
 Use ToolSearch to find "claude-flow memory" tools, then:
 mcp__claude-flow__memory_store(
   key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"validation-gate"}',
-  namespace: "coordination"
+  value: '{"status":"task-received","task":"validation-gate","feature":"<feature-id>"}',
+  namespace: "coordination",
+  upsert: true
 )
 ```
 
@@ -256,8 +267,9 @@ mcp__claude-flow__memory_store(
 ```
 mcp__claude-flow__memory_store(
   key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<tier completed>","checks_passed":<N>,"checks_failed":<M>}',
-  namespace: "coordination"
+  value: '{"current_step":"<tier completed>","checks_passed":<N>,"checks_failed":<M>,"feature":"<feature-id>"}',
+  namespace: "coordination",
+  upsert: true
 )
 ```
 
@@ -265,8 +277,9 @@ mcp__claude-flow__memory_store(
 ```
 mcp__claude-flow__memory_store(
   key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","result":"<PASS|WARN|FAIL>","report":"<path>","confidence":<score>}',
-  namespace: "coordination"
+  value: '{"status":"complete","result":"<PASS|WARN|FAIL>","report":"<path>","confidence":<score>,"feature":"<feature-id>"}',
+  namespace: "coordination",
+  upsert: true
 )
 ```
 

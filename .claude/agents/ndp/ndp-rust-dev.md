@@ -128,8 +128,9 @@ When part of a swarm, you MUST report status through shared memory:
 Use ToolSearch to find "claude-flow memory" tools, then:
 mcp__claude-flow__memory_store(
   key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"<brief task description>"}',
-  namespace: "coordination"
+  value: '{"status":"task-received","task":"<brief task description>","feature":"<feature-id>"}',
+  namespace: "coordination",
+  upsert: true
 )
 ```
 
@@ -137,8 +138,9 @@ mcp__claude-flow__memory_store(
 ```
 mcp__claude-flow__memory_store(
   key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>}',
-  namespace: "coordination"
+  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>,"feature":"<feature-id>"}',
+  namespace: "coordination",
+  upsert: true
 )
 ```
 
@@ -146,8 +148,9 @@ mcp__claude-flow__memory_store(
 ```
 mcp__claude-flow__memory_store(
   key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>"}',
-  namespace: "coordination"
+  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>","feature":"<feature-id>"}',
+  namespace: "coordination",
+  upsert: true
 )
 ```
 

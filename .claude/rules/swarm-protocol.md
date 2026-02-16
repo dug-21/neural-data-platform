@@ -53,14 +53,19 @@ Without `hive-mind_join`, agents are invisible to `hive-mind_status`. Without `a
 
 Agents use `memory_store`/`memory_retrieve` with `namespace: "coordination"` for all swarm state. Key convention: `swarm/{agent-id}/{status|progress|complete}` for per-agent state, `swarm/shared/{feature}-context` for shared context. Storage is SQLite + HNSW vectors.
 
+**Memory conventions (IMPORTANT):**
+- All `memory_store` calls MUST use `upsert: true` to prevent UNIQUE constraint failures on retries
+- All memory values MUST include `"feature":"<feature-id>"` in the JSON payload (not just in the key) — this improves semantic search recall for discovery
+- Discovery uses `memory_list` + `memory_retrieve` (exact-key, 100% reliable), NOT `memory_search` (semantic, 20-80% recall for JSON payloads)
+
 Do NOT use `claude-flow swarm init` or `claude-flow agent spawn` CLI commands — they are cosmetic. Use MCP tools for coordination and the Task tool for agent processes.
 
 ### Agent ID = Swarm Activation
 
 All NDP agent definitions (except ndp-scrum-master) contain a `## Swarm Coordination` section. This section is **dormant** unless the agent's spawn prompt includes `Your agent ID: <id>`. When present, the agent MUST:
-- Write `swarm/{id}/status` on start
-- Write `swarm/{id}/progress` after each major step
-- Write `swarm/{id}/complete` before returning
+- Write `swarm/{id}/status` on start (with `upsert: true`)
+- Write `swarm/{id}/progress` after each major step (with `upsert: true`)
+- Write `swarm/{id}/complete` before returning (with `upsert: true`)
 - Read `swarm/shared/{feature}-context` for shared context
 
 The coordinator's only job is to **pass the agent ID**. The agent definition handles the rest. This means the coordinator prompt can be minimal — no need to repeat memory instructions.
