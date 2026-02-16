@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-02-16
+
+Fix `PgVectorEngine::search()` panic: `block_on` called from within the tokio async runtime. This was a latent bug hidden by the v1.2.7 serialization fix — search was never reached before because no embeddings were stored.
+
+### Fixed
+
+- **`crates/ndp-intelligence/src/similarity/pgvector.rs`** — wrap `handle.block_on()` with `tokio::task::block_in_place()` in both `search()` and `count()` methods. The `SimilarityEngine` trait is synchronous, but these methods are called from `IntelligenceService::run_cycle()` which is async. `block_in_place` tells tokio to move async tasks off the current thread before blocking, preventing the "Cannot start a runtime from within a runtime" panic
+
+### Technical Notes
+
+- Requires multi-threaded tokio runtime (`#[tokio::main]`), which ndp-intelligence-app already uses
+- GitHub Issue: #18
+
 ## [1.2.7] - 2026-02-15
 
 Fix pgvector parameter serialization: `tokio-postgres` cannot serialize a Rust `String` to the pgvector `vector` OID. Double-cast `::text::vector` forces PostgreSQL to accept a text parameter and cast server-side.
@@ -992,7 +1005,8 @@ First formal release establishing declarative deployment and release methodology
 
 ---
 
-[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.2.7...HEAD
+[Unreleased]: https://github.com/dug-21/neural-data-platform/compare/v1.2.8...HEAD
+[1.2.8]: https://github.com/dug-21/neural-data-platform/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/dug-21/neural-data-platform/compare/v1.2.6...v1.2.7
 [1.1.26]: https://github.com/dug-21/neural-data-platform/compare/v1.1.25...v1.1.26
 [1.1.25]: https://github.com/dug-21/neural-data-platform/compare/v1.1.24...v1.1.25

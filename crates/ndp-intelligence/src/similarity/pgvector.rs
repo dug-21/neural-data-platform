@@ -46,37 +46,39 @@ impl SimilarityEngine for PgVectorEngine {
         }
 
         let handle = tokio::runtime::Handle::current();
-        handle.block_on(async {
-            let client = self
-                .pool
-                .get()
-                .await
-                .map_err(|e| SimilarityError::Backend(format!("Pool error: {}", e)))?;
+        tokio::task::block_in_place(|| {
+            handle.block_on(async {
+                let client = self
+                    .pool
+                    .get()
+                    .await
+                    .map_err(|e| SimilarityError::Backend(format!("Pool error: {}", e)))?;
 
-            let vector_str = format_pgvector(&query.vector);
-            let rows = client
-                .query(
-                    "SELECT bucket::text AS id,
-                            1.0 - (embedding <=> $1::text::vector) AS similarity,
-                            metadata
-                     FROM gold.metric_embeddings
-                     WHERE domain_id = $2
-                     ORDER BY embedding <=> $1::text::vector
-                     LIMIT $3",
-                    &[&vector_str, &self.domain_id, &(query.k as i64)],
-                )
-                .await
-                .map_err(|e| SimilarityError::Backend(format!("Query error: {}", e)))?;
+                let vector_str = format_pgvector(&query.vector);
+                let rows = client
+                    .query(
+                        "SELECT bucket::text AS id,
+                                1.0 - (embedding <=> $1::text::vector) AS similarity,
+                                metadata
+                         FROM gold.metric_embeddings
+                         WHERE domain_id = $2
+                         ORDER BY embedding <=> $1::text::vector
+                         LIMIT $3",
+                        &[&vector_str, &self.domain_id, &(query.k as i64)],
+                    )
+                    .await
+                    .map_err(|e| SimilarityError::Backend(format!("Query error: {}", e)))?;
 
-            Ok(rows
-                .iter()
-                .map(|row| SearchResult {
-                    id: row.get("id"),
-                    similarity: row.get("similarity"),
-                    metadata: row.get("metadata"),
-                })
-                .filter(|r| r.similarity >= query.min_similarity)
-                .collect())
+                Ok(rows
+                    .iter()
+                    .map(|row| SearchResult {
+                        id: row.get("id"),
+                        similarity: row.get("similarity"),
+                        metadata: row.get("metadata"),
+                    })
+                    .filter(|r| r.similarity >= query.min_similarity)
+                    .collect())
+            })
         })
     }
 
@@ -85,19 +87,21 @@ impl SimilarityEngine for PgVectorEngine {
             Ok(h) => h,
             Err(_) => return 0,
         };
-        handle
-            .block_on(async {
-                let client = self.pool.get().await.ok()?;
-                let row = client
-                    .query_one(
-                        "SELECT count(*)::bigint FROM gold.metric_embeddings WHERE domain_id = $1",
-                        &[&self.domain_id],
-                    )
-                    .await
-                    .ok()?;
-                Some(row.get::<_, i64>(0) as usize)
-            })
-            .unwrap_or(0)
+        tokio::task::block_in_place(|| {
+            handle
+                .block_on(async {
+                    let client = self.pool.get().await.ok()?;
+                    let row = client
+                        .query_one(
+                            "SELECT count(*)::bigint FROM gold.metric_embeddings WHERE domain_id = $1",
+                            &[&self.domain_id],
+                        )
+                        .await
+                        .ok()?;
+                    Some(row.get::<_, i64>(0) as usize)
+                })
+                .unwrap_or(0)
+        })
     }
 }
 
