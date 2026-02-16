@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-02-16
+
+Fix column name mismatch between Gold aligned view and intelligence layer. The aligned view prefixes all columns with the stream alias (e.g., `indoor_co2_mean`) but the intelligence layer used unprefixed names (`co2_mean`). This caused prediction SQL to fail with "column does not exist" and embeddings to silently produce zero-filled direct fields.
+
+### Fixed
+
+- **`crates/ndp-intelligence/src/service.rs`** — `sql_row_to_gold_row` now strips the primary stream alias prefix from column names, so GoldRow fields use logical names (`pm25_mean`) matching the embedding config. Previously all direct embedding fields resolved to zero via null_strategy because the embedder looked for `pm25_mean` but found `indoor_pm25_mean`
+- **`crates/ndp-intelligence/src/predictions/mod.rs`** — `PredictionEngine` now prepends the primary stream alias when constructing SQL queries against the aligned view, so `SELECT indoor_co2_mean FROM gold.indoor_air_quality_aligned` instead of `SELECT co2_mean` (which doesn't exist)
+- **`crates/ndp-intelligence/src/predictions/outcome.rs`** — `OutcomeTracker` applies the same column prefix for outcome evaluation queries
+- **`apps/ndp-intelligence-app/src/config.rs`** — `load_intelligence_config` now extracts the primary stream alias from the domain config's `streams` array and threads it through service construction
+
+### Technical Notes
+
+- Root cause: the Gold aligned view generator (`column_builder.rs`) creates columns as `{alias}_{column}` (e.g., `indoor_pm25_mean`), but the intelligence embedding config and objectives use logical names without the alias prefix
+- The "db error" crash appeared in v1.2.9 because that was the first version where predictions were actually generated (v1.2.7 fixed serialization, v1.2.8 fixed block_on, v1.2.9 fixed ID parsing)
+- Embedding quality was silently degraded since v1.2.0: all direct field values (pm25, co2, temperature, humidity) were zero, leaving only temporal features (hour_sin, hour_cos, is_weekend) with real values. After this fix, similarity search will produce meaningful results
+- GitHub Issue: #18
+
 ## [1.2.9] - 2026-02-16
 
 Fix search result ID format mismatch: PgVectorEngine search returned `bucket::text` (e.g., `2026-01-18 17:00:00+00`) but `parse_bucket_from_id()` expects a Unix epoch integer string. All neighbors were skipped with "invalid digit found in string", producing 0 predictions.

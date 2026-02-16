@@ -18,6 +18,8 @@ pub struct OutcomeTracker {
     db_pool: Arc<Pool>,
     storage: Arc<dyn StorageBackend>,
     objective_metrics: Vec<ObjectiveMetric>,
+    /// Primary stream alias used to prefix column names in SQL queries.
+    column_prefix: String,
 }
 
 impl OutcomeTracker {
@@ -26,11 +28,13 @@ impl OutcomeTracker {
         db_pool: Arc<Pool>,
         storage: Arc<dyn StorageBackend>,
         objective_metrics: Vec<ObjectiveMetric>,
+        column_prefix: String,
     ) -> Self {
         Self {
             db_pool,
             storage,
             objective_metrics,
+            column_prefix,
         }
     }
 
@@ -64,9 +68,14 @@ impl OutcomeTracker {
                 continue;
             }
 
+            let view_col = if self.column_prefix.is_empty() {
+                prediction.metric.clone()
+            } else {
+                format!("{}_{}", self.column_prefix, prediction.metric)
+            };
             let sql = format!(
                 "SELECT {} FROM {} WHERE bucket = $1 LIMIT 1",
-                super::sanitize_field_name(&prediction.metric),
+                super::sanitize_field_name(&view_col),
                 view_name
             );
             let row = client

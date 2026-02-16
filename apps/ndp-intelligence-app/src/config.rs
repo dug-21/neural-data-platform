@@ -18,6 +18,17 @@ pub struct DomainConfig {
     pub intelligence: Option<IntelligenceConfig>,
     #[serde(default)]
     pub objectives: Vec<DomainObjective>,
+    #[serde(default)]
+    pub streams: Vec<DomainStream>,
+}
+
+/// A stream reference in the domain config.
+#[derive(Debug, serde::Deserialize)]
+pub struct DomainStream {
+    #[serde(default)]
+    pub alias: String,
+    #[serde(default)]
+    pub role: String,
 }
 
 /// An objective from the domain config.
@@ -47,7 +58,7 @@ pub struct ObjectiveTarget {
 /// from the domain's objectives array.
 pub async fn load_intelligence_config(
     app_config: &AppConfig,
-) -> Result<(IntelligenceConfig, Vec<ObjectiveMetric>), IntelligenceError> {
+) -> Result<(IntelligenceConfig, Vec<ObjectiveMetric>, String), IntelligenceError> {
     let endpoints: Vec<&str> = app_config.etcd_endpoints.iter().map(|s| s.as_str()).collect();
     let config_client = config_client::ConfigClient::new(&endpoints)
         .await
@@ -76,13 +87,26 @@ pub async fn load_intelligence_config(
 
     // Convert domain objectives to ObjectiveMetrics
     let objectives = convert_objectives(&domain_config.objectives);
+
+    // Determine the primary stream alias for column name mapping.
+    // The Gold aligned view prefixes all columns with the stream alias
+    // (e.g., indoor_pm25_mean), but the intelligence layer uses logical
+    // names (pm25_mean). The primary alias bridges this gap.
+    let primary_alias = domain_config
+        .streams
+        .iter()
+        .find(|s| s.role == "primary")
+        .map(|s| s.alias.clone())
+        .unwrap_or_default();
+
     info!(
-        "Loaded intelligence config from etcd: domain={}, {} objectives",
+        "Loaded intelligence config from etcd: domain={}, {} objectives, primary_alias='{}'",
         app_config.domain_id,
-        objectives.len()
+        objectives.len(),
+        primary_alias
     );
 
-    Ok((intel_config, objectives))
+    Ok((intel_config, objectives, primary_alias))
 }
 
 /// Convert domain objectives to ObjectiveMetric format for PredictionEngine.

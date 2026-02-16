@@ -72,11 +72,19 @@ pub struct PredictionEngine {
     horizons: Vec<Duration>,
     min_confidence: f64,
     objective_metrics: Vec<ObjectiveMetric>,
+    /// Primary stream alias used to prefix column names in SQL queries.
+    /// The Gold aligned view uses `{alias}_{column}` naming.
+    column_prefix: String,
 }
 
 impl PredictionEngine {
     /// Create a new PredictionEngine from configuration.
-    pub fn new(db_pool: Arc<Pool>, config: &IntelligenceConfig, objectives: &[ObjectiveMetric]) -> Self {
+    pub fn new(
+        db_pool: Arc<Pool>,
+        config: &IntelligenceConfig,
+        objectives: &[ObjectiveMetric],
+        column_prefix: String,
+    ) -> Self {
         let horizons = config
             .search
             .prediction_horizons
@@ -88,6 +96,17 @@ impl PredictionEngine {
             horizons,
             min_confidence: 0.5,
             objective_metrics: objectives.to_vec(),
+            column_prefix,
+        }
+    }
+
+    /// Map a logical field name to the view column name by prepending the
+    /// primary stream alias. E.g., "co2_mean" → "indoor_co2_mean".
+    fn view_column_name(&self, field: &str) -> String {
+        if self.column_prefix.is_empty() {
+            field.to_string()
+        } else {
+            format!("{}_{}", self.column_prefix, field)
         }
     }
 
@@ -129,9 +148,10 @@ impl PredictionEngine {
                     };
                     let future_bucket = neighbor_bucket + *horizon;
 
+                    let view_col = self.view_column_name(&objective.field);
                     let sql = format!(
                         "SELECT {} FROM {} WHERE bucket = $1 LIMIT 1",
-                        sanitize_field_name(&objective.field),
+                        sanitize_field_name(&view_col),
                         view_name
                     );
                     let row = client

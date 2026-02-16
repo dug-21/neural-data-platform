@@ -130,6 +130,12 @@ pub struct IntelligenceService {
     observation_count: usize,
     warmup_threshold: usize,
     backfill_mode: bool,
+    /// Primary stream alias for column name mapping.
+    ///
+    /// The Gold aligned view prefixes all columns with the stream alias
+    /// (e.g., `indoor_pm25_mean`). This prefix is stripped in `sql_row_to_gold_row`
+    /// so GoldRow fields use logical names matching the embedding config.
+    primary_alias: String,
 }
 
 impl IntelligenceService {
@@ -146,6 +152,7 @@ impl IntelligenceService {
         objectives: Vec<ObjectiveMetric>,
         pool: Arc<Pool>,
         storage: Arc<dyn StorageBackend>,
+        primary_alias: String,
     ) -> Result<Self> {
         // Build embedder from config
         let mut embedder = MetricEmbedder::from_config(&intelligence_config.embedding)
@@ -187,7 +194,7 @@ impl IntelligenceService {
             })?;
 
         for row in &rows {
-            let gold_row = sql_row_to_gold_row(row, &app_config.domain_id);
+            let gold_row = sql_row_to_gold_row(row, &app_config.domain_id, &primary_alias);
             embedder.observe(&gold_row);
         }
 
@@ -203,11 +210,12 @@ impl IntelligenceService {
         .map_err(IntelligenceError::Similarity)?;
 
         // Create prediction engine
-        let prediction_engine = PredictionEngine::new(pool.clone(), intelligence_config, &objectives);
+        let prediction_engine =
+            PredictionEngine::new(pool.clone(), intelligence_config, &objectives, primary_alias.clone());
 
         // Create outcome tracker
         let outcome_tracker =
-            OutcomeTracker::new(pool.clone(), storage.clone(), objectives);
+            OutcomeTracker::new(pool.clone(), storage.clone(), objectives, primary_alias.clone());
 
         // Find last processed bucket
         let last_row = client
@@ -237,6 +245,7 @@ impl IntelligenceService {
             domain_id: app_config.domain_id.clone(),
             search_config: intelligence_config.search.clone(),
             last_processed,
+            primary_alias,
             observation_count,
             warmup_threshold: app_config.warmup_threshold,
             backfill_mode: false,
@@ -301,7 +310,7 @@ impl IntelligenceService {
         }
 
         for row in &rows {
-            let gold_row = sql_row_to_gold_row(row, &self.domain_id);
+            let gold_row = sql_row_to_gold_row(row, &self.domain_id, &self.primary_alias);
             summary.rows_observed += 1;
 
             // 2. WARMUP: observe for running stats
@@ -432,16 +441,42 @@ impl IntelligenceService {
 }
 
 /// Convert a tokio_postgres::Row from the Gold aligned view to a GoldRow.
-pub fn sql_row_to_gold_row(row: &tokio_postgres::Row, domain_id: &str) -> GoldRow {
+/// Convert a tokio_postgres Row into a GoldRow, stripping the primary stream
+/// alias prefix from column names.
+///
+/// The Gold aligned view prefixes all columns with the stream alias
+/// (e.g., `indoor_pm25_mean` for the "indoor" alias). The intelligence layer
+/// uses logical field names (`pm25_mean`) matching the embedding config and
+/// objective definitions. This function normalizes by stripping the primary
+/// alias prefix so downstream consumers find the expected field names.
+///
+/// Only the primary stream's prefix is stripped; other streams' columns
+/// (e.g., `outdoor_pm25_mean`) are kept as-is.
+pub fn sql_row_to_gold_row(
+    row: &tokio_postgres::Row,
+    domain_id: &str,
+    primary_alias: &str,
+) -> GoldRow {
     let bucket: DateTime<Utc> = row.get("bucket");
     let mut fields = BTreeMap::new();
+    let prefix = if primary_alias.is_empty() {
+        String::new()
+    } else {
+        format!("{}_", primary_alias)
+    };
     for (idx, column) in row.columns().iter().enumerate() {
         if column.name() == "bucket" {
             continue;
         }
         // Try to read as f64
         let value: Option<f64> = row.try_get(idx).ok();
-        fields.insert(column.name().to_string(), value);
+        let name = column.name();
+        let key = if !prefix.is_empty() && name.starts_with(&prefix) {
+            name[prefix.len()..].to_string()
+        } else {
+            name.to_string()
+        };
+        fields.insert(key, value);
     }
     GoldRow {
         bucket,

@@ -116,7 +116,7 @@ async fn run_daemon() -> Result<(), ndp_intelligence::error::IntelligenceError> 
     let pool = create_pool(&app_config)?;
 
     // Load domain config from etcd via config-client
-    let (intel_config, objectives) = load_intelligence_config(&app_config).await?;
+    let (intel_config, objectives, primary_alias) = load_intelligence_config(&app_config).await?;
 
     // Create storage backend (dedicated connection, not pooled)
     let storage_client = create_storage_client(&app_config.database_url).await?;
@@ -126,7 +126,7 @@ async fn run_daemon() -> Result<(), ndp_intelligence::error::IntelligenceError> 
 
     // Create intelligence service
     let mut service = IntelligenceService::new(
-        &app_config, &intel_config, objectives, pool.clone(), storage,
+        &app_config, &intel_config, objectives, pool.clone(), storage, primary_alias,
     )
     .await?;
 
@@ -194,7 +194,7 @@ async fn run_one_shot(domain_override: Option<String>) -> Result<(), ndp_intelli
     }
 
     let pool = create_pool(&app_config)?;
-    let (intel_config, objectives) = load_intelligence_config(&app_config).await?;
+    let (intel_config, objectives, primary_alias) = load_intelligence_config(&app_config).await?;
 
     let storage_client = create_storage_client(&app_config.database_url).await?;
     let storage = Arc::new(ndp_intelligence::storage::postgres::PostgresStorage::new(
@@ -202,7 +202,7 @@ async fn run_one_shot(domain_override: Option<String>) -> Result<(), ndp_intelli
     ));
 
     let mut service = IntelligenceService::new(
-        &app_config, &intel_config, objectives, pool, storage,
+        &app_config, &intel_config, objectives, pool, storage, primary_alias,
     )
     .await?;
 
@@ -222,7 +222,7 @@ async fn run_backfill(
     }
 
     let pool = create_pool(&app_config)?;
-    let (intel_config, objectives) = load_intelligence_config(&app_config).await?;
+    let (intel_config, objectives, primary_alias) = load_intelligence_config(&app_config).await?;
 
     let storage_client = create_storage_client(&app_config.database_url).await?;
     let storage = Arc::new(ndp_intelligence::storage::postgres::PostgresStorage::new(
@@ -230,7 +230,7 @@ async fn run_backfill(
     ));
 
     let mut service = IntelligenceService::new(
-        &app_config, &intel_config, objectives, pool, storage,
+        &app_config, &intel_config, objectives, pool, storage, primary_alias,
     )
     .await?;
     service.set_backfill_mode(true);
