@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.13] - 2026-02-16
+
+Fix prediction storage serialization: `$4::interval` cast caused tokio-postgres to infer the parameter type as `interval`, but the Rust `String` type doesn't implement `ToSql` for `interval`. Changed to `$4::text::interval` — same double-cast pattern as the pgvector fix in v1.2.7.
+
+### Fixed
+
+- **`crates/ndp-intelligence/src/storage/postgres.rs`** — `store_prediction` horizon parameter changed from `$4::interval` to `$4::text::interval`
+
+### Technical Notes
+
+- Same root cause as v1.2.7's `$3::text::vector` fix: explicit casts cause tokio-postgres to infer the parameter type from the cast target, failing serialization when `String` doesn't implement `ToSql` for that type
+- The `::text::interval` double cast tells tokio-postgres the wire type is `text` (serializable), then PostgreSQL converts `text → interval` server-side
+- This is the first time `store_prediction` was exercised with valid predictions — earlier versions failed at search (v1.2.9), column lookup (v1.2.10), or type deserialization (v1.2.11) before reaching the store step
+- GitHub Issue: #18
+
 ## [1.2.12] - 2026-02-16
 
 Fix Gold validator resolving field names from raw Bronze `fields[].name` instead of Silver `silver_etl.field_mappings[].target_column`. Gold aggregates reference Silver column names by design, so the validator must check against the same names. This caused 9 false `INVALID_GOLD_FIELD` errors when running `ndp gold sync --stream air-quality`.

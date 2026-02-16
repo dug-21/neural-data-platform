@@ -132,7 +132,7 @@ impl StorageBackend for PostgresStorage {
                 "INSERT INTO gold.predictions
                  (bucket, domain_id, metric, horizon, predicted_value, predicted_breach,
                   confidence, k_neighbors, k_supporting)
-                 VALUES ($1, $2, $3, $4::interval, $5, $6, $7, $8, $9)
+                 VALUES ($1, $2, $3, $4::text::interval, $5, $6, $7, $8, $9)
                  RETURNING id",
                 &[
                     &prediction.bucket,
