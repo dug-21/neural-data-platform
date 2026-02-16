@@ -310,7 +310,7 @@ generate_create_table_ddl() {
     echo "    -- Standard metadata columns"
     echo "    dq_flags TEXT[] DEFAULT '{}',"
     echo "    _bronze_id BIGINT,"
-    echo "    _ingested_at TIMESTAMPTZ DEFAULT NOW(),"
+    echo "    ingestion_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),"
     echo "    -- Primary key for deduplication"
     echo "    PRIMARY KEY (${timestamp_col}, ndp_id)"
     echo ");"
@@ -340,7 +340,7 @@ generate_indexes_ddl() {
     echo ""
     echo "-- Index on ingestion time for incremental processing"
     echo "CREATE INDEX IF NOT EXISTS idx_${table_name}_ingested"
-    echo "    ON ${target_table} (_ingested_at DESC);"
+    echo "    ON ${target_table} (ingestion_time DESC);"
     echo ""
 }
 
@@ -838,7 +838,7 @@ Standard Columns (added to all Silver tables):
   - ndp_id
   - dq_flags (TEXT[])
   - _bronze_id
-  - _ingested_at
+  - ingestion_time
 HELP_EOF
             ;;
         *)

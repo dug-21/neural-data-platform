@@ -1,0 +1,10 @@
+{"wifi":-45,"serialno":"test-sensor-001","rco2":650,"pm02":12,"pm01":8,"pm10":18,"atmp":22.5,"rhum":55,"tvocIndex":120,"noxIndex":15,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-52,"serialno":"test-sensor-001","rco2":720,"pm02":18,"pm01":11,"pm10":25,"atmp":23.1,"rhum":52,"tvocIndex":135,"noxIndex":18,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-48,"serialno":"test-sensor-001","rco2":580,"pm02":8,"pm01":5,"pm10":12,"atmp":21.8,"rhum":58,"tvocIndex":95,"noxIndex":12,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-55,"serialno":"test-sensor-001","rco2":890,"pm02":25,"pm01":16,"pm10":35,"atmp":24.0,"rhum":48,"tvocIndex":180,"noxIndex":22,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-42,"serialno":"test-sensor-001","rco2":510,"pm02":5,"pm01":3,"pm10":8,"atmp":22.0,"rhum":60,"tvocIndex":85,"noxIndex":10,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-60,"serialno":"test-sensor-001","rco2":1050,"pm02":32,"pm01":20,"pm10":45,"atmp":23.5,"rhum":45,"tvocIndex":220,"noxIndex":28,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-38,"serialno":"test-sensor-001","rco2":480,"pm02":3,"pm01":2,"pm10":5,"atmp":21.2,"rhum":62,"tvocIndex":75,"noxIndex":8,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-50,"serialno":"test-sensor-001","rco2":750,"pm02":15,"pm01":10,"pm10":22,"atmp":22.8,"rhum":54,"tvocIndex":140,"noxIndex":17,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-47,"serialno":"test-sensor-001","rco2":620,"pm02":10,"pm01":7,"pm10":15,"atmp":22.2,"rhum":57,"tvocIndex":110,"noxIndex":14,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}
+{"wifi":-53,"serialno":"test-sensor-001","rco2":830,"pm02":22,"pm01":14,"pm10":30,"atmp":23.8,"rhum":50,"tvocIndex":165,"noxIndex":20,"boot":42,"firmware":"3.1.4","model":"I-9PSL"}

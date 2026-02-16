@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "description": "Stress testbed: sustained load for RSS monitoring (minimal surface, high throughput)",
+  "changes": [
+    {
+      "type": "stream",
+      "id": "air-quality",
+      "action": "update"
+    },
+    {
+      "type": "silver-table",
+      "stream_id": "air-quality",
+      "action": "sync"
+    },
+    {
+      "type": "dictionary",
+      "action": "sync"
+    }
+  ]
+}

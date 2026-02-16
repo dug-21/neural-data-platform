@@ -1,0 +1,7 @@
+# Regression testbed overrides
+# Enables intelligence profile, reduces warmup for testability
+services:
+  ndp-intelligence:
+    environment:
+      - INTELLIGENCE_WARMUP_THRESHOLD=5
+      - INTELLIGENCE_POLL_INTERVAL_SECS=30

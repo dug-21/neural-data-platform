@@ -1,0 +1,10 @@
+# Stress testbed overrides
+# Longer timeouts, higher resource limits for sustained load testing
+services:
+  air-quality-app:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      - RUST_LOG=info

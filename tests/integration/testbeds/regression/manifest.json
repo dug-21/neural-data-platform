@@ -1,0 +1,69 @@
+{
+  "$schema": "../../../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "description": "Regression testbed: full layer coverage (all streams, Silver, Gold, domains, intelligence)",
+  "changes": [
+    {"type": "container", "target": "air-quality-app", "action": "build", "no_cache": true},
+
+    {"type": "tool", "id": "ndp-cli", "action": "build"},
+    {"type": "tool", "id": "ndp-validate", "action": "build"},
+    {"type": "tool", "id": "ndp-gold-ddl", "action": "build"},
+
+    {
+      "type": "stream",
+      "id": "air-quality",
+      "action": "update"
+    },
+    {
+      "type": "stream",
+      "id": "outdoor-weather",
+      "action": "update"
+    },
+    {
+      "type": "stream",
+      "id": "outdoor-air-quality",
+      "action": "update"
+    },
+    {
+      "type": "stream",
+      "id": "home-assistant-state",
+      "action": "update"
+    },
+    {
+      "type": "silver-table",
+      "stream_id": "air-quality",
+      "action": "sync"
+    },
+    {
+      "type": "silver-table",
+      "stream_id": "outdoor-weather",
+      "action": "sync"
+    },
+    {
+      "type": "silver-table",
+      "stream_id": "outdoor-air-quality",
+      "action": "sync"
+    },
+    {
+      "type": "silver-table",
+      "stream_id": "home-assistant-state",
+      "action": "sync"
+    },
+    {"type": "gold-tables", "stream_id": "air-quality", "action": "sync"},
+    {"type": "gold-tables", "stream_id": "outdoor-weather", "action": "sync"},
+    {"type": "gold-tables", "stream_id": "outdoor-air-quality", "action": "sync"},
+    {"type": "gold-tables", "stream_id": "home-assistant-state", "action": "sync"},
+
+    {
+      "type": "dictionary",
+      "action": "sync"
+    },
+    {
+      "type": "domain",
+      "domain_id": "indoor-air-quality",
+      "action": "sync"
+    },
+
+    {"type": "container", "target": "air-quality-app", "action": "restart"}
+  ]
+}

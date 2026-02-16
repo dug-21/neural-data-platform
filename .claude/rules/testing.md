@@ -30,6 +30,26 @@ A fully functioning integration stack exists. All SPARC Refinement and Completio
 | MCP server | 9100 | Management Control Plane |
 | Grafana | 3000 | Dashboards |
 
+## Integration Testbed Framework (ops-007)
+
+End-to-end pipeline validation via composable testbeds. See `tests/integration/README.md` for full docs.
+
+```bash
+# Smoke test (< 2 min): clean slate -> inject 10 MQTT messages -> validate Silver
+./tests/integration/run-testbed.sh smoke
+
+# With intelligence daemon
+./tests/integration/run-testbed.sh smoke --intelligence
+
+# Stress test (30 min): sustained load, RSS monitoring
+./tests/integration/run-testbed.sh stress --timeout 1800 --count 18000 --rate 10
+
+# Feature-specific testbed
+./tests/integration/run-testbed.sh feature --path product/features/fe-005/testbed
+```
+
+Feature developers: add a testbed at `product/features/{id}/testbed/` (manifest.json + validate.sh). It uses the same `deploy.sh apply` pipeline as production.
+
 ## When to use integration env
 
 - All SPARC Refinement phases (TDD against live stack)
@@ -37,6 +57,7 @@ A fully functioning integration stack exists. All SPARC Refinement and Completio
 - Any schema change (verify DDL against TimescaleDB)
 - Any ETL change (verify data flow end-to-end)
 - Any config change that affects runtime behavior
+- **After any deploy.sh change** (run `./tests/integration/run-testbed.sh smoke`)
 
 ## Testing Conventions
 

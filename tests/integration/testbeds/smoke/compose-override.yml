@@ -1,0 +1,7 @@
+# Smoke testbed overrides
+# Reduces thresholds for faster validation in test environment
+services:
+  ndp-intelligence:
+    environment:
+      - INTELLIGENCE_WARMUP_THRESHOLD=5
+      - INTELLIGENCE_POLL_INTERVAL_SECS=30
