@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.11",
+  "description": "Cast numeric columns to float8 in Gold view queries — fixes avg(smallint) deserialization panic",
+  "changes": [
+    {"type": "container", "target": "ndp-intelligence", "action": "build"},
+    {"type": "container", "target": "ndp-intelligence", "action": "restart"}
+  ]
+}

@@ -150,7 +150,7 @@ impl PredictionEngine {
 
                     let view_col = self.view_column_name(&objective.field);
                     let sql = format!(
-                        "SELECT {} FROM {} WHERE bucket = $1 LIMIT 1",
+                        "SELECT {}::double precision FROM {} WHERE bucket = $1 LIMIT 1",
                         sanitize_field_name(&view_col),
                         view_name
                     );

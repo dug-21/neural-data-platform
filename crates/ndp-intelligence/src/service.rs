@@ -136,6 +136,10 @@ pub struct IntelligenceService {
     /// (e.g., `indoor_pm25_mean`). This prefix is stripped in `sql_row_to_gold_row`
     /// so GoldRow fields use logical names matching the embedding config.
     primary_alias: String,
+    /// Cached column list with float8 casts for the Gold aligned view.
+    /// Built once during init from information_schema to avoid `SELECT *`
+    /// which returns `numeric` columns that tokio-postgres can't deserialize as f64.
+    cast_columns: String,
 }
 
 impl IntelligenceService {
@@ -180,9 +184,10 @@ impl IntelligenceService {
             "gold.{}_aligned",
             app_config.domain_id.replace('-', "_")
         );
+        let columns = build_cast_select(&client, &view_name).await?;
         let rows = client
             .query(
-                &format!("SELECT * FROM {} ORDER BY bucket ASC", view_name),
+                &format!("SELECT {} FROM {} ORDER BY bucket ASC", columns, view_name),
                 &[],
             )
             .await
@@ -246,6 +251,7 @@ impl IntelligenceService {
             search_config: intelligence_config.search.clone(),
             last_processed,
             primary_alias,
+            cast_columns: columns,
             observation_count,
             warmup_threshold: app_config.warmup_threshold,
             backfill_mode: false,
@@ -283,8 +289,8 @@ impl IntelligenceService {
             client
                 .query(
                     &format!(
-                        "SELECT * FROM {} WHERE bucket > $1 ORDER BY bucket ASC LIMIT 100",
-                        view_name
+                        "SELECT {} FROM {} WHERE bucket > $1 ORDER BY bucket ASC LIMIT 100",
+                        self.cast_columns, view_name
                     ),
                     &[&last],
                 )
@@ -294,8 +300,8 @@ impl IntelligenceService {
             client
                 .query(
                     &format!(
-                        "SELECT * FROM {} ORDER BY bucket ASC LIMIT 100",
-                        view_name
+                        "SELECT {} FROM {} ORDER BY bucket ASC LIMIT 100",
+                        self.cast_columns, view_name
                     ),
                     &[],
                 )
@@ -440,6 +446,74 @@ impl IntelligenceService {
     }
 }
 
+/// Build a SELECT statement for the Gold aligned view that casts numeric
+/// columns to `double precision`. This is necessary because `avg(smallint)`
+/// returns `numeric` in PostgreSQL, and tokio-postgres cannot deserialize
+/// `numeric` as `f64` without the `with-rust_decimal` feature.
+///
+/// Only columns with numeric PostgreSQL types are included (cast to float8).
+/// The `bucket` column is included as-is (timestamptz). Non-numeric columns
+/// (text, boolean, etc.) are skipped — they are not needed for embeddings.
+///
+/// Returns a column list like: `bucket, col1::float8 AS col1, col2::float8 AS col2, ...`
+async fn build_cast_select(client: &deadpool_postgres::Client, view_name: &str) -> Result<String> {
+    // Split "gold.view_name" into schema and table parts
+    let (schema, table) = view_name
+        .split_once('.')
+        .unwrap_or(("public", view_name));
+
+    // Use pg_attribute + pg_type for materialized views (information_schema doesn't include them)
+    let col_rows = client
+        .query(
+            "SELECT a.attname, t.typname \
+             FROM pg_attribute a \
+             JOIN pg_class c ON a.attrelid = c.oid \
+             JOIN pg_namespace n ON c.relnamespace = n.oid \
+             JOIN pg_type t ON a.atttypid = t.oid \
+             WHERE n.nspname = $1 AND c.relname = $2 \
+               AND a.attnum > 0 AND NOT a.attisdropped \
+             ORDER BY a.attnum",
+            &[&schema, &table],
+        )
+        .await
+        .map_err(|e| {
+            IntelligenceError::Database(format!(
+                "Failed to query columns for {}: {}",
+                view_name, e
+            ))
+        })?;
+
+    let mut parts = Vec::new();
+    for row in &col_rows {
+        let col_name: String = row.get(0);
+        let type_name: String = row.get(1);
+        match type_name.as_str() {
+            // Timestamp column — include as-is
+            "timestamptz" | "timestamp" if col_name == "bucket" => {
+                parts.push("bucket".to_string());
+            }
+            // Numeric types — cast to float8 for uniform f64 deserialization
+            "float8" | "float4" | "int2" | "int4" | "int8" | "numeric" => {
+                parts.push(format!("{}::float8 AS {}", col_name, col_name));
+            }
+            // Skip non-numeric columns (text, bool, etc.)
+            _ => {
+                debug!("Skipping non-numeric column '{}' (type: {})", col_name, type_name);
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        return Err(IntelligenceError::Database(format!(
+            "No columns found for view {}",
+            view_name
+        )));
+    }
+
+    info!("Gold view SELECT: {} columns from {}", parts.len(), view_name);
+    Ok(parts.join(", "))
+}
+
 /// Convert a tokio_postgres::Row from the Gold aligned view to a GoldRow.
 /// Convert a tokio_postgres Row into a GoldRow, stripping the primary stream
 /// alias prefix from column names.
@@ -468,8 +542,8 @@ pub fn sql_row_to_gold_row(
         if column.name() == "bucket" {
             continue;
         }
-        // Try to read as f64
-        let value: Option<f64> = row.try_get(idx).ok();
+        // All numeric columns are cast to float8 in the SQL query, so f64 always works.
+        let value: Option<f64> = row.try_get(idx).ok().flatten();
         let name = column.name();
         let key = if !prefix.is_empty() && name.starts_with(&prefix) {
             name[prefix.len()..].to_string()

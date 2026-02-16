@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-02-16
+
+Fix `numeric` type deserialization panic in prediction queries. PostgreSQL `avg(smallint)` returns `numeric`, which tokio-postgres cannot deserialize as `f64` — causing a thread panic at `predictions/mod.rs:163`. Same issue silently dropped co2/tvoc/nox values in embeddings.
+
+### Fixed
+
+- **`crates/ndp-intelligence/src/predictions/mod.rs`** — prediction SQL now casts selected column to `::double precision`, preventing panic on `numeric` columns
+- **`crates/ndp-intelligence/src/predictions/outcome.rs`** — outcome evaluation SQL applies the same `::double precision` cast
+- **`crates/ndp-intelligence/src/service.rs`** — `build_cast_select` helper queries `pg_attribute` + `pg_type` for view columns, includes only numeric-typed columns with `::float8` casts, skips non-numeric columns (text, bool, etc.). Cached in `IntelligenceService.cast_columns`
+
+### Technical Notes
+
+- Root cause: Silver `co2` column is `smallint`, `tvoc_index` and `nox_index` are also `smallint`. The Gold CA computes `avg(smallint)` which returns `numeric`. tokio-postgres (without `with-rust_decimal-1` feature) cannot deserialize `numeric` as any Rust numeric type
+- `row.get::<_, Option<f64>>(0)` panics on `numeric` columns (prediction queries)
+- `row.try_get::<_, Option<f64>>(idx).ok()` silently returns `None` for `numeric` columns (embedding warmup), so co2/tvoc/nox values were missing from embeddings even after v1.2.10
+- Uses `pg_attribute` + `pg_type` instead of `information_schema.columns` because materialized views are not listed in `information_schema`
+- Type-aware: only includes columns with numeric pg_types (float8, float4, int2, int4, int8, numeric). Non-numeric columns skipped with debug log
+- After deploy, a backfill is required to regenerate embeddings with correct co2/tvoc/nox values
+- GitHub Issue: #18
+
 ## [1.2.10] - 2026-02-16
 
 Fix column name mismatch between Gold aligned view and intelligence layer. The aligned view prefixes all columns with the stream alias (e.g., `indoor_co2_mean`) but the intelligence layer used unprefixed names (`co2_mean`). This caused prediction SQL to fail with "column does not exist" and embeddings to silently produce zero-filled direct fields.

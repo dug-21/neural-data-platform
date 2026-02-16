@@ -74,7 +74,7 @@ impl OutcomeTracker {
                 format!("{}_{}", self.column_prefix, prediction.metric)
             };
             let sql = format!(
-                "SELECT {} FROM {} WHERE bucket = $1 LIMIT 1",
+                "SELECT {}::double precision FROM {} WHERE bucket = $1 LIMIT 1",
                 super::sanitize_field_name(&view_col),
                 view_name
             );
