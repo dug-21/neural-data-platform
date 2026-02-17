@@ -15,7 +15,7 @@ use neural_core::sources::{
 };
 use neural_core::EventBus;
 use neural_core::{
-    HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, RawSource, SensorConfig,
+    HttpPollingConfig, HttpPollingSource, MqttConfig, MqttSource, RawSource, SensorConfig, Source,
     SourceConfig, SourceType, StreamConfig,
 };
 use regex::Regex;
@@ -928,6 +928,13 @@ impl SourceManager {
                             warn!("Failed to fetch points from MQTT source: {}", e);
                         }
                     }
+
+                    // BUG-007: Drain cached_points to prevent unbounded memory growth.
+                    // MqttSource::process_events() parses every MQTT message into
+                    // TimeSeriesPoints and pushes them to cached_points (Source::fetch()).
+                    // Since DP-012, only RawDataPoints via EventBus are used — the parsed
+                    // points are never consumed, causing ~3.85 MiB/hour leak.
+                    let _ = source.fetch().await;
                 }
             }
         }

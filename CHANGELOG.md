@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.14] - 2026-02-17
+
+Fix unbounded memory growth in air-quality-app (~3.85 MiB/hour). `MqttSource::process_events()` parses every MQTT message into `TimeSeriesPoint` and pushes to `cached_points` (the `Source::fetch()` path). Since DP-012, only `RawDataPoint` via EventBus is consumed — `cached_points` was never drained.
+
+### Fixed
+
+- **`apps/air-quality-app/src/coordinator/source_manager.rs`** — drain `cached_points` after each `fetch_raw_batch()` poll by calling `source.fetch().await`
+
+### Technical Notes
+
+- Root cause: `MqttSource` has two internal caches — `cached_raw_points` (drained by `fetch_raw_batch()` every 100ms) and `cached_points` (drained by `fetch()` which nobody called). After DP-012 EventBus migration, the `Source::fetch()` path became dead code but `process_events()` still populates it
+- Growth rate: ~15 `TimeSeriesPoint` per message x ~400-600 bytes x ~6 messages/min = ~3.5-4.0 MiB/hour, matching observed 3.85 MiB/hour over 40 hours (21 MiB to 173 MiB)
+- Same bug class as AIR-011 (HTTP polling sources had unused `source.start()` accumulating points); MQTT can't remove `start()` (needs broker connection), so we drain instead
+- Integration testbed validated: 8/8 assertions pass (services healthy, Silver rows populated, Bronze WAL exists, zero container restarts)
+- GitHub Issue: #40
+
 ## [1.2.13] - 2026-02-16
 
 Fix prediction storage serialization: `$4::interval` cast caused tokio-postgres to infer the parameter type as `interval`, but the Rust `String` type doesn't implement `ToSql` for `interval`. Changed to `$4::text::interval` — same double-cast pattern as the pgvector fix in v1.2.7.

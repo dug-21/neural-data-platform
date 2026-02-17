@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.14",
+  "description": "Fix MqttSource cached_points unbounded memory growth (~3.85 MiB/hour)",
+  "changes": [
+    {"type": "container", "target": "air-quality-app", "action": "build", "no_cache": true},
+    {"type": "container", "target": "air-quality-app", "action": "restart"}
+  ]
+}
