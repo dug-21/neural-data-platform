@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.16] - 2026-02-18
+
+Demote Bronze heartbeat memory diagnostics from `info!` to `debug!`. The 30-second heartbeat logged detailed memory stats (RSS, arena, fordblks, heap, smaps, unaccounted) at INFO level — 2,880 lines/day of noise now that memory leaks are fixed (BUG-005, BUG-007). Memory trend summary (every 10 snapshots) also demoted. Snapshot start/complete remain at INFO.
+
+### Changed
+
+- **`core/src/subscribers/bronze.rs`** — heartbeat `info!` (line 488) changed to `debug!`; trend summary `info!` (line 307) changed to `debug!`
+
+### Technical Notes
+
+- These diagnostics were added during BUG-005 investigation and served their purpose through BUG-007 (v1.2.14)
+- Still accessible via `RUST_LOG=neural_core::subscribers::bronze=debug` when needed
+- Snapshot start/complete remain at `info!` — those are meaningful operational events (daily Parquet writes)
+- GitHub Issue: #43
+
 ## [1.2.15] - 2026-02-18
 
 Add non-numeric type support (`text` and `jsonb`) as a generic capability through the full Bronze-Silver-Gold pipeline. NWS forecast is the validation case; the design supports future text-bearing streams without architectural changes. This is plumbing — once text reaches Gold, fe-005 handles embedding it.

@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.16",
+  "description": "Demote Bronze heartbeat memory diagnostics from INFO to DEBUG to reduce log noise",
+  "changes": [
+    {"type": "container", "target": "air-quality-app", "action": "build", "no_cache": true},
+    {"type": "container", "target": "air-quality-app", "action": "restart"}
+  ]
+}

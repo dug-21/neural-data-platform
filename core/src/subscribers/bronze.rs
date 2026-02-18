@@ -304,7 +304,7 @@ impl BronzeSubscriber {
         // Trend summary every 10 snapshots
         if self.snapshots_written.is_multiple_of(10) {
             let rss_now = read_process_rss_mib();
-            info!(
+            debug!(
                 subscriber_id = %self.id,
                 snapshots = self.snapshots_written,
                 trend_samples = self.memory_trend.len(),
@@ -485,7 +485,7 @@ impl Subscriber for BronzeSubscriber {
                         self.memory_trend.record(rss);
                     }
 
-                    info!(
+                    debug!(
                         subscriber_id = %self.id,
                         wal_mib = format_args!("{:.1}", wal_bytes as f64 / 1_048_576.0),
                         wal_file_bytes = wal_bytes,
