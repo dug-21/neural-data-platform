@@ -1,0 +1,14 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.17",
+  "description": "Release v1.2.17: Add firmware text field to air-quality Silver, revert nws-forecast-hourly to Bronze-only (#37)",
+  "changes": [
+    {"type": "container", "target": "air-quality-app", "action": "build", "no_cache": true},
+    {"type": "stream", "id": "air-quality", "action": "update"},
+    {"type": "stream", "id": "nws-forecast-hourly", "action": "update"},
+    {"type": "silver-table", "stream_id": "air-quality", "action": "sync"},
+    {"type": "dictionary", "action": "sync"},
+    {"type": "container", "target": "air-quality-app", "action": "restart"}
+  ]
+}

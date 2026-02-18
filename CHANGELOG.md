@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.17] - 2026-02-18
+
+Add firmware text field to air-quality Silver stream (dp-023 proof point). Revert nws-forecast-hourly to Bronze-only — 156 overlapping hourly periods are unusable in Silver without forecast-issue-time dedup. Fix config deserialization crash when `silver_etl` section omits required fields.
+
+### Added
+
+- `firmware` text field mapping in air-quality Silver ETL config
+- `RowIterator` pre-transform type for row-oriented array APIs (generic capability)
+- Multi-segment dotted path navigation in `extract_json_path` (e.g., `dewpoint.value`)
+
+### Changed
+
+- **nws-forecast-hourly**: Reverted to Bronze-only (no `silver_etl` section) — forecast data needs architectural rethink for Silver
+
+### Fixed
+
+- Config deserialization crash: `silver_etl: {enabled: false}` without `target_table` killed all data sources
+
+### Technical Notes
+
+- GitHub Issue: #37
+- RowIterator creates virtual RawDataPoint per array element, runs standard field mapping pipeline
+- 5 new tests in `core/src/silver/transform.rs`
+
 ## [1.2.16] - 2026-02-18
 
 Demote Bronze heartbeat memory diagnostics from `info!` to `debug!`. The 30-second heartbeat logged detailed memory stats (RSS, arena, fordblks, heap, smaps, unaccounted) at INFO level — 2,880 lines/day of noise now that memory leaks are fixed (BUG-005, BUG-007). Memory trend summary (every 10 snapshots) also demoted. Snapshot start/complete remain at INFO.
