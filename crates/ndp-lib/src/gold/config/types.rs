@@ -304,6 +304,11 @@ pub struct SilverFieldMapping {
 
     /// Target column name in Silver layer (e.g., "co2")
     pub target_column: String,
+
+    /// PostgreSQL column type (e.g., "double_precision", "text", "jsonb")
+    /// Used by TextViewGenerator to discover text/jsonb fields.
+    #[serde(rename = "type", default)]
+    pub column_type: String,
 }
 
 /// Timestamp field configuration

@@ -657,6 +657,18 @@ fn coerce_to_type(
                 actual: type_name(value),
             }),
         },
+        "jsonb" => match value {
+            Value::Object(_) | Value::Array(_) => Ok(value.clone()),
+            Value::String(s) => {
+                serde_json::from_str::<Value>(s).map_err(|_| TransformError::TypeConversion {
+                    field: field_name.to_string(),
+                    expected: "jsonb (valid JSON string)".to_string(),
+                    actual: "invalid JSON string".to_string(),
+                })
+            }
+            Value::Null => Ok(Value::Null),
+            Value::Number(_) | Value::Bool(_) => Ok(value.clone()),
+        },
         _ => Ok(value.clone()),
     }
 }
@@ -801,6 +813,54 @@ mod tests {
             coerce_to_type(&json!(42), "text", "test").unwrap().as_str(),
             Some("42")
         );
+    }
+
+    #[test]
+    fn test_coerce_jsonb_object() {
+        let input = json!({"temperature": 72, "status": "ok"});
+        let result = coerce_to_type(&input, "jsonb", "test").unwrap();
+        assert_eq!(result, json!({"temperature": 72, "status": "ok"}));
+    }
+
+    #[test]
+    fn test_coerce_jsonb_array() {
+        let input = json!([1, 2, 3]);
+        let result = coerce_to_type(&input, "jsonb", "test").unwrap();
+        assert_eq!(result, json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn test_coerce_jsonb_string_valid() {
+        let input = json!("{\"key\": \"val\"}");
+        let result = coerce_to_type(&input, "jsonb", "test").unwrap();
+        assert_eq!(result, json!({"key": "val"}));
+    }
+
+    #[test]
+    fn test_coerce_jsonb_string_invalid() {
+        let input = json!("not json");
+        let result = coerce_to_type(&input, "jsonb", "test");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_coerce_jsonb_null() {
+        let result = coerce_to_type(&Value::Null, "jsonb", "test").unwrap();
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_coerce_jsonb_number() {
+        let input = json!(42);
+        let result = coerce_to_type(&input, "jsonb", "test").unwrap();
+        assert_eq!(result, json!(42));
+    }
+
+    #[test]
+    fn test_coerce_jsonb_boolean() {
+        let input = json!(true);
+        let result = coerce_to_type(&input, "jsonb", "test").unwrap();
+        assert_eq!(result, json!(true));
     }
 
     #[test]

@@ -193,11 +193,21 @@ mod pooled {
                 }
             }
 
-            // 5. Data fields (from record.fields which are set by transform)
+            // 5. Data fields with type-aware placeholders (jsonb needs ::jsonb cast)
             let field_names: Vec<String> = record.fields.keys().cloned().collect();
             for name in &field_names {
                 columns.push(name.clone());
-                placeholders.push(format!("${}", param_index));
+                let col_type = etl_config
+                    .field_mappings
+                    .iter()
+                    .find(|m| m.target_column == *name)
+                    .map(|m| m.column_type.as_str())
+                    .unwrap_or("text");
+                if col_type == "jsonb" {
+                    placeholders.push(format!("${}::jsonb", param_index));
+                } else {
+                    placeholders.push(format!("${}", param_index));
+                }
                 param_index += 1;
             }
 
@@ -462,6 +472,153 @@ mod pooled {
             }
         }
         query
+    }
+
+    #[cfg(test)]
+    mod pooled_tests {
+        use super::*;
+
+        #[test]
+        fn test_build_raw_query_text_value() {
+            let result = build_raw_query(
+                "INSERT INTO t (col) VALUES ($1)",
+                &["Partly Cloudy".to_string()],
+            );
+            assert_eq!(result, "INSERT INTO t (col) VALUES ('Partly Cloudy')");
+        }
+
+        #[test]
+        fn test_build_raw_query_jsonb_value() {
+            let result = build_raw_query(
+                "INSERT INTO t (col) VALUES ($1::jsonb)",
+                &["{\"key\":\"val\"}".to_string()],
+            );
+            assert!(result.contains("::jsonb"));
+            assert!(result.contains("'{\"key\":\"val\"}'"));
+        }
+
+        #[test]
+        fn test_build_raw_query_text_with_quotes() {
+            let result = build_raw_query(
+                "INSERT INTO t (col) VALUES ($1)",
+                &["It's partly cloudy".to_string()],
+            );
+            assert!(result.contains("It''s partly cloudy"));
+        }
+
+        #[test]
+        fn test_build_raw_query_mixed_types() {
+            let result = build_raw_query(
+                "INSERT INTO t (temp, forecast) VALUES ($1, $2::jsonb)",
+                &["72.5".to_string(), "{\"text\":\"sunny\"}".to_string()],
+            );
+            assert!(result.contains("'72.5'"));
+            assert!(result.contains("'{\"text\":\"sunny\"}'::jsonb"));
+        }
+
+        #[tokio::test]
+        async fn test_build_upsert_query_jsonb_cast() {
+            use crate::config::{
+                DeduplicationConfig, DeduplicationStrategy, DqOutputConfig, SilverFieldMapping,
+                TimestampMapping,
+            };
+            use crate::silver::types::{DqResult, SilverRecord};
+            use std::collections::HashMap;
+
+            let config = TimescaleConfig {
+                connection_string: "postgresql://localhost/test".to_string(),
+                ..Default::default()
+            };
+            let output = TimescaleOutput {
+                config,
+                pool: bb8::Pool::builder().build_unchecked(
+                    bb8_postgres::PostgresConnectionManager::new_from_stringlike(
+                        "host=localhost",
+                        tokio_postgres::NoTls,
+                    )
+                    .unwrap(),
+                ),
+            };
+
+            let etl_config = SilverEtlConfig {
+                enabled: true,
+                target_table: "silver.test".to_string(),
+                timestamp: TimestampMapping {
+                    source_field: "time".to_string(),
+                    target_field: "observation_time".to_string(),
+                    ..Default::default()
+                },
+                field_mappings: vec![
+                    SilverFieldMapping {
+                        source_path: "raw_payload.temp".to_string(),
+                        target_column: "temperature_f".to_string(),
+                        column_type: "double_precision".to_string(),
+                        nullable: false,
+                        transform: None,
+                        dq_rules: vec![],
+                    },
+                    SilverFieldMapping {
+                        source_path: "raw_payload.forecast".to_string(),
+                        target_column: "forecast_data".to_string(),
+                        column_type: "jsonb".to_string(),
+                        nullable: true,
+                        transform: None,
+                        dq_rules: vec![],
+                    },
+                ],
+                deduplication: DeduplicationConfig {
+                    enabled: true,
+                    strategy: DeduplicationStrategy::Upsert,
+                    key_columns: vec!["observation_time".to_string()],
+                },
+                dq_output: DqOutputConfig::default(),
+                ..Default::default()
+            };
+
+            let mut fields = HashMap::new();
+            fields.insert("temperature_f".to_string(), serde_json::json!(72.5));
+            fields.insert(
+                "forecast_data".to_string(),
+                serde_json::json!({"text": "sunny"}),
+            );
+
+            let record = SilverRecord {
+                stream_id: "test".to_string(),
+                timestamp: chrono::Utc::now(),
+                valid_timestamp: None,
+                device_id: None,
+                fields,
+                identity_fields: HashMap::new(),
+                dq_result: DqResult::passed(),
+            };
+
+            let (query, field_order) = output.build_upsert_query(&record, &etl_config);
+
+            // The jsonb column should have ::jsonb cast
+            assert!(
+                query.contains("::jsonb"),
+                "JSONB column should have ::jsonb cast in query: {}",
+                query
+            );
+
+            // Count ::jsonb casts -- should be exactly 1 (only the forecast_data column)
+            let jsonb_cast_count = query.matches("::jsonb").count();
+            assert_eq!(
+                jsonb_cast_count, 1,
+                "Should have exactly 1 ::jsonb cast (for forecast_data only), got {} in query: {}",
+                jsonb_cast_count, query
+            );
+
+            // Verify both fields are in field_order
+            assert!(
+                field_order.contains(&"temperature_f".to_string()),
+                "field_order should contain temperature_f"
+            );
+            assert!(
+                field_order.contains(&"forecast_data".to_string()),
+                "field_order should contain forecast_data"
+            );
+        }
     }
 }
 

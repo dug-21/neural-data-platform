@@ -2181,6 +2181,29 @@ handle_domain() {
         log "  Intelligence not configured for domain $domain_id, skipping"
     fi
 
+    # Generate and apply Gold text view DDL (dp-023: text field pipeline)
+    log "  Generating Gold text view DDL using $ndp_tool gold text-view..."
+    local text_ddl
+    text_ddl=$("$ndp_tool" gold text-view --domain "$domain_id" \
+        --config-dir "$(dirname "$CONFIG_STREAMS_DIR")" 2>&1)
+    local text_exit_code=$?
+
+    if [ $text_exit_code -eq 0 ] && [ -n "$text_ddl" ]; then
+        # Skip if no text fields found (generator returns comment-only SQL)
+        if echo "$text_ddl" | grep -q "^-- No text fields"; then
+            log "  No text fields in domain $domain_id, skipping text view"
+        else
+            log "  Applying Gold text view DDL to TimescaleDB..."
+            if echo "$text_ddl" | dcx timescaledb psql -U postgres -d ndp; then
+                log "  Gold text view for domain $domain_id created/updated successfully"
+            else
+                warn "  Failed to apply Gold text view DDL (non-fatal)"
+            fi
+        fi
+    else
+        log "  Gold text view generation not available for domain $domain_id, skipping"
+    fi
+
     # Sync domain objectives to data dictionary
     log "  Syncing domain objectives to data dictionary..."
     sync_domains_to_data_dictionary

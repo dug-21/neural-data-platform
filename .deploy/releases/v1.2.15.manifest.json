@@ -1,0 +1,15 @@
+{
+  "$schema": "../../schemas/manifest.schema.json",
+  "version": "1.0",
+  "release_version": "1.2.15",
+  "description": "Release v1.2.15: Text field pipeline — text/jsonb support through Bronze-Silver-Gold (dp-023, #37)",
+  "changes": [
+    {"type": "container", "target": "air-quality-app", "action": "build", "no_cache": true},
+    {"type": "tool", "id": "ndp-cli", "action": "build"},
+    {"type": "stream", "id": "nws-forecast-hourly", "action": "update"},
+    {"type": "silver-table", "stream_id": "nws-forecast-hourly", "action": "sync"},
+    {"type": "domain", "domain_id": "indoor-air-quality", "action": "sync"},
+    {"type": "dictionary", "action": "sync"},
+    {"type": "container", "target": "air-quality-app", "action": "restart"}
+  ]
+}

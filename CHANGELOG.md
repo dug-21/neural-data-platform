@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.15] - 2026-02-18
+
+Add non-numeric type support (`text` and `jsonb`) as a generic capability through the full Bronze-Silver-Gold pipeline. NWS forecast is the validation case; the design supports future text-bearing streams without architectural changes. This is plumbing — once text reaches Gold, fe-005 handles embedding it.
+
+### Added
+
+- **`core/src/silver/transform.rs`** — explicit `"jsonb"` match arm in `coerce_to_type()` with JSON validation for string inputs, pass-through for objects/arrays/numbers/booleans
+- **`core/src/silver/outputs/timescale.rs`** — type-aware parameter placeholders: `$N::jsonb` cast for jsonb columns in `build_upsert_query()`
+- **`crates/ndp-lib/src/gold/generators/text_view.rs`** — `TextViewGenerator`: config-driven per-domain VIEW over Silver text/jsonb columns with unpivoted schema (`source_stream`, `field_name`, `text_value`, `observation_time`) and `DISTINCT ON` deduplication
+- **`deploy/pi/deploy.sh`** — Gold text view generation block in `handle_domain()` (Phase 6), follows events/intelligence pattern
+- **`config/base/streams/nws-forecast-hourly/config.json`** — `stream_type: "forecast"`, `detailedForecast` parser mapping, full `silver_etl` section with 9 field_mappings (7 numeric + 2 text: `short_forecast`, `detailed_forecast`)
+
+### Changed
+
+- **`crates/ndp-lib/src/gold/generators/mod.rs`** — added `pub mod text_view` and `TextViewGenerator` re-export
+- **`tools/ndp-cli/src/commands/gold.rs`** — added `text-view` subcommand: `ndp gold text-view --domain <id>` generates Gold text view DDL
+- **`crates/ndp-lib/src/gold/config/types.rs`** — added `column_type` field to `SilverFieldMapping` for text field discovery
+
+### Technical Notes
+
+- `coerce_to_type()` wildcard `_ => Ok(value.clone())` was already silently passing jsonb values through — explicit branch adds correctness (JSON string validation) and testability (7 new tests)
+- Gold text view is a VIEW (not MATERIALIZED VIEW) — no refresh policy needed, queries always return current data
+- DDL generator `map_type()` and data dictionary sync already handled text/jsonb types — zero changes needed
+- `apps/silver-etl/` is deprecated — all Silver changes in `core/src/silver/` (streaming subscriber path)
+- 18 new tests: 12 in platform-core (920 total, was 908), 6 in ndp-lib text_view module
+- GitHub Issue: #37
+
 ## [1.2.14] - 2026-02-17
 
 Fix unbounded memory growth in air-quality-app (~3.85 MiB/hour). `MqttSource::process_events()` parses every MQTT message into `TimeSeriesPoint` and pushes to `cached_points` (the `Source::fetch()` path). Since DP-012, only `RawDataPoint` via EventBus is consumed — `cached_points` was never drained.

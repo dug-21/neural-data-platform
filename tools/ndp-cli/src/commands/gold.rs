@@ -99,6 +99,13 @@ pub enum GoldCommands {
         command: IntelligenceCommands,
     },
 
+    /// Generate Gold text view DDL for a domain.
+    TextView {
+        /// Domain ID to generate text view for.
+        #[arg(long)]
+        domain: String,
+    },
+
     /// Recreate Gold layer (drop and create).
     Recreate {
         /// Target stream ID.
@@ -139,6 +146,7 @@ pub async fn run(
     let loader = ndp_lib::gold::config::FileSystemConfigLoader::new(config_dir);
 
     match args.command {
+        GoldCommands::TextView { domain } => run_text_view(&loader, &domain).await,
         GoldCommands::Intelligence { command } => run_intelligence(&loader, command).await,
         GoldCommands::Generate {
             stream,
@@ -372,6 +380,22 @@ async fn run_recreate(
     }
 
     Err("Must specify --stream or --domain".into())
+}
+
+/// Generate Gold text view DDL for a domain (dp-023).
+///
+/// Scans domain streams for text/jsonb Silver columns and generates
+/// a VIEW with unpivoted schema (source_stream, field_name, value).
+async fn run_text_view(
+    loader: &ndp_lib::gold::config::FileSystemConfigLoader,
+    domain_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!(domain_id = %domain_id, "Generating Gold text view DDL");
+
+    let generator = ndp_lib::gold::generators::TextViewGenerator::new(loader.clone());
+    let ddl = generator.generate(domain_id, ndp_lib::gold::config::Action::Sync)?;
+    println!("{ddl}");
+    Ok(())
 }
 
 /// Generate intelligence schema DDL for a domain.

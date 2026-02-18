@@ -1,5 +1,6 @@
 {
   "stream_id": "nws-forecast-hourly",
+  "stream_type": "forecast",
   "description": "Hourly weather forecast from NWS gridpoint forecast",
   "version": "1.0.0",
   "enabled": true,
@@ -67,6 +68,12 @@
       "type": "string",
       "nullable": true,
       "description": "Brief forecast description"
+    },
+    {
+      "name": "detailed_forecast",
+      "type": "string",
+      "nullable": true,
+      "description": "Multi-sentence forecast narrative"
     },
     {
       "name": "probability_of_precipitation",
@@ -221,6 +228,11 @@
               "optional": true
             },
             {
+              "path": "detailedForecast",
+              "metric_name": "detailed_forecast",
+              "optional": true
+            },
+            {
               "path": "probabilityOfPrecipitation.value",
               "metric_name": "probability_of_precipitation",
               "unit": "percent",
@@ -235,6 +247,95 @@
     "batch_size": 156,
     "batch_timeout_secs": 60,
     "buffer_capacity": 200
+  },
+  "silver_etl": {
+    "enabled": true,
+    "target_table": "silver.nws_forecast_hourly",
+    "timestamp": {
+      "source_field": "timestamp",
+      "target_field": "observation_time",
+      "transform": "iso8601"
+    },
+    "identity_fields": [
+      {
+        "source": "ndp_id",
+        "target": "ndp_id"
+      }
+    ],
+    "deduplication": {
+      "enabled": true,
+      "strategy": "upsert",
+      "key_columns": ["observation_time", "ndp_id"]
+    },
+    "field_mappings": [
+      {
+        "source_path": "temperature",
+        "target_column": "temperature_f",
+        "type": "double_precision",
+        "nullable": false,
+        "description": "Forecast temperature in Fahrenheit"
+      },
+      {
+        "source_path": "dewpoint",
+        "target_column": "dewpoint_c",
+        "type": "double_precision",
+        "nullable": true,
+        "description": "Forecast dew point in Celsius"
+      },
+      {
+        "source_path": "relative_humidity",
+        "target_column": "relative_humidity",
+        "type": "double_precision",
+        "nullable": true,
+        "description": "Relative humidity percentage"
+      },
+      {
+        "source_path": "wind_speed",
+        "target_column": "wind_speed_mph",
+        "type": "double_precision",
+        "nullable": true,
+        "description": "Wind speed in mph"
+      },
+      {
+        "source_path": "wind_direction",
+        "target_column": "wind_direction_deg",
+        "type": "double_precision",
+        "nullable": true,
+        "description": "Wind direction in degrees"
+      },
+      {
+        "source_path": "probability_of_precipitation",
+        "target_column": "probability_of_precipitation",
+        "type": "double_precision",
+        "nullable": true,
+        "description": "Precipitation probability percentage"
+      },
+      {
+        "source_path": "forecast_issue_time",
+        "target_column": "forecast_issue_time",
+        "type": "double_precision",
+        "nullable": true,
+        "description": "Forecast issue timestamp as epoch seconds"
+      },
+      {
+        "source_path": "short_forecast",
+        "target_column": "short_forecast",
+        "type": "text",
+        "nullable": true,
+        "description": "Brief forecast description (e.g., Partly Cloudy)"
+      },
+      {
+        "source_path": "detailed_forecast",
+        "target_column": "detailed_forecast",
+        "type": "text",
+        "nullable": true,
+        "description": "Multi-sentence forecast narrative"
+      }
+    ],
+    "dq_rules": [],
+    "dq_output": {
+      "enabled": false
+    }
   },
   "config_version": 2
 }

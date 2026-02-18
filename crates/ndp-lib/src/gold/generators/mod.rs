@@ -19,6 +19,7 @@ pub mod null_handler;
 pub mod pgvector_schema;
 pub mod refresh_policy;
 pub mod state_transitions;
+pub mod text_view;
 
 pub use aligned_view::AlignedViewGenerator;
 pub use classification::{
@@ -37,3 +38,4 @@ pub use refresh_policy::RefreshPolicyGenerator;
 pub use state_transitions::{
     DeviceTypeRule, ITransitionGenerator, StateTransitionGenerator, TransitionConfig,
 };
+pub use text_view::TextViewGenerator;
