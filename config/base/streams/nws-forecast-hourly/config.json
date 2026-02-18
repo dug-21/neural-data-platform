@@ -1,6 +1,5 @@
 {
   "stream_id": "nws-forecast-hourly",
-  "stream_type": "forecast",
   "description": "Hourly weather forecast from NWS gridpoint forecast",
   "version": "1.0.0",
   "enabled": true,
@@ -68,12 +67,6 @@
       "type": "string",
       "nullable": true,
       "description": "Brief forecast description"
-    },
-    {
-      "name": "detailed_forecast",
-      "type": "string",
-      "nullable": true,
-      "description": "Multi-sentence forecast narrative"
     },
     {
       "name": "probability_of_precipitation",
@@ -228,11 +221,6 @@
               "optional": true
             },
             {
-              "path": "detailedForecast",
-              "metric_name": "detailed_forecast",
-              "optional": true
-            },
-            {
               "path": "probabilityOfPrecipitation.value",
               "metric_name": "probability_of_precipitation",
               "unit": "percent",
@@ -247,9 +235,6 @@
     "batch_size": 156,
     "batch_timeout_secs": 60,
     "buffer_capacity": 200
-  },
-  "silver_etl": {
-    "enabled": false
   },
   "config_version": 2
 }
