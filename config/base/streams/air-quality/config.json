@@ -525,6 +525,13 @@
             "clamp_to_bounds": true
           }
         ]
+      },
+      {
+        "source_path": "raw_payload.firmware",
+        "target_column": "firmware",
+        "type": "text",
+        "description": "Device firmware version",
+        "nullable": true
       }
     ],
     "dq_rules": [

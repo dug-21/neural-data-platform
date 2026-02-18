@@ -401,6 +401,10 @@ pub fn build_parser_from_config(
             ColumnOrientedParser::from_config(base_config)
                 .map_err(|e| PreTransformError::Parser(e.to_string()))
         }
+        PreTransformType::RowIterator(_) => Err(PreTransformError::Parser(
+            "RowIterator is not supported in batch silver-etl (use streaming subscriber)"
+                .to_string(),
+        )),
     }
 }
 

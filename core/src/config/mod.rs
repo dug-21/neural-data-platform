@@ -26,6 +26,7 @@ pub use silver_etl::{
     MetricExplosionMapping,
     PreTransformConfig,
     PreTransformType,
+    RowIteratorConfig,
     SilverConfigError,
     SilverEtlConfig,
     SilverFieldMapping,

@@ -102,22 +102,113 @@ pub fn transform_with_pre_transform(
         .as_ref()
         .ok_or_else(|| TransformError::ConfigError("pre_transform not configured".to_string()))?;
 
-    // Build ColumnOrientedParser from config (matches batch silver-etl exactly)
-    let parser = build_column_oriented_parser(pre_transform_config)?;
+    match &pre_transform_config.transform_type {
+        PreTransformType::ArrayExplosion(_) => {
+            // Column-oriented: NWS gridpoints where each metric has its own values[] array
+            let parser = build_column_oriented_parser(pre_transform_config)?;
 
-    // Parse payload -> narrow points (one per metric/validTime)
-    let points = parser
-        .parse(&raw.raw_payload, raw.timestamp)
-        .map_err(|e| TransformError::ConfigError(format!("Parser error: {}", e)))?;
+            let points = parser
+                .parse(&raw.raw_payload, raw.timestamp)
+                .map_err(|e| TransformError::ConfigError(format!("Parser error: {}", e)))?;
 
-    if points.is_empty() {
-        return Ok(vec![]);
+            if points.is_empty() {
+                return Ok(vec![]);
+            }
+
+            pivot_to_silver_records(raw, config, points)
+        }
+        PreTransformType::RowIterator(row_config) => {
+            // Row-oriented: each array element has all metrics as direct fields
+            transform_with_row_iterator(raw, config, row_config)
+        }
+    }
+}
+
+/// Transform using row-oriented array iteration.
+///
+/// Navigates to `array_path` in raw_payload, then for each element:
+/// 1. Parses the element's timestamp from `timestamp_field`
+/// 2. Creates a virtual RawDataPoint with the element as `raw_payload`
+/// 3. Runs standard `transform_to_silver()` on the virtual point
+///
+/// This supports both numeric AND text fields since it uses the standard
+/// field mapping pipeline (not the narrow TimeSeriesPoint f64 pipeline).
+fn transform_with_row_iterator(
+    raw: &RawDataPoint,
+    config: &SilverEtlConfig,
+    row_config: &crate::config::RowIteratorConfig,
+) -> Result<Vec<SilverRecord>, TransformError> {
+    // Navigate to array in raw_payload
+    let array = navigate_json_path(&raw.raw_payload, &row_config.array_path).ok_or_else(|| {
+        TransformError::ConfigError(format!(
+            "Array not found at path '{}' in raw_payload",
+            row_config.array_path
+        ))
+    })?;
+
+    let elements = array.as_array().ok_or_else(|| {
+        TransformError::ConfigError(format!(
+            "Value at '{}' is not an array",
+            row_config.array_path
+        ))
+    })?;
+
+    let mut records = Vec::with_capacity(elements.len());
+
+    for (idx, element) in elements.iter().enumerate() {
+        // Parse element timestamp (RFC3339)
+        let element_ts = element
+            .get(&row_config.timestamp_field)
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                TransformError::ConfigError(format!(
+                    "Element {} missing timestamp field '{}'",
+                    idx, row_config.timestamp_field
+                ))
+            })
+            .and_then(|s| {
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .map_err(|e| {
+                        TransformError::ConfigError(format!(
+                            "Element {} invalid timestamp '{}': {}",
+                            idx, s, e
+                        ))
+                    })
+            })?;
+
+        // Create virtual RawDataPoint: element becomes raw_payload,
+        // element timestamp becomes the point timestamp
+        let virtual_raw = RawDataPoint {
+            timestamp: element_ts,
+            source_id: raw.source_id.clone(),
+            ndp_id: raw.ndp_id.clone(),
+            context: raw.context.clone(),
+            raw_payload: element.clone(),
+        };
+
+        match transform_to_silver(&virtual_raw, config) {
+            Ok(record) => records.push(record),
+            Err(e) => {
+                tracing::warn!(
+                    element_idx = idx,
+                    error = %e,
+                    "Row iterator: skipping element"
+                );
+            }
+        }
     }
 
-    // Pivot narrow points to wide SilverRecords (group by valid_time)
-    let records = pivot_to_silver_records(raw, config, points)?;
-
     Ok(records)
+}
+
+/// Navigate a dotted JSON path (e.g., "properties.periods") into a Value.
+fn navigate_json_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
+    let mut current = root;
+    for segment in path.split('.') {
+        current = current.get(segment)?;
+    }
+    Some(current)
 }
 
 /// Build ColumnOrientedParser from PreTransformConfig.
@@ -165,6 +256,9 @@ fn build_column_oriented_parser(
             ColumnOrientedParser::from_config(base_config)
                 .map_err(|e| TransformError::ConfigError(format!("Parser creation failed: {}", e)))
         }
+        PreTransformType::RowIterator(_) => Err(TransformError::ConfigError(
+            "RowIterator does not use ColumnOrientedParser".to_string(),
+        )),
     }
 }
 
@@ -460,7 +554,14 @@ fn extract_json_path(path: &str, raw: &RawDataPoint) -> Option<Value> {
             raw.timestamp.timestamp_micros(),
         ))),
         "source_id" => Some(Value::String(raw.source_id.clone())),
-        _ => raw.raw_payload.get(parts[0]).cloned(),
+        _ => {
+            // Navigate full dotted path into raw_payload
+            let mut current = &raw.raw_payload;
+            for part in &parts {
+                current = navigate_json_part(current, part)?;
+            }
+            Some(current.clone())
+        }
     }
 }
 
@@ -904,5 +1005,277 @@ mod tests {
 
         assert_eq!(result.fields["aqi"].as_i64(), Some(2));
         assert_eq!(result.fields["pm25"].as_f64(), Some(12.5));
+    }
+
+    // ========== RowIterator Pre-Transform Tests ==========
+
+    #[test]
+    fn test_row_iterator_basic() {
+        let ts = Utc.with_ymd_and_hms(2026, 2, 18, 12, 0, 0).unwrap();
+        let raw = RawDataPoint::new(
+            "nws-forecast-hourly-Http",
+            json!({
+                "properties": {
+                    "periods": [
+                        {
+                            "startTime": "2026-02-18T12:00:00-05:00",
+                            "temperature": 55,
+                            "shortForecast": "Mostly Clear"
+                        },
+                        {
+                            "startTime": "2026-02-18T13:00:00-05:00",
+                            "temperature": 57,
+                            "shortForecast": "Partly Cloudy"
+                        }
+                    ]
+                }
+            }),
+        )
+        .with_timestamp(ts)
+        .with_ndp_id("weather-nws-001");
+
+        let mut config = test_config();
+        config.pre_transform = Some(crate::config::PreTransformConfig {
+            transform_type: crate::config::PreTransformType::RowIterator(
+                crate::config::RowIteratorConfig {
+                    array_path: "properties.periods".to_string(),
+                    timestamp_field: "startTime".to_string(),
+                },
+            ),
+        });
+        config.field_mappings = vec![
+            SilverFieldMapping {
+                source_path: "temperature".to_string(),
+                target_column: "temperature_f".to_string(),
+                column_type: "double_precision".to_string(),
+                nullable: false,
+                transform: None,
+                dq_rules: vec![],
+            },
+            SilverFieldMapping {
+                source_path: "shortForecast".to_string(),
+                target_column: "short_forecast".to_string(),
+                column_type: "text".to_string(),
+                nullable: true,
+                transform: None,
+                dq_rules: vec![],
+            },
+        ];
+
+        let records = transform_with_pre_transform(&raw, &config).unwrap();
+
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].fields["temperature_f"].as_f64(), Some(55.0));
+        assert_eq!(
+            records[0].fields["short_forecast"].as_str(),
+            Some("Mostly Clear")
+        );
+        assert_eq!(records[1].fields["temperature_f"].as_f64(), Some(57.0));
+        assert_eq!(
+            records[1].fields["short_forecast"].as_str(),
+            Some("Partly Cloudy")
+        );
+    }
+
+    #[test]
+    fn test_row_iterator_nested_values() {
+        let ts = Utc.with_ymd_and_hms(2026, 2, 18, 12, 0, 0).unwrap();
+        let raw = RawDataPoint::new(
+            "nws-forecast-hourly-Http",
+            json!({
+                "properties": {
+                    "periods": [
+                        {
+                            "startTime": "2026-02-18T12:00:00-05:00",
+                            "temperature": 55,
+                            "dewpoint": {"unitCode": "wmoUnit:degC", "value": 10.8},
+                            "relativeHumidity": {"unitCode": "wmoUnit:percent", "value": 79},
+                            "probabilityOfPrecipitation": {"unitCode": "wmoUnit:percent", "value": 3}
+                        }
+                    ]
+                }
+            }),
+        )
+        .with_timestamp(ts);
+
+        let mut config = test_config();
+        config.pre_transform = Some(crate::config::PreTransformConfig {
+            transform_type: crate::config::PreTransformType::RowIterator(
+                crate::config::RowIteratorConfig {
+                    array_path: "properties.periods".to_string(),
+                    timestamp_field: "startTime".to_string(),
+                },
+            ),
+        });
+        config.field_mappings = vec![
+            SilverFieldMapping {
+                source_path: "dewpoint.value".to_string(),
+                target_column: "dewpoint_c".to_string(),
+                column_type: "double_precision".to_string(),
+                nullable: true,
+                transform: None,
+                dq_rules: vec![],
+            },
+            SilverFieldMapping {
+                source_path: "relativeHumidity.value".to_string(),
+                target_column: "relative_humidity".to_string(),
+                column_type: "double_precision".to_string(),
+                nullable: true,
+                transform: None,
+                dq_rules: vec![],
+            },
+            SilverFieldMapping {
+                source_path: "probabilityOfPrecipitation.value".to_string(),
+                target_column: "probability_of_precipitation".to_string(),
+                column_type: "double_precision".to_string(),
+                nullable: true,
+                transform: None,
+                dq_rules: vec![],
+            },
+        ];
+
+        let records = transform_with_pre_transform(&raw, &config).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].fields["dewpoint_c"].as_f64(), Some(10.8));
+        assert_eq!(records[0].fields["relative_humidity"].as_f64(), Some(79.0));
+        assert_eq!(
+            records[0].fields["probability_of_precipitation"].as_f64(),
+            Some(3.0)
+        );
+    }
+
+    #[test]
+    fn test_row_iterator_uses_element_timestamp() {
+        let ts = Utc.with_ymd_and_hms(2026, 2, 18, 0, 0, 0).unwrap();
+        let raw = RawDataPoint::new(
+            "nws-forecast-hourly-Http",
+            json!({
+                "properties": {
+                    "periods": [
+                        {
+                            "startTime": "2026-02-18T15:00:00-05:00",
+                            "temperature": 60
+                        }
+                    ]
+                }
+            }),
+        )
+        .with_timestamp(ts);
+
+        let mut config = test_config();
+        config.pre_transform = Some(crate::config::PreTransformConfig {
+            transform_type: crate::config::PreTransformType::RowIterator(
+                crate::config::RowIteratorConfig {
+                    array_path: "properties.periods".to_string(),
+                    timestamp_field: "startTime".to_string(),
+                },
+            ),
+        });
+        config.field_mappings = vec![SilverFieldMapping {
+            source_path: "temperature".to_string(),
+            target_column: "temperature_f".to_string(),
+            column_type: "double_precision".to_string(),
+            nullable: false,
+            transform: None,
+            dq_rules: vec![],
+        }];
+
+        let records = transform_with_pre_transform(&raw, &config).unwrap();
+
+        assert_eq!(records.len(), 1);
+        // Timestamp should be the element's startTime (20:00 UTC), not the ingestion time
+        let expected_ts = DateTime::parse_from_rfc3339("2026-02-18T15:00:00-05:00")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert_eq!(records[0].timestamp, expected_ts);
+    }
+
+    #[test]
+    fn test_row_iterator_nullable_string_fields() {
+        let ts = Utc.with_ymd_and_hms(2026, 2, 18, 12, 0, 0).unwrap();
+        let raw = RawDataPoint::new(
+            "nws-forecast-hourly-Http",
+            json!({
+                "properties": {
+                    "periods": [
+                        {
+                            "startTime": "2026-02-18T12:00:00-05:00",
+                            "temperature": 55,
+                            "windSpeed": "10 mph"
+                        }
+                    ]
+                }
+            }),
+        )
+        .with_timestamp(ts);
+
+        let mut config = test_config();
+        config.pre_transform = Some(crate::config::PreTransformConfig {
+            transform_type: crate::config::PreTransformType::RowIterator(
+                crate::config::RowIteratorConfig {
+                    array_path: "properties.periods".to_string(),
+                    timestamp_field: "startTime".to_string(),
+                },
+            ),
+        });
+        config.field_mappings = vec![
+            SilverFieldMapping {
+                source_path: "temperature".to_string(),
+                target_column: "temperature_f".to_string(),
+                column_type: "double_precision".to_string(),
+                nullable: false,
+                transform: None,
+                dq_rules: vec![],
+            },
+            SilverFieldMapping {
+                // windSpeed is "10 mph" string — can't parse to double_precision
+                source_path: "windSpeed".to_string(),
+                target_column: "wind_speed_mph".to_string(),
+                column_type: "double_precision".to_string(),
+                nullable: true,
+                transform: None,
+                dq_rules: vec![],
+            },
+        ];
+
+        let records = transform_with_pre_transform(&raw, &config).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].fields["temperature_f"].as_f64(), Some(55.0));
+        // windSpeed should be NULL (can't parse "10 mph" to double_precision)
+        assert!(records[0].fields["wind_speed_mph"].is_null());
+    }
+
+    #[test]
+    fn test_extract_json_path_multi_segment() {
+        let raw = RawDataPoint::new(
+            "test-Http",
+            json!({
+                "dewpoint": {"unitCode": "wmoUnit:degC", "value": 10.8},
+                "nested": {"deep": {"leaf": 42}}
+            }),
+        );
+
+        // Single segment (existing behavior)
+        assert_eq!(
+            extract_json_path("dewpoint", &raw).unwrap(),
+            json!({"unitCode": "wmoUnit:degC", "value": 10.8})
+        );
+
+        // Multi segment (new behavior)
+        assert_eq!(
+            extract_json_path("dewpoint.value", &raw).unwrap(),
+            json!(10.8)
+        );
+
+        // Deep navigation
+        assert_eq!(
+            extract_json_path("nested.deep.leaf", &raw).unwrap(),
+            json!(42)
+        );
+
+        // Nonexistent path
+        assert!(extract_json_path("dewpoint.nonexistent", &raw).is_none());
     }
 }

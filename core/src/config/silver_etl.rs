@@ -738,6 +738,43 @@ pub struct PreTransformConfig {
 pub enum PreTransformType {
     /// Explode columnar arrays into individual rows
     ArrayExplosion(ArrayExplosionConfig),
+
+    /// Iterate over row-oriented arrays (e.g., NWS forecast hourly periods).
+    ///
+    /// Each array element becomes a separate SilverRecord with standard
+    /// field_mappings applied against the element's fields.
+    RowIterator(RowIteratorConfig),
+}
+
+/// Configuration for row-oriented array iteration pre-transform.
+///
+/// Used for APIs that return arrays of objects where each object contains
+/// all metrics as direct fields (row-oriented), as opposed to ArrayExplosion
+/// which handles column-oriented arrays.
+///
+/// # Example Input (NWS forecast hourly)
+/// ```json
+/// {
+///   "properties": {
+///     "periods": [
+///       {"startTime": "2026-01-01T12:00:00Z", "temperature": 55, "shortForecast": "Sunny"},
+///       {"startTime": "2026-01-01T13:00:00Z", "temperature": 57, "shortForecast": "Partly Cloudy"}
+///     ]
+///   }
+/// }
+/// ```
+///
+/// # Output
+/// Each array element becomes one SilverRecord. The element's fields are
+/// resolved by standard field_mappings source_paths.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct RowIteratorConfig {
+    /// JSON path to the array (e.g., "properties.periods")
+    pub array_path: String,
+
+    /// Field within each element containing the timestamp (e.g., "startTime")
+    /// Parsed as RFC3339/ISO 8601.
+    pub timestamp_field: String,
 }
 
 /// Configuration for array explosion pre-transform
@@ -1686,6 +1723,7 @@ transform_type:
                 assert_eq!(explosion.metrics[0].target_column, "temperature_c");
                 assert_eq!(explosion.metrics[0].column_type, "double_precision");
             }
+            _ => panic!("Expected ArrayExplosion"),
         }
     }
 
@@ -1714,6 +1752,7 @@ transform_type:
                 assert_eq!(explosion.value_field, "value");
                 assert_eq!(explosion.values_path, "values");
             }
+            _ => panic!("Expected ArrayExplosion"),
         }
     }
 
@@ -1769,6 +1808,7 @@ field_mappings: []
                 assert_eq!(explosion.metrics_base_path, "properties");
                 assert_eq!(explosion.metrics.len(), 1);
             }
+            _ => panic!("Expected ArrayExplosion"),
         }
     }
 
