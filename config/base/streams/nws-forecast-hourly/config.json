@@ -254,7 +254,7 @@
     "timestamp": {
       "source_field": "timestamp",
       "target_field": "observation_time",
-      "transform": "iso8601"
+      "transform": "microseconds_to_timestamp"
     },
     "identity_fields": [
       {
