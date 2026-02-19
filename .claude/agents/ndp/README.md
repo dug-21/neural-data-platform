@@ -117,6 +117,7 @@ Task(subagent_type="ndp-parquet-dev", prompt="Your agent ID: dp-004-agent-2-bron
 | `reflexion` | Record pattern feedback | AFTER implementation (REQUIRED) |
 | `save-pattern` | Store new patterns | AFTER discoveries |
 | `learner` | Auto-discover patterns from history | User-invoked after feature completion |
+| `pattern-manage` | Pattern lifecycle (delete, deprecate, update, stats) | Cleanup, auditing, deduplication |
 
 ## Directory
 
@@ -152,5 +153,6 @@ Task(subagent_type="ndp-parquet-dev", prompt="Your agent ID: dp-004-agent-2-bron
 ├── validate-plan/            # 5-check validation (used by ndp-validator for planning)
 ├── trust-dashboard/          # Bayesian trust scores (reads ndp-validator entries)
 ├── shadow-judge/             # Human judgment calibration
-└── align/                    # Vision alignment check (planning sessions)
+├── align/                    # Vision alignment check (planning sessions)
+└── pattern-manage/           # Pattern lifecycle management (GH Issue #42)
 ```

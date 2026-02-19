@@ -411,6 +411,7 @@ mcp__agentdb__learning_train(
 
 - **`get-pattern`** - Search patterns BEFORE work (uses RL predictions for ranking)
 - **`save-pattern`** - Store NEW patterns after discovering reusable approaches
+- **`pattern-manage`** - Delete, deprecate, update, deduplicate patterns (lifecycle management)
 - **`learner`** - Auto-discover patterns from reflexion episodes
 
 ---

@@ -374,6 +374,7 @@ Without feedback, the system can't learn which patterns work.
 
 - **`save-pattern`** - Store NEW patterns after discovering reusable approaches
 - **`reflexion`** - Record feedback on pattern effectiveness (REQUIRED after using patterns)
+- **`pattern-manage`** - Delete, deprecate, update, deduplicate patterns (lifecycle management)
 - **`learner`** - Auto-discover patterns from successful episodes (user-invoked)
 
 ---

@@ -161,34 +161,28 @@ How to confirm the pattern worked:
 
 ## Update vs. Create New
 
-AgentDB tracks pattern usage and success rates. To update a pattern:
+Use `/pattern-manage` for updates and cleanup:
 
-1. **Search for existing:**
+1. **Update in place** (preferred — no duplicate):
+   ```bash
+   node .claude/skills/pattern-manage/scripts/pattern-manage.js update 5 --approach "New content..." --success_rate 0.95
    ```
-   mcp__agentdb__agentdb_pattern_search(task="pattern-name", k=3)
+
+2. **Deprecate old + create new** (when approach fundamentally changed):
+   ```bash
+   node .claude/skills/pattern-manage/scripts/pattern-manage.js deprecate 5
+   ```
+   Then use `agentdb_pattern_store` to create the replacement.
+
+3. **Delete obsolete** (pattern references deleted code or is a duplicate):
+   ```bash
+   node .claude/skills/pattern-manage/scripts/pattern-manage.js delete 5
    ```
 
-2. **If found with low success rate**: Create improved version with `-v2` suffix
-
-3. **If found with high success rate**: Only create new if fundamentally different
-
-```
-# Original
-mcp__agentdb__agentdb_pattern_store(
-  taskType="procedure:add-stream",
-  approach="Original approach...",
-  successRate=0.9,
-  tags=["procedure", "streams"]
-)
-
-# Updated version (when original is insufficient)
-mcp__agentdb__agentdb_pattern_store(
-  taskType="procedure:add-stream-v2",
-  approach="Updated approach with retention field requirement...",
-  successRate=0.9,
-  tags=["procedure", "streams", "updated"]
-)
-```
+4. **Find duplicates**:
+   ```bash
+   node .claude/skills/pattern-manage/scripts/pattern-manage.js duplicates
+   ```
 
 ---
 
@@ -209,6 +203,7 @@ mcp__agentdb__agentdb_pattern_store(
 - **`get-pattern`** - Search patterns BEFORE work (always check first)
 - **`reflexion`** - Record feedback on pattern effectiveness
 - **`learner`** - Auto-discover patterns from successful episodes
+- **`pattern-manage`** - Delete, deprecate, update, deduplicate patterns
 
 ---
 
