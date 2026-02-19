@@ -63,6 +63,16 @@ if command -v claude &> /dev/null; then
     claude mcp list 2>/dev/null || echo "  MCP not configured yet"
 fi
 
+# Ensure Claude aliases are available
+if ! grep -q 'alias dsp=' ~/.bashrc 2>/dev/null; then
+    cat >> ~/.bashrc << 'ALIASES'
+
+# Claude quick aliases
+alias dsp='claude --dangerously-skip-permissions'
+alias dspc='claude --dangerously-skip-permissions -c'
+ALIASES
+fi
+
 echo "✅ Minimal post-start complete!"
 echo "🚀 Ready for development!"
 echo ""

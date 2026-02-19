@@ -1,6 +1,6 @@
 {
   "name": "Neural Trader Development",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-bullseye",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
   
   "features": {
     "ghcr.io/devcontainers/features/python:1": {
@@ -12,6 +12,8 @@
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
+
+  "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash",
 
   "customizations": {
     "vscode": {

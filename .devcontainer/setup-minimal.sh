@@ -195,6 +195,8 @@ alias cf='cargo fmt'
 # Claude and ruv-swarm
 alias claude='claude'
 alias swarm='ruv-swarm'
+alias dsp='claude --dangerously-skip-permissions'
+alias dspc='claude --dangerously-skip-permissions -c'
 
 # Git shortcuts
 alias gs='git status'
