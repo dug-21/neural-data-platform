@@ -321,67 +321,6 @@ When a feature does NOT need a testbed: library-only changes (no runtime artifac
 
 Run with: `./tests/integration/run-testbed.sh feature --path product/features/{id}/testbed [--intelligence]`
 
-## Feature Work Context
-
-When assigned work as part of a feature implementation swarm, read these files from the feature directory (the scrum master's spawn prompt tells you which component files are yours):
-
-1. `IMPLEMENTATION-BRIEF.md` -- your assignment, constraints, wave structure, component map
-2. `architecture/ARCHITECTURE.md` -- ADRs, integration surface findings
-3. `pseudocode/OVERVIEW.md` -- how your component connects to others
-4. `pseudocode/{your-component}.md` -- implementation detail for your component
-5. `test-plan/OVERVIEW.md` -- overall test strategy, testbed design
-6. `test-plan/{your-component}.md` -- what to test, expected assertions
-
-Read these files BEFORE starting implementation. The component pseudocode and test plan contain the integration surface details (view names, column types, SQL patterns, assertions) needed to write correct code and tests.
-
----
-
-## Swarm Coordination
-
-**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
-If no agent ID was provided, skip this section entirely.
-
-When part of a swarm, you MUST report status through shared memory:
-
-**ON START** — immediately after reading your task:
-```
-Use ToolSearch to find "claude-flow memory" tools, then:
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"<brief task description>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON PROGRESS** — after each major step (file created, test written, section completed):
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON COMPLETE** — before returning results:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**READ SHARED CONTEXT** — at start, to get swarm-wide context:
-```
-mcp__claude-flow__memory_retrieve(
-  key: "swarm/shared/<feature-id>-context",
-  namespace: "coordination"
-)
-```
-
 ## Related Agents
 
 - `ndp-rust-dev` - Implements code you test
@@ -391,9 +330,6 @@ mcp__claude-flow__memory_retrieve(
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve testing patterns before writing tests (REQUIRED)
-- `save-pattern` - Store new reusable test patterns (REQUIRED)
-- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
@@ -409,29 +345,4 @@ Before returning your work to the coordinator, verify:
 - [ ] Integration tests are marked `#[ignore]`
 - [ ] Mock expectations verify call counts (`times(N)`)
 - [ ] All modified files are within the scope defined in the brief
-- [ ] You called `get-pattern` before writing tests
-
 If any check fails, fix it before returning. Do not leave it for the coordinator.
-
----
-
-## Pattern Integration (REQUIRED)
-
-### BEFORE Writing Tests
-
-Use `get-pattern` skill with domain "testing" to retrieve:
-- Test structure patterns (unit, integration, e2e)
-- Mocking approaches for this codebase
-- Fixture patterns and test helpers
-
-### DURING Testing
-
-Track what you learn:
-- Effective mocking strategies
-- Edge cases worth documenting
-- Test patterns that could be reused
-
-### AFTER Testing
-
-1. Use `reflexion` skill to record whether retrieved patterns helped
-2. Use `save-pattern` skill with domain "testing" to store new test approaches

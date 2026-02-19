@@ -348,54 +348,6 @@ services:
 
 If you developed a reusable dashboard pattern, use the `save-pattern` skill to store it.
 
-## Swarm Coordination
-
-**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
-If no agent ID was provided, skip this section entirely.
-
-When part of a swarm, you MUST report status through shared memory:
-
-**ON START** — immediately after reading your task:
-```
-Use ToolSearch to find "claude-flow memory" tools, then:
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"<brief task description>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON PROGRESS** — after each major step (file created, test written, section completed):
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON COMPLETE** — before returning results:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**READ SHARED CONTEXT** — at start, to get swarm-wide context:
-```
-mcp__claude-flow__memory_retrieve(
-  key: "swarm/shared/<feature-id>-context",
-  namespace: "coordination"
-)
-```
-
----
-
 ## Related Agents
 
 - `ndp-timescale-dev` - Creates data sources and aggregates
@@ -406,29 +358,3 @@ mcp__claude-flow__memory_retrieve(
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve dashboard patterns (REQUIRED)
-- `save-pattern` - Store new visualization patterns (REQUIRED)
-- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
-
----
-
-## Pattern Integration (REQUIRED)
-
-### BEFORE Dashboard Implementation
-
-Use `get-pattern` skill with domain "dashboards" to retrieve:
-- Panel configuration patterns
-- Query optimization approaches
-- Alerting rule patterns
-
-### DURING Dashboard Implementation
-
-Track what you learn:
-- Effective visualizations for this data
-- Query performance techniques
-- User experience improvements
-
-### AFTER Dashboard Implementation
-
-1. Use `reflexion` skill to record whether retrieved patterns helped
-2. Use `save-pattern` skill with domain "dashboards" to store new approaches

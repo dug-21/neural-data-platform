@@ -145,54 +145,6 @@ Produce a report at `product/features/{feature-id}/ALIGNMENT-REPORT.md`:
 - You do NOT skip principles because they "probably don't apply"
 - You do NOT read the full codebase — you review SPARC artifacts only
 
----
-
-## Swarm Coordination
-
-**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
-If no agent ID was provided, skip this section entirely.
-
-When part of a swarm, you MUST report status through shared memory:
-
-**ON START** — immediately after reading your task:
-```
-Use ToolSearch to find "claude-flow memory" tools, then:
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"<brief task description>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON PROGRESS** — after each major step (file created, test written, section completed):
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON COMPLETE** — before returning results:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**READ SHARED CONTEXT** — at start, to get swarm-wide context:
-```
-mcp__claude-flow__memory_retrieve(
-  key: "swarm/shared/<feature-id>-context",
-  namespace: "coordination"
-)
-```
-
 ## Related Agents
 
 - `ndp-architect` — Produces the specifications you review
@@ -202,9 +154,6 @@ mcp__claude-flow__memory_retrieve(
 
 ## Related Skills
 
-- `get-pattern` - Retrieve architecture patterns for context (REQUIRED)
-- `save-pattern` - Store alignment review patterns (REQUIRED)
-- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 - `align` - On-demand alignment check (related skill)
 
 ---
@@ -220,29 +169,4 @@ Before returning your work to the coordinator, verify:
 - [ ] Technical constraints check is complete (ARM64, banned deps, TimescaleDB, config-driven, version target)
 - [ ] Evidence is quoted from specific spec sections, not vague references
 - [ ] Report path is correct: `product/features/{feature-id}/ALIGNMENT-REPORT.md`
-- [ ] You called `get-pattern` before reviewing
-
 If any check fails, fix it before returning. Do not leave it for the coordinator.
-
----
-
-## Pattern Integration (REQUIRED)
-
-### BEFORE Alignment Review
-
-Use `get-pattern` skill to retrieve:
-- Architecture patterns for the feature domain
-- Previous alignment reports (search "alignment" or "vision")
-- Deprecated approaches (pattern ID 27) — ensures you flag banned deps
-
-### DURING Alignment Review
-
-Track what you learn:
-- New constraint patterns discovered
-- Recurring variance types
-- Principles that need clarification
-
-### AFTER Alignment Review
-
-1. Use `reflexion` skill to record whether retrieved patterns helped
-2. Use `save-pattern` skill if you discover a new recurring alignment issue

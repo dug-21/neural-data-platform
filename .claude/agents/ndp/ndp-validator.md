@@ -148,6 +148,28 @@ Write glass box report to: `product/features/{feature-id}/reports/validate-impl-
 
 If no feature directory exists (e.g. hotfix session), write to: `product/reports/validate-{date}.md`
 
+### Tier 2f: Learning Compliance (WARN-only)
+
+Check whether agents recorded reflexion entries for this feature:
+
+```
+mcp__agentdb__reflexion_retrieve(
+  task="{feature-id}",
+  k=20,
+  only_successes=false
+)
+```
+
+Expected: At least one reflexion entry per pattern ID distributed to agents.
+
+| Result | Classification |
+|--------|---------------|
+| Reflexion entries found for all distributed patterns | PASS |
+| Reflexion entries found for some patterns | WARN: "Missing reflexion for pattern IDs: {list}" |
+| No reflexion entries found | WARN: "No reflexion recorded for {feature-id}" |
+
+This is WARN-only, never FAIL. Missing learning data doesn't block shipping, but it should be visible in the glass box report.
+
 ---
 
 ## Trust Recording (MANDATORY — both modes)
@@ -241,54 +263,6 @@ Checks: {N passed} / {M total} ({K not checked})
 Confidence: {score}/100
 Trust entries recorded: {count}
 Issues: {list any FAIL/WARN items, or "none"}
-```
-
----
-
-## Swarm Coordination
-
-**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
-If no agent ID was provided, skip this section entirely.
-
-When part of a swarm, you MUST report status through shared memory:
-
-**ON START** — immediately after reading your task:
-```
-Use ToolSearch to find "claude-flow memory" tools, then:
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"validation-gate","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON PROGRESS** — after each validation tier completes:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<tier completed>","checks_passed":<N>,"checks_failed":<M>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON COMPLETE** — after all validation and trust recording:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","result":"<PASS|WARN|FAIL>","report":"<path>","confidence":<score>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**READ SHARED CONTEXT** — at start, to get swarm-wide context:
-```
-mcp__claude-flow__memory_retrieve(
-  key: "swarm/shared/<feature-id>-context",
-  namespace: "coordination"
-)
 ```
 
 ---

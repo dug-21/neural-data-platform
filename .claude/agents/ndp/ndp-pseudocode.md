@@ -144,54 +144,6 @@ Never proceed with a guessed view name, column name, or type. If you cannot veri
 - **DO NOT write pseudocode before reading the architecture output** -- architecture defines the integration surface
 - **DO NOT leave TODO or placeholder functions** -- if blocked, flag the gap explicitly
 
----
-
-## Swarm Coordination
-
-**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
-If no agent ID was provided, skip this section entirely.
-
-When part of a swarm, you MUST report status through shared memory:
-
-**ON START** -- immediately after reading your task:
-```
-Use ToolSearch to find "claude-flow memory" tools, then:
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"<brief task description>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON PROGRESS** -- after each major step (file created, test written, section completed):
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON COMPLETE** -- before returning results:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**READ SHARED CONTEXT** -- at start, to get swarm-wide context:
-```
-mcp__claude-flow__memory_retrieve(
-  key: "swarm/shared/<feature-id>-context",
-  namespace: "coordination"
-)
-```
-
 ## Related Agents
 
 - `ndp-architect` - Produces the architecture output you MUST read before writing pseudocode
@@ -203,9 +155,6 @@ mcp__claude-flow__memory_retrieve(
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve development and architecture patterns (REQUIRED)
-- `save-pattern` - Store new pseudocode patterns and discoveries (REQUIRED)
-- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
@@ -223,34 +172,4 @@ Before returning your work to the coordinator, verify:
 - [ ] No TODO, `unimplemented!()`, or placeholder functions -- gaps are flagged explicitly
 - [ ] Column names use correct prefixes from Gold DDL generators
 - [ ] New patterns saved via `save-pattern` with feature tags
-- [ ] You called `get-pattern` before designing
-
 If any check fails, fix it before returning. Do not leave it for the coordinator.
-
----
-
-## Pattern Integration (REQUIRED)
-
-### BEFORE Pseudocode Work
-
-Use `get-pattern` skill with domain "development" to retrieve:
-- Existing algorithm patterns for the affected components
-- Rust async and channel patterns used in similar features
-- SQL patterns for TimescaleDB queries and Gold views
-- Integration surface findings from prior features
-
-### DURING Pseudocode Work
-
-Track what you learn:
-- New algorithm patterns worth capturing (state machines, processing loops)
-- SQL pitfalls discovered during schema verification (type mismatches, naming surprises)
-- Component interaction patterns not previously documented
-- Gaps in architecture output that required codebase research
-
-### AFTER Pseudocode Work
-
-1. Use `reflexion` skill to record whether retrieved patterns helped
-2. Use `save-pattern` skill with:
-   - domain: "development"
-   - tags: Include **feature identifier** (e.g., "fe-004", "pseudocode") so other agents can find it
-   - This enables implementation agents to query patterns by feature

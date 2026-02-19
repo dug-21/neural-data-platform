@@ -42,12 +42,12 @@ Hive State                     Agent Store                    Claude Code Runtim
   hive-mind_status ─────────>
 ```
 
-**Three integration steps per agent** (all required):
-1. `agent_spawn(agentId)` — registers in agent store (`.claude-flow/agents/store.json`)
-2. `hive-mind_join(agentId, role)` — registers in hive workers (`.claude-flow/hive-mind/state.json`)
-3. `Task()` — creates the real Claude Code process
+**Two required steps per agent** (+ one optional):
+1. `agent_spawn(agentId)` — registers in agent store (`.claude-flow/agents/store.json`) **REQUIRED**
+2. `Task()` — creates the real Claude Code process **REQUIRED**
+3. `hive-mind_join(agentId, role)` — registers in hive workers (`.claude-flow/hive-mind/state.json`) **OPTIONAL** — only needed if you want `hive-mind_status` tracking
 
-Without `hive-mind_join`, agents are invisible to `hive-mind_status`. Without `agent_spawn`, `agent_update` and `agent_status` fail. Both registration steps MUST happen before the Task call.
+Without `agent_spawn`, `agent_update` and `agent_status` fail. `agent_spawn` MUST happen before the Task call.
 
 ### Claude-Flow Memory
 
@@ -70,6 +70,8 @@ All NDP agent definitions (except ndp-scrum-master) contain a `## Swarm Coordina
 
 The coordinator's only job is to **pass the agent ID**. The agent definition handles the rest. This means the coordinator prompt can be minimal — no need to repeat memory instructions.
 
+**Note**: The hive-mind layer is optional. Agents coordinate through `memory_store`/`memory_retrieve` with `namespace: "coordination"`. The hive-mind layer is useful for topology tracking but not required for agent coordination.
+
 ---
 
 ## Swarm Launch: 2 Messages
@@ -81,33 +83,29 @@ When a task qualifies for swarm (see complexity detection below), execute in 2 m
 All MCP calls and TaskCreate calls go in ONE message. Use ToolSearch to find "claude-flow hive" tools first, then batch everything:
 
 ```
-# STEP 1: Create the hive
-mcp__claude-flow__hive-mind_init(
-  topology: "hierarchical",
-  queenId: "swarm-lead"
-)
-
-# STEP 2: Register each agent in BOTH stores (all in same message)
+# STEP 1: Register each agent
 mcp__claude-flow__agent_spawn(agentId: "agent-1-{role}", agentType: "{type}")
-mcp__claude-flow__hive-mind_join(agentId: "agent-1-{role}", role: "worker")
 mcp__claude-flow__agent_spawn(agentId: "agent-2-{role}", agentType: "{type}")
-mcp__claude-flow__hive-mind_join(agentId: "agent-2-{role}", role: "worker")
 # ... all agents
 
-# STEP 3: Seed shared context (agents read this via memory_retrieve)
+# STEP 2: Seed shared context (agents read this via memory_retrieve)
 mcp__claude-flow__memory_store(
   key: "swarm/shared/{feature-id}-context",
   value: "{task description, goals, constraints}",
-  namespace: "coordination"
+  namespace: "coordination",
+  upsert: true
 )
 
-# STEP 4: Define ALL tasks (batched)
+# STEP 3: Define ALL tasks (batched)
 TaskCreate("Task 1 subject", "description", "active form")
 TaskCreate("Task 2 subject", "description", "active form")
 # ... all tasks
 ```
 
-Set task dependencies with TaskUpdate after creation. Verify with `hive-mind_status(verbose=true)`.
+Set task dependencies with TaskUpdate after creation.
+
+The hive-mind layer (hive-mind_init, hive-mind_join, hive-mind_status) is OPTIONAL.
+Agent coordination happens through memory_store/memory_retrieve, not hive-mind state.
 
 ### Message 2: Execute (ALL agents spawned in parallel)
 
@@ -189,9 +187,9 @@ These run via `.claude/settings.json` without agent action:
 
 ---
 
-## Verifying Swarm State
+## Verifying Swarm State (Optional)
 
-After registering agents and before spawning Task agents, verify the hive is healthy:
+If using hive-mind for topology tracking, verify the hive is healthy before spawning:
 
 ```
 mcp__claude-flow__hive-mind_status(verbose: true)

@@ -34,6 +34,7 @@ The `/get-pattern`, `/save-pattern`, and `/reflexion` skills use **AgentDB** —
 | `get-pattern` | BEFORE work | Search patterns + RL predictions + certified recall |
 | `save-pattern` | AFTER discoveries | Store NEW reusable knowledge |
 | `reflexion` | AFTER work | Rate EACH pattern + feed RL engine + optional causal edges |
+| `pattern-manage` | Cleanup/auditing | Delete, deprecate, update, deduplicate patterns |
 | `learner` | Post-feature | Train RL policy, discover causal patterns from episodes |
 
 ## Persistent Learning Session
@@ -102,6 +103,18 @@ This tells the system nothing about which patterns helped or hurt.
 - `0.0` — Pattern was wrong, actively harmful
 
 **If get-pattern returned nothing useful**: still record a reflexion with reward=0.0 and critique explaining what you searched for and what was missing. This signals gaps that `/save-pattern` should fill.
+
+## Feedback Priority: Negative Before Positive
+
+If you discover a pattern is wrong, outdated, or harmful — record it IMMEDIATELY. Do not wait until "after work." A bad pattern left unmarked will mislead every future agent that retrieves it.
+
+Priority order:
+1. **Pattern is wrong/deprecated** — reflexion with reward=0.0 RIGHT NOW, mid-task if needed
+2. **Pattern conflicts with current architecture** — reflexion with reward=0.0 + save replacement pattern
+3. **Pattern was irrelevant** — reflexion with reward=0.4-0.5 (in your return, lower priority)
+4. **Pattern was helpful** — reflexion with reward=0.7-1.0 (in your return, lowest priority — implicit signal from task success partially covers this)
+
+The rule: negative feedback is urgent and must be explicit. Positive feedback is confirmatory and can be implicit (retrieval + task success). If you run out of context budget, always record the negatives and skip the positives.
 
 ## When to check patterns (get-pattern)
 

@@ -115,31 +115,31 @@ After spawning: tell the user that the scrum-master is coordinating, then STOP. 
 
 The scrum-master executes the following steps autonomously. These details are here so the scrum-master can read this file and follow them.
 
-#### Step 3a: Initialize Coordination Layer (MCP)
+#### Step 3a: Initialize Coordination Layer
 
-Use MCP tools for coordination, Task tool for agents. Do NOT use `claude-flow swarm init` CLI (it is cosmetic).
+Three required operations (batch in ONE message):
 
-```
-Use ToolSearch to find "claude-flow hive" tools, then call:
+1. Seed shared context:
+   ```
+   mcp__claude-flow__memory_store(
+     key: "swarm/shared/{feature-id}-context",
+     value: "{task description, goals, constraints}",
+     namespace: "coordination",
+     upsert: true
+   )
+   ```
 
-# 1. Create the hive
-mcp__claude-flow__hive-mind_init(
-  topology: "hierarchical",
-  queenId: "impl-lead"
-)
+2. Register agents (one per planned agent):
+   ```
+   mcp__claude-flow__agent_spawn(agentId: "agent-1-{role}", agentType: "{type}")
+   ```
 
-# 2. Register each planned agent in BOTH stores (repeat per agent)
-mcp__claude-flow__agent_spawn(agentId: "agent-1-{role}", agentType: "{ndp-agent-type}")
-mcp__claude-flow__hive-mind_join(agentId: "agent-1-{role}", role: "worker")
+3. Verify readiness: confirm memory store succeeded
 
-# ... register all agents for the first wave before spawning any Task
-
-# 3. Verify: hive-mind_status(verbose=true) should show all agents in workers array
-```
-
-This creates `.claude-flow/hive-mind/state.json` with workers list and shared memory. Agents registered via `agent_spawn` + `hive-mind_join` are visible in `hive-mind_status` AND trackable via `agent_update`.
-
-For large features (10+ tasks): use `topology: "mesh"` for peer communication.
+The hive-mind layer (hive-mind_init, hive-mind_join, hive-mind_status) is OPTIONAL.
+Agent coordination happens through memory_store/memory_retrieve, not hive-mind state.
+If you use hive-mind for topology tracking, batch it with the above. But do not block
+on hive-mind failures — agents work without it.
 
 #### Step 3b: Definition (batch with Step 3a)
 
@@ -164,13 +164,11 @@ Set task dependencies with TaskUpdate after creation.
 Spawn ALL agents for the current wave in ONE message (parallel).
 
 **Pre-spawn checklist** (verify before ANY Task call):
-- [ ] hive-mind_init ran
-- [ ] Agents registered (agent_spawn + hive-mind_join for each)
+- [ ] Agents registered (agent_spawn for each)
 - [ ] Tasks defined (TaskCreate completed)
 - [ ] Shared context seeded (memory_store key="swarm/shared/{feature}-context")
 - [ ] Brief read
 - [ ] `cargo build --workspace` passes (abort if fails — do not spawn agents on a broken workspace)
-- [ ] hive-mind_status shows all agents in workers array
 
 If ANY item is unchecked, STOP. Complete the missing step first.
 
@@ -202,7 +200,16 @@ Task(
     - product/features/{feature-id}/test-plan/{component}.md
 
     YOUR TASK: {description}
-    Files to create/modify: {paths}"
+    Files to create/modify: {paths}
+
+    RETURN FORMAT (required):
+    1. Files modified: [paths]
+    2. Tests: pass/fail
+    3. Issues: [blockers]
+    4. Pattern assessment: for each pattern from get-pattern, state {ID: helped/didn't/irrelevant}
+    5. Discoveries: [new approaches worth saving]
+
+    Before returning, call reflexion for each pattern you used."
 )
 ```
 
@@ -269,6 +276,17 @@ gh issue comment <N> --body "## Wave X Complete
 - Issues: [if any]"
 ```
 
+#### Step 3g: Learning Gate
+
+After GH Issue update and before declaring the wave complete:
+
+1. Review agent return messages for pattern assessment data
+2. Record reflexion entries for each pattern used across the wave (aggregate)
+3. Save any new patterns from agent discoveries
+4. Include learning summary in return to primary agent
+
+This step is the coordinator's responsibility. It serves as a backstop for agents that didn't complete individual reflexion.
+
 #### Multi-Wave Features
 
 For features with sequential waves:
@@ -322,14 +340,15 @@ PRIMARY AGENT:
   Message 3:  Review results + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + memory_store seed
+  Step 3a:  MCP: agent_spawn (all agents) + memory_store seed
   Step 3b:  TaskCreate (batch ALL) — in SAME message as 3a
   Step 3c:  Task() spawn ALL wave agents (parallel, ONE message)
   Step 3c.5: Per-wave AC check
   Step 3d:  Drift check
   Step 3e:  Task(ndp-validator) — 4-tier validation + trust recording
   Step 3f:  gh issue comment
-  (repeat 3c-3f for multi-wave)
+  Step 3g:  Learning gate — reflexion aggregation + new pattern saves
+  (repeat 3c-3g for multi-wave)
 ```
 
 ---

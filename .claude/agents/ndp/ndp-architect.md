@@ -159,51 +159,54 @@ After creating an ADR, use `save-pattern` skill with:
 
 ---
 
-## Swarm Coordination
+## Pattern Conflict Review (REQUIRED for Feature Work)
 
-**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
-If no agent ID was provided, skip this section entirely.
+After designing the architecture and writing ADRs, review ALL patterns returned by your initial `get-pattern` search for conflicts with your new decisions.
 
-When part of a swarm, you MUST report status through shared memory:
+### Conflict Check Process
 
-**ON START** — immediately after reading your task:
+For each pattern returned by get-pattern:
+
+1. **Does this pattern conflict with any ADR you just wrote?**
+   - Example: Pattern recommends DuckDB, your ADR eliminates DuckDB
+   - Example: Pattern assumes column naming scheme X, your architecture uses scheme Y
+
+2. **Does this pattern assume something your feature changes?**
+   - Example: Pattern references a view name you're renaming
+   - Example: Pattern describes a data flow path you're restructuring
+
+3. **Is this pattern still accurate for the codebase as it will exist after this feature?**
+
+### For Each Conflict Found
+
+Record an immediate deprecation reflexion:
+
 ```
-Use ToolSearch to find "claude-flow memory" tools, then:
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"<brief task description>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
+mcp__agentdb__reflexion_store(
+  session_id="architecture-deprecation",
+  task="Pattern ID {N} ({name}) conflicts with {feature-id} ADR-{M}",
+  reward=0.0,
+  success=false,
+  critique="DEPRECATED: {specific conflict}. Superseded by: {new pattern or ADR reference}. Reason: {why the old approach is now wrong}."
 )
 ```
 
-**ON PROGRESS** — after each major step (file created, test written, section completed):
+Then save the replacement pattern:
+
 ```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
+mcp__agentdb__agentdb_pattern_store(
+  taskType="{same category as deprecated pattern}",
+  approach="{updated approach reflecting new architecture}",
+  successRate=0.9,
+  tags=["{feature-id}", "{domain}", "supersedes-{old-pattern-id}"]
 )
 ```
 
-**ON COMPLETE** — before returning results:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
+### Why This Matters
 
-**READ SHARED CONTEXT** — at start, to get swarm-wide context:
-```
-mcp__claude-flow__memory_retrieve(
-  key: "swarm/shared/<feature-id>-context",
-  namespace: "coordination"
-)
-```
+This is the single most valuable correction in the system. Every pattern you deprecate here prevents every implementation agent in the swarm from following a bad approach. Bad patterns are 5x more costly than good ones — an agent following a deprecated pattern with high confidence wastes an entire context window on rework.
+
+---
 
 ## Related Agents
 
@@ -215,9 +218,6 @@ mcp__claude-flow__memory_retrieve(
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve existing architecture patterns (REQUIRED)
-- `save-pattern` - Store new architecture patterns (REQUIRED)
-- `reflexion` - Record whether retrieved patterns helped (REQUIRED)
 
 ---
 
@@ -234,46 +234,6 @@ Before returning your work to the coordinator, verify:
 - [ ] All modified files are within the scope defined in the brief
 - [ ] You called `get-pattern` before designing
 - [ ] Integration Surface table included in ARCHITECTURE.md for cross-boundary features
+- [ ] Pattern conflict review completed (no stale patterns left unmarked)
 
 If any check fails, fix it before returning. Do not leave it for the coordinator.
-
----
-
-## Pattern Integration (REQUIRED)
-
-**The architect is a pattern CREATOR.** Your designs become the patterns other agents follow.
-
-### BEFORE Architecture Work
-
-Use `get-pattern` skill with domain "architecture" to retrieve:
-- Existing ADRs for the affected area
-- Related design patterns
-- Previous decisions that may conflict or align
-
-### DURING Architecture Work
-
-Document as you design:
-- New patterns to create
-- Existing patterns that need updates
-- Outdated patterns to deprecate
-
-### AFTER Architecture Work
-
-1. Use `save-pattern` skill with:
-   - domain: "architecture"
-   - tags: Include **feature identifier** (e.g., "dp-001", "silver-layer")
-   - This enables other agents to query patterns by feature
-
-2. Use `reflexion` skill to record whether retrieved patterns helped
-
-### Why Feature Identifiers Matter
-
-When you save patterns with feature tags, other agents can find them:
-
-```
-Architect saves:     domain="architecture", tags=["dp-001", "timescaledb-schema"]
-Rust dev queries:    get-pattern with "dp-001 schema"
-DQ engineer queries: get-pattern with "dp-001 validation"
-```
-
-All agents working on dp-001 can discover your architectural decisions.

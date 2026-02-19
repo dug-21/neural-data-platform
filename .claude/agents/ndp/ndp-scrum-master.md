@@ -53,7 +53,7 @@ From the primary agent's spawn prompt:
 
 ## How Agents Coordinate (you don't micromanage this)
 
-Every agent you spawn gets `Your agent ID: {feature}-agent-N-{role}` in its prompt. This activates the `## Swarm Coordination` section built into all NDP agent definitions, which instructs agents to:
+Every agent you spawn gets `Your agent ID: {feature}-agent-N-{role}` in its prompt. This activates the Swarm Coordination section in `.claude/rules/agent-behaviors.md`, which instructs agents to:
 
 - Write `swarm/{id}/status` on start
 - Write `swarm/{id}/progress` after each major step
@@ -104,7 +104,16 @@ Task(
     - product/features/{id}/test-plan/{component}.md (your component's test expectations)
 
     YOUR TASK: {description}
-    Files to create/modify: {paths}"
+    Files to create/modify: {paths}
+
+    RETURN FORMAT (required):
+    1. Files modified: [paths]
+    2. Tests: pass/fail
+    3. Issues: [blockers]
+    4. Pattern assessment: for each pattern from get-pattern, state {ID: helped/didn't/irrelevant}
+    5. Discoveries: [new approaches worth saving]
+
+    Before returning, call reflexion for each pattern you used."
 )
 ```
 
@@ -144,6 +153,7 @@ Before returning "complete" to the primary agent, verify:
 - [ ] GH Issue updated
 - [ ] Pattern IDs distributed to agents (from primary agent's get-pattern)
 - [ ] Feature testbed passes (if applicable — see below)
+- [ ] Learning gate completed (reflexion entries recorded for all patterns used)
 
 If anything fails the gate, report the specific failure — do not improvise fixes beyond the protocol's 2-iteration drift budget.
 
@@ -159,6 +169,52 @@ For qualifying features (those that touch integration boundaries: SQL queries, c
 3. A failing testbed blocks the Exit Gate — the feature cannot be declared complete
 
 Library-only features (no runtime artifact) and documentation-only features are exempt from testbed requirements.
+
+---
+
+## Step 3g: Learning Gate (after GH Issue update, before exit gate)
+
+After all waves complete and validation passes, aggregate learning:
+
+### 1. Collect Agent Pattern Reports
+
+Read each agent's return message. Look for the "Patterns used" section (agents include this per the agent-behaviors rule). If an agent's return doesn't include pattern assessment, note it as "no pattern feedback from agent-N."
+
+### 2. Record Reflexion for Each Pattern Used Across the Swarm
+
+For each unique pattern ID that was distributed to or retrieved by agents:
+
+```
+mcp__agentdb__reflexion_store(
+  session_id="{feature-id}",
+  task="Swarm used pattern ID {N} ({name}) across {count} agents",
+  reward={aggregate - average of agent assessments, or infer from task success},
+  success={true if agents using this pattern succeeded},
+  critique="Used by agents: {list}. Assessment: {aggregate feedback from agent returns}. {any specific notes}"
+)
+```
+
+### 3. Save New Patterns from Agent Discoveries
+
+If any agent reported a discovery in their "Discoveries" return section, save it:
+
+```
+mcp__agentdb__agentdb_pattern_store(
+  taskType="{appropriate category}",
+  approach="{discovery description from agent return}",
+  successRate=0.9,
+  tags=["{feature-id}", "{domain}"]
+)
+```
+
+### 4. Report Learning Summary
+
+Include in your return to the primary agent:
+- Patterns used: {count} across {agent count} agents
+- Reflexion entries recorded: {count}
+- New patterns saved: {count}
+- Patterns with no agent feedback: {list IDs}
+- Deprecations recorded: {count, if architect flagged any}
 
 ---
 

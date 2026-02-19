@@ -207,54 +207,6 @@ Recommend these DQ rules to `ndp-dq-engineer`:
 | 201-300 | Purple | #8F3F97 |
 | 301-500 | Maroon | #7E0023 |
 
----
-
-## Swarm Coordination
-
-**This section activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
-If no agent ID was provided, skip this section entirely.
-
-When part of a swarm, you MUST report status through shared memory:
-
-**ON START** — immediately after reading your task:
-```
-Use ToolSearch to find "claude-flow memory" tools, then:
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/status",
-  value: '{"status":"task-received","task":"<brief task description>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON PROGRESS** — after each major step (file created, test written, section completed):
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/progress",
-  value: '{"current_step":"<what you just did>","files_modified":["<paths>"],"progress_pct":<N>,"feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**ON COMPLETE** — before returning results:
-```
-mcp__claude-flow__memory_store(
-  key: "swarm/<your-agent-id>/complete",
-  value: '{"status":"complete","deliverables":["<file paths>"],"test_results":"<summary>","feature":"<feature-id>"}',
-  namespace: "coordination",
-  upsert: true
-)
-```
-
-**READ SHARED CONTEXT** — at start, to get swarm-wide context:
-```
-mcp__claude-flow__memory_retrieve(
-  key: "swarm/shared/<feature-id>-context",
-  namespace: "coordination"
-)
-```
-
 ## Related Agents
 
 - `ndp-meteorologist` - Sibling domain specialist (weather)
@@ -266,30 +218,3 @@ mcp__claude-flow__memory_retrieve(
 ## Related Skills
 
 - `ndp-github-workflow` - Branch, commit, PR conventions (REQUIRED)
-- `get-pattern` - Retrieve air quality domain patterns (REQUIRED)
-- `save-pattern` - Store or updates new domain knowledge (REQUIRED)
-- `reflexion` - Evaluation of patterns you retrieved and used (REQUIRED)
-
----
-
-## Pattern Integration (REQUIRED)
-
-### BEFORE Domain Work
-
-Use `get-pattern` skill with domain "air-quality" to retrieve:
-- Existing calibration patterns
-- Sensor correction factors
-- Health threshold documentation
-
-### DURING Domain Work
-
-Document patterns that need attention:
-- New calibration factors discovered
-- Sensor quirks identified
-- Health threshold updates
-- Outdated patterns that need revision
-
-### AFTER Domain Work
-
-1. Use `reflexion` skill to record whether retrieved patterns helped
-2. Use `save-pattern` skill with domain "air-quality" to store new discoveries
