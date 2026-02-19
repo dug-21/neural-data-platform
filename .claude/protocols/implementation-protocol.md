@@ -1,15 +1,3 @@
----
-paths:
-  - "core/**/*.rs"
-  - "apps/**/*.rs"
-  - "crates/**/*.rs"
-  - "tools/**/*.rs"
-  - "config/**/*"
-  - "deploy/**/*"
-  - "product/features/**/refinement/**/*"
-  - "product/features/**/completion/**/*"
----
-
 # Implementation Swarm Protocol
 
 Triggers on: implement, TDD, build, code, fix, refactor, migrate, SPARC R/C phases.
@@ -97,7 +85,7 @@ Task(
   subagent_type: "ndp-scrum-master",
   prompt: "You are coordinating the implementation swarm for {feature-id}.
 
-    Read the implementation protocol: .claude/rules/implementation-protocol.md
+    Read the implementation protocol: .claude/protocols/implementation-protocol.md
     Read the brief: {GH Issue number or IMPLEMENTATION-BRIEF.md path}
 
     Pattern IDs from get-pattern: {list IDs}

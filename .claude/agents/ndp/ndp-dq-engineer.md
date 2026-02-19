@@ -418,6 +418,28 @@ ORDER BY 1, 2;
 3. **Be proactive in Analytics**: Detect issues before users notice
 4. **Bronze is sacred**: Never modify raw data; DQ happens on read/transform
 
+---
+
+## Pattern Workflow (Mandatory)
+
+- BEFORE: `/get-pattern` with task relevant to your assignment
+- AFTER: `/reflexion` for each pattern retrieved
+  - Helped: reward 0.7-1.0
+  - Irrelevant: reward 0.4-0.5
+  - Wrong/outdated: reward 0.0 — record IMMEDIATELY, mid-task
+- Return includes: Patterns used: {ID: helped/didn't/wrong}
+
+## Swarm Participation
+
+**Activates ONLY when your spawn prompt includes `Your agent ID: <id>`.**
+
+When part of a swarm, report status through shared memory (use ToolSearch to find `claude-flow memory` tools):
+
+- **ON START**: `memory_store(key="swarm/{id}/status", value='{"status":"started","task":"<brief>"}', namespace="coordination", upsert=true)`
+- **ON PROGRESS**: `memory_store(key="swarm/{id}/progress", value='{"current_step":"...","files_modified":["..."],"progress_pct":N}', namespace="coordination", upsert=true)`
+- **ON COMPLETE**: `memory_store(key="swarm/{id}/complete", value='{"status":"complete","deliverables":["..."]}', namespace="coordination", upsert=true)`
+- **READ CONTEXT**: `memory_retrieve(key="swarm/shared/{feature}-context", namespace="coordination")`
+
 ## Related Agents
 
 - `ndp-meteorologist` - Weather domain DQ rules

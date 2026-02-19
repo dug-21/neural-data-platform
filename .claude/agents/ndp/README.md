@@ -6,7 +6,7 @@ Project-specific agents for the Neural Data Platform. These agents know the proj
 
 ## When to Use NDP Agents
 
-**ALWAYS use NDP agents instead of generic agents for this project.** See `.claude/rules/agent-routing.md` for swarm composition templates and full routing tables.
+**ALWAYS use NDP agents instead of generic agents for this project.** See `.claude/protocols/agent-routing.md` for swarm composition templates and full routing tables.
 
 ## Agent Roster
 
@@ -100,7 +100,7 @@ Agents should know these patterns exist (use get-pattern for details):
 
 ## Spawning NDP Agents
 
-Agents are spawned by `ndp-scrum-master` (the coordinator) with an Agent ID that activates their `## Swarm Coordination` block. See `.claude/rules/agent-routing.md` for composition templates.
+Agents are spawned by `ndp-scrum-master` (the coordinator) with an Agent ID that activates their `## Swarm Coordination` block. See `.claude/protocols/agent-routing.md` for composition templates.
 
 ```
 # The scrum-master spawns workers with Agent IDs — agents self-coordinate via shared memory

@@ -452,7 +452,7 @@ Do NOT skip the trust recording step. Even self-reported data establishes the ba
 
 ## Related
 
-- `.claude/rules/implementation-protocol.md` -- full implementation swarm protocol
+- `.claude/protocols/implementation-protocol.md` -- full implementation swarm protocol
 - `.claude/rules/testing.md` -- integration environment details, baseline/flaky management
 - `.claude/skills/validate-plan/SKILL.md` -- planning artifact validation
 - `docker-compose.integration.yml` -- integration stack definition

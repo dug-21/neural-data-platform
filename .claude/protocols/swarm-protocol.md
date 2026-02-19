@@ -1,12 +1,8 @@
----
-paths:
-  - "product/features/**/*"
-  - "CLAUDE.md"
----
-
 # Swarm Orchestration Protocol
 
 Base protocol for all swarm operations. Extended by `implementation-protocol.md` (for coding) and `planning-protocol.md` (for SPARC planning).
+
+Both are in `.claude/protocols/` — NOT auto-loaded as rules. The scrum-master reads them explicitly via Read().
 
 ---
 

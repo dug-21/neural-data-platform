@@ -1,9 +1,3 @@
----
-paths:
-  - "product/features/**/*"
-  - ".claude/agents/**/*"
----
-
 # Agent Routing and Swarm Composition
 
 ## NDP Agent Preference
@@ -40,16 +34,17 @@ These are non-negotiable. No swarm runs without a coordinator and no swarm compl
 | `ndp-scrum-master` | coordinator | Reads protocol file, inits hive, spawns workers with Agent IDs, drift checks, GH Issue lifecycle |
 | `ndp-validator` | gate | Memory-driven discovery of agent completions, 4-tier impl validation OR 5-check plan validation, trust recording |
 
-### Planning (4 agents — planning swarms only, wave-ordered)
+### Planning (5 agents — planning swarms only, wave-ordered)
 
 | Agent | Type | Wave | What It Produces |
 |-------|------|------|-----------------|
-| `ndp-architect` | specialist | 1 | ARCHITECTURE.md with ADRs + Integration Surface table, stored as AgentDB patterns |
-| `specification` | generic | 1 | SPECIFICATION.md, TASK-DECOMPOSITION.md |
+| `ndp-architect` | specialist | 1 | ARCHITECTURE.md with ADRs + Integration Surface, stores ADRs in AgentDB via /save-pattern |
+| `ndp-specification` | specialist | 1 | SPECIFICATION.md, TASK-DECOMPOSITION.md |
 | `ndp-pseudocode` | specialist | 2 | pseudocode/OVERVIEW.md + per-component pseudocode files (reads Wave 1 output) |
 | `ndp-tester` | specialist | 2 | test-plan/OVERVIEW.md + per-component test plan files (reads Wave 1 output) |
+| `ndp-synthesizer` | synthesizer | 3 | IMPLEMENTATION-BRIEF.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, GH Issue (fresh context) |
 
-Wave 1 (spec + arch) runs first; Wave 2 (pseudocode + test plan) runs after Wave 1 completes. Plus `ndp-vision-guardian` for alignment check (Wave 3, after planning agents complete).
+Wave 1 (spec + arch) → Wave 2 (pseudocode + test plan) → Wave 3 (vision guardian, synthesizer, validator — sequential).
 
 ### Core Implementation (2 agents — most implementation swarms)
 
@@ -106,12 +101,15 @@ Use these as starting points. Add/remove specialists based on the specific task.
 
 ```
 Coordinator:  ndp-scrum-master
-Wave 1:       ndp-architect, specification              (parallel)
+Wave 1:       ndp-architect, ndp-specification              (parallel)
+              ndp-architect stores ADRs in AgentDB via /save-pattern
 Wave 2:       ndp-pseudocode, ndp-tester                (parallel, after Wave 1)
-Wave 3:       ndp-vision-guardian (alignment), ndp-validator (5-check)  (sequential)
+Wave 3:       ndp-vision-guardian (alignment)            (sequential)
+              ndp-synthesizer (brief + maps + GH Issue)  (fresh context window)
+              ndp-validator (5-check)
 ```
 
-Produces: SPECIFICATION.md, TASK-DECOMPOSITION.md, ARCHITECTURE.md (with Integration Surface), pseudocode/OVERVIEW.md + per-component pseudocode, test-plan/OVERVIEW.md + per-component test plans, ALIGNMENT-REPORT.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, IMPLEMENTATION-BRIEF.md (with Component Map), GH Issue.
+Produces: SPECIFICATION.md, TASK-DECOMPOSITION.md, ARCHITECTURE.md (with Integration Surface + ADRs stored in AgentDB), pseudocode/OVERVIEW.md + per-component pseudocode, test-plan/OVERVIEW.md + per-component test plans, ALIGNMENT-REPORT.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, IMPLEMENTATION-BRIEF.md (with Component Map), GH Issue.
 
 ### Feature Implementation (General Rust)
 

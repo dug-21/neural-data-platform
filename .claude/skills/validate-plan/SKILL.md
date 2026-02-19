@@ -163,6 +163,6 @@ Minimum 0, maximum 100.
 
 ## Related
 
-- `.claude/rules/planning-protocol.md` -- planning swarm protocol (Step 3h calls this skill)
+- `.claude/protocols/planning-protocol.md` -- planning swarm protocol (Step 3h calls this skill)
 - `.claude/skills/validate/SKILL.md` -- implementation validation (4-tier)
 - `product/vision/ALIGNMENT-CRITERIA.md` -- vision alignment criteria

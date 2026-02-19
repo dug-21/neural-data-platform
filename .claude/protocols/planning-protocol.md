@@ -1,9 +1,3 @@
----
-paths:
-  - "product/features/**/*"
-  - "CLAUDE.md"
----
-
 # Planning Swarm Protocol
 
 Triggers on: specification, pseudocode, architecture, design, research, scope, roadmap, SPARC S/P/A phases.
@@ -90,7 +84,7 @@ Task(
   subagent_type: "ndp-scrum-master",
   prompt: "You are coordinating the planning swarm for {feature-id}.
 
-    Read the planning protocol: .claude/rules/planning-protocol.md
+    Read the planning protocol: .claude/protocols/planning-protocol.md
     Read the scope: product/features/{feature-id}/SCOPE.md
 
     Pattern IDs from get-pattern: {list IDs}
@@ -123,7 +117,7 @@ mcp__claude-flow__hive-mind_init(
 )
 
 # 2. Register each planned agent in BOTH stores (repeat per agent)
-mcp__claude-flow__agent_spawn(agentId: "agent-1-spec", agentType: "specification")
+mcp__claude-flow__agent_spawn(agentId: "agent-1-spec", agentType: "ndp-specification")
 mcp__claude-flow__hive-mind_join(agentId: "agent-1-spec", role: "worker")
 
 mcp__claude-flow__agent_spawn(agentId: "agent-2-arch", agentType: "ndp-architect")
@@ -183,7 +177,7 @@ Agents are spawned in three waves. Each wave must complete before the next begin
 - [ ] SCOPE.md read
 - [ ] hive-mind_status shows all agents in workers array
 
-Agent types for planning: `ndp-architect`, `specification`, `ndp-pseudocode`, `ndp-tester`
+Agent types for planning: `ndp-architect`, `ndp-specification`, `ndp-pseudocode`, `ndp-tester`, `ndp-synthesizer`
 
 Do NOT spawn: `ndp-rust-dev`, `coder`, `sparc-coder`.
 
@@ -197,8 +191,8 @@ Each agent prompt MUST include:
 
 Spawn in ONE message:
 
-- **Specification agent** (`specification`): produces `specification/SPECIFICATION.md` and `specification/TASK-DECOMPOSITION.md`
-- **Architecture agent** (`ndp-architect`): performs codebase consultation (reads actual Gold DDL generators, existing schemas, cargo workspace structure), then produces `architecture/ARCHITECTURE.md` with exact view names, column prefixes, PostgreSQL types, and integration surface details
+- **Specification agent** (`ndp-specification`): produces `specification/SPECIFICATION.md` and `specification/TASK-DECOMPOSITION.md`
+- **Architecture agent** (`ndp-architect`): performs codebase consultation, produces `architecture/ARCHITECTURE.md` with ADRs, integration surface details. **The architect stores each ADR in AgentDB via `/save-pattern` before returning** (architect is the ADR authority — see ndp-architect agent definition). The architect returns ADR pattern IDs in its completion message.
 
 **Architecture agent (ndp-architect) MUST produce individual ADRs** in `product/features/{feature-id}/architecture/ARCHITECTURE.md` using this format:
 
@@ -265,111 +259,40 @@ Save to `product/features/{feature-id}/ALIGNMENT-REPORT.md`.
 
 Include variances in the return summary. The primary agent will present them to the user.
 
-#### Step 3e: Store ADRs in AgentDB via /save-pattern (permanent knowledge)
+#### Step 3e: Spawn Synthesizer (brief compilation + GH Issue)
 
-After the architecture agent completes, store each ADR as a permanent AgentDB pattern using `/save-pattern`. This is how implementation agents later access architectural decisions via `/get-pattern`.
+ADR storage is handled by the architect in Wave 1 (see architect agent definition). The architect returns ADR pattern IDs in its completion message. Pass these to the synthesizer.
 
-For EACH `## ADR-NNN:` in the ARCHITECTURE.md, use `/save-pattern`:
+Spawn `ndp-synthesizer` with all SPARC artifact paths and the architect's ADR pattern IDs:
 
 ```
-taskType: "adr:{feature-id}-{nnn}"
-approach: "{full ADR text verbatim — Context + Decision + Consequences}"
-successRate: 1.0
-tags: ["adr", "{feature-id}", "architecture", "{title-slug}"]
+Task(
+  subagent_type: "ndp-synthesizer",
+  prompt: "You are compiling the implementation brief for {feature-id}.
+    Your agent ID: {feature-id}-synthesizer
+
+    Read these SPARC artifacts:
+    - product/features/{id}/SCOPE.md
+    - product/features/{id}/specification/SPECIFICATION.md
+    - product/features/{id}/specification/TASK-DECOMPOSITION.md
+    - product/features/{id}/architecture/ARCHITECTURE.md
+    - product/features/{id}/pseudocode/OVERVIEW.md
+    - product/features/{id}/pseudocode/{component-1}.md
+    - product/features/{id}/pseudocode/{component-2}.md
+    - product/features/{id}/test-plan/OVERVIEW.md
+    - product/features/{id}/test-plan/{component-1}.md
+    - product/features/{id}/test-plan/{component-2}.md
+    - product/features/{id}/ALIGNMENT-REPORT.md
+
+    ADR pattern IDs from architect: {list from architect's return}
+    Vision variances: {from vision guardian's return}
+
+    Produce: IMPLEMENTATION-BRIEF.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, GH Issue.
+    Return: file paths + GH Issue URL."
+)
 ```
 
-The `/save-pattern` skill handles duplicate checking, embedding generation, and storage. See that skill for best practices.
-
-Record the returned pattern IDs — they go into the IMPLEMENTATION-BRIEF.md's Resolved Decisions table so `/spec-compile` can reference them in the Level-1 summary.
-
-#### Step 3f: Generate Planning Deliverables
-
-Produce the following deliverables:
-
-**1. ACCEPTANCE-MAP.md** at `product/features/{feature-id}/ACCEPTANCE-MAP.md`:
-
-```markdown
-# {feature-id} Acceptance Criteria Map
-
-| AC-ID | Description | Verification Method | Verification Detail | Status |
-|-------|-------------|--------------------|--------------------|--------|
-| AC-01 | Description from SCOPE.md | test/manual/file-check/grep/shell | Specific verification command or procedure | PENDING |
-```
-
-Verification method types: `test` (cargo test function), `manual` (human check), `file-check` (file exists), `grep` (content match), `shell` (run command, check exit code). Every AC from SCOPE.md must appear.
-
-**2. LAUNCH-PROMPT.md** at `product/features/{feature-id}/LAUNCH-PROMPT.md`:
-
-```markdown
-# Implementation Launch Prompt: {feature-id}
-
-## Proposed Prompt
-> Implement {feature-id}: {title}
-> GitHub Issue: #{N}
-> Brief: product/features/{id}/IMPLEMENTATION-BRIEF.md
-> Pattern IDs from planning: {list}
-> Constraints: {key constraints}
-> Wave structure: {summary}
-
-## Reminders for User
-- Review ALIGNMENT-REPORT.md for any variances
-- Verify acceptance criteria in SCOPE.md
-
-## Gotchas Discovered During Planning
-- {gotcha 1}
-```
-
-**3. IMPLEMENTATION-BRIEF.md** at `product/features/{feature-id}/IMPLEMENTATION-BRIEF.md` (200-400 lines):
-
-- **SPARC artifact links table** (MUST include):
-  ```
-  | Artifact | Path |
-  |----------|------|
-  | Scope | product/features/{feature-id}/SCOPE.md |
-  | Specification | product/features/{feature-id}/specification/SPECIFICATION.md |
-  | Task Decomposition | product/features/{feature-id}/specification/TASK-DECOMPOSITION.md |
-  | Architecture (ADRs) | product/features/{feature-id}/architecture/ARCHITECTURE.md |
-  | Pseudocode Overview | product/features/{feature-id}/pseudocode/OVERVIEW.md |
-  | Pseudocode Components | product/features/{feature-id}/pseudocode/{component}.md (per component) |
-  | Test Plan Overview | product/features/{feature-id}/test-plan/OVERVIEW.md |
-  | Test Plan Components | product/features/{feature-id}/test-plan/{component}.md (per component) |
-  | Alignment Report | product/features/{feature-id}/ALIGNMENT-REPORT.md |
-  ```
-- **Component Map** (MUST include — maps components to their pseudocode and test plan files):
-  ```markdown
-  ## Component Map
-
-  | Component | Pseudocode | Test Plan |
-  |-----------|-----------|-----------|
-  | {component-1} | pseudocode/{component-1}.md | test-plan/{component-1}.md |
-  | {component-2} | pseudocode/{component-2}.md | test-plan/{component-2}.md |
-  ```
-  Components are determined by the pseudocode and test plan agents from the specification. They map to cargo workspace members and deployment artifacts (e.g., ndp-intelligence, ndp-lib, air-quality-app, deploy-sh, ndp-cli).
-- Goal (2-3 sentences — the full objective, not a 1-liner)
-- Resolved Decisions table: `| Decision | Resolution | Source | Pattern ID |` — include the AgentDB pattern ID from Step 3e so spec-compile can reference it
-- GitHub Issue link (added in Step 3g)
-- Files to create/modify (paths + 1-line summaries)
-- Data structures (actual Rust code)
-- Function signatures (actual Rust code)
-- Test expectations (unit + integration)
-- Constraints (version, banned deps, ARM64, config-driven, no hardcoded DDL)
-- Dependencies (crates, features)
-- NOT in scope
-- Alignment status (from ALIGNMENT-REPORT.md)
-
-#### Step 3g: Create GitHub Issue
-
-```bash
-gh issue create \
-  --title "[{feature-id}] {description}" \
-  --label "implementation,{phase}" \
-  --body "$(cat product/features/{feature-id}/IMPLEMENTATION-BRIEF.md)"
-```
-
-Then update SCOPE.md with the issue link:
-```
-Add `## Tracking\n\n{issue-url}` to SCOPE.md (if not already present)
-```
+The synthesizer gets a fresh context window — it reads artifacts directly for higher quality synthesis. See `ndp-synthesizer` agent definition for deliverable specifications.
 
 #### Step 3h: Validate Planning Artifacts (spawn ndp-validator)
 
@@ -431,18 +354,17 @@ PRIMARY AGENT:
   Message 3:  Review results + present variances + /reflexion + /save-pattern
 
 NDP-SCRUM-MASTER (internal):
-  Step 3a:  MCP: hive-mind_init + agent_spawn + hive-mind_join (all agents) + memory_store seed
+  Step 3a:  MCP: agent_spawn (all agents) + memory_store seed
   Step 3b:  TaskCreate (batch ALL with wave deps) — in SAME message as 3a
-  Step 3c:  Wave 1: Task(specification) + Task(ndp-architect) — parallel, ONE message
+  Step 3c:  Wave 1: Task(ndp-specification) + Task(ndp-architect) — parallel, ONE message
+            (architect stores ADRs via /save-pattern, returns pattern IDs)
             ...wait for Wave 1...
             Wave 2: Task(ndp-pseudocode) + Task(ndp-tester) — parallel, ONE message
             ...wait for Wave 2...
-            Wave 3 (Steps 3d-3h, sequential):
+            Wave 3 (Steps 3d-3f, sequential):
   Step 3d:  Task(ndp-vision-guardian) — alignment check
-  Step 3e:  Store each ADR in AgentDB via agentdb_pattern_store (permanent)
-  Step 3f:  Generate ACCEPTANCE-MAP.md + LAUNCH-PROMPT.md + IMPLEMENTATION-BRIEF.md
-  Step 3g:  gh issue create + update SCOPE.md
-  Step 3h:  Task(ndp-validator) — 5-check planning validation + trust recording
+  Step 3e:  Task(ndp-synthesizer) — brief + maps + GH Issue (fresh context, reads all artifacts)
+  Step 3f:  Task(ndp-validator) — 5-check planning validation + trust recording
 ```
 
 ---

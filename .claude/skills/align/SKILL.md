@@ -91,7 +91,7 @@ The user can edit ALIGNMENT-CRITERIA.md at any time. All agents and skills refer
 
 ## Integration with Planning Protocol
 
-The planning swarm protocol (`.claude/rules/planning-protocol.md`) calls `/align` automatically as Step 5 after all planning agents complete. You can also invoke it manually at any point.
+The planning swarm protocol (`.claude/protocols/planning-protocol.md`) calls `/align` automatically as Step 5 after all planning agents complete. You can also invoke it manually at any point.
 
 ---
 
@@ -105,4 +105,4 @@ The planning swarm protocol (`.claude/rules/planning-protocol.md`) calls `/align
 
 - `product/vision/ALIGNMENT-CRITERIA.md` — the criteria document (user-editable)
 - `.claude/agents/ndp/ndp-vision-guardian.md` — the agent definition
-- `.claude/rules/planning-protocol.md` — planning swarm protocol (calls /align at Step 5)
+- `.claude/protocols/planning-protocol.md` — planning swarm protocol (calls /align at Step 5)
