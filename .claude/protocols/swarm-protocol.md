@@ -1,8 +1,58 @@
 # Swarm Orchestration Protocol
 
-Base protocol for all swarm operations. Extended by `implementation-protocol.md` (for coding) and `planning-protocol.md` (for SPARC planning).
+Base protocol for all swarm operations. Extended by:
+- `design-protocol.md` — Session 1: research, design, vision check, brief compilation
+- `delivery-protocol.md` — Session 2: component design, implementation, testing with 3 validation gates
 
 Both are in `.claude/protocols/` — NOT auto-loaded as rules. The scrum-master reads them explicitly via Read().
+
+---
+
+## Two Sessions, Two Leaders
+
+The development lifecycle executes across two distinct sessions with a human approval gate between them.
+
+| Session | Leader | Protocol | What It Does |
+|---------|--------|----------|-------------|
+| Session 1 (Design) | Design Leader | `design-protocol.md` | Research → 3 source docs → vision check → brief → GH Issue. Returns to human. |
+| Session 2 (Delivery) | Delivery Leader | `delivery-protocol.md` | Stage 3a → Gate 3a → Stage 3b → Gate 3b → Stage 3c → Gate 3c → Delivery. |
+
+Both leaders are the same agent (ndp-scrum-master) reading different protocols. The **Implementation Brief** is the handoff document — it contains the component map, acceptance criteria, GH Issue number, and paths to the three source documents.
+
+```
+SESSION 1                                SESSION 2
+═════════                                ═════════
+
+Phase 1: Research & Scope                Stage 3a: Component Design
+Phase 2: Design (3 source docs)            ★ Gate 3a ★
+  → Vision alignment                     Stage 3b: Implementation
+  → Synthesizer (brief + map + GH)         ★ Gate 3b ★
+  ★ HUMAN REVIEWS & APPROVES ★           Stage 3c: Testing & Risk Validation
+                                           ★ Gate 3c ★
+                                         Phase 4: Delivery
+```
+
+---
+
+## Three Validation Gates
+
+The Delivery Leader runs three validation gates sequentially. Each gate uses the same validator agent (ndp-validator) with different focused checks.
+
+| Gate | What It Validates | Validates Against | On Pass | On Fail |
+|------|-------------------|-------------------|---------|---------|
+| Gate 3a | Component designs, pseudocode, test plans | Architecture, Specification, Risk Strategy | Auto-proceed to 3b | Rework (2x) or stop |
+| Gate 3b | Implemented code, test cases | Pseudocode, Architecture, Specification | Auto-proceed to 3c | Rework (2x) or stop |
+| Gate 3c | Test results, risk coverage | Risk Strategy, Specification, Architecture | Deliver | Rework (2x) or stop |
+
+---
+
+## Two-Tier Escalation
+
+At every gate, failures fall into two categories:
+
+**Reworkable**: Design doesn't match spec, code doesn't match pseudocode, test gaps. Loop back to previous stage agents. Max 2 iterations per gate.
+
+**Scope/Feasibility**: Scope was wrong, technology doesn't work, architecture can't support a requirement. Stop the session immediately and return to human with a recommendation.
 
 ---
 
@@ -10,7 +60,7 @@ Both are in `.claude/protocols/` — NOT auto-loaded as rules. The scrum-master 
 
 Swarms use **coordinator delegation**: the primary agent spawns `ndp-scrum-master` as the single coordinator, who then spawns worker agents, monitors results, detects drift, and controls flow. Use **Task tool** (spawn-and-wait) at both levels. Do NOT use TeamCreate — Teams are for long-running collaborative work requiring inter-agent messaging.
 
-See `implementation-protocol.md` and `planning-protocol.md` for the specific delegation flows.
+See `design-protocol.md` and `delivery-protocol.md` for the specific delegation flows.
 
 ---
 
@@ -76,15 +126,14 @@ When a task qualifies for swarm (see complexity detection below), execute in 2 m
 
 ### Message 1: Initialize + Register + Define (ALL batched)
 
-All MCP calls and TaskCreate calls go in ONE message. Use ToolSearch to find "claude-flow hive" tools first, then batch everything:
+All MCP calls and TaskCreate calls go in ONE message:
 
 ```
 # STEP 1: Register each agent
 mcp__claude-flow__agent_spawn(agentId: "agent-1-{role}", agentType: "{type}")
 mcp__claude-flow__agent_spawn(agentId: "agent-2-{role}", agentType: "{type}")
-# ... all agents
 
-# STEP 2: Seed shared context (agents read this via memory_retrieve)
+# STEP 2: Seed shared context
 mcp__claude-flow__memory_store(
   key: "swarm/shared/{feature-id}-context",
   value: "{task description, goals, constraints}",
@@ -95,13 +144,9 @@ mcp__claude-flow__memory_store(
 # STEP 3: Define ALL tasks (batched)
 TaskCreate("Task 1 subject", "description", "active form")
 TaskCreate("Task 2 subject", "description", "active form")
-# ... all tasks
 ```
 
 Set task dependencies with TaskUpdate after creation.
-
-The hive-mind layer (hive-mind_init, hive-mind_join, hive-mind_status) is OPTIONAL.
-Agent coordination happens through memory_store/memory_retrieve, not hive-mind state.
 
 ### Message 2: Execute (ALL agents spawned in parallel)
 
@@ -109,33 +154,8 @@ Spawn ALL agents in ONE message via Task tool. Every Task call runs in parallel.
 
 Each agent prompt MUST include:
 1. `Your agent ID: {feature}-agent-N-{role}` — this activates the Swarm Coordination block in agent definitions
-2. The Level-1 summary (if feature work — from `/spec-compile`)
-3. The task description (2-3 sentences)
-4. Specific file paths
-
-The agent ID is the critical line. All NDP agent definitions (except ndp-scrum-master) contain a `## Swarm Coordination` section that activates when `Your agent ID:` is present. This section instructs agents to:
-- Write `swarm/{id}/status` on start
-- Write `swarm/{id}/progress` after each major step
-- Write `swarm/{id}/complete` before returning
-- Read `swarm/shared/{feature}-context` for shared state
-
-The coordinator does NOT need to repeat memory instructions in the prompt — the agent definition handles it.
-
-Example agent prompt:
-```
-You are agent-N implementing {subtask} for {feature-id}.
-Your agent ID: {feature-id}-agent-N-{role}
-
-{Level-1 summary — objective, ADR list with pattern IDs, constraints, NOT in scope}
-
-YOUR SPECIFIC TASK: {subtask description}
-
-Files to read/modify: {paths from brief}
-
-BEFORE implementing:
-  Use ToolSearch to find "agentdb pattern" tools, then call:
-  mcp__agentdb__agentdb_pattern_search(task="adr:{feature-id}", k=10)
-```
+2. The task description (2-3 sentences)
+3. Specific file paths
 
 After spawning: tell the user what agents are working on, then STOP.
 
@@ -153,16 +173,14 @@ DO NOT: poll TaskOutput repeatedly, check swarm status continuously, or add more
 
 ---
 
-## Multi-Wave Features
+## Multi-Stage Features
 
-For features with sequential waves (Wave 1 → Wave 2 → Wave 3):
-- Spawn ALL agents within a wave in ONE message (parallel)
-- Wait for the wave to complete
-- Mark completed tasks, update TaskList
-- Spawn the next wave's agents in a NEW message (parallel)
-- Repeat until all waves complete
-
-Do NOT spawn agents from different waves in the same message if Wave N+1 depends on Wave N outputs.
+For the Delivery Leader running Stages 3a → 3b → 3c:
+- Complete each stage fully before starting the next
+- Run the validation gate between stages
+- If a gate passes, proceed to the next stage in a NEW message
+- If a gate fails, rework (max 2 iterations) or stop
+- Post progress to GH Issue after each gate
 
 ---
 
@@ -183,20 +201,6 @@ These run via `.claude/settings.json` without agent action:
 
 ---
 
-## Verifying Swarm State (Optional)
-
-If using hive-mind for topology tracking, verify the hive is healthy before spawning:
-
-```
-mcp__claude-flow__hive-mind_status(verbose: true)
-```
-
-Expected: `workers` array contains all registered agents, `sharedMemory` has the context key.
-
-If workers array is empty, the `hive-mind_join` calls failed — re-register before spawning.
-
----
-
 ## Anti-Drift Config
 
 ```
@@ -207,7 +211,7 @@ mcp__claude-flow__hive-mind_init(topology: "hierarchical", queenId: "swarm-lead"
 mcp__claude-flow__hive-mind_init(topology: "mesh", queenId: "swarm-lead")
 ```
 
-Plus: every agent gets the Level-1 summary (objective + ADR pattern IDs + constraints + NOT-in-scope) in its prompt. This is the primary anti-drift mechanism.
+In the design session, agents get the SCOPE.md for alignment. In the delivery session, agents get the three source documents + implementation brief. These are the primary anti-drift mechanisms.
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "name": "Neural Trader Development",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-trixie",
   
   "features": {
     "ghcr.io/devcontainers/features/python:1": {

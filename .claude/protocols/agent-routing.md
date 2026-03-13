@@ -10,188 +10,198 @@ Always use NDP-specific agents over generic ones:
 | `system-architect` | `ndp-architect` | Knows Domain Adapter pattern, ADRs |
 | `tester` | `ndp-tester` | Knows test patterns, mocking approach |
 | `planner` | `ndp-scrum-master` | Knows feature lifecycle, reads protocols |
-| `reviewer` | `ndp-validator` | Runs /validate or /validate-plan, glass box reports, trust recording |
+| `reviewer` | `ndp-validator` | Runs gate validations, glass box reports, trust recording |
+| `researcher` | `ndp-researcher` | Knows project context, AgentDB patterns |
 
 ---
 
-## Every Swarm Has These Two Agents
+## Two Sessions, Two Leaders
 
-| Agent | Role | Spawned By |
-|-------|------|------------|
-| `ndp-scrum-master` | **Coordinator (queen)** — reads protocol, spawns workers, manages waves, updates GH Issues | Primary agent |
-| `ndp-validator` | **Validation gate** — discovers completions from shared memory, runs tier checks, records trust | Scrum-master (end of each wave) |
+Every feature follows a two-session lifecycle. The same coordinator agent (ndp-scrum-master) serves as leader in both sessions, reading different protocols.
 
-These are non-negotiable. No swarm runs without a coordinator and no swarm completes without validation.
+| Session | Leader Role | Protocol | Ends When |
+|---------|------------|----------|-----------|
+| Session 1 | Design Leader | `design-protocol.md` | Returns artifacts to human for approval |
+| Session 2 | Delivery Leader | `delivery-protocol.md` | All 3 gates pass and code is delivered |
+
+The **Implementation Brief** is the handoff document between sessions.
+
+---
+
+## Every Swarm Has These Agents
+
+| Agent | Role | When |
+|-------|------|------|
+| `ndp-scrum-master` | **Leader** — reads protocol, spawns workers, manages stages, updates GH Issues | Both sessions |
+| `ndp-validator` | **Validation gate** — focused checks per gate, glass box reports, trust recording | Session 2 (spawned 3x) |
+
+These are non-negotiable. No swarm runs without a leader and no delivery completes without validation gates.
 
 ---
 
 ## Complete Agent Roster
 
-### Coordination (2 agents — mandatory on every swarm)
+### Coordination (2 agents — mandatory)
 
 | Agent | Type | What It Does |
 |-------|------|-------------|
-| `ndp-scrum-master` | coordinator | Reads protocol file, inits hive, spawns workers with Agent IDs, drift checks, GH Issue lifecycle |
-| `ndp-validator` | gate | Memory-driven discovery of agent completions, 4-tier impl validation OR 5-check plan validation, trust recording |
+| `ndp-scrum-master` | coordinator | Design Leader (Session 1) or Delivery Leader (Session 2). Reads protocol, spawns workers, manages gates, GH Issue lifecycle |
+| `ndp-validator` | gate | Gate 3a (design review), Gate 3b (code review), Gate 3c (risk coverage). One agent, three focused spawns |
 
-### Planning (5 agents — planning swarms only, wave-ordered)
+### Research (1 agent — Phase 1)
 
-| Agent | Type | Wave | What It Produces |
-|-------|------|------|-----------------|
-| `ndp-architect` | specialist | 1 | ARCHITECTURE.md with ADRs + Integration Surface, stores ADRs in AgentDB via /save-pattern |
-| `ndp-specification` | specialist | 1 | SPECIFICATION.md, TASK-DECOMPOSITION.md |
-| `ndp-pseudocode` | specialist | 2 | pseudocode/OVERVIEW.md + per-component pseudocode files (reads Wave 1 output) |
-| `ndp-tester` | specialist | 2 | test-plan/OVERVIEW.md + per-component test plan files (reads Wave 1 output) |
-| `ndp-synthesizer` | synthesizer | 3 | IMPLEMENTATION-BRIEF.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, GH Issue (fresh context) |
+| Agent | Type | What It Does |
+|-------|------|-------------|
+| `ndp-researcher` | specialist | Problem space exploration, codebase analysis, collaborative scope definition, writes SCOPE.md |
 
-Wave 1 (spec + arch) → Wave 2 (pseudocode + test plan) → Wave 3 (vision guardian, synthesizer, validator — sequential).
+### Design (4 agents — Session 1, Phase 2)
 
-### Core Implementation (2 agents — most implementation swarms)
+| Agent | Type | What It Produces |
+|-------|------|-----------------|
+| `ndp-architect` | specialist | ARCHITECTURE.md with ADRs + Integration Surface, stores ADRs in AgentDB |
+| `ndp-specification` | specialist | SPECIFICATION.md (requirements, acceptance criteria, domain models) |
+| `ndp-risk-strategist` | specialist | RISK-TEST-STRATEGY.md (feature-level risks, test scenario mapping, priority) |
+| `ndp-vision-guardian` | specialist | ALIGNMENT-REPORT.md (checks source docs against product vision) |
+
+### Synthesis (1 agent — Session 1, Phase 2)
+
+| Agent | Type | What It Produces |
+|-------|------|-----------------|
+| `ndp-synthesizer` | synthesizer | IMPLEMENTATION-BRIEF.md (coordinator's operating doc), ACCEPTANCE-MAP.md, GH Issue |
+
+### Component Design (2 agents — Session 2, Stage 3a)
+
+| Agent | Type | What It Produces |
+|-------|------|-----------------|
+| `ndp-pseudocode` | specialist | pseudocode/OVERVIEW.md + per-component pseudocode files |
+| `ndp-tester` | specialist | test-plan/OVERVIEW.md + per-component test plan files (rooted in risk strategy) |
+
+### Implementation (variable — Session 2, Stage 3b)
 
 | Agent | Type | When to Include |
 |-------|------|----------------|
 | `ndp-rust-dev` | general | Any Rust code changes — the default implementation agent |
 | `ndp-tester` | specialized | When new tests are needed or test strategy changes |
-
-### Data Layer (4 agents — include when touching their layer)
-
-| Agent | Type | Layer | When to Include |
-|-------|------|-------|----------------|
-| `ndp-parquet-dev` | narrow | Bronze | WAL, Parquet files, snapshot logic, `core/src/bronze/` |
-| `ndp-timescale-dev` | narrow | Silver | Hypertables, continuous aggregates, ETL, `apps/silver-etl/` |
-| `ndp-analytics-engineer` | specialized | Gold | Materialized views, domain transforms, `tools/ndp-gold-ddl/` |
-| `ndp-dq-engineer` | specialized | Cross-layer | Data quality rules, transparency tables, schema validation |
-
-### Domain Scientists (2 agents — include when their domain is involved)
-
-| Agent | Type | When to Include |
-|-------|------|----------------|
-| `ndp-meteorologist` | specialized | NWS data, forecast schemas, atmospheric science, weather stream config |
-| `ndp-air-quality-specialist` | specialized | AQI calculations, EPA standards, sensor calibration, health thresholds |
-
-### ML & Features (2 agents)
-
-| Agent | Type | When to Include |
-|-------|------|----------------|
-| `ndp-feature-engineer` | narrow | Time-series features, windowing, aggregations, ML-ready data |
-| `ndp-ml-engineer` | narrow | ruv-FANN models, training pipelines, inference integration |
-
-### Visualization & Alerts (2 agents)
-
-| Agent | Type | When to Include |
-|-------|------|----------------|
+| `ndp-parquet-dev` | narrow | WAL, Parquet files, snapshot logic, `core/src/bronze/` |
+| `ndp-timescale-dev` | narrow | Hypertables, continuous aggregates, ETL |
+| `ndp-analytics-engineer` | specialized | Materialized views, domain transforms, `tools/ndp-gold-ddl/` |
+| `ndp-dq-engineer` | specialized | Data quality rules, transparency tables, schema validation |
+| `ndp-meteorologist` | specialized | NWS data, forecast schemas, atmospheric science |
+| `ndp-air-quality-specialist` | specialized | AQI calculations, EPA standards, sensor calibration |
+| `ndp-feature-engineer` | narrow | Time-series features, windowing, aggregations |
+| `ndp-ml-engineer` | narrow | ruv-FANN models, training pipelines, inference |
 | `ndp-grafana-dev` | narrow | Grafana dashboards, panels, data sources |
 | `ndp-alert-engineer` | narrow | Rust-based triggers, thresholds, notifications |
 
-### Alignment (1 agent — planning swarms only)
+### Testing (1 agent — Session 2, Stage 3c)
 
-| Agent | Type | When to Include |
-|-------|------|----------------|
-| `ndp-vision-guardian` | specialist | After planning agents complete, before generating brief |
+| Agent | Type | What It Produces |
+|-------|------|-----------------|
+| `ndp-tester` | execution | Runs all tests, produces RISK-COVERAGE-REPORT.md |
 
-**Total: 17 agents** (2 coordination + 4 planning + 11 implementation/specialist)
+**Total: 19 agents** (2 coordination + 1 research + 4 design + 1 synthesis + 2 component design + variable implementation + 1 testing)
 
 ---
 
 ## Swarm Composition Templates
 
-Use these as starting points. Add/remove specialists based on the specific task.
-
-### Planning Swarm
+### Design Swarm (Session 1)
 
 ```
-Coordinator:  ndp-scrum-master
-Wave 1:       ndp-architect, ndp-specification              (parallel)
-              ndp-architect stores ADRs in AgentDB via /save-pattern
-Wave 2:       ndp-pseudocode, ndp-tester                (parallel, after Wave 1)
-Wave 3:       ndp-vision-guardian (alignment)            (sequential)
-              ndp-synthesizer (brief + maps + GH Issue)  (fresh context window)
-              ndp-validator (5-check)
+Leader:   ndp-scrum-master (Design Leader)
+Wave 1:   ndp-architect, ndp-specification                         (parallel)
+          ndp-architect stores ADRs in AgentDB via /save-pattern
+Wave 2:   ndp-risk-strategist (reads arch + spec + vision)         (sequential)
+Wave 3:   ndp-vision-guardian (reads all 3 source docs)            (sequential)
+Wave 4:   ndp-synthesizer (brief + acceptance map + GH Issue)      (sequential, fresh context)
 ```
 
-Produces: SPECIFICATION.md, TASK-DECOMPOSITION.md, ARCHITECTURE.md (with Integration Surface + ADRs stored in AgentDB), pseudocode/OVERVIEW.md + per-component pseudocode, test-plan/OVERVIEW.md + per-component test plans, ALIGNMENT-REPORT.md, ACCEPTANCE-MAP.md, LAUNCH-PROMPT.md, IMPLEMENTATION-BRIEF.md (with Component Map), GH Issue.
+Produces: ARCHITECTURE.md, SPECIFICATION.md, RISK-TEST-STRATEGY.md, ALIGNMENT-REPORT.md, IMPLEMENTATION-BRIEF.md, ACCEPTANCE-MAP.md, GH Issue.
 
-### Feature Implementation (General Rust)
+### Delivery Swarm (Session 2)
 
 ```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-rust-dev, ndp-tester
-Post-wave:    ndp-validator (4-tier)
+Leader:     ndp-scrum-master (Delivery Leader)
+Stage 3a:   ndp-pseudocode, ndp-tester (test plans)               (parallel)
+Gate 3a:    ndp-validator (component design validation)
+Stage 3b:   ndp-rust-dev, specialists                             (parallel)
+Gate 3b:    ndp-validator (code review validation)
+Stage 3c:   ndp-tester (test execution)
+Gate 3c:    ndp-validator (risk coverage validation)
+```
+
+### Stage 3b Composition by Feature Type
+
+Use these as starting points for Stage 3b agent selection. The Delivery Leader picks agents based on the Component Map in the implementation brief.
+
+#### General Rust Feature
+
+```
+Stage 3b:  ndp-rust-dev, ndp-tester
 ```
 
 The baseline. Most features start here.
 
-### Data Pipeline (Bronze → Silver → Gold)
+#### Data Pipeline (Bronze → Silver → Gold)
 
 ```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-parquet-dev, ndp-timescale-dev, ndp-analytics-engineer, ndp-dq-engineer
-Post-wave:    ndp-validator (4-tier)
+Stage 3b:  ndp-parquet-dev, ndp-timescale-dev, ndp-analytics-engineer, ndp-dq-engineer
 ```
 
 Add domain scientist if pipeline involves domain-specific logic.
 
-### Schema / ETL Change
+#### Schema / ETL Change
 
 ```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-architect, ndp-timescale-dev, ndp-dq-engineer
-Post-wave:    ndp-validator (4-tier)
+Stage 3b:  ndp-timescale-dev, ndp-dq-engineer
 ```
 
-Always include `ndp-architect` for cross-cutting schema changes.
+Architecture decisions already captured in Phase 2 source docs.
 
-### New Data Source
-
-```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-architect, ndp-rust-dev, ndp-parquet-dev, {domain-scientist}
-Post-wave:    ndp-validator (4-tier)
-```
-
-Domain scientist validates the data interpretation.
-
-### ML / Predictions
+#### New Data Source
 
 ```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-feature-engineer, ndp-ml-engineer, ndp-rust-dev
-Post-wave:    ndp-validator (4-tier)
+Stage 3b:  ndp-rust-dev, ndp-parquet-dev, {domain-scientist}
 ```
 
-### Dashboard / Visualization
+Domain scientist validates data interpretation.
+
+#### ML / Predictions
 
 ```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-grafana-dev, ndp-analytics-engineer
-Post-wave:    ndp-validator (4-tier)
+Stage 3b:  ndp-feature-engineer, ndp-ml-engineer, ndp-rust-dev
 ```
 
-### Alerts / Triggers
+#### Dashboard / Visualization
 
 ```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-alert-engineer, ndp-rust-dev, {domain-scientist}
-Post-wave:    ndp-validator (4-tier)
+Stage 3b:  ndp-grafana-dev, ndp-analytics-engineer
 ```
 
-### Bug Fix
+#### Alerts / Triggers
 
 ```
-Coordinator:  ndp-scrum-master
-Workers:      ndp-rust-dev, ndp-tester
-Post-wave:    ndp-validator (4-tier)
+Stage 3b:  ndp-alert-engineer, ndp-rust-dev, {domain-scientist}
 ```
 
-For single-file bugs, skip the swarm entirely — just fix and /validate.
+#### Bug Fix
+
+```
+Stage 3b:  ndp-rust-dev, ndp-tester
+```
+
+For single-file bugs, skip the swarm entirely — just fix and validate.
 
 ---
 
 ## Composition Rules
 
-1. **Every swarm**: ndp-scrum-master (coordinator) + ndp-validator (gate). No exceptions.
-2. **Domain data work**: include the relevant domain scientist (meteorologist or air-quality-specialist).
-3. **Schema/ETL changes**: include ndp-dq-engineer for data quality impact.
-4. **Cross-cutting changes**: include ndp-architect for ADR decisions.
-5. **Skip swarm for**: single-file edits, 1-2 line fixes, config changes, docs, exploration.
-6. **Max wave size**: 5 workers. Split into waves if more agents needed.
+1. **Every swarm**: ndp-scrum-master (leader) + ndp-validator (gates). No exceptions.
+2. **Session 1**: Always ndp-architect + ndp-specification + ndp-risk-strategist + ndp-vision-guardian + ndp-synthesizer.
+3. **Session 2 Stage 3a**: Always ndp-pseudocode + ndp-tester (test plans).
+4. **Session 2 Stage 3b**: Varies by feature type — pick from implementation roster.
+5. **Session 2 Stage 3c**: Always ndp-tester (execution mode).
+6. **Domain data work**: Include the relevant domain scientist (meteorologist or air-quality-specialist).
+7. **Schema/ETL changes**: Include ndp-dq-engineer for data quality impact.
+8. **Skip swarm for**: single-file edits, 1-2 line fixes, config changes, docs, exploration.
+9. **Max stage size**: 5 workers per stage. Split into waves within a stage if more agents needed.

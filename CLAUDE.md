@@ -1,6 +1,6 @@
 # NDP — Non-Negotiable Rules
 
-1. **Feature work uses swarms** — spawn `ndp-scrum-master` who reads `.claude/protocols/`. No solo feature work. See `.claude/protocols/swarm-protocol.md`.
+1. **Feature work uses swarms** — spawn `ndp-scrum-master` who reads `.claude/protocols/`. Two sessions: Design Leader (Phase 2) → human review → Delivery Leader (Phase 3). See `.claude/protocols/swarm-protocol.md`.
 2. **BEFORE any work**: `/get-pattern` to search existing knowledge. No exceptions.
 3. **AFTER any work**: `/reflexion` to record per-pattern feedback. `/save-pattern` for new discoveries. Negative feedback (wrong/outdated, reward 0.0) is URGENT — record immediately.
 4. **Anti-stub**: Never leave TODO, `unimplemented!()`, `todo!()`, or placeholder functions. Ask the user if blocked.
@@ -35,10 +35,10 @@
 /config-client           - etcd configuration client
 /deploy                  - Docker and Pi deployment
 /docs                    - Architecture docs and procedures
-/product/features/       - SPARC documentation per feature
+/product/features/       - Feature lifecycle documentation
 /tools                   - CLI tools (ndp-cli, ndp-validate, ndp-gold-ddl)
 /.claude/agents/ndp      - NDP agent definitions
-/.claude/protocols       - Swarm protocols (planning, implementation, routing)
+/.claude/protocols       - Swarm protocols (design, delivery, research, routing)
 /.claude/rules           - Contextual rules (testing, rust workspace)
 ```
 
@@ -58,22 +58,21 @@ Features follow `{phase}-{NNN}` pattern in `product/features/`:
 | Alerts | `al` | Triggers, notifications |
 | Operations | `ops` | Tooling, CLI, deployment automation |
 
-### Feature Directory Structure (SPARC)
+### Feature Directory Structure
 
 ```
 product/features/{phase}-{NNN}/
-├── SCOPE.md                    # Human writes, agents never modify
-├── IMPLEMENTATION-BRIEF.md     # Synthesizer output, implementation input
-├── ALIGNMENT-REPORT.md         # Vision guardian output
-├── ACCEPTANCE-MAP.md           # AC verification map
-├── LAUNCH-PROMPT.md            # Implementation launch prompt
-├── specification/              # SPARC S
-├── pseudocode/                 # SPARC P
-├── architecture/               # SPARC A
-├── test-plan/                  # Test strategy + per-component plans
-├── refinement/                 # SPARC R
-├── completion/                 # SPARC C
-└── reports/
+├── SCOPE.md                    # Researcher + human → agent writes, human approves
+├── RISK-TEST-STRATEGY.md       # Risk strategist output (Phase 2, source document)
+├── IMPLEMENTATION-BRIEF.md     # Synthesizer output (Phase 2, handoff to Phase 3)
+├── ALIGNMENT-REPORT.md         # Vision guardian output (Phase 2)
+├── ACCEPTANCE-MAP.md           # AC verification map (Phase 2)
+├── specification/              # SPECIFICATION.md (Phase 2, source document)
+├── architecture/               # ARCHITECTURE.md + ADRs (Phase 2, source document)
+├── pseudocode/                 # Per-component pseudocode (Stage 3a)
+├── test-plan/                  # Per-component test plans (Stage 3a)
+├── testing/                    # RISK-COVERAGE-REPORT.md (Stage 3c)
+└── reports/                    # Gate reports (3a, 3b, 3c)
 ```
 
 ### Implementation Tracking
